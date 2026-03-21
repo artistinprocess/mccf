@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MCCF X3D Demo Scene</title>
+<!-- X_ITE CDN - current stable -->
+<script src="https://cdn.jsdelivr.net/npm/x_ite@latest/dist/x_ite.min.js"></script>
+<style>
+  body { margin: 0; background: #0a0c10; color: #c8d0e0;
+         font-family: 'IBM Plex Mono', monospace; }
+  #hud {
+    position: fixed; top: 12px; right: 12px;
+    background: rgba(17,19,24,0.92);
+    border: 1px solid #252a36;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 11px;
+    min-width: 220px;
+    z-index: 100;
+  }
+  .hud-title { font-size: 12px; font-weight: 600; color: #4af0a8; margin-bottom: 8px; }
+  .param-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .param-name { color: #6a7890; }
+  .param-val  { color: #4af0a8; font-weight: 500; }
+  #api-url-label {
+    position: fixed; bottom: 12px; left: 12px;
+    font-size: 10px; color: #4a5568;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-title">MCCF Affect Params</div>
+  <div id="affect-hud">Waiting for sensor data...</div>
+</div>
+<div id="api-url-label">MCCF API: <span id="api-display">http://localhost:5000</span></div>
+
+<X3D id="x3d-scene" width="100vw" height="100vh">
+  <Scene>
+
+    <!-- Background -->
+    <Background skyColor="0.04 0.047 0.063"/>
+
+    <!-- Navigation -->
+    <NavigationInfo type='"EXAMINE" "ANY"' speed="2"/>
+    <Viewpoint position="0 3 12" orientation="1 0 0 -0.2" description="Overview"/>
+
+    <!-- Lighting -->
+    <DirectionalLight direction="-1 -1 -1" intensity="0.8" color="0.9 0.95 1.0"/>
+    <PointLight location="0 4 0" intensity="0.4" color="0.6 0.8 1.0" radius="20"/>
+
+    <!-- Ground plane -->
+    <Transform translation="0 -0.05 0">
+      <Shape>
+        <Appearance>
+          <Material diffuseColor="0.08 0.10 0.14" specularColor="0.1 0.1 0.1" shininess="0.3"/>
+        </Appearance>
+        <Box size="24 0.1 24"/>
+      </Shape>
+    </Transform>
+
+    <!-- Grid lines on ground -->
+    <Transform translation="0 0 0">
+      <Shape>
+        <Appearance>
+          <Material emissiveColor="0.15 0.2 0.25"/>
+        </Appearance>
+        <IndexedLineSet coordIndex="
+          0 1 -1  2 3 -1  4 5 -1  6 7 -1  8 9 -1
+          10 11 -1 12 13 -1 14 15 -1 16 17 -1 18 19 -1
+          20 21 -1 22 23 -1">
+          <Coordinate point="
+            -12 0 -10  12 0 -10
+            -12 0  -6  12 0  -6
+            -12 0  -2  12 0  -2
+            -12 0   2  12 0   2
+            -12 0   6  12 0   6
+            -12 0  10  12 0  10
+            -10 0 -12  -10 0 12
+             -6 0 -12   -6 0 12
+             -2 0 -12   -2 0 12
+              2 0 -12    2 0 12
+              6 0 -12    6 0 12
+             10 0 -12   10 0 12"/>
+        </IndexedLineSet>
+      </Shape>
+    </Transform>
+
+    <!-- ═══════════════════════════════════════════════
+         AGENT ALICE
+    ═══════════════════════════════════════════════ -->
+    <Transform DEF="Avatar_Alice" translation="-3 0 0">
+      <!-- Body -->
+      <Transform translation="0 1.0 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_Alice_Body"
+              diffuseColor="0.37 0.67 0.94"
+              specularColor="0.3 0.3 0.5"
+              shininess="0.6"/>
+          </Appearance>
+          <Cylinder height="1.4" radius="0.35"/>
+        </Shape>
+      </Transform>
+      <!-- Head -->
+      <Transform translation="0 1.95 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_Alice_Head"
+              diffuseColor="0.9 0.8 0.7"
+              specularColor="0.2 0.2 0.2"
+              shininess="0.4"/>
+          </Appearance>
+          <Sphere radius="0.32"/>
+        </Shape>
+      </Transform>
+      <!-- Affect glow ring -->
+      <Transform translation="0 0.05 0" rotation="1 0 0 1.5708">
+        <Shape>
+          <Appearance>
+            <Material DEF="Glow_Alice"
+              emissiveColor="0.2 0.6 1.0"
+              transparency="0.4"/>
+          </Appearance>
+          <Torus innerRadius="0.5" outerRadius="0.55"/>
+        </Shape>
+      </Transform>
+      <!-- Label -->
+      <Transform translation="0 2.5 0">
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material emissiveColor="0.7 0.85 1.0"/>
+            </Appearance>
+            <Text string='"Alice"'>
+              <FontStyle size="0.25" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+
+    <!-- ═══════════════════════════════════════════════
+         AGENT BOB
+    ═══════════════════════════════════════════════ -->
+    <Transform DEF="Avatar_Bob" translation="3 0 0">
+      <Transform translation="0 1.0 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_Bob_Body"
+              diffuseColor="0.94 0.47 0.35"
+              specularColor="0.4 0.2 0.2"
+              shininess="0.5"/>
+          </Appearance>
+          <Cylinder height="1.4" radius="0.35"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 1.95 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_Bob_Head"
+              diffuseColor="0.88 0.78 0.65"
+              specularColor="0.2 0.2 0.2"
+              shininess="0.4"/>
+          </Appearance>
+          <Sphere radius="0.32"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 0.05 0" rotation="1 0 0 1.5708">
+        <Shape>
+          <Appearance>
+            <Material DEF="Glow_Bob"
+              emissiveColor="1.0 0.5 0.3"
+              transparency="0.4"/>
+          </Appearance>
+          <Torus innerRadius="0.5" outerRadius="0.55"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 2.5 0">
+        <Billboard>
+          <Shape>
+            <Appearance><Material emissiveColor="1.0 0.75 0.6"/></Appearance>
+            <Text string='"Bob"'>
+              <FontStyle size="0.25" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+
+    <!-- ═══════════════════════════════════════════════
+         AGENT AI
+    ═══════════════════════════════════════════════ -->
+    <Transform DEF="Avatar_AI" translation="0 0 -4">
+      <Transform translation="0 1.0 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_AI_Body"
+              diffuseColor="0.29 0.94 0.65"
+              specularColor="0.3 0.5 0.4"
+              shininess="0.7"/>
+          </Appearance>
+          <Cylinder height="1.4" radius="0.35"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 1.95 0">
+        <Shape>
+          <Appearance>
+            <Material DEF="Mat_AI_Head"
+              diffuseColor="0.7 0.95 0.8"
+              specularColor="0.3 0.5 0.4"
+              shininess="0.7"/>
+          </Appearance>
+          <Sphere radius="0.32"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 0.05 0" rotation="1 0 0 1.5708">
+        <Shape>
+          <Appearance>
+            <Material DEF="Glow_AI"
+              emissiveColor="0.2 0.95 0.55"
+              transparency="0.3"/>
+          </Appearance>
+          <Torus innerRadius="0.5" outerRadius="0.55"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 2.5 0">
+        <Billboard>
+          <Shape>
+            <Appearance><Material emissiveColor="0.5 1.0 0.7"/></Appearance>
+            <Text string='"AI"'>
+              <FontStyle size="0.25" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+
+    <!-- ═══════════════════════════════════════════════
+         PROXIMITY SENSORS
+         Each sensor monitors space around its avatar.
+         Position_changed fires as avatars are selected/moved.
+    ═══════════════════════════════════════════════ -->
+    <ProximitySensor DEF="Prox_Alice" size="20 20 20" center="0 1 0"/>
+    <ProximitySensor DEF="Prox_Bob"   size="20 20 20" center="0 1 0"/>
+    <ProximitySensor DEF="Prox_AI"    size="20 20 20" center="0 1 0"/>
+
+    <!-- Time sensor for continuous dwell tracking -->
+    <TimeSensor DEF="Clock" cycleInterval="1.0" loop="true"/>
+
+    <!-- ═══════════════════════════════════════════════
+         MCCF BRIDGE SCRIPT
+         Receives position events, computes distances,
+         POSTs to MCCF API, routes affect params back.
+    ═══════════════════════════════════════════════ -->
+    <Script DEF="MCCF_Bridge" directOutput="true" mustEvaluate="true">
+
+      <!-- API config -->
+      <field accessType="initializeOnly" type="SFString"
+             name="api_url" value="http://localhost:5000"/>
+
+      <!-- Position inputs from avatar transforms -->
+      <field accessType="inputOnly"  type="SFVec3f" name="pos_Alice"/>
+      <field accessType="inputOnly"  type="SFVec3f" name="pos_Bob"/>
+      <field accessType="inputOnly"  type="SFVec3f" name="pos_AI"/>
+
+      <!-- Tick input for dwell accumulation -->
+      <field accessType="inputOnly"  type="SFTime"  name="tick"/>
+
+      <!-- Affect outputs — routed to material/transform nodes -->
+      <field accessType="outputOnly" type="SFColor" name="color_Alice"/>
+      <field accessType="outputOnly" type="SFColor" name="color_Bob"/>
+      <field accessType="outputOnly" type="SFColor" name="color_AI"/>
+
+      <field accessType="outputOnly" type="SFFloat" name="glow_Alice"/>
+      <field accessType="outputOnly" type="SFFloat" name="glow_Bob"/>
+      <field accessType="outputOnly" type="SFFloat" name="glow_AI"/>
+
+      <field accessType="outputOnly" type="SFVec3f" name="scale_Alice"/>
+      <field accessType="outputOnly" type="SFVec3f" name="scale_Bob"/>
+      <field accessType="outputOnly" type="SFVec3f" name="scale_AI"/>
+
+      <![CDATA[
+        ecmascript:
+
+        var API_URL = "";
+        var positions = { Alice: null, Bob: null, AI: null };
+        var dwell    = {};
+        var lastTick = {};
+        var pending  = {};   // throttle: one request per pair per tick
+        var params   = {};   // last known affect params per agent
+
+        function initialize() {
+          API_URL = fields.api_url;
+          scale_Alice = new SFVec3f(1,1,1);
+          scale_Bob   = new SFVec3f(1,1,1);
+          scale_AI    = new SFVec3f(1,1,1);
+        }
+
+        function pos_Alice(val, ts) { positions.Alice = val; _update("Alice", ts); }
+        function pos_Bob(val, ts)   { positions.Bob   = val; _update("Bob",   ts); }
+        function pos_AI(val, ts)    { positions.AI    = val; _update("AI",    ts); }
+
+        function tick(ts) {
+          // periodic update even without movement
+          ["Alice","Bob","AI"].forEach(function(a) {
+            _update(a, ts);
+          });
+        }
+
+        function _update(from, ts) {
+          var others = ["Alice","Bob","AI"];
+          for (var i = 0; i < others.length; i++) {
+            var to = others[i];
+            if (to === from) continue;
+            if (!positions[from] || !positions[to]) continue;
+
+            var key = from + "_" + to;
+            if (pending[key]) continue;   // throttle
+            pending[key] = true;
+
+            var dx = positions[from].x - positions[to].x;
+            var dz = positions[from].z - positions[to].z;
+            var dist = Math.sqrt(dx*dx + dz*dz);
+
+            if (!dwell[key]) dwell[key] = 0;
+            if (!lastTick[key]) lastTick[key] = ts;
+            var dt = ts - lastTick[key];
+            lastTick[key] = ts;
+
+            if (dist < 3.0) dwell[key] += dt;
+            else dwell[key] = Math.max(0, dwell[key] - dt * 0.5);
+
+            // Gaze angle: crude approximation from relative position angle
+            var gazeAngle = Math.abs(Math.atan2(dz, dx) * 180 / Math.PI);
+
+            var body = JSON.stringify({
+              from_agent: from,
+              to_agent:   to,
+              sensor_data: {
+                distance:  dist,
+                dwell:     dwell[key],
+                velocity:  0.0,
+                gaze_angle: gazeAngle,
+                max_range: 10.0
+              }
+            });
+
+            _postMCCF(from, to, body, key);
+          }
+        }
+
+        function _postMCCF(from, to, body, key) {
+          var xhr = new XMLHttpRequest();
+          xhr.open("POST", API_URL + "/sensor", true);
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+              pending[key] = false;
+              if (xhr.status === 200) {
+                try {
+                  var r = JSON.parse(xhr.responseText);
+                  _applyAffect(from, r);
+                  _updateHUD(from, to, r);
+                } catch(e) {}
+              }
+            }
+          };
+          xhr.send(body);
+        }
+
+        function _applyAffect(agent, r) {
+          params[agent] = r;
+
+          // valence -1..1 → color
+          // positive valence: warm/bright; negative: cool/dim
+          var v = Math.max(-1, Math.min(1, r.valence || 0));
+          var arousal = Math.max(0, Math.min(1, r.arousal || 0.5));
+          var eng     = Math.max(0, Math.min(1, r.engagement || 0.5));
+
+          // Base hue from role color, modulated by valence
+          var rr, gg, bb;
+          if (agent === "Alice") {
+            rr = 0.37 + v * 0.15;
+            gg = 0.67 + v * 0.1;
+            bb = 0.94 - v * 0.2;
+          } else if (agent === "Bob") {
+            rr = 0.94 - v * 0.1;
+            gg = 0.47 + v * 0.2;
+            bb = 0.35 + v * 0.1;
+          } else {
+            rr = 0.29 + v * 0.1;
+            gg = 0.94 - v * 0.1;
+            bb = 0.65 + v * 0.1;
+          }
+
+          rr = Math.max(0.1, Math.min(1.0, rr));
+          gg = Math.max(0.1, Math.min(1.0, gg));
+          bb = Math.max(0.1, Math.min(1.0, bb));
+
+          // Scale: engagement drives slight Y scaling (attentive posture)
+          var sy = 1.0 + eng * 0.15;
+          // arousal drives slight XZ expansion (open/closed body)
+          var sxz = 1.0 - (1.0 - arousal) * 0.1;
+
+          if (agent === "Alice") {
+            color_Alice = new SFColor(rr, gg, bb);
+            glow_Alice  = arousal * 0.7;
+            scale_Alice = new SFVec3f(sxz, sy, sxz);
+          } else if (agent === "Bob") {
+            color_Bob   = new SFColor(rr, gg, bb);
+            glow_Bob    = arousal * 0.7;
+            scale_Bob   = new SFVec3f(sxz, sy, sxz);
+          } else {
+            color_AI    = new SFColor(rr, gg, bb);
+            glow_AI     = arousal * 0.7;
+            scale_AI    = new SFVec3f(sxz, sy, sxz);
+          }
+        }
+
+        function _updateHUD(from, to, r) {
+          // Communicate to HUD via document if accessible
+          if (typeof document !== "undefined") {
+            var el = document.getElementById("affect-hud");
+            if (el) {
+              el.innerHTML =
+                "<div class='param-row'><span class='param-name'>from</span>" +
+                "<span class='param-val'>" + from + " → " + to + "</span></div>" +
+                "<div class='param-row'><span class='param-name'>arousal</span>" +
+                "<span class='param-val'>" + (r.arousal||0).toFixed(3) + "</span></div>" +
+                "<div class='param-row'><span class='param-name'>valence</span>" +
+                "<span class='param-val'>" + (r.valence||0).toFixed(3) + "</span></div>" +
+                "<div class='param-row'><span class='param-name'>engagement</span>" +
+                "<span class='param-val'>" + (r.engagement||0).toFixed(3) + "</span></div>" +
+                "<div class='param-row'><span class='param-name'>coherence</span>" +
+                "<span class='param-val'>" + (r.coherence_to_other||0).toFixed(3) + "</span></div>" +
+                "<div class='param-row'><span class='param-name'>regulation</span>" +
+                "<span class='param-val'>" + (r.regulation_state||0).toFixed(3) + "</span></div>";
+            }
+          }
+        }
+      ]]>
+    </Script>
+
+    <!-- ═══════════════════════════════════════════════
+         ROUTES
+         Avatar positions → MCCF Bridge
+         Clock tick → MCCF Bridge
+         Affect outputs → Material nodes
+    ═══════════════════════════════════════════════ -->
+
+    <!-- Position routing -->
+    <ROUTE fromNode="Avatar_Alice" fromField="translation"
+           toNode="MCCF_Bridge"   toField="pos_Alice"/>
+    <ROUTE fromNode="Avatar_Bob"   fromField="translation"
+           toNode="MCCF_Bridge"   toField="pos_Bob"/>
+    <ROUTE fromNode="Avatar_AI"    fromField="translation"
+           toNode="MCCF_Bridge"   toField="pos_AI"/>
+
+    <!-- Clock tick for dwell accumulation -->
+    <ROUTE fromNode="Clock"       fromField="cycleTime"
+           toNode="MCCF_Bridge"  toField="tick"/>
+
+    <!-- Affect → body material color -->
+    <ROUTE fromNode="MCCF_Bridge"    fromField="color_Alice"
+           toNode="Mat_Alice_Body"   toField="diffuseColor"/>
+    <ROUTE fromNode="MCCF_Bridge"    fromField="color_Bob"
+           toNode="Mat_Bob_Body"     toField="diffuseColor"/>
+    <ROUTE fromNode="MCCF_Bridge"    fromField="color_AI"
+           toNode="Mat_AI_Body"      toField="diffuseColor"/>
+
+    <!-- Affect → glow ring emissive intensity (via scale proxy) -->
+    <ROUTE fromNode="MCCF_Bridge"  fromField="scale_Alice"
+           toNode="Avatar_Alice"   toField="scale"/>
+    <ROUTE fromNode="MCCF_Bridge"  fromField="scale_Bob"
+           toNode="Avatar_Bob"     toField="scale"/>
+    <ROUTE fromNode="MCCF_Bridge"  fromField="scale_AI"
+           toNode="Avatar_AI"      toField="scale"/>
+
+  </Scene>
+</X3D>
+
+<script>
+  // Display configured API URL in HUD
+  document.getElementById('api-display').textContent =
+    document.querySelector('[name="api_url"]')?.getAttribute('value') || 'http://localhost:5000';
+</script>
+</body>
+</html>

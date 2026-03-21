@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Lighting</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg:     #060810;
+  --s1:     #0a0c16;
+  --s2:     #0f1220;
+  --s3:     #141828;
+  --border: #1c2238;
+  --text:   #a0b0cc;
+  --dim:    #384060;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: 12px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px 1fr 200px;
+  grid-template-columns: 220px 1fr 220px;
+  grid-template-areas: "hdr hdr hdr" "left stage right" "foot foot foot";
+  overflow: hidden;
+}
+
+header {
+  grid-area: hdr;
+  background: var(--s1); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 14px;
+}
+.logo { font-family: var(--display); font-weight: 800; font-size: 14px; color: #f0c060; }
+.logo span { color: var(--dim); font-weight: 400; }
+
+.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); }
+.api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--mono); font-size: 10px; padding: 3px 8px; width: 150px; outline: none; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.sdot.on  { background: #4af0a8; box-shadow: 0 0 5px #4af0a8; }
+.sdot.off { background: #f06060; }
+.hbtn { font-family: var(--mono); font-size: 10px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; transition: all 0.12s; }
+.hbtn:hover { color: #f0c060; border-color: #f0c060; }
+
+.panel { overflow-y: auto; padding: 12px; border-right: 1px solid var(--border); }
+.panel::-webkit-scrollbar { width: 3px; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+#left-panel  { grid-area: left; }
+#stage-panel { grid-area: stage; position: relative; overflow: hidden; padding: 0; }
+#right-panel { grid-area: right; border-right: none; }
+#foot-panel  { grid-area: foot; border-top: 1px solid var(--border); background: var(--s1); padding: 10px 16px; display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; }
+
+.sh { font-family: var(--display); font-size: 9px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin: 12px 0 7px; display: flex; align-items: center; gap: 6px; }
+.sh:first-child { margin-top: 0; }
+.sh::after { content:''; flex:1; height:1px; background: var(--border); }
+
+/* Light source cards */
+.light-card { background: var(--s2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 10px; margin-bottom: 6px; }
+.light-name { font-family: var(--display); font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.light-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.light-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-bottom: 3px; }
+.light-val { color: var(--text); }
+
+/* Agent tint cards */
+.agent-tint { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--s2); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
+.tint-swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.1); }
+.tint-info { flex: 1; }
+.tint-name { font-size: 11px; font-family: var(--display); font-weight: 600; }
+.tint-kelvin { font-size: 9px; color: var(--dim); }
+
+/* Stage canvas */
+#stage-canvas { width: 100%; height: 100%; display: block; }
+
+/* Scalar table */
+.scalar-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 10px; }
+.scalar-key { color: var(--dim); }
+.scalar-val { font-family: var(--mono); color: var(--text); }
+.scalar-swatch { width: 12px; height: 12px; border-radius: 2px; margin-left: 4px; flex-shrink: 0; }
+
+/* Footer */
+.foot-section { min-width: 140px; }
+.foot-title { font-family: var(--display); font-size: 9px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.foot-val { font-size: 15px; font-family: var(--display); font-weight: 700; margin-bottom: 2px; }
+.foot-sub { font-size: 9px; color: var(--dim); }
+
+/* Kelvin strip */
+#kelvin-strip { height: 20px; border-radius: 4px; width: 100%; margin-top: 6px; }
+#kelvin-marker { width: 3px; height: 26px; background: white; border-radius: 2px; position: relative; top: -22px; transition: margin-left 0.5s ease; }
+
+/* Zone preset palette */
+.zone-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+.zone-chip { padding: 3px 8px; border-radius: 3px; font-size: 9px; border: 1px solid; cursor: pointer; transition: all 0.12s; font-family: var(--mono); }
+.zone-chip:hover { filter: brightness(1.3); }
+.zone-chip.active { filter: brightness(1.4); box-shadow: 0 0 6px currentColor; }
+
+#toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--s2); border:1px solid #f0c060; border-radius:4px; padding:6px 16px; font-size:11px; color:#f0c060; opacity:0; transition:all 0.18s; pointer-events:none; z-index:999; }
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>Lighting</span></div>
+  <button class="hbtn" id="live-btn" onclick="toggleLive()">Live Off</button>
+  <span id="update-label" style="font-size:10px;color:var(--dim)">manual</span>
+  <div class="api-row">
+    <div class="sdot" id="sdot"></div>
+    <span id="stext">offline</span>
+    <input id="api-url" value="http://localhost:5000" onchange="setApi(this.value)">
+    <button class="hbtn" onclick="refresh()">↺ Refresh</button>
+  </div>
+</header>
+
+<!-- LEFT: light sources -->
+<div class="panel" id="left-panel">
+  <div class="sh" style="margin-top:0">Light Sources</div>
+  <div id="light-cards"></div>
+
+  <div class="sh">Agent Tints</div>
+  <div id="agent-tints"></div>
+
+  <div class="sh">Zone Preset</div>
+  <div class="zone-palette" id="zone-palette"></div>
+</div>
+
+<!-- STAGE: scene preview -->
+<div id="stage-panel">
+  <canvas id="stage-canvas"></canvas>
+</div>
+
+<!-- RIGHT: scalars -->
+<div class="panel" id="right-panel">
+  <div class="sh" style="margin-top:0">Output Scalars</div>
+  <div id="scalar-table"></div>
+
+  <div class="sh">X3D Routing</div>
+  <div style="font-size:10px;color:var(--dim);line-height:1.8" id="route-hints">
+    <div>key_color → KeyLight.color</div>
+    <div>key_intensity → KeyLight.intensity</div>
+    <div>fill_color → FillLight.color</div>
+    <div>fill_intensity → FillLight.intensity</div>
+    <div>ambient_color → AmbientLight.color</div>
+    <div>ambient_intensity → AmbientLight.intensity</div>
+    <div>rim_intensity → RimLight.intensity</div>
+    <div>flicker_amplitude → FlickerLFO.gain</div>
+    <div style="margin-top:6px;color:#384060">Per agent:</div>
+    <div>agent_tints[n].body → Mat_[n]_Body.diffuseColor</div>
+    <div>agent_tints[n].glow → Mat_[n]_Head.emissiveColor</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div id="foot-panel">
+  <div class="foot-section">
+    <div class="foot-title">Color Temp</div>
+    <div class="foot-val" id="f-kelvin" style="color:#f0c060">5000K</div>
+    <div class="foot-sub" id="f-zone">neutral</div>
+  </div>
+  <div class="foot-section" style="flex:1">
+    <div class="foot-title">Kelvin Scale</div>
+    <canvas id="kelvin-strip" width="400" height="20"></canvas>
+    <div id="kelvin-marker"></div>
+  </div>
+  <div class="foot-section">
+    <div class="foot-title">Contrast</div>
+    <div class="foot-val" id="f-contrast">0.50</div>
+    <div class="foot-sub">key:fill ratio</div>
+  </div>
+  <div class="foot-section">
+    <div class="foot-title">Flicker</div>
+    <div class="foot-val" id="f-flicker">0.00</div>
+    <div class="foot-sub">B instability</div>
+  </div>
+  <div class="foot-section">
+    <div class="foot-title">Agents Lit</div>
+    <div class="foot-val" id="f-agents">0</div>
+    <div class="foot-sub">tints active</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ================================================================
+// MCCF Lighting Visualizer
+// ================================================================
+let API = 'http://localhost:5000';
+let liveInterval = null;
+let lightState = null;
+let animFrame  = null;
+
+const ZONE_COLORS = {
+  garden: '#4af0a8', intimate: '#f06060', library: '#60a8f0',
+  authority: '#a060f0', forum: '#f0c060', threat: '#ff4040',
+  sacred: '#ffe080', neutral: '#556688'
+};
+
+// ================================================================
+// API
+// ================================================================
+function setApi(url) { API = url.trim(); refresh(); }
+
+async function refresh() {
+  try {
+    const r = await fetch(API + '/lighting/state');
+    if (!r.ok) throw new Error();
+    lightState = await r.json();
+    setStatus('on');
+    render();
+  } catch {
+    setStatus('off');
+    // Try ambient/sync to generate initial state
+    try {
+      await fetch(API + '/ambient/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      await refresh();
+    } catch {}
+  }
+}
+
+function setStatus(s) {
+  document.getElementById('sdot').className  = 'sdot ' + s;
+  document.getElementById('stext').textContent = s === 'on' ? 'online' : 'offline';
+}
+
+function toggleLive() {
+  const btn = document.getElementById('live-btn');
+  if (liveInterval) {
+    clearInterval(liveInterval);
+    liveInterval = null;
+    btn.textContent = 'Live Off';
+    document.getElementById('update-label').textContent = 'manual';
+  } else {
+    liveInterval = setInterval(refresh, 2000);
+    btn.textContent = 'Live On';
+    document.getElementById('update-label').textContent = 'every 2s';
+    btn.style.color = '#4af0a8';
+    btn.style.borderColor = '#4af0a8';
+  }
+}
+
+// ================================================================
+// Render
+// ================================================================
+function render() {
+  if (!lightState) return;
+  renderLightCards();
+  renderAgentTints();
+  renderScalars();
+  renderStage();
+  renderFooter();
+  renderKelvinStrip();
+  renderZonePalette();
+}
+
+function renderLightCards() {
+  const sources = [
+    { name: 'Key',     colorKey: 'key_color',     intKey: 'key_intensity',     extra: 'directional' },
+    { name: 'Fill',    colorKey: 'fill_color',     intKey: 'fill_intensity',    extra: 'point'       },
+    { name: 'Ambient', colorKey: 'ambient_color',  intKey: 'ambient_intensity', extra: 'directional' },
+    { name: 'Rim',     colorKey: 'rim_color',      intKey: 'rim_intensity',     extra: 'point'       },
+  ];
+
+  document.getElementById('light-cards').innerHTML = sources.map(s => {
+    const col = lightState[s.colorKey] || [1,1,1];
+    const int = lightState[s.intKey]   || 0;
+    const hex = rgbToHex(col);
+    const k   = lightState.kelvin_normalized ? Math.round(lightState.kelvin_normalized * 7000 + 2000) : 5000;
+    return `<div class="light-card">
+      <div class="light-name">
+        <div class="light-swatch" style="background:${hex}"></div>
+        ${s.name}
+        <span style="font-size:9px;color:var(--dim);margin-left:auto">${s.extra}</span>
+      </div>
+      <div class="light-row"><span>color</span><span class="light-val">${hex}</span></div>
+      <div class="light-row"><span>intensity</span><span class="light-val">${int.toFixed(3)}</span></div>
+      <div style="height:4px;background:var(--s3);border-radius:2px;margin-top:4px;overflow:hidden">
+        <div style="height:100%;width:${int*100}%;background:${hex};border-radius:2px;transition:width 0.5s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAgentTints() {
+  const tints = lightState.agent_tints || {};
+  const el = document.getElementById('agent-tints');
+  el.innerHTML = Object.entries(tints).map(([name, t]) => {
+    const bodyHex = rgbToHex(t.body);
+    const glowHex = rgbToHex(t.glow);
+    const k = colorTempEstimate(t.body);
+    return `<div class="agent-tint">
+      <div class="tint-swatch" style="background:${bodyHex};box-shadow:0 0 8px ${glowHex}${Math.round(t.glow_intensity*255).toString(16).padStart(2,'0')}"></div>
+      <div class="tint-info">
+        <div class="tint-name">${name}</div>
+        <div class="tint-kelvin">${bodyHex} · glow ${t.glow_intensity.toFixed(3)}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--dim);font-size:10px">No agents.</div>';
+}
+
+function renderScalars() {
+  const skip = new Set(['agent_tints','key_direction','fill_location','zone_type']);
+  const el   = document.getElementById('scalar-table');
+  el.innerHTML = Object.entries(lightState)
+    .filter(([k]) => !skip.has(k))
+    .map(([k, v]) => {
+      const isColor = Array.isArray(v) && v.length === 3;
+      const hex     = isColor ? rgbToHex(v) : null;
+      const display = isColor ? hex : (typeof v === 'number' ? v.toFixed(4) : String(v));
+      return `<div class="scalar-row">
+        <span class="scalar-key">${k}</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="scalar-val">${display}</span>
+          ${hex ? `<div class="scalar-swatch" style="background:${hex}"></div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function renderStage() {
+  const canvas = document.getElementById('stage-canvas');
+  const wrap   = document.getElementById('stage-panel');
+  const W = canvas.width  = wrap.clientWidth;
+  const H = canvas.height = wrap.clientHeight;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background — ambient light sets the base
+  const ambRGB  = lightState.ambient_color || [0.2, 0.2, 0.25];
+  const ambInt  = lightState.ambient_intensity || 0.3;
+  const bgR = Math.round(ambRGB[0] * ambInt * 255 * 0.5);
+  const bgG = Math.round(ambRGB[1] * ambInt * 255 * 0.5);
+  const bgB = Math.round(ambRGB[2] * ambInt * 255 * 0.5);
+  ctx.fillStyle = `rgb(${bgR},${bgG},${bgB})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Floor plane gradient
+  const floorGrad = ctx.createLinearGradient(0, H*0.6, 0, H);
+  const keyRGB = lightState.key_color || [1,1,1];
+  const keyInt = lightState.key_intensity || 0.8;
+  floorGrad.addColorStop(0, `rgba(${Math.round(keyRGB[0]*keyInt*80)},${Math.round(keyRGB[1]*keyInt*80)},${Math.round(keyRGB[2]*keyInt*80)},0.4)`);
+  floorGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = floorGrad;
+  ctx.fillRect(0, H*0.6, W, H*0.4);
+
+  // Key light cone from above
+  const kDir = lightState.key_direction || [-0.5,-1,-0.5];
+  const coneX = W/2 - kDir[0] * 200;
+  const coneW = 80 + (1 - (lightState.contrast||0.5)) * 120;
+  const coneGrad = ctx.createRadialGradient(coneX, 0, 0, coneX, H*0.5, H*0.6);
+  coneGrad.addColorStop(0, `rgba(${Math.round(keyRGB[0]*255)},${Math.round(keyRGB[1]*255)},${Math.round(keyRGB[2]*255)},${keyInt*0.25})`);
+  coneGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = coneGrad;
+  ctx.beginPath();
+  ctx.moveTo(coneX, 0);
+  ctx.lineTo(coneX - coneW, H);
+  ctx.lineTo(coneX + coneW, H);
+  ctx.closePath();
+  ctx.fill();
+
+  // Fill light (softer, from side)
+  const fillRGB = lightState.fill_color || [0.8,0.85,1];
+  const fillInt = lightState.fill_intensity || 0.4;
+  const fillGrad = ctx.createRadialGradient(W*0.85, H*0.3, 0, W*0.85, H*0.3, W*0.6);
+  fillGrad.addColorStop(0, `rgba(${Math.round(fillRGB[0]*255)},${Math.round(fillRGB[1]*255)},${Math.round(fillRGB[2]*255)},${fillInt*0.15})`);
+  fillGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fillGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Rim light (back edge)
+  const rimRGB = lightState.rim_color || [0.6,0.7,1];
+  const rimInt = lightState.rim_intensity || 0.2;
+  const rimGrad = ctx.createLinearGradient(0, H*0.5, 0, H*0.2);
+  rimGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  rimGrad.addColorStop(1, `rgba(${Math.round(rimRGB[0]*255)},${Math.round(rimRGB[1]*255)},${Math.round(rimRGB[2]*255)},${rimInt*0.2})`);
+  ctx.fillStyle = rimGrad;
+  ctx.fillRect(0, H*0.2, W, H*0.3);
+
+  // Agent spheres
+  const tints  = lightState.agent_tints || {};
+  const names  = Object.keys(tints);
+  const n      = names.length || 1;
+  names.forEach((name, i) => {
+    const t  = tints[name];
+    const cx = W * (0.25 + i * (0.5 / Math.max(n-1,1)));
+    const cy = H * 0.55;
+    const r  = 36;
+
+    // Shadow
+    const contrast = lightState.contrast || 0.5;
+    const shadowLen = 30 + contrast * 60;
+    const shadowGrad = ctx.createRadialGradient(cx + shadowLen*0.3, cy + r, 0, cx, cy + r, r * 1.5);
+    shadowGrad.addColorStop(0, `rgba(0,0,0,${contrast * 0.6})`);
+    shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.beginPath();
+    ctx.ellipse(cx + shadowLen*0.2, cy + r + 5, r * 1.2, r * 0.3, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Body
+    const bodyRGB = t.body || [0.7,0.7,0.8];
+    const bHex    = rgbToHex(bodyRGB);
+    const bodyGrad = ctx.createRadialGradient(cx - r*0.3, cy - r*0.3, 0, cx, cy, r);
+    bodyGrad.addColorStop(0, lightenHex(bHex, 0.4));
+    bodyGrad.addColorStop(0.6, bHex);
+    bodyGrad.addColorStop(1, darkenHex(bHex, 0.4));
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // Glow ring
+    const glowRGB = t.glow || bodyRGB;
+    const gHex    = rgbToHex(glowRGB);
+    const glowAmt = t.glow_intensity || 0;
+    if (glowAmt > 0.05) {
+      const glowGrad = ctx.createRadialGradient(cx, cy, r, cx, cy, r + 20);
+      glowGrad.addColorStop(0, gHex + Math.round(glowAmt * 200).toString(16).padStart(2,'0'));
+      glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 20, 0, Math.PI*2);
+      ctx.fillStyle = glowGrad;
+      ctx.fill();
+    }
+
+    // Label
+    ctx.fillStyle = 'rgba(160,176,200,0.9)';
+    ctx.font = 'bold 11px Syne, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(name, cx, cy + r + 18);
+  });
+
+  // Flicker overlay
+  const flicker = lightState.flicker_amplitude || 0;
+  if (flicker > 0.005) {
+    const flkAmt = flicker * (0.5 + Math.sin(Date.now() / 80) * 0.5);
+    ctx.fillStyle = `rgba(255,200,100,${flkAmt * 0.06})`;
+    ctx.fillRect(0, 0, W, H);
+    requestAnimationFrame(() => render());
+  }
+}
+
+function renderFooter() {
+  const k = lightState.kelvin_normalized ? Math.round(lightState.kelvin_normalized * 7000 + 2000) : 5000;
+  document.getElementById('f-kelvin').textContent = k + 'K';
+  document.getElementById('f-zone').textContent   = lightState.zone_type || 'neutral';
+  document.getElementById('f-contrast').textContent = (lightState.contrast || 0).toFixed(3);
+  document.getElementById('f-flicker').textContent  = (lightState.flicker_amplitude || 0).toFixed(4);
+  document.getElementById('f-agents').textContent   = Object.keys(lightState.agent_tints || {}).length;
+
+  // Color footer value by kelvin
+  const kn = lightState.kelvin_normalized || 0.4;
+  const warmness = 1 - kn;
+  const r = Math.round(180 + warmness * 75);
+  const g = Math.round(160 + warmness * 40);
+  const b = Math.round(100 + kn * 155);
+  document.getElementById('f-kelvin').style.color = `rgb(${r},${g},${b})`;
+}
+
+function renderKelvinStrip() {
+  const canvas = document.getElementById('kelvin-strip');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth;
+  const H = 20;
+  canvas.height = H;
+
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  const stops = [
+    [0,    '#ff8040'],  // 2000K
+    [0.2,  '#ffb060'],  // 3400K
+    [0.4,  '#fff0c0'],  // 4800K
+    [0.6,  '#ffffff'],  // 6200K
+    [0.8,  '#c8d8ff'],  // 7600K
+    [1.0,  '#90b0ff'],  // 9000K
+  ];
+  stops.forEach(([t, c]) => grad.addColorStop(t, c));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Marker
+  const kn = lightState?.kelvin_normalized || 0.4;
+  const markerX = kn * W;
+  document.getElementById('kelvin-marker').style.marginLeft = `${markerX - 1.5}px`;
+}
+
+function renderZonePalette() {
+  const el = document.getElementById('zone-palette');
+  if (el.children.length > 0) return; // only render once
+  const zones = ['neutral','garden','intimate','library','authority','forum','threat','sacred'];
+  el.innerHTML = zones.map(z => {
+    const col = ZONE_COLORS[z] || '#888';
+    return `<div class="zone-chip" style="color:${col};border-color:${col};background:${col}18"
+      data-zone="${z}" onclick="previewZone('${z}')">${z}</div>`;
+  }).join('');
+}
+
+async function previewZone(zone) {
+  // Trigger ambient sync with zone hint to preview lighting
+  try {
+    await fetch(API + '/ambient/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone_hint: zone })
+    });
+    await refresh();
+    document.querySelectorAll('.zone-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.zone === zone));
+  } catch { toast('API offline'); }
+}
+
+// ================================================================
+// Color utilities
+// ================================================================
+function rgbToHex(rgb) {
+  const r = Math.round((rgb[0] || 0) * 255);
+  const g = Math.round((rgb[1] || 0) * 255);
+  const b = Math.round((rgb[2] || 0) * 255);
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function lightenHex(hex, amount) {
+  const rgb = hexToRgb(hex);
+  return `rgb(${Math.min(255,Math.round(rgb[0]*(1+amount)))},${Math.min(255,Math.round(rgb[1]*(1+amount)))},${Math.min(255,Math.round(rgb[2]*(1+amount)))})`;
+}
+
+function darkenHex(hex, amount) {
+  const rgb = hexToRgb(hex);
+  return `rgb(${Math.round(rgb[0]*(1-amount))},${Math.round(rgb[1]*(1-amount))},${Math.round(rgb[2]*(1-amount))})`;
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function colorTempEstimate(rgb) {
+  // crude estimate: ratio of blue to red
+  const warmth = (rgb[0] || 0) - (rgb[2] || 0);
+  return Math.round(5000 - warmth * 3000) + 'K';
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ================================================================
+// Init
+// ================================================================
+window.addEventListener('load', () => {
+  setApi(document.getElementById('api-url').value);
+  window.addEventListener('resize', () => { if (lightState) renderStage(); });
+});
+</script>
+</body>
+</html>

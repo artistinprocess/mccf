@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Waypoint Editor — Scene Composer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg:       #080a0e;
+  --s1:       #0e1117;
+  --s2:       #141820;
+  --s3:       #1c2230;
+  --border:   #222840;
+  --accent:   #4af0a8;
+  --warm:     #f0c060;
+  --cool:     #60a8f0;
+  --danger:   #f06060;
+  --purple:   #a060f0;
+  --text:     #c0cce0;
+  --dim:      #5a6880;
+  --E: #f06060; --B: #60a8f0; --P: #f0c060; --S: #4af0a8;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 260px 1fr 300px;
+  grid-template-areas: "hdr hdr hdr" "left map right";
+  overflow: hidden;
+}
+
+header {
+  grid-area: hdr;
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 20px;
+}
+
+.logo {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--warm);
+  letter-spacing: -0.3px;
+}
+.logo span { color: var(--dim); font-weight: 400; }
+
+.mode-tabs { display: flex; gap: 2px; }
+.mtab {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.mtab:hover { color: var(--text); border-color: var(--dim); }
+.mtab.active { color: var(--warm); border-color: var(--warm); background: #1a1508; }
+
+.api-row {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.api-row input {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  width: 160px;
+  outline: none;
+}
+.sdot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.sdot.on  { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+.sdot.off { background: var(--danger); }
+
+/* ── PANELS ── */
+.panel {
+  overflow-y: auto;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+}
+.panel::-webkit-scrollbar { width: 3px; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+#left-panel  { grid-area: left; }
+#map-panel   { grid-area: map; position: relative; overflow: hidden; padding: 0; }
+#right-panel { grid-area: right; border-right: none; }
+
+/* section headers */
+.sh {
+  font-family: var(--display);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 14px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sh:first-child { margin-top: 0; }
+.sh::after { content:''; flex:1; height:1px; background: var(--border); }
+
+/* ── Zone list ── */
+.zone-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.zone-item:hover { border-color: var(--dim); }
+.zone-item.sel   { border-color: var(--warm); }
+
+.zone-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.zone-name {
+  flex: 1;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 600;
+}
+.zone-type {
+  font-size: 9px;
+  color: var(--dim);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/* ── Waypoint list ── */
+.wp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 3px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+  font-size: 11px;
+}
+.wp-item:hover { border-color: var(--dim); }
+.wp-item.sel   { border-color: var(--cool); }
+.wp-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--s3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  color: var(--cool);
+  flex-shrink: 0;
+}
+
+/* ── Map canvas ── */
+#scene-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+.map-toolbar {
+  position: absolute;
+  top: 10px; left: 10px;
+  display: flex; gap: 6px;
+  background: rgba(8,10,14,0.88);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 10px;
+}
+
+.tool-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 9px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.tool-btn:hover   { color: var(--text); border-color: var(--dim); }
+.tool-btn.active  { color: var(--warm); border-color: var(--warm); }
+
+.coord-display {
+  position: absolute;
+  bottom: 10px; left: 10px;
+  background: rgba(8,10,14,0.85);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+/* ── Forms ── */
+label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
+label:first-child { margin-top: 0; }
+
+input[type=text], input[type=number], select {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+  margin-bottom: 0;
+  transition: border-color 0.12s;
+}
+input:focus, select:focus { border-color: var(--warm); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.btn:hover        { border-color: var(--dim); color: var(--warm); }
+.btn.pri          { background: var(--warm); border-color: var(--warm); color: #1a1000; font-weight: 600; }
+.btn.pri:hover    { background: #e8b040; }
+.btn.danger       { border-color: var(--danger); color: var(--danger); }
+.btn.cool         { border-color: var(--cool); color: var(--cool); }
+.btn.full         { width: 100%; justify-content: center; }
+.btn-row          { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ── Channel bias sliders ── */
+.bias-row {
+  display: grid;
+  grid-template-columns: 14px 1fr 38px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.bias-ch { font-size: 10px; font-weight: 600; font-family: var(--display); }
+.bias-val { font-size: 10px; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--warm); }
+
+/* ── Affective arc chart ── */
+#arc-canvas {
+  width: 100%;
+  height: 160px;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--s2);
+}
+
+.arc-legend {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;
+}
+.arc-leg-item {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 9px; color: var(--dim);
+}
+.arc-leg-dot { width: 8px; height: 3px; border-radius: 2px; }
+
+/* ── Pressure bar ── */
+.pressure-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.p-item { background: var(--s2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; }
+.p-label { font-size: 9px; color: var(--dim); margin-bottom: 4px; }
+.p-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.p-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.p-val { font-size: 10px; color: var(--accent); font-weight: 500; margin-top: 2px; }
+
+/* toast */
+#toast {
+  position: fixed; bottom: 16px; left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--s2); border: 1px solid var(--warm);
+  border-radius: 4px; padding: 6px 16px;
+  font-size: 11px; color: var(--warm);
+  opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* path sequence */
+.path-seq {
+  display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0;
+  align-items: center;
+}
+.path-wp {
+  background: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--cool);
+  cursor: grab;
+  position: relative;
+}
+.path-arrow { color: var(--dim); font-size: 12px; }
+
+/* resonance heat */
+.res-heat {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+.res-pos { background: #0d2e20; color: var(--accent); }
+.res-neg { background: #2e0d0d; color: var(--danger); }
+.res-neu { background: var(--s3);  color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>Scene Composer</span></div>
+  <div class="mode-tabs">
+    <button class="mtab active" onclick="setMode('zones')">Zones</button>
+    <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
+    <button class="mtab" onclick="setMode('paths')">Paths</button>
+    <button class="mtab" onclick="setMode('arc')">Arc</button>
+  </div>
+  <div class="api-row">
+    <div class="sdot" id="sdot"></div>
+    <span id="stext">offline</span>
+    <input id="api-input" value="http://localhost:5000" onchange="setApi(this.value)">
+    <button class="btn" onclick="ping()" style="padding:2px 8px">ping</button>
+  </div>
+</header>
+
+<!-- LEFT: object lists -->
+<div class="panel" id="left-panel">
+
+  <!-- ZONES MODE -->
+  <div id="mode-zones">
+    <div class="sh">Zones</div>
+    <div id="zone-list"></div>
+    <button class="btn full" style="margin-top:6px" onclick="startPlaceZone()">+ Place Zone</button>
+
+    <div id="place-zone-form" style="display:none;margin-top:10px">
+      <div class="sh">New Zone</div>
+      <label>Name</label>
+      <input id="z-name" type="text" placeholder="Zone name">
+      <label>Preset</label>
+      <select id="z-preset" onchange="loadPreset()">
+        <option value="neutral">neutral</option>
+        <option value="library">library</option>
+        <option value="intimate_alcove">intimate alcove</option>
+        <option value="forum_plaza">forum / plaza</option>
+        <option value="authority_throne">authority / throne</option>
+        <option value="garden_path">garden path</option>
+        <option value="threat_zone">threat zone</option>
+        <option value="sacred_memorial">sacred / memorial</option>
+      </select>
+      <label>Radius</label>
+      <input id="z-radius" type="number" value="3" min="0.5" max="20" step="0.5">
+      <div class="sh">Channel Bias</div>
+      <div class="bias-row">
+        <span class="bias-ch" style="color:var(--E)">E</span>
+        <input type="range" id="zb-E" min="-0.5" max="0.5" step="0.01" value="0" oninput="updateBiasDisplay('E')">
+        <span class="bias-val" id="zbv-E">0.00</span>
+      </div>
+      <div class="bias-row">
+        <span class="bias-ch" style="color:var(--B)">B</span>
+        <input type="range" id="zb-B" min="-0.5" max="0.5" step="0.01" value="0" oninput="updateBiasDisplay('B')">
+        <span class="bias-val" id="zbv-B">0.00</span>
+      </div>
+      <div class="bias-row">
+        <span class="bias-ch" style="color:var(--P)">P</span>
+        <input type="range" id="zb-P" min="-0.5" max="0.5" step="0.01" value="0" oninput="updateBiasDisplay('P')">
+        <span class="bias-val" id="zbv-P">0.00</span>
+      </div>
+      <div class="bias-row">
+        <span class="bias-ch" style="color:var(--S)">S</span>
+        <input type="range" id="zb-S" min="-0.5" max="0.5" step="0.01" value="0" oninput="updateBiasDisplay('S')">
+        <span class="bias-val" id="zbv-S">0.00</span>
+      </div>
+      <label>Description</label>
+      <input id="z-desc" type="text" placeholder="Optional description">
+      <div class="btn-row">
+        <button class="btn pri" onclick="confirmPlaceZone()">Place on Map</button>
+        <button class="btn" onclick="cancelPlace()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WAYPOINTS MODE -->
+  <div id="mode-waypoints" style="display:none">
+    <div class="sh">Waypoints</div>
+    <div id="wp-list"></div>
+    <button class="btn full" style="margin-top:6px" onclick="startPlaceWP()">+ Place Waypoint</button>
+    <div id="place-wp-form" style="display:none;margin-top:10px">
+      <div class="sh">New Waypoint</div>
+      <label>Name</label>
+      <input id="wp-name" type="text" placeholder="Waypoint name">
+      <label>Label</label>
+      <input id="wp-label" type="text" placeholder="Narrative label">
+      <label>Dwell (s)</label>
+      <input id="wp-dwell" type="number" value="2" min="0.5" step="0.5">
+      <div class="btn-row">
+        <button class="btn pri" onclick="confirmPlaceWP()">Place on Map</button>
+        <button class="btn" onclick="cancelPlace()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATHS MODE -->
+  <div id="mode-paths" style="display:none">
+    <div class="sh">Paths</div>
+    <div id="path-list"></div>
+    <div style="margin-top:10px">
+      <div class="sh">New Path</div>
+      <label>Path Name</label>
+      <input id="p-name" type="text" placeholder="Path name">
+      <label>Agent</label>
+      <select id="p-agent"></select>
+      <label>Waypoints (in order)</label>
+      <div id="p-wp-select" style="max-height:120px;overflow-y:auto;background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px"></div>
+      <div id="p-sequence" class="path-seq"></div>
+      <div class="btn-row">
+        <button class="btn pri" onclick="createPath()">Create Path</button>
+        <button class="btn" onclick="clearPathSeq()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARC MODE -->
+  <div id="mode-arc" style="display:none">
+    <div class="sh">Arc Analysis</div>
+    <label>Path</label>
+    <select id="arc-path-sel" onchange="loadArc()"></select>
+    <div style="margin-top:10px" id="arc-summary"></div>
+  </div>
+
+</div>
+
+<!-- MAP -->
+<div id="map-panel">
+  <canvas id="scene-canvas"></canvas>
+  <div class="map-toolbar">
+    <button class="tool-btn active" id="tool-select" onclick="setTool('select')">Select</button>
+    <button class="tool-btn" id="tool-move"   onclick="setTool('move')">Move</button>
+    <button class="tool-btn" id="tool-query"  onclick="setTool('query')">Query</button>
+  </div>
+  <div class="coord-display" id="coord-display">x: 0.0  z: 0.0</div>
+</div>
+
+<!-- RIGHT: detail / properties -->
+<div class="panel" id="right-panel">
+
+  <!-- ZONE DETAIL -->
+  <div id="detail-zone" style="display:none">
+    <div class="sh" style="margin-top:0">Zone Properties</div>
+    <div id="zone-detail-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--warm);margin-bottom:8px;"></div>
+    <div id="zone-bias-bars"></div>
+    <div class="sh">Resonance Memory</div>
+    <div id="zone-resonance"></div>
+    <div class="btn-row">
+      <button class="btn danger" onclick="deleteSelectedZone()">Delete</button>
+    </div>
+  </div>
+
+  <!-- WAYPOINT DETAIL -->
+  <div id="detail-wp" style="display:none">
+    <div class="sh" style="margin-top:0">Waypoint</div>
+    <div id="wp-detail-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
+    <div class="sh">Zone Pressure Here</div>
+    <div class="pressure-grid" id="wp-pressure-grid"></div>
+    <div class="sh">Active Zones</div>
+    <div id="wp-active-zones" style="font-size:10px;color:var(--dim)">—</div>
+    <div class="btn-row">
+      <button class="btn danger" onclick="deleteSelectedWP()">Delete</button>
+    </div>
+  </div>
+
+  <!-- ARC CHART -->
+  <div id="detail-arc">
+    <div class="sh" style="margin-top:0">Affective Arc</div>
+    <canvas id="arc-canvas"></canvas>
+    <div class="arc-legend">
+      <div class="arc-leg-item"><div class="arc-leg-dot" style="background:var(--E)"></div>E emotional</div>
+      <div class="arc-leg-item"><div class="arc-leg-dot" style="background:var(--B)"></div>B behavioral</div>
+      <div class="arc-leg-item"><div class="arc-leg-dot" style="background:var(--P)"></div>P predictive</div>
+      <div class="arc-leg-item"><div class="arc-leg-dot" style="background:var(--S)"></div>S social</div>
+      <div class="arc-leg-item"><div class="arc-leg-dot" style="background:#888;border:1px dashed var(--dim)"></div>regulation</div>
+    </div>
+    <div id="arc-wp-detail" style="margin-top:10px;font-size:10px;color:var(--dim)">
+      Select a path and click a waypoint in the arc to see details.
+    </div>
+  </div>
+
+  <!-- POSITION QUERY -->
+  <div id="detail-query" style="display:none">
+    <div class="sh" style="margin-top:0">Position Query</div>
+    <div id="query-pos" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="pressure-grid" id="query-pressure-grid"></div>
+    <div class="sh">Active Zones</div>
+    <div id="query-zones" style="font-size:10px;color:var(--dim)"></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ================================================================
+// State
+// ================================================================
+let API = 'http://localhost:5000';
+let mode = 'zones';
+let tool = 'select';
+let placing = null;    // 'zone' | 'waypoint'
+let pendingZone = null;
+let pendingWP = null;
+
+let zones = {};
+let waypoints = {};
+let paths = {};
+let agents = {};
+let arcData = null;
+
+let selectedZone = null;
+let selectedWP   = null;
+
+let pathSequence = [];  // waypoint names in order
+
+// Canvas state
+let canvas, ctx;
+let W, H;
+const SCALE = 30;   // pixels per world unit
+let offset = { x: 0, z: 0 };  // camera offset in world units
+
+// Interaction
+let isDragging = false;
+let dragTarget = null;
+let lastMouse = { x: 0, y: 0 };
+
+const CH_COLORS = { E: '#f06060', B: '#60a8f0', P: '#f0c060', S: '#4af0a8' };
+
+// ================================================================
+// Init
+// ================================================================
+window.addEventListener('load', () => {
+  canvas = document.getElementById('scene-canvas');
+  ctx    = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mouseup',   onMouseUp);
+  canvas.addEventListener('click',     onCanvasClick);
+
+  setApi(document.getElementById('api-input').value);
+});
+
+function resizeCanvas() {
+  const wrap = document.getElementById('map-panel');
+  W = canvas.width  = wrap.clientWidth;
+  H = canvas.height = wrap.clientHeight;
+  offset = { x: -W/(2*SCALE), z: -H/(2*SCALE) };
+  drawScene();
+}
+
+// ================================================================
+// API
+// ================================================================
+function setApi(url) { API = url.trim(); ping(); }
+
+async function ping() {
+  try {
+    const r = await fetch(API + '/field', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      setStatus('on');
+      await loadAll();
+    }
+  } catch { setStatus('off'); }
+}
+
+function setStatus(s) {
+  document.getElementById('sdot').className = 'sdot ' + s;
+  document.getElementById('stext').textContent = s === 'on' ? 'online' : 'offline';
+}
+
+async function apiGet(path) {
+  const r = await fetch(API + path);
+  return r.json();
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function apiDelete(path) {
+  return fetch(API + path, { method: 'DELETE' });
+}
+
+async function loadAll() {
+  try {
+    const [zd, wd, pd, fd] = await Promise.all([
+      apiGet('/zone'),
+      apiGet('/waypoint'),
+      apiGet('/path'),
+      apiGet('/field')
+    ]);
+    zones     = zd;
+    waypoints = wd;
+    paths     = pd;
+    agents    = fd.agents || {};
+    renderAll();
+  } catch(e) { console.error(e); }
+}
+
+// ================================================================
+// Mode switching
+// ================================================================
+function setMode(m) {
+  mode = m;
+  ['zones','waypoints','paths','arc'].forEach(n => {
+    document.getElementById('mode-' + n).style.display = n === m ? 'block' : 'none';
+  });
+  document.querySelectorAll('.mtab').forEach((b,i) => {
+    b.classList.toggle('active', ['zones','waypoints','paths','arc'][i] === m);
+  });
+  if (m === 'paths') populatePathUI();
+  if (m === 'arc')   populateArcUI();
+  drawScene();
+}
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + t).classList.add('active');
+  if (t !== 'query') {
+    document.getElementById('detail-query').style.display = 'none';
+    document.getElementById('detail-arc').style.display = 'block';
+  }
+}
+
+// ================================================================
+// Rendering
+// ================================================================
+function renderAll() {
+  renderZoneList();
+  renderWPList();
+  renderPathList();
+  drawScene();
+}
+
+function renderZoneList() {
+  const el = document.getElementById('zone-list');
+  el.innerHTML = Object.values(zones).map(z => `
+    <div class="zone-item ${z.name === selectedZone ? 'sel':''}"
+         onclick="selectZone('${z.name}')">
+      <div class="zone-dot" style="background:${z.color}"></div>
+      <span class="zone-name">${z.name}</span>
+      <span class="zone-type">${z.zone_type}</span>
+    </div>`).join('') || '<div style="color:var(--dim);font-size:10px">No zones yet.</div>';
+}
+
+function renderWPList() {
+  const el = document.getElementById('wp-list');
+  const wps = Object.values(waypoints);
+  el.innerHTML = wps.map((wp, i) => `
+    <div class="wp-item ${wp.name === selectedWP ? 'sel':''}"
+         onclick="selectWP('${wp.name}')">
+      <div class="wp-num">${i+1}</div>
+      <span style="flex:1">${wp.name}</span>
+      <span style="color:var(--dim);font-size:9px">${wp.label || ''}</span>
+    </div>`).join('') || '<div style="color:var(--dim);font-size:10px">No waypoints yet.</div>';
+}
+
+function renderPathList() {
+  const el = document.getElementById('path-list');
+  el.innerHTML = Object.values(paths).map(p => `
+    <div class="zone-item" onclick="selectPath('${p.name}')">
+      <span class="zone-name">${p.name}</span>
+      <span class="zone-type">${p.agent}</span>
+    </div>`).join('') || '<div style="color:var(--dim);font-size:10px">No paths yet.</div>';
+}
+
+// ================================================================
+// Canvas drawing
+// ================================================================
+function worldToCanvas(wx, wz) {
+  return {
+    cx: (wx - offset.x) * SCALE,
+    cy: (wz - offset.z) * SCALE
+  };
+}
+
+function canvasToWorld(cx, cy) {
+  return {
+    wx: cx / SCALE + offset.x,
+    wz: cy / SCALE + offset.z
+  };
+}
+
+function drawScene() {
+  if (!ctx) return;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid
+  ctx.strokeStyle = '#1c2230';
+  ctx.lineWidth = 1;
+  const gridStep = SCALE;
+  const startX = -((offset.x % 1) * SCALE);
+  const startY = -((offset.z % 1) * SCALE);
+  for (let x = startX; x < W; x += gridStep) {
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for (let y = startY; y < H; y += gridStep) {
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+  // Origin cross
+  const o = worldToCanvas(0, 0);
+  ctx.strokeStyle = '#2a3450';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(o.cx-20,o.cy); ctx.lineTo(o.cx+20,o.cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(o.cx,o.cy-20); ctx.lineTo(o.cx,o.cy+20); ctx.stroke();
+
+  // Draw zones
+  Object.values(zones).forEach(z => drawZone(z));
+
+  // Draw path lines
+  if (mode === 'paths' || mode === 'arc') {
+    Object.values(paths).forEach(p => drawPath(p));
+  }
+
+  // Draw waypoints
+  Object.values(waypoints).forEach((wp, i) => drawWaypoint(wp, i));
+
+  // Arc overlay
+  if (mode === 'arc' && arcData) drawArcOverlay();
+}
+
+function drawZone(z) {
+  const {cx, cy} = worldToCanvas(z.location[0], z.location[2] || 0);
+  const r = z.radius * SCALE;
+
+  const selected = z.name === selectedZone;
+
+  // Filled circle
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  const col = z.color || '#888888';
+  grad.addColorStop(0, col + '44');
+  grad.addColorStop(0.7, col + '22');
+  grad.addColorStop(1, col + '00');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Border
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle = selected ? col : col + '88';
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.setLineDash(selected ? [] : [5, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI*2);
+  ctx.fillStyle = col;
+  ctx.fill();
+
+  // Label
+  ctx.fillStyle = col;
+  ctx.font = 'bold 11px Syne, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(z.name, cx, cy + 8);
+  ctx.font = '9px IBM Plex Mono';
+  ctx.fillStyle = col + 'aa';
+  ctx.fillText(z.zone_type, cx, cy + 20);
+
+  // Resonance heat ring
+  const rw = z.resonance_weight || 0;
+  if (Math.abs(rw) > 0.05) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.05, 0, Math.PI*2);
+    ctx.strokeStyle = rw > 0 ? 'rgba(74,240,168,0.5)' : 'rgba(240,96,96,0.5)';
+    ctx.lineWidth = 2 + Math.min(4, Math.abs(rw));
+    ctx.stroke();
+  }
+}
+
+function drawWaypoint(wp, index) {
+  const pos = wp.position || [0,0,0];
+  const {cx, cy} = worldToCanvas(pos[0], pos[2] || 0);
+  const selected = wp.name === selectedWP;
+
+  // Diamond shape
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 10);
+  ctx.lineTo(cx + 8, cy);
+  ctx.lineTo(cx, cy + 10);
+  ctx.lineTo(cx - 8, cy);
+  ctx.closePath();
+  ctx.fillStyle = selected ? '#60a8f0' : '#1c3050';
+  ctx.fill();
+  ctx.strokeStyle = selected ? '#80c8ff' : '#60a8f0';
+  ctx.lineWidth = selected ? 2 : 1;
+  ctx.stroke();
+
+  // Number
+  ctx.fillStyle = '#c0d8f0';
+  ctx.font = 'bold 9px Syne';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(index + 1, cx, cy);
+
+  // Label
+  ctx.fillStyle = '#60a8f0';
+  ctx.font = '10px IBM Plex Mono';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(wp.name, cx + 10, cy - 8);
+  if (wp.label) {
+    ctx.fillStyle = '#3a6080';
+    ctx.font = '9px IBM Plex Mono';
+    ctx.fillText(wp.label, cx + 10, cy + 2);
+  }
+}
+
+function drawPath(p) {
+  const wps = (p.waypoints || []).map(n => waypoints[n]).filter(Boolean);
+  if (wps.length < 2) return;
+  ctx.strokeStyle = '#3a5070';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  wps.forEach((wp, i) => {
+    const pos = wp.position || [0,0,0];
+    const {cx, cy} = worldToCanvas(pos[0], pos[2] || 0);
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawArcOverlay() {
+  if (!arcData) return;
+  arcData.forEach((step, i) => {
+    const pos = step.position || [0,0,0];
+    const {cx, cy} = worldToCanvas(pos[0], pos[2] || 0);
+    const e = step.channel_state.E || 0;
+    const r = 6 + e * 12;
+
+    // Emotional intensity glow
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, `rgba(240,96,96,${e * 0.6})`);
+    grad.addColorStop(1, 'transparent');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  });
+}
+
+// ================================================================
+// Zone placement
+// ================================================================
+function startPlaceZone() {
+  document.getElementById('place-zone-form').style.display = 'block';
+  placing = 'zone';
+  toast('Click on the map to place the zone center');
+}
+
+function cancelPlace() {
+  placing = null;
+  pendingZone = null;
+  pendingWP   = null;
+  document.getElementById('place-zone-form').style.display = 'none';
+  document.getElementById('place-wp-form').style.display   = 'none';
+}
+
+function confirmPlaceZone() {
+  if (!pendingZone) {
+    toast('Click on map first to set position');
+    return;
+  }
+  placing = null;
+  _createZoneAt(pendingZone.x, pendingZone.z);
+  pendingZone = null;
+}
+
+async function _createZoneAt(wx, wz) {
+  const name    = document.getElementById('z-name').value.trim();
+  const preset  = document.getElementById('z-preset').value;
+  const radius  = parseFloat(document.getElementById('z-radius').value);
+  const desc    = document.getElementById('z-desc').value;
+
+  if (!name) { toast('Zone needs a name'); return; }
+
+  const bias = {};
+  ['E','B','P','S'].forEach(ch => {
+    bias[ch] = parseFloat(document.getElementById('zb-' + ch).value);
+  });
+
+  await apiPost('/zone', {
+    name, preset, radius,
+    location: [wx, 0, wz],
+    channel_bias: bias,
+    description: desc
+  });
+  document.getElementById('place-zone-form').style.display = 'none';
+  document.getElementById('z-name').value = '';
+  await loadAll();
+  toast('Zone placed: ' + name);
+}
+
+function loadPreset() {
+  const preset = document.getElementById('z-preset').value;
+  const PRESETS = {
+    neutral:           { E:0,     B:0,     P:0,     S:0    },
+    library:           { E:-0.10, B:0.05,  P:0.25,  S:0.05 },
+    intimate_alcove:   { E:0.30,  B:-0.05, P:-0.10, S:0.20 },
+    forum_plaza:       { E:0.05,  B:0.20,  P:0.10,  S:0.25 },
+    authority_throne:  { E:-0.15, B:0.30,  P:0.20,  S:-0.10},
+    garden_path:       { E:0.20,  B:-0.05, P:-0.05, S:0.10 },
+    threat_zone:       { E:0.35,  B:0.15,  P:0.30,  S:-0.20},
+    sacred_memorial:   { E:0.15,  B:0.10,  P:0.10,  S:0.15 },
+  };
+  const p = PRESETS[preset] || PRESETS.neutral;
+  ['E','B','P','S'].forEach(ch => {
+    document.getElementById('zb-' + ch).value = p[ch];
+    document.getElementById('zbv-' + ch).textContent = p[ch].toFixed(2);
+  });
+}
+
+function updateBiasDisplay(ch) {
+  const v = parseFloat(document.getElementById('zb-' + ch).value);
+  document.getElementById('zbv-' + ch).textContent = v.toFixed(2);
+}
+
+// ================================================================
+// Waypoint placement
+// ================================================================
+function startPlaceWP() {
+  document.getElementById('place-wp-form').style.display = 'block';
+  placing = 'waypoint';
+  toast('Click on the map to place the waypoint');
+}
+
+function confirmPlaceWP() {
+  if (!pendingWP) { toast('Click on map first'); return; }
+  placing = null;
+  _createWPAt(pendingWP.x, pendingWP.z);
+  pendingWP = null;
+}
+
+async function _createWPAt(wx, wz) {
+  const name  = document.getElementById('wp-name').value.trim();
+  const label = document.getElementById('wp-label').value;
+  const dwell = parseFloat(document.getElementById('wp-dwell').value);
+  if (!name) { toast('Waypoint needs a name'); return; }
+
+  const result = await apiPost('/waypoint', {
+    name, label, dwell_time: dwell,
+    position: [wx, 0, wz]
+  });
+  document.getElementById('place-wp-form').style.display = 'none';
+  document.getElementById('wp-name').value = '';
+  document.getElementById('wp-label').value = '';
+  await loadAll();
+  toast('Waypoint placed: ' + name);
+  if (result.predicted_pressure) {
+    showWPPressure(name, result.predicted_pressure);
+  }
+}
+
+// ================================================================
+// Canvas interaction
+// ================================================================
+function onMouseMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const {wx, wz} = canvasToWorld(cx, cy);
+  document.getElementById('coord-display').textContent =
+    `x: ${wx.toFixed(1)}  z: ${wz.toFixed(1)}`;
+
+  if (isDragging && dragTarget && tool === 'move') {
+    const {wx: nx, wz: nz} = canvasToWorld(cx, cy);
+    if (dragTarget.type === 'zone' && zones[dragTarget.name]) {
+      zones[dragTarget.name].location[0] = nx;
+      zones[dragTarget.name].location[2] = nz;
+    } else if (dragTarget.type === 'wp' && waypoints[dragTarget.name]) {
+      waypoints[dragTarget.name].position[0] = nx;
+      waypoints[dragTarget.name].position[2] = nz;
+    }
+    drawScene();
+  }
+  lastMouse = { x: cx, y: cy };
+}
+
+function onMouseDown(e) {
+  if (tool !== 'move') return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const {wx, wz} = canvasToWorld(cx, cy);
+
+  // Hit test zones
+  for (const z of Object.values(zones)) {
+    const dx = wx - z.location[0];
+    const dz = wz - (z.location[2] || 0);
+    if (Math.sqrt(dx*dx+dz*dz) < 0.8) {
+      isDragging = true;
+      dragTarget = { type: 'zone', name: z.name };
+      return;
+    }
+  }
+  // Hit test waypoints
+  for (const wp of Object.values(waypoints)) {
+    const dx = wx - wp.position[0];
+    const dz = wz - (wp.position[2] || 0);
+    if (Math.sqrt(dx*dx+dz*dz) < 0.6) {
+      isDragging = true;
+      dragTarget = { type: 'wp', name: wp.name };
+      return;
+    }
+  }
+}
+
+async function onMouseUp(e) {
+  if (isDragging && dragTarget) {
+    // Persist move
+    if (dragTarget.type === 'zone') {
+      const z = zones[dragTarget.name];
+      await apiDelete('/zone/' + encodeURIComponent(dragTarget.name));
+      await apiPost('/zone', {
+        name: z.name,
+        location: z.location,
+        radius: z.radius,
+        zone_type: z.zone_type,
+        channel_bias: z.channel_bias,
+        description: z.description,
+        color: z.color
+      });
+    } else if (dragTarget.type === 'wp') {
+      const wp = waypoints[dragTarget.name];
+      // Re-POST with new position (API treats as upsert via name)
+      await apiPost('/waypoint', {
+        name: wp.name,
+        position: wp.position,
+        label: wp.label,
+        dwell_time: wp.dwell_time
+      });
+    }
+    await loadAll();
+  }
+  isDragging = false;
+  dragTarget = null;
+}
+
+async function onCanvasClick(e) {
+  if (isDragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const {wx, wz} = canvasToWorld(cx, cy);
+
+  if (placing === 'zone') {
+    pendingZone = { x: wx, z: wz };
+    toast(`Zone will be placed at (${wx.toFixed(1)}, ${wz.toFixed(1)}) — click Place`);
+    return;
+  }
+  if (placing === 'waypoint') {
+    pendingWP = { x: wx, z: wz };
+    toast(`Waypoint will be placed at (${wx.toFixed(1)}, ${wz.toFixed(1)}) — click Place`);
+    return;
+  }
+  if (tool === 'query') {
+    await queryPosition(wx, wz);
+    return;
+  }
+
+  // Select hit test
+  for (const z of Object.values(zones)) {
+    const dx = wx - z.location[0];
+    const dz = wz - (z.location[2] || 0);
+    if (Math.sqrt(dx*dx+dz*dz) < z.radius) {
+      selectZone(z.name);
+      return;
+    }
+  }
+  for (const wp of Object.values(waypoints)) {
+    const dx = wx - wp.position[0];
+    const dz = wz - (wp.position[2] || 0);
+    if (Math.sqrt(dx*dx+dz*dz) < 0.8) {
+      selectWP(wp.name);
+      return;
+    }
+  }
+}
+
+// ================================================================
+// Selection
+// ================================================================
+function selectZone(name) {
+  selectedZone = name;
+  selectedWP   = null;
+  showZoneDetail(name);
+  renderAll();
+}
+
+function showZoneDetail(name) {
+  const z = zones[name];
+  if (!z) return;
+  document.getElementById('detail-zone').style.display = 'block';
+  document.getElementById('detail-wp').style.display   = 'none';
+  document.getElementById('detail-query').style.display = 'none';
+  document.getElementById('zone-detail-name').textContent = z.name + ' [' + z.zone_type + ']';
+
+  const bias = z.channel_bias || {};
+  document.getElementById('zone-bias-bars').innerHTML = ['E','B','P','S'].map(ch => {
+    const v = bias[ch] || 0;
+    const pct = ((v + 0.5) / 1.0 * 100).toFixed(0);
+    const col = CH_COLORS[ch];
+    const sign = v >= 0 ? '+' : '';
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+      <span style="width:12px;font-size:10px;font-weight:700;color:${col}">${ch}</span>
+      <div style="flex:1;height:4px;background:var(--border);border-radius:2px;position:relative;">
+        <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--dim)"></div>
+        <div style="position:absolute;
+          ${v>=0 ? 'left:50%' : 'right:' + (50) + '%'};
+          top:0;bottom:0;
+          width:${Math.abs(v)*100}%;
+          background:${col};border-radius:2px;
+          ${v<0 ? 'margin-left:-'+(Math.abs(v)*100)+'%' : ''}"></div>
+      </div>
+      <span style="width:36px;text-align:right;font-size:10px;color:${col}">${sign}${v.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+
+  const rw = z.resonance_weight || 0;
+  const rwClass = rw > 0.1 ? 'res-pos' : rw < -0.1 ? 'res-neg' : 'res-neu';
+  document.getElementById('zone-resonance').innerHTML = `
+    <div style="margin-bottom:6px">
+      <span class="res-heat ${rwClass}">resonance: ${rw.toFixed(3)}</span>
+    </div>
+    <div style="font-size:10px;color:var(--dim)">
+      Episodes recorded: ${z.episode_count || 0}<br>
+      ${z.description || ''}
+    </div>`;
+}
+
+function selectWP(name) {
+  selectedWP   = name;
+  selectedZone = null;
+  showWPDetail(name);
+  renderAll();
+}
+
+async function showWPDetail(name) {
+  const wp = waypoints[name];
+  if (!wp) return;
+  document.getElementById('detail-wp').style.display   = 'block';
+  document.getElementById('detail-zone').style.display = 'none';
+  document.getElementById('detail-query').style.display = 'none';
+  document.getElementById('wp-detail-name').textContent =
+    name + (wp.label ? ' — ' + wp.label : '');
+
+  try {
+    const pos = wp.position || [0,0,0];
+    const data = await apiGet(`/scene/pressure?x=${pos[0]}&y=${pos[1]}&z=${pos[2]}`);
+    showWPPressure(name, data.channel_pressure);
+    const zonesActive = (data.active_zones || []).map(z => z.name).join(', ') || 'none';
+    document.getElementById('wp-active-zones').textContent = zonesActive;
+  } catch {}
+}
+
+function showWPPressure(name, pressure) {
+  const grid = document.getElementById('wp-pressure-grid');
+  if (!grid || !pressure) return;
+  grid.innerHTML = ['E','B','P','S'].map(ch => {
+    const v = pressure[ch] || 0;
+    const col = CH_COLORS[ch];
+    const pct = Math.abs(v) * 100;
+    const sign = v >= 0 ? '+' : '';
+    return `<div class="p-item">
+      <div class="p-label" style="color:${col}">${ch}</div>
+      <div class="p-bar">
+        <div class="p-fill" style="width:${pct}%;background:${col}"></div>
+      </div>
+      <div class="p-val" style="color:${col}">${sign}${v.toFixed(3)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function queryPosition(wx, wz) {
+  try {
+    const data = await apiGet(`/scene/pressure?x=${wx.toFixed(2)}&y=0&z=${wz.toFixed(2)}`);
+    document.getElementById('detail-query').style.display = 'block';
+    document.getElementById('detail-zone').style.display  = 'none';
+    document.getElementById('detail-wp').style.display    = 'none';
+    document.getElementById('query-pos').textContent =
+      `Query at (${wx.toFixed(2)}, ${wz.toFixed(2)})`;
+
+    const grid = document.getElementById('query-pressure-grid');
+    const p = data.channel_pressure || {};
+    grid.innerHTML = ['E','B','P','S'].map(ch => {
+      const v = p[ch] || 0;
+      const col = CH_COLORS[ch];
+      const pct = Math.abs(v) * 100;
+      return `<div class="p-item">
+        <div class="p-label" style="color:${col}">${ch}</div>
+        <div class="p-bar">
+          <div class="p-fill" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="p-val" style="color:${col}">${(v>=0?'+':'')}${v.toFixed(3)}</div>
+      </div>`;
+    }).join('');
+
+    const zList = (data.active_zones || []).map(z =>
+      `<span style="color:${z.color || '#888'};margin-right:8px">${z.name}</span>`
+    ).join('') || 'none';
+    document.getElementById('query-zones').innerHTML = zList;
+  } catch { toast('Query failed'); }
+}
+
+// ================================================================
+// Path UI
+// ================================================================
+function populatePathUI() {
+  const sel = document.getElementById('p-agent');
+  sel.innerHTML = Object.keys(agents).map(n =>
+    `<option value="${n}">${n}</option>`).join('');
+
+  const wpSel = document.getElementById('p-wp-select');
+  wpSel.innerHTML = Object.values(waypoints).map(wp =>
+    `<div class="wp-item" onclick="addToPath('${wp.name}')" style="cursor:pointer">
+      <div class="wp-num">+</div>
+      <span>${wp.name}</span>
+      <span style="color:var(--dim);font-size:9px">${wp.label||''}</span>
+    </div>`
+  ).join('') || '<div style="color:var(--dim);font-size:10px">No waypoints yet.</div>';
+}
+
+function addToPath(wpName) {
+  pathSequence.push(wpName);
+  renderPathSequence();
+}
+
+function clearPathSeq() {
+  pathSequence = [];
+  renderPathSequence();
+}
+
+function renderPathSequence() {
+  const el = document.getElementById('p-sequence');
+  if (!pathSequence.length) {
+    el.innerHTML = '<span style="color:var(--dim);font-size:10px">No waypoints selected</span>';
+    return;
+  }
+  el.innerHTML = pathSequence.map((wp, i) =>
+    `${i > 0 ? '<span class="path-arrow">→</span>' : ''}
+     <span class="path-wp">${wp}</span>`
+  ).join('');
+}
+
+async function createPath() {
+  const name   = document.getElementById('p-name').value.trim();
+  const agent  = document.getElementById('p-agent').value;
+  if (!name || pathSequence.length < 2) {
+    toast('Path needs name and at least 2 waypoints');
+    return;
+  }
+  await apiPost('/path', { name, agent, waypoints: pathSequence });
+  await loadAll();
+  clearPathSeq();
+  toast('Path created: ' + name);
+}
+
+function selectPath(name) {
+  document.getElementById('arc-path-sel').value = name;
+  setMode('arc');
+  loadArc();
+}
+
+// ================================================================
+// Arc analysis
+// ================================================================
+function populateArcUI() {
+  const sel = document.getElementById('arc-path-sel');
+  sel.innerHTML = Object.keys(paths).map(n =>
+    `<option value="${n}">${n}</option>`).join('');
+  if (Object.keys(paths).length > 0) loadArc();
+}
+
+async function loadArc() {
+  const name = document.getElementById('arc-path-sel').value;
+  if (!name) return;
+  try {
+    const data = await apiGet('/path/' + encodeURIComponent(name) + '/arc');
+    arcData = data.arc || [];
+    renderArcChart(arcData);
+    renderArcSummary(arcData, name);
+    drawScene();
+  } catch { toast('Arc load failed'); }
+}
+
+function renderArcChart(arc) {
+  const canvas = document.getElementById('arc-canvas');
+  const ctx2   = canvas.getContext('2d');
+  const W2 = canvas.width  = canvas.offsetWidth;
+  const H2 = canvas.height = 160;
+  ctx2.clearRect(0,0,W2,H2);
+
+  if (!arc || arc.length === 0) return;
+
+  const PAD = { l:30, r:10, t:10, b:20 };
+  const cW = W2 - PAD.l - PAD.r;
+  const cH = H2 - PAD.t - PAD.b;
+
+  // Grid
+  ctx2.strokeStyle = '#1c2230';
+  ctx2.lineWidth = 1;
+  for (let v = 0; v <= 1; v += 0.25) {
+    const y = PAD.t + (1-v)*cH;
+    ctx2.beginPath(); ctx2.moveTo(PAD.l, y); ctx2.lineTo(W2-PAD.r, y); ctx2.stroke();
+    ctx2.fillStyle = '#3a4860';
+    ctx2.font = '8px IBM Plex Mono';
+    ctx2.textAlign = 'right';
+    ctx2.fillText(v.toFixed(2), PAD.l-3, y+3);
+  }
+
+  const channels = { E: '#f06060', B: '#60a8f0', P: '#f0c060', S: '#4af0a8' };
+
+  // Draw channel lines
+  Object.entries(channels).forEach(([ch, col]) => {
+    ctx2.beginPath();
+    ctx2.strokeStyle = col;
+    ctx2.lineWidth = 1.5;
+    arc.forEach((step, i) => {
+      const x = PAD.l + (i / (arc.length-1 || 1)) * cW;
+      const y = PAD.t + (1 - (step.channel_state[ch]||0)) * cH;
+      if (i === 0) ctx2.moveTo(x, y);
+      else ctx2.lineTo(x, y);
+    });
+    ctx2.stroke();
+  });
+
+  // Regulation dashed line
+  ctx2.beginPath();
+  ctx2.strokeStyle = '#666';
+  ctx2.lineWidth = 1;
+  ctx2.setLineDash([4,3]);
+  arc.forEach((step, i) => {
+    const x = PAD.l + (i / (arc.length-1 || 1)) * cW;
+    const y = PAD.t + (1 - (step.regulation||1)) * cH;
+    if (i === 0) ctx2.moveTo(x, y);
+    else ctx2.lineTo(x, y);
+  });
+  ctx2.stroke();
+  ctx2.setLineDash([]);
+
+  // Waypoint markers
+  ctx2.fillStyle = '#60a8f0';
+  arc.forEach((step, i) => {
+    const x = PAD.l + (i / (arc.length-1 || 1)) * cW;
+    ctx2.beginPath();
+    ctx2.arc(x, H2-PAD.b+10, 3, 0, Math.PI*2);
+    ctx2.fill();
+    ctx2.fillStyle = '#3a5070';
+    ctx2.font = '8px Syne';
+    ctx2.textAlign = 'center';
+    ctx2.fillText(i+1, x, H2-PAD.b+10);
+    ctx2.fillStyle = '#60a8f0';
+  });
+}
+
+function renderArcSummary(arc, pathName) {
+  const el = document.getElementById('arc-summary');
+  if (!arc || arc.length === 0) return;
+
+  const first = arc[0];
+  const last  = arc[arc.length-1];
+
+  const deltas = {};
+  ['E','B','P','S'].forEach(ch => {
+    deltas[ch] = (last.channel_state[ch] - first.channel_state[ch]).toFixed(3);
+  });
+
+  el.innerHTML = `
+    <div style="font-family:var(--display);font-size:11px;color:var(--warm);margin-bottom:6px">
+      ${pathName} — ${arc.length} waypoints
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin-bottom:8px">
+      Net emotional arc (start → end):
+    </div>
+    ${['E','B','P','S'].map(ch => {
+      const d = parseFloat(deltas[ch]);
+      const col = CH_COLORS[ch];
+      const sign = d >= 0 ? '+' : '';
+      return `<div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="color:${col}">${ch}</span>
+        <span>${first.channel_state[ch].toFixed(3)}</span>
+        <span style="color:var(--dim)">→</span>
+        <span>${last.channel_state[ch].toFixed(3)}</span>
+        <span style="color:${d>=0?'var(--accent)':'var(--danger)'};font-weight:600">${sign}${deltas[ch]}</span>
+      </div>`;
+    }).join('')}
+    <div style="display:flex;justify-content:space-between;margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">
+      <span style="color:var(--dim)">regulation</span>
+      <span>${first.regulation.toFixed(3)} → ${last.regulation.toFixed(3)}</span>
+    </div>`;
+}
+
+// ================================================================
+// Delete
+// ================================================================
+async function deleteSelectedZone() {
+  if (!selectedZone) return;
+  await apiDelete('/zone/' + encodeURIComponent(selectedZone));
+  selectedZone = null;
+  document.getElementById('detail-zone').style.display = 'none';
+  await loadAll();
+  toast('Zone deleted');
+}
+
+async function deleteSelectedWP() {
+  if (!selectedWP) return;
+  toast('Delete endpoint — extend API with DELETE /waypoint/<name>');
+}
+
+// ================================================================
+// Utilities
+// ================================================================
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
