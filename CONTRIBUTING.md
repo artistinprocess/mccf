@@ -310,6 +310,8 @@ The architecture is open. Derivative works will exist that this project
 cannot control. This prohibition does not prevent that — it documents
 what this project is for and what it refuses to be complicit in.
 
+The practical implication: when choosing which LLM adapter to use with the MCCF, prefer models trained with Co-rewarding or multi-signal RL approaches — they will be more naturally compatible with the four-channel architecture because their training objective is structurally similar to the MCCF's evaluation objective.
+
 If you are building on this architecture for purposes this project
 prohibits: you know what you are doing. This documentation is the
 record that the original project named it clearly.
