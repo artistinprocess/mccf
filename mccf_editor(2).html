@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Editor — Affective Field Designer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111318;
+    --surface2:  #181c24;
+    --border:    #252a36;
+    --accent:    #4af0a8;
+    --accent2:   #f06060;
+    --accent3:   #60a8f0;
+    --accent4:   #f0c060;
+    --muted:     #4a5568;
+    --text:      #c8d0e0;
+    --text-dim:  #6a7890;
+    --E:         #f06060;
+    --B:         #60a8f0;
+    --P:         #f0c060;
+    --S:         #4af0a8;
+    --radius:    6px;
+    --mono: 'IBM Plex Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    height: 100vh;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-areas:
+      "header header header"
+      "left   center right";
+  }
+
+  /* ── Header ── */
+  header {
+    grid-area: header;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 16px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .logo span { color: var(--text-dim); font-weight: 400; }
+
+  .header-tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .tab-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: var(--radius);
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+
+  .tab-btn:hover { color: var(--text); border-color: var(--border); }
+  .tab-btn.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+
+  .api-status {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .status-dot.online { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .status-dot.offline { background: var(--accent2); }
+
+  /* ── Panels ── */
+  .panel {
+    overflow-y: auto;
+    padding: 16px;
+    border-right: 1px solid var(--border);
+  }
+
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  #left-panel { grid-area: left; }
+  #center-panel { grid-area: center; padding: 0; overflow: hidden; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  #right-panel { grid-area: right; border-right: none; }
+
+  /* ── Section headers ── */
+  .section-head {
+    font-family: var(--display);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-head:first-child { margin-top: 0; }
+  .section-head::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Agent cards ── */
+  .agent-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+  .agent-card:hover { border-color: var(--muted); }
+  .agent-card.selected { border-color: var(--accent); }
+
+  .agent-name {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .role-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .role-agent     { background: #1a3a4a; color: var(--accent3); }
+  .role-gardener  { background: #1a3a1a; color: var(--accent); }
+  .role-librarian { background: #3a2a1a; color: var(--accent4); }
+
+  .channel-bars { display: flex; gap: 3px; margin-top: 6px; }
+  .ch-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+    position: relative;
+  }
+  .ch-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+  .ch-bar[data-ch="E"] .ch-bar-fill { background: var(--E); }
+  .ch-bar[data-ch="B"] .ch-bar-fill { background: var(--B); }
+  .ch-bar[data-ch="P"] .ch-bar-fill { background: var(--P); }
+  .ch-bar[data-ch="S"] .ch-bar-fill { background: var(--S); }
+
+  .ch-labels {
+    display: flex;
+    gap: 3px;
+    margin-top: 3px;
+  }
+  .ch-label {
+    flex: 1;
+    text-align: center;
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+
+  .reg-bar-wrap {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .reg-track {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .reg-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent3), var(--accent));
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  /* ── Forms ── */
+  label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .weight-row {
+    display: grid;
+    grid-template-columns: 16px 1fr 40px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .weight-label {
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--display);
+  }
+  .weight-val {
+    font-size: 11px;
+    color: var(--accent);
+    text-align: right;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.03em;
+  }
+  .btn:hover { border-color: var(--muted); color: var(--accent); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    font-weight: 500;
+  }
+  .btn.primary:hover { background: #3ad898; }
+  .btn.danger { border-color: var(--accent2); color: var(--accent2); }
+  .btn.full { width: 100%; justify-content: center; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+  /* ── Center: field canvas ── */
+  #field-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #field-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .canvas-overlay {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(10,12,16,0.85);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+
+  .center-toolbar {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .view-label {
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ── Right panel: editor ── */
+  #editor-form { display: none; }
+  #editor-form.visible { display: block; }
+
+  /* ── Coherence matrix ── */
+  .matrix-wrap {
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .matrix-table {
+    border-collapse: collapse;
+    font-size: 11px;
+    width: 100%;
+  }
+  .matrix-table th, .matrix-table td {
+    padding: 5px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .matrix-table th {
+    background: var(--surface2);
+    font-family: var(--display);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .matrix-cell {
+    font-family: var(--mono);
+    font-size: 11px;
+    transition: background 0.3s;
+  }
+
+  /* ── Export panel ── */
+  .export-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .export-tab {
+    padding: 4px 10px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--mono);
+    transition: all 0.15s;
+  }
+  .export-tab.active { border-color: var(--accent3); color: var(--accent3); }
+
+  .code-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    white-space: pre;
+    overflow: auto;
+    max-height: 300px;
+    line-height: 1.6;
+  }
+
+  /* ── Cultivar shelf ── */
+  .cultivar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cultivar-card:hover { border-color: var(--accent4); }
+
+  .cultivar-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    background: var(--surface2);
+  }
+
+  .cultivar-info { flex: 1; min-width: 0; }
+  .cultivar-name {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .cultivar-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+
+  /* ── Sensor simulator ── */
+  .sensor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sensor-val {
+    font-size: 14px;
+    font-family: var(--display);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 8px 20px;
+    font-size: 12px;
+    color: var(--accent);
+    opacity: 0;
+    transition: all 0.2s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Simulation running indicator */
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .sim-running { animation: pulse 1.5s infinite; }
+
+  .sym-gap-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+  }
+  .gap-high { background: #3a1a1a; color: var(--accent2); }
+  .gap-med  { background: #3a3010; color: var(--accent4); }
+  .gap-low  { background: #102a20; color: var(--accent);  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>Editor</span></div>
+  <div class="header-tabs">
+    <button class="tab-btn active" onclick="switchTab('agents')">Agents</button>
+    <button class="tab-btn" onclick="switchTab('cultivars')">Cultivars</button>
+    <button class="tab-btn" onclick="switchTab('sensors')">Sensors</button>
+    <button class="tab-btn" onclick="switchTab('export')">Export</button>
+  </div>
+  <div class="api-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">disconnected</span>
+    <input type="text" id="api-url-input" value="http://localhost:5000"
+           style="width:180px;margin:0;padding:3px 8px;font-size:11px;"
+           onchange="setApiUrl(this.value)">
+    <button class="btn" onclick="pingApi()" style="padding:3px 10px;font-size:10px;">ping</button>
+  </div>
+</header>
+
+<!-- LEFT PANEL -->
+<div class="panel" id="left-panel">
+
+  <!-- AGENTS TAB -->
+  <div id="tab-agents">
+    <div class="section-head">Active Agents</div>
+    <div id="agent-list"></div>
+    <button class="btn full" onclick="showNewAgentForm()">+ New Agent</button>
+
+    <div id="new-agent-form" style="display:none;margin-top:16px;">
+      <div class="section-head">New Agent</div>
+      <label>Name</label>
+      <input type="text" id="new-name" placeholder="Agent name">
+      <label>Role</label>
+      <select id="new-role">
+        <option value="agent">agent</option>
+        <option value="gardener">gardener</option>
+        <option value="librarian">librarian</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn primary" onclick="createAgent()">Create</button>
+        <button class="btn" onclick="hideNewAgentForm()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CULTIVARS TAB -->
+  <div id="tab-cultivars" style="display:none;">
+    <div class="section-head">Cultivar Templates</div>
+    <div id="cultivar-list"></div>
+    <div style="margin-top:12px;">
+      <div class="section-head">Save Current Agent as Cultivar</div>
+      <label>From Agent</label>
+      <select id="cultivar-source-agent"></select>
+      <label>Cultivar Name</label>
+      <input type="text" id="new-cultivar-name" placeholder="e.g. Lady of the Garden">
+      <label>Description</label>
+      <input type="text" id="new-cultivar-desc" placeholder="Short description">
+      <button class="btn primary full" onclick="saveCultivar()">Save as Cultivar</button>
+    </div>
+  </div>
+
+  <!-- SENSORS TAB -->
+  <div id="tab-sensors" style="display:none;">
+    <div class="section-head">Sensor Simulator</div>
+    <p style="font-size:10px;color:var(--text-dim);margin-bottom:12px;">
+      Simulate X3D sensor events to test channel mapping without a live scene.
+    </p>
+    <label>From Agent</label>
+    <select id="sim-from"></select>
+    <label>To Agent</label>
+    <select id="sim-to"></select>
+    <div class="section-head">Sensor Values</div>
+    <div class="sensor-grid">
+      <div>
+        <label>Distance (m)</label>
+        <input type="range" id="sim-distance" min="0" max="10" step="0.1" value="3.0"
+               oninput="updateSensorDisplay()">
+        <div class="sensor-val" id="disp-distance">3.0m</div>
+      </div>
+      <div>
+        <label>Dwell (s)</label>
+        <input type="range" id="sim-dwell" min="0" max="60" step="1" value="0"
+               oninput="updateSensorDisplay()">
+        <div class="sensor-val" id="disp-dwell">0s</div>
+      </div>
+      <div>
+        <label>Velocity</label>
+        <input type="range" id="sim-velocity" min="-2" max="2" step="0.1" value="0"
+               oninput="updateSensorDisplay()">
+        <div class="sensor-val" id="disp-velocity">0.0</div>
+      </div>
+      <div>
+        <label>Gaze Angle °</label>
+        <input type="range" id="sim-gaze" min="0" max="180" step="5" value="45"
+               oninput="updateSensorDisplay()">
+        <div class="sensor-val" id="disp-gaze">45°</div>
+      </div>
+    </div>
+    <label style="margin-top:4px;">
+      <input type="checkbox" id="sim-dissonant"> Dissonant episode
+    </label>
+    <label style="margin-top:8px;">Outcome delta</label>
+    <input type="range" id="sim-outcome" min="0" max="1" step="0.05" value="0"
+           oninput="updateSensorDisplay()">
+    <div class="sensor-val" id="disp-outcome">0.0</div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="fireSensor()">Fire Sensor</button>
+      <button class="btn sim-btn" id="auto-sim-btn" onclick="toggleAutoSim()">Auto</button>
+    </div>
+    <div id="sensor-result" style="margin-top:12px;display:none;">
+      <div class="section-head">Returned Affect Params</div>
+      <div id="affect-params-display"></div>
+    </div>
+  </div>
+
+  <!-- EXPORT TAB -->
+  <div id="tab-export" style="display:none;">
+    <div class="section-head">Export</div>
+    <div class="export-tabs">
+      <button class="export-tab active" onclick="switchExport('json')">JSON</button>
+      <button class="export-tab" onclick="switchExport('python')">Python</button>
+      <button class="export-tab" onclick="switchExport('x3d')">X3D</button>
+    </div>
+    <div class="btn-row" style="margin-bottom:12px;">
+      <button class="btn primary" onclick="fetchExport()">Generate</button>
+      <button class="btn" onclick="copyExport()">Copy</button>
+    </div>
+    <div class="code-block" id="export-output">// Click Generate to export</div>
+  </div>
+
+</div>
+
+<!-- CENTER PANEL: field visualization -->
+<div id="center-panel">
+  <div class="center-toolbar">
+    <span class="view-label">Coherence Field</span>
+    <button class="btn" onclick="refreshField()" style="margin-left:auto;">↺ Refresh</button>
+    <button class="btn" id="live-btn" onclick="toggleLive()">Live Off</button>
+    <button class="btn" onclick="takeSnapshot()">Snapshot</button>
+  </div>
+  <div id="field-canvas-wrap">
+    <canvas id="field-canvas"></canvas>
+    <div class="canvas-overlay" id="canvas-hint">
+      No agents registered. Create agents to see the coherence field.
+    </div>
+  </div>
+  <!-- Matrix below canvas -->
+  <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);max-height:180px;overflow-y:auto;">
+    <div class="section-head" style="margin-top:0;">Coherence Matrix</div>
+    <div class="matrix-wrap" id="matrix-wrap">
+      <div style="color:var(--text-dim);font-size:11px;">No data</div>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL: agent editor -->
+<div class="panel" id="right-panel">
+  <div class="section-head" style="margin-top:0;">Agent Editor</div>
+  <div id="editor-placeholder" style="color:var(--text-dim);font-size:11px;line-height:1.7;">
+    Select an agent from the left panel to edit its parameters.
+  </div>
+
+  <div id="editor-form">
+    <input type="hidden" id="edit-agent-name">
+
+    <label>Name</label>
+    <div style="font-family:var(--display);font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px;" id="edit-name-display"></div>
+
+    <label>Role</label>
+    <select id="edit-role" onchange="markDirty()">
+      <option value="agent">agent</option>
+      <option value="gardener">gardener</option>
+      <option value="librarian">librarian</option>
+    </select>
+
+    <div class="section-head">Channel Weights</div>
+    <p style="font-size:10px;color:var(--text-dim);margin-bottom:10px;">Must sum to 1.0 — auto-normalized on save.</p>
+
+    <div class="weight-row">
+      <span class="weight-label" style="color:var(--E)">E</span>
+      <input type="range" id="w-E" min="0.05" max="0.70" step="0.01" value="0.25"
+             oninput="updateWeightDisplay('E')">
+      <span class="weight-val" id="wv-E">0.25</span>
+    </div>
+    <div class="weight-row">
+      <span class="weight-label" style="color:var(--B)">B</span>
+      <input type="range" id="w-B" min="0.05" max="0.70" step="0.01" value="0.25"
+             oninput="updateWeightDisplay('B')">
+      <span class="weight-val" id="wv-B">0.25</span>
+    </div>
+    <div class="weight-row">
+      <span class="weight-label" style="color:var(--P)">P</span>
+      <input type="range" id="w-P" min="0.05" max="0.70" step="0.01" value="0.25"
+             oninput="updateWeightDisplay('P')">
+      <span class="weight-val" id="wv-P">0.25</span>
+    </div>
+    <div class="weight-row">
+      <span class="weight-label" style="color:var(--S)">S</span>
+      <input type="range" id="w-S" min="0.05" max="0.70" step="0.01" value="0.25"
+             oninput="updateWeightDisplay('S')">
+      <span class="weight-val" id="wv-S">0.25</span>
+    </div>
+
+    <div class="section-head">Affect Regulation</div>
+    <p style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">
+      1.0 = fully reactive · 0.0 = fully suppressed<br>
+      Trained agents: 0.3–0.8
+    </p>
+    <div class="weight-row">
+      <span class="weight-label" style="color:var(--accent3)">R</span>
+      <input type="range" id="w-reg" min="0" max="1" step="0.01" value="1.0"
+             oninput="updateWeightDisplay('reg')">
+      <span class="weight-val" id="wv-reg">1.00</span>
+    </div>
+
+    <div class="section-head">Sensor → Channel Transfer Curves</div>
+    <p style="font-size:10px;color:var(--text-dim);margin-bottom:10px;">
+      Proximity max range and dwell saturation for this agent's perception.
+    </p>
+    <div class="field-row">
+      <div>
+        <label>Max Range (m)</label>
+        <input type="number" id="edit-max-range" value="10" min="1" max="50">
+      </div>
+      <div>
+        <label>Dwell Sat. (s)</label>
+        <input type="number" id="edit-dwell-sat" value="30" min="5" max="120">
+      </div>
+    </div>
+
+    <div class="section-head">Coherence State</div>
+    <div id="coherence-toward-display" style="font-size:11px;color:var(--text-dim);">
+      No interactions yet.
+    </div>
+
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn primary" onclick="saveAgentEdits()">Apply</button>
+      <button class="btn" onclick="saveAsCultivar()">→ Cultivar</button>
+      <button class="btn danger" onclick="removeAgent()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let API_URL = 'http://localhost:5000';
+let fieldState = { agents: {}, matrix: {}, echo_chamber_risks: {}, entanglement: {}, alignment_coherence: {} };
+let selectedAgent = null;
+let liveInterval = null;
+let autoSimInterval = null;
+let currentExportType = 'json';
+let isDirty = false;
+
+// Canvas rendering
+const CHANNEL_COLORS = { E: '#f06060', B: '#60a8f0', P: '#f0c060', S: '#4af0a8' };
+const NODE_RADIUS = 32;
+
+// ============================================================
+// API
+// ============================================================
+function setApiUrl(url) {
+  API_URL = url.trim();
+  pingApi();
+}
+
+async function pingApi() {
+  try {
+    const r = await fetch(API_URL + '/field', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      setStatus('online');
+      const data = await r.json();
+      fieldState = data;
+      renderAll();
+    }
+  } catch {
+    setStatus('offline');
+  }
+}
+
+function setStatus(state) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + state;
+  txt.textContent = state;
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API_URL + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function apiGet(path) {
+  const r = await fetch(API_URL + path);
+  return r.json();
+}
+
+async function refreshField() {
+  try {
+    const data = await apiGet('/field');
+    fieldState = data;
+    renderAll();
+    setStatus('online');
+  } catch { setStatus('offline'); }
+}
+
+// ============================================================
+// Tabs
+// ============================================================
+function switchTab(tab) {
+  ['agents','cultivars','sensors','export'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['agents','cultivars','sensors','export'][i] === tab);
+  });
+  if (tab === 'cultivars') loadCultivars();
+  if (tab === 'export') fetchExport();
+}
+
+// ============================================================
+// Agent list render
+// ============================================================
+function renderAll() {
+  renderAgentList();
+  renderCanvas();
+  renderMatrix();
+  if (selectedAgent) renderCoherenceState();
+  updateCultivarSourceSelect();
+  updateSimSelects();
+  document.getElementById('canvas-hint').style.display =
+    Object.keys(fieldState.agents).length === 0 ? 'block' : 'none';
+}
+
+function renderAgentList() {
+  const el = document.getElementById('agent-list');
+  el.innerHTML = '';
+  const agents = fieldState.agents || {};
+  Object.entries(agents).forEach(([name, data]) => {
+    const w = data.weights || { E:0.25,B:0.25,P:0.25,S:0.25 };
+    const card = document.createElement('div');
+    card.className = 'agent-card' + (name === selectedAgent ? ' selected' : '');
+    card.onclick = () => selectAgent(name);
+    card.innerHTML = `
+      <div class="agent-name">
+        ${name}
+        <span class="role-badge role-${data.role || 'agent'}">${data.role || 'agent'}</span>
+      </div>
+      <div class="channel-bars">
+        ${['E','B','P','S'].map(ch =>
+          `<div class="ch-bar" data-ch="${ch}">
+            <div class="ch-bar-fill" style="width:${(w[ch]||0.25)*100}%"></div>
+          </div>`
+        ).join('')}
+      </div>
+      <div class="ch-labels">${['E','B','P','S'].map(ch=>`<div class="ch-label">${ch}</div>`).join('')}</div>
+      <div class="reg-bar-wrap">
+        <span>reg</span>
+        <div class="reg-track">
+          <div class="reg-fill" style="width:${(data.regulation||1)*100}%"></div>
+        </div>
+        <span>${((data.regulation||1)*100).toFixed(0)}%</span>
+      </div>
+    `;
+    el.appendChild(card);
+  });
+}
+
+// ============================================================
+// Agent selection & editor
+// ============================================================
+function selectAgent(name) {
+  selectedAgent = name;
+  const data = fieldState.agents[name];
+  if (!data) return;
+
+  document.getElementById('editor-placeholder').style.display = 'none';
+  document.getElementById('editor-form').classList.add('visible');
+  document.getElementById('edit-agent-name').value = name;
+  document.getElementById('edit-name-display').textContent = name;
+  document.getElementById('edit-role').value = data.role || 'agent';
+
+  const w = data.weights || { E:0.25,B:0.25,P:0.25,S:0.25 };
+  ['E','B','P','S'].forEach(ch => {
+    document.getElementById('w-' + ch).value = w[ch] || 0.25;
+    document.getElementById('wv-' + ch).textContent = (w[ch]||0.25).toFixed(2);
+  });
+  document.getElementById('w-reg').value = data.regulation || 1.0;
+  document.getElementById('wv-reg').textContent = (data.regulation||1.0).toFixed(2);
+
+  renderAgentList();
+  renderCoherenceState();
+}
+
+function updateWeightDisplay(ch) {
+  const val = parseFloat(document.getElementById('w-' + ch).value);
+  document.getElementById('wv-' + ch).textContent = val.toFixed(2);
+  markDirty();
+}
+
+function markDirty() { isDirty = true; }
+
+function renderCoherenceState() {
+  const el = document.getElementById('coherence-toward-display');
+  const matrix = fieldState.matrix || {};
+  const row = matrix[selectedAgent] || {};
+  const agents = Object.keys(fieldState.agents || {}).filter(n => n !== selectedAgent);
+  if (agents.length === 0) {
+    el.innerHTML = '<span style="color:var(--text-dim)">No other agents.</span>';
+    return;
+  }
+  el.innerHTML = agents.map(other => {
+    const rij = (row[other] || 0).toFixed(3);
+    const rji = (matrix[other] && matrix[other][selectedAgent] !== undefined)
+      ? matrix[other][selectedAgent].toFixed(3) : '—';
+    const gap = matrix[other] ? Math.abs(row[other] - matrix[other][selectedAgent]) : 0;
+    const gapClass = gap > 0.15 ? 'gap-high' : gap > 0.08 ? 'gap-med' : 'gap-low';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="flex:1;">${other}</span>
+      <span style="color:var(--accent);">${rij}</span>
+      <span style="color:var(--text-dim)">↔</span>
+      <span style="color:var(--accent3);">${rji}</span>
+      <span class="sym-gap-badge ${gapClass}">Δ${gap.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function saveAgentEdits() {
+  const name = document.getElementById('edit-agent-name').value;
+  const role = document.getElementById('edit-role').value;
+  const reg  = parseFloat(document.getElementById('w-reg').value);
+  const weights = {};
+  let sum = 0;
+  ['E','B','P','S'].forEach(ch => {
+    weights[ch] = parseFloat(document.getElementById('w-' + ch).value);
+    sum += weights[ch];
+  });
+  // normalize
+  ['E','B','P','S'].forEach(ch => weights[ch] = parseFloat((weights[ch]/sum).toFixed(4)));
+
+  await apiPost('/agent', { name, weights, role, regulation: reg });
+  await apiPost('/gardener/regulate', { agent: name, level: reg, reason: 'editor update' });
+  await apiPost('/gardener/reweight', { agent: name, weights, reason: 'editor update' });
+  await refreshField();
+  toast('Agent updated');
+  isDirty = false;
+}
+
+async function createAgent() {
+  const name = document.getElementById('new-name').value.trim();
+  const role = document.getElementById('new-role').value;
+  if (!name) return toast('Name required');
+  await apiPost('/agent', { name, role });
+  await refreshField();
+  document.getElementById('new-name').value = '';
+  hideNewAgentForm();
+  toast('Agent created: ' + name);
+}
+
+function showNewAgentForm() { document.getElementById('new-agent-form').style.display = 'block'; }
+function hideNewAgentForm() { document.getElementById('new-agent-form').style.display = 'none'; }
+
+async function removeAgent() {
+  // No delete endpoint in current API — just deselect and inform
+  toast('Remove via server restart or extend API with DELETE /agent');
+}
+
+// ============================================================
+// Canvas field visualization
+// ============================================================
+function renderCanvas() {
+  const wrap = document.getElementById('field-canvas-wrap');
+  const canvas = document.getElementById('field-canvas');
+  const W = wrap.clientWidth;
+  const H = wrap.clientHeight;
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const agents = Object.keys(fieldState.agents || {});
+  if (agents.length === 0) return;
+
+  // Layout agents in a circle
+  const cx = W / 2, cy = H / 2;
+  const R  = Math.min(W, H) * 0.32;
+  const positions = {};
+  agents.forEach((name, i) => {
+    const angle = (2 * Math.PI * i / agents.length) - Math.PI / 2;
+    positions[name] = {
+      x: cx + R * Math.cos(angle),
+      y: cy + R * Math.sin(angle)
+    };
+  });
+
+  const matrix = fieldState.matrix || {};
+
+  // Draw edges
+  agents.forEach(from => {
+    agents.forEach(to => {
+      if (from === to) return;
+      const r = (matrix[from] && matrix[from][to]) || 0;
+      if (r < 0.05) return;
+      const p1 = positions[from];
+      const p2 = positions[to];
+
+      // Arrow offset
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const nx = dx/dist, ny = dy/dist;
+
+      const sx = p1.x + nx * NODE_RADIUS;
+      const sy = p1.y + ny * NODE_RADIUS;
+      const ex = p2.x - nx * NODE_RADIUS;
+      const ey = p2.y - ny * NODE_RADIUS;
+
+      // Color by coherence
+      const alpha = Math.min(0.9, r * 1.1);
+      const hue   = r > 0.7 ? 160 : r > 0.4 ? 40 : 0;
+      ctx.strokeStyle = `hsla(${hue}, 80%, 60%, ${alpha})`;
+      ctx.lineWidth = 1 + r * 3;
+
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      // Arrowhead
+      const angle = Math.atan2(ey - sy, ex - sx);
+      const aLen = 8, aW = 4;
+      ctx.fillStyle = `hsla(${hue}, 80%, 60%, ${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - aLen*Math.cos(angle-0.4), ey - aLen*Math.sin(angle-0.4));
+      ctx.lineTo(ex - aLen*Math.cos(angle+0.4), ey - aLen*Math.sin(angle+0.4));
+      ctx.closePath();
+      ctx.fill();
+
+      // Coherence label
+      if (r > 0.15) {
+        const mx = (sx + ex) / 2;
+        const my = (sy + ey) / 2;
+        ctx.fillStyle = `hsla(${hue}, 70%, 70%, 0.9)`;
+        ctx.font = '10px IBM Plex Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText(r.toFixed(2), mx + ny * 12, my - nx * 12);
+      }
+    });
+  });
+
+  // Draw nodes
+  agents.forEach(name => {
+    const {x, y} = positions[name];
+    const data = fieldState.agents[name] || {};
+    const role = data.role || 'agent';
+    const roleColor = { agent: '#60a8f0', gardener: '#4af0a8', librarian: '#f0c060' }[role] || '#60a8f0';
+
+    // Echo chamber highlight
+    const echoRisks = fieldState.echo_chamber_risks || {};
+    const inEcho = Object.keys(echoRisks).some(k => k.includes(name));
+
+    if (inEcho) {
+      ctx.beginPath();
+      ctx.arc(x, y, NODE_RADIUS + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(240,96,96,0.5)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Node background
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, NODE_RADIUS);
+    grad.addColorStop(0, roleColor + '33');
+    grad.addColorStop(1, '#111318');
+    ctx.beginPath();
+    ctx.arc(x, y, NODE_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = name === selectedAgent ? roleColor : '#252a36';
+    ctx.lineWidth = name === selectedAgent ? 2.5 : 1;
+    ctx.stroke();
+
+    // Channel arc indicators
+    const channels = ['E','B','P','S'];
+    const w = data.weights || {};
+    channels.forEach((ch, ci) => {
+      const startAngle = (ci / 4) * Math.PI * 2 - Math.PI / 2;
+      const sweep = ((w[ch] || 0.25)) * Math.PI * 2 * 0.95;
+      ctx.beginPath();
+      ctx.arc(x, y, NODE_RADIUS - 5, startAngle, startAngle + sweep);
+      ctx.strokeStyle = CHANNEL_COLORS[ch] + 'cc';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+
+    // Label
+    ctx.fillStyle = '#c8d0e0';
+    ctx.font = 'bold 11px Syne, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, x, y);
+
+    // Regulation indicator
+    const reg = data.regulation || 1.0;
+    ctx.fillStyle = 'rgba(96,168,240,0.8)';
+    ctx.font = '9px IBM Plex Mono';
+    ctx.fillText('R:' + reg.toFixed(1), x, y + 14);
+  });
+}
+
+// ============================================================
+// Matrix
+// ============================================================
+function renderMatrix() {
+  const wrap = document.getElementById('matrix-wrap');
+  const matrix = fieldState.matrix || {};
+  const agents = Object.keys(matrix);
+  if (agents.length === 0) {
+    wrap.innerHTML = '<div style="color:var(--text-dim);font-size:11px;">No data</div>';
+    return;
+  }
+
+  let html = '<table class="matrix-table"><thead><tr><th></th>';
+  agents.forEach(n => { html += `<th>${n}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  agents.forEach(from => {
+    html += `<tr><th>${from}</th>`;
+    agents.forEach(to => {
+      const v = matrix[from][to] || 0;
+      const isSelected = from === selectedAgent || to === selectedAgent;
+      const bg = v > 0.8 ? '#0d2e20' : v > 0.6 ? '#152a10' : v > 0.4 ? '#252010' : 'transparent';
+      const col = v > 0.7 ? 'var(--accent)' : v > 0.4 ? 'var(--text)' : 'var(--text-dim)';
+      if (from === to) {
+        html += `<td class="matrix-cell" style="color:var(--muted)">—</td>`;
+      } else {
+        html += `<td class="matrix-cell"
+          style="background:${isSelected ? bg + ';border-color:var(--accent3)' : bg};color:${col}">
+          ${v.toFixed(3)}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Echo chamber warnings
+  const risks = fieldState.echo_chamber_risks || {};
+  if (Object.keys(risks).length > 0) {
+    html += '<div style="margin-top:8px;">';
+    Object.entries(risks).forEach(([pair, data]) => {
+      html += `<div style="font-size:10px;color:var(--accent2);margin-top:4px;">
+        ⚠ Echo risk: ${pair} — mutual ${data.mutual_coherence} [${data.risk}]</div>`;
+    });
+    html += '</div>';
+  }
+
+  // v1.6.0 — Entanglement negativity
+  const entanglement = fieldState.entanglement || {};
+  const highNeg = Object.entries(entanglement).filter(([,d]) => d.level === 'strong' || d.level === 'very_high');
+  if (highNeg.length > 0) {
+    html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">';
+    html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Entanglement (structural coupling)</div>';
+    highNeg.forEach(([pair, d]) => {
+      const col = d.level === 'very_high' ? 'var(--accent2)' : 'var(--accent3)';
+      html += `<div style="font-size:10px;color:${col};margin-top:3px;">
+        ⬡ ${pair} — negativity ${d.negativity} [${d.level}]</div>`;
+    });
+    html += '</div>';
+  }
+
+  // v1.6.0 — Alignment coherence (ideology drift warnings)
+  const alignments = fieldState.alignment_coherence || {};
+  const drifting = Object.entries(alignments).filter(([,d]) => d.evaluative_gate === 'CLOSED');
+  if (drifting.length > 0) {
+    html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">';
+    html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Ideology drift (H_alignment)</div>';
+    drifting.forEach(([name, d]) => {
+      html += `<div style="font-size:10px;color:var(--accent2);margin-top:3px;">
+        ↯ ${name} — coherence ${d.alignment_coherence} — gate CLOSED</div>`;
+    });
+    html += '</div>';
+  }
+
+  wrap.innerHTML = html;
+}
+
+// ============================================================
+// Cultivars
+// ============================================================
+async function loadCultivars() {
+  try {
+    const data = await apiGet('/cultivar');
+    renderCultivarList(data);
+  } catch { toast('API offline'); }
+}
+
+function renderCultivarList(cultivars) {
+  const el = document.getElementById('cultivar-list');
+  const icons = { 'Lady of the Garden': '🌸', 'Skeptic': '🔍', 'Gardener': '🌿' };
+  el.innerHTML = Object.entries(cultivars).map(([name, c]) => `
+    <div class="cultivar-card" onclick="spawnFromCultivar('${name}')">
+      <div class="cultivar-icon">${icons[name] || '✦'}</div>
+      <div class="cultivar-info">
+        <div class="cultivar-name">${name}</div>
+        <div class="cultivar-desc">${c.description || ''}</div>
+      </div>
+      <button class="btn" style="padding:3px 8px;font-size:10px;" onclick="event.stopPropagation();spawnFromCultivar('${name}')">Spawn</button>
+    </div>
+  `).join('') || '<div style="color:var(--text-dim);font-size:11px;">No cultivars saved yet.</div>';
+}
+
+async function spawnFromCultivar(cultivarName) {
+  const agentName = prompt(`Spawn from "${cultivarName}" — new agent name:`);
+  if (!agentName) return;
+  try {
+    const encoded = encodeURIComponent(cultivarName);
+    const r = await fetch(`${API_URL}/cultivar/${encoded}/spawn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name: agentName })
+    });
+    const data = await r.json();
+    await refreshField();
+    toast(`Spawned: ${agentName} from ${cultivarName}`);
+  } catch { toast('Spawn failed'); }
+}
+
+async function saveCultivar() {
+  const agentName = document.getElementById('cultivar-source-agent').value;
+  const cultivarName = document.getElementById('new-cultivar-name').value.trim();
+  const desc = document.getElementById('new-cultivar-desc').value.trim();
+  if (!cultivarName || !agentName) return toast('Agent and cultivar name required');
+  await apiPost('/cultivar', { agent_name: agentName, cultivar_name: cultivarName, description: desc });
+  toast('Cultivar saved: ' + cultivarName);
+  loadCultivars();
+}
+
+async function saveAsCultivar() {
+  if (!selectedAgent) return;
+  const name = prompt('Cultivar name:');
+  if (!name) return;
+  const desc = prompt('Description (optional):') || '';
+  await apiPost('/cultivar', { agent_name: selectedAgent, cultivar_name: name, description: desc });
+  toast('Saved as cultivar: ' + name);
+}
+
+function updateCultivarSourceSelect() {
+  const sel = document.getElementById('cultivar-source-agent');
+  if (!sel) return;
+  const agents = Object.keys(fieldState.agents || {});
+  sel.innerHTML = agents.map(n => `<option>${n}</option>`).join('');
+}
+
+// ============================================================
+// Sensor simulator
+// ============================================================
+function updateSimSelects() {
+  const agents = Object.keys(fieldState.agents || {});
+  ['sim-from','sim-to'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = agents.map(n => `<option ${n===prev?'selected':''}>${n}</option>`).join('');
+  });
+}
+
+function updateSensorDisplay() {
+  document.getElementById('disp-distance').textContent =
+    parseFloat(document.getElementById('sim-distance').value).toFixed(1) + 'm';
+  document.getElementById('disp-dwell').textContent =
+    document.getElementById('sim-dwell').value + 's';
+  document.getElementById('disp-velocity').textContent =
+    parseFloat(document.getElementById('sim-velocity').value).toFixed(1);
+  document.getElementById('disp-gaze').textContent =
+    document.getElementById('sim-gaze').value + '°';
+  document.getElementById('disp-outcome').textContent =
+    parseFloat(document.getElementById('sim-outcome').value).toFixed(2);
+}
+
+async function fireSensor() {
+  const from = document.getElementById('sim-from').value;
+  const to   = document.getElementById('sim-to').value;
+  if (!from || !to || from === to) return toast('Select two different agents');
+
+  const payload = {
+    from_agent: from,
+    to_agent: to,
+    sensor_data: {
+      distance:     parseFloat(document.getElementById('sim-distance').value),
+      dwell:        parseFloat(document.getElementById('sim-dwell').value),
+      velocity:     parseFloat(document.getElementById('sim-velocity').value),
+      gaze_angle:   parseFloat(document.getElementById('sim-gaze').value),
+      max_range:    10.0,
+      outcome_delta: parseFloat(document.getElementById('sim-outcome').value),
+      was_dissonant: document.getElementById('sim-dissonant').checked
+    }
+  };
+
+  try {
+    const result = await apiPost('/sensor', payload);
+    const el = document.getElementById('sensor-result');
+    el.style.display = 'block';
+    document.getElementById('affect-params-display').innerHTML =
+      Object.entries(result)
+        .filter(([k]) => !['timestamp','from_agent','to_agent'].includes(k))
+        .map(([k,v]) => `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="color:var(--text-dim)">${k}</span>
+          <span style="color:var(--accent);font-weight:500">${typeof v === 'number' ? v.toFixed(4) : v}</span>
+        </div>`).join('');
+    await refreshField();
+  } catch { toast('Sensor fire failed — API offline?'); }
+}
+
+function toggleAutoSim() {
+  const btn = document.getElementById('auto-sim-btn');
+  if (autoSimInterval) {
+    clearInterval(autoSimInterval);
+    autoSimInterval = null;
+    btn.textContent = 'Auto';
+    btn.classList.remove('sim-running');
+  } else {
+    btn.textContent = 'Stop';
+    btn.classList.add('sim-running');
+    autoSimInterval = setInterval(() => {
+      // small random walk on distance to simulate movement
+      const dEl = document.getElementById('sim-distance');
+      const curr = parseFloat(dEl.value);
+      dEl.value = Math.max(0.5, Math.min(10, curr + (Math.random()-0.5) * 0.8));
+      updateSensorDisplay();
+      fireSensor();
+    }, 1500);
+  }
+}
+
+// ============================================================
+// Live mode
+// ============================================================
+function toggleLive() {
+  const btn = document.getElementById('live-btn');
+  if (liveInterval) {
+    clearInterval(liveInterval);
+    liveInterval = null;
+    btn.textContent = 'Live Off';
+    btn.classList.remove('sim-running');
+  } else {
+    liveInterval = setInterval(refreshField, 2000);
+    btn.textContent = 'Live On';
+    btn.classList.add('sim-running');
+  }
+}
+
+// ============================================================
+// Snapshot
+// ============================================================
+async function takeSnapshot() {
+  const label = 'manual_' + new Date().toISOString().slice(11,19);
+  await apiPost('/snapshot', { label });
+  toast('Snapshot: ' + label);
+}
+
+// ============================================================
+// Export
+// ============================================================
+function switchExport(type) {
+  currentExportType = type;
+  document.querySelectorAll('.export-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  fetchExport();
+}
+
+async function fetchExport() {
+  const el = document.getElementById('export-output');
+  try {
+    if (currentExportType === 'json') {
+      const data = await apiGet('/export/json');
+      el.textContent = JSON.stringify(data, null, 2);
+    } else if (currentExportType === 'python') {
+      const r = await fetch(API_URL + '/export/python');
+      el.textContent = await r.text();
+    } else {
+      const r = await fetch(API_URL + '/export/x3d?api_url=' + encodeURIComponent(API_URL));
+      el.textContent = await r.text();
+    }
+  } catch { el.textContent = '// API offline'; }
+}
+
+function copyExport() {
+  navigator.clipboard.writeText(document.getElementById('export-output').textContent);
+  toast('Copied to clipboard');
+}
+
+// ============================================================
+// Utilities
+// ============================================================
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// Resize canvas on window resize
+window.addEventListener('resize', () => renderCanvas());
+
+// ============================================================
+// Init
+// ============================================================
+pingApi();
+setInterval(() => {
+  if (liveInterval) return; // live mode handles its own refresh
+}, 5000);
+</script>
+</body>
+</html>
