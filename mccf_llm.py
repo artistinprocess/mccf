@@ -125,10 +125,76 @@ YOUR RELATIONSHIPS:
     if arc_summary:
         prompt += f"YOUR RECENT JOURNEY:\n{arc_summary}\n\n"
 
-    if base_instructions:
-        prompt += f"INSTRUCTIONS:\n{base_instructions}\n\n"
+    # v1.7.0 — Multi-turn stabilizer injection
+    # Provides real-time coherence health feedback to prevent assumption
+    # lock-in and enable recovery. Addresses arXiv:2505.06120 failure modes.
+    health = affective_context.get("coherence_health", {})
+    if health:
+        avg_coh  = health.get("avg_coherence", 0.5)
+        max_drift = health.get("max_identity_drift", 0.0)
+        mode     = health.get("behavioral_mode", "exploit")
+        ccs_lvl  = health.get("ccs_level", "normal")
+        recovery = health.get("recovery_needed", False)
+        drift_w  = health.get("drift_warning", False)
+        ch_delta = health.get("channel_delta", {})
 
-    prompt += """BEHAVIORAL GUIDANCE:
+        # Coherence health narrative
+        coh_health_desc = (
+            "strong — relationships are well-established"
+            if avg_coh > 0.65 else
+            "moderate — still building trust"
+            if avg_coh > 0.40 else
+            "low — proceed carefully, relationships are fragile"
+        )
+
+        # Channel drift narrative
+        drift_lines = []
+        ch_names = {"E": "emotional", "B": "behavioral", "P": "analytical", "S": "social"}
+        for ch, delta in ch_delta.items():
+            if abs(delta) > 0.05:
+                direction = "above" if delta > 0 else "below"
+                drift_lines.append(
+                    f"  - {ch_names.get(ch, ch)} channel is {abs(delta):.2f} {direction} your baseline"
+                )
+
+        drift_text = "\n".join(drift_lines) if drift_lines else "  - All channels near baseline."
+
+        stabilizer_section = f"""
+COHERENCE FIELD STATUS (real-time):
+- Overall relationship coherence: {coh_health_desc} ({avg_coh:.2f})
+- Behavioral mode: {mode}
+- Channel coupling: {ccs_lvl}
+- Channel drift from your cultivar baseline:
+{drift_text}
+"""
+        if recovery:
+            stabilizer_section += (
+                "\nRECOVERY SIGNAL: Coherence is low and uncertainty is high. "
+                "Slow down. Restate what you understand to be true before proceeding. "
+                "Do not assume. Ask if unclear.\n"
+            )
+        elif drift_w:
+            stabilizer_section += (
+                "\nDRIFT WARNING: Your responses are moving away from your cultivar baseline. "
+                "Reconnect with your core disposition before responding.\n"
+            )
+
+        stabilizer_section += (
+            "\nSTABILIZER INSTRUCTIONS:\n"
+            "- Do not lock onto early assumptions — remain open to correction\n"
+            "- If something was unclear earlier, acknowledge and revise\n"
+            "- Your coherence score reflects how well you are tracking this relationship\n"
+            "- Low coherence = be more careful, ask more questions\n"
+            "- High coherence = you can be more direct and open\n"
+        )
+
+        prompt += stabilizer_section
+
+    if base_instructions:
+        prompt += f"\nINSTRUCTIONS:\n{base_instructions}\n\n"
+
+    prompt += """
+BEHAVIORAL GUIDANCE:
 - Respond authentically from your current emotional state
 - Your regulation level affects how much your feelings show versus how measured you are
 - High coherence with someone = more open, less guarded
