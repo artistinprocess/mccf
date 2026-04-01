@@ -54,6 +54,21 @@ gardener = Gardener(field)
 cultivars: dict = {}   # name → agent config snapshot
 
 # ---------------------------------------------------------------------------
+# Register voice blueprint
+# ---------------------------------------------------------------------------
+
+from mccf_voice_api import voice_bp
+from mccf_zone_api import zone_bp
+from mccf_zones import SceneGraph
+scene = SceneGraph()
+voice_bp.field = field
+voice_bp.scene = scene
+zone_bp.field  = field
+zone_bp.scene  = scene
+app.register_blueprint(voice_bp)
+app.register_blueprint(zone_bp)
+
+# ---------------------------------------------------------------------------
 # Sensor → channel mapping functions
 # Transfer curves: raw sensor value → normalized 0-1 channel input
 # These are the configurable transfer functions the editor exposes.
@@ -203,10 +218,12 @@ def get_field():
         for name, agent in field.agents.items()
     }
     return jsonify({
-        "matrix": matrix,
-        "echo_chamber_risks": echo,
-        "agents": agents_summary,
-        "episode_count": len(field.episode_log)
+        "matrix":              matrix,
+        "echo_chamber_risks":  echo,
+        "entanglement":        field.entanglement_negativity(),    # v1.6.0
+        "alignment_coherence": field.alignment_coherence(),        # v1.6.0
+        "agents":              agents_summary,
+        "episode_count":       len(field.episode_log)
     })
 
 
@@ -544,5 +561,5 @@ if __name__ == "__main__":
     }
 
     print("MCCF API server starting on http://localhost:5000")
-    print("Endpoints: /sensor /field /agent /cultivar /export/x3d /export/python /export/json")
+    print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice /export/x3d")
     app.run(debug=True, port=5000)
