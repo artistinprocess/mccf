@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MCCF X3D Scene</title>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.6/dist/x_ite.min.js"></script>
+<style>
+  body { margin: 0; background: #0a0a0f; font-family: monospace; }
+  x3d-canvas { width: 100vw; height: 88vh; display: block; }
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.88);
+    padding: 6px 14px;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    z-index: 100;
+  }
+  button {
+    background: #1a2030; color: #4af0a8;
+    border: 1px solid #4af0a8; border-radius: 3px;
+    padding: 3px 10px; cursor: pointer;
+    font-family: monospace; font-size: 11px;
+  }
+  button:hover { background: #4af0a8; color: #111; }
+  button.active { background: #4af0a8; color: #111; }
+  #status { color: #6a7890; font-size: 11px; margin-left: auto; }
+  #poll-indicator {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #333; display: inline-block; margin-right: 4px;
+    transition: background 0.2s;
+  }
+  #field-overlay {
+    position: fixed; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.75);
+    border: 1px solid #2a3545;
+    padding: 8px 12px;
+    font-size: 10px; color: #6a8090;
+    border-radius: 3px; min-width: 180px; z-index: 100;
+  }
+  #field-overlay .row { display: flex; justify-content: space-between; margin: 2px 0; }
+  #field-overlay .val { color: #a0c0d0; }
+  .tension-low  { color: #4a8adf; }
+  .tension-mid  { color: #4adfc0; }
+  .tension-high { color: #df8a4a; }
+  .tension-crit { color: #df4a4a; }
+</style>
+</head>
+<body>
+
+<x3d-canvas id="x3d" src="mccf_scene.x3d" update="auto" contentScale="auto"></x3d-canvas>
+
+<div id="field-overlay">
+  <div style="color:#7ab8f5;margin-bottom:4px;font-size:11px;">⬡ MCCF FIELD</div>
+  <div class="row"><span>coherence</span><span class="val" id="ov-coh">—</span></div>
+  <div class="row"><span>echo risk</span><span class="val" id="ov-echo">—</span></div>
+  <div class="row"><span>episodes</span><span class="val" id="ov-ep">—</span></div>
+  <div class="row"><span>agents</span><span class="val" id="ov-agents">—</span></div>
+  <div class="row"><span>tension</span><span class="val" id="ov-tension">—</span></div>
+  <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
+  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
+  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
+</div>
+
+<div id="controls">
+  <span style="color:#6a7890;font-size:11px;">Viewpoints:</span>
+  <button onclick="gotoVP('VP1')" id="btn-VP1">W1</button>
+  <button onclick="gotoVP('VP2')" id="btn-VP2">W2</button>
+  <button onclick="gotoVP('VP3')" id="btn-VP3">W3</button>
+  <button onclick="gotoVP('VP4')" id="btn-VP4">W4</button>
+  <button onclick="gotoVP('VP5')" id="btn-VP5">W5</button>
+  <button onclick="gotoVP('VP6')" id="btn-VP6">W6</button>
+  <button onclick="gotoVP('VP7')" id="btn-VP7">W7</button>
+  <button onclick="gotoVP('VP8')" id="btn-VP8">Overview</button>
+  <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
+  <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
+  <span id="status"><span id="poll-indicator"></span>Loading…</span>
+</div>
+
+<script>
+const API        = 'http://localhost:5000';
+const POLL_MS    = 750;
+const HOTHOUSE_MS= 1000;
+const LIGHTING_MS= 2000;  // lighting changes are slower than field/hothouse
+const canvas     = document.getElementById('x3d');
+let pollingActive= true;
+let activeVP     = null;
+
+// --- Viewpoint navigation ---
+function gotoVP(id) {
+  try {
+    const vp = canvas.browser.currentScene.getNamedNode(id);
+    if (vp) {
+      vp.set_bind = true;
+      setStatus('Viewpoint: ' + id);
+      if (activeVP) document.getElementById('btn-'+activeVP)?.classList.remove('active');
+      document.getElementById('btn-'+id)?.classList.add('active');
+      activeVP = id;
+    }
+  } catch(e) { console.warn('VP nav:', e); }
+}
+
+function setStatus(msg) {
+  document.getElementById('status').innerHTML = '<span id="poll-indicator"></span>' + msg;
+}
+
+canvas.addEventListener('load', () => {
+  setStatus('Scene loaded');
+  setTimeout(() => gotoVP('VP1'), 400);
+  startPolling();
+});
+canvas.addEventListener('error', () => setStatus('Load error — check console'));
+
+// --- Polling toggle ---
+function togglePolling() {
+  pollingActive = !pollingActive;
+  document.getElementById('poll-btn').textContent = pollingActive ? '⏸ Pause' : '▶ Resume';
+  if (pollingActive) { pollField(); pollHotHouse(); }
+}
+
+function flash(ok) {
+  const el = document.getElementById('poll-indicator');
+  if (el) { el.style.background = ok ? '#4af0a8' : '#df4a4a'; setTimeout(()=>{ if(el) el.style.background='#333'; }, 200); }
+}
+
+function startPolling() {
+  // Trigger ambient sync first so lighting has state immediately
+  fetch(API + '/ambient/sync', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({zone_hint:'neutral'})
+  }).catch(() => {});
+  pollField();
+  pollHotHouse();
+  pollLighting();
+}
+
+// --- /field polling ---
+async function pollField() {
+  if (!pollingActive) return;
+  try {
+    const r = await fetch(API+'/field', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    flash(true);
+    applyFieldData(d);
+    document.getElementById('ov-poll').textContent = 'synced '+new Date().toLocaleTimeString();
+  } catch(e) {
+    flash(false);
+    document.getElementById('ov-poll').textContent = 'poll error';
+  }
+  setTimeout(pollField, POLL_MS);
+}
+
+// --- /hothouse/x3d polling ---
+async function pollHotHouse() {
+  if (!pollingActive) return;
+  try {
+    const r = await fetch(API+'/hothouse/x3d', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (d && Object.keys(d).length > 0) {
+      applyHotHouseData(d);
+    } else {
+      // HotHouse empty — drive agents from /field channel weights directly
+      applyFieldChannelsToAgents();
+    }
+  } catch(e) {
+    applyFieldChannelsToAgents();
+  }
+  setTimeout(pollHotHouse, HOTHOUSE_MS);
+}
+
+function applyFieldChannelsToAgents() {
+  // Fallback: map E/B/P/S channel weights to basic visual params
+  // so agents are visible even without HotHouse running
+  const agents = Object.entries((window._lastFieldData || {}).agents || {});
+  if (!agents.length) return;
+  const mockHotHouse = {};
+  agents.forEach(([name, data]) => {
+    const w = data.weights || {E:0.35,B:0.25,P:0.20,S:0.20};
+    mockHotHouse[name] = {
+      morphWeight_emotion:  w.E || 0.35,
+      animationSpeed:       w.B || 0.25,
+      gazeDirectness:       w.P || 0.20,
+      socialProximity:      w.S || 0.20,
+      gestureConfidence:    0.5,
+      interactionOpenness:  1.0
+    };
+  });
+  applyHotHouseData(mockHotHouse);
+}
+
+// --- Apply /field to scene ---
+function applyFieldData(d) {
+  window._lastFieldData = d;  // store for HotHouse fallback
+  try {
+    const scene   = canvas.browser.currentScene;
+    const agents  = Object.keys(d.agents || {});
+    const epCount = d.episode_count || 0;
+    const ac      = d.alignment_coherence || {};
+    const coh     = typeof ac.global_coherence === 'number' ? ac.global_coherence : 0.5;
+    const echoArr = Object.values(d.echo_chamber_risks || {});
+    const echo    = echoArr.length > 0 ? Math.max(...echoArr) : 0.0;
+    const tension = Math.min(1.0, (1.0 - coh)*0.6 + echo*0.4);
+
+    document.getElementById('ov-coh').textContent    = coh.toFixed(3);
+    document.getElementById('ov-echo').textContent   = echo.toFixed(3);
+    document.getElementById('ov-ep').textContent     = epCount;
+    document.getElementById('ov-agents').textContent = agents.length;
+    const tel = document.getElementById('ov-tension');
+    tel.textContent = tension.toFixed(3);
+    tel.className = 'val '+(tension<0.3?'tension-low':tension<0.6?'tension-mid':tension<0.8?'tension-high':'tension-crit');
+
+    // MCCFField node
+    const fn = scene.getNamedNode('GlobalField');
+    if (fn) { fn.globalCoherence=coh; fn.echoRisk=echo; fn.tensionLevel=tension; fn.episodeCount=epCount; }
+
+    // Update field ring materials
+    updateFieldMaterials(scene, coh, echo, tension);
+
+    // MCCFChannel nodes
+    const mx = d.matrix || {};
+    updateChannelNode(scene, 'Ch_SA', mx, 'The Steward',   'The Archivist');
+    updateChannelNode(scene, 'Ch_SW', mx, 'The Steward',   'The Witness');
+    updateChannelNode(scene, 'Ch_AW', mx, 'The Archivist', 'The Witness');
+  } catch(e) { console.warn('applyFieldData:', e); }
+}
+
+function updateChannelNode(scene, def, matrix, from, to) {
+  const node = scene.getNamedNode(def);
+  if (!node) return;
+  const coh = (matrix[from]||{})[to] || 0.0;
+  node.coherence = coh;
+}
+
+function updateFieldMaterials(scene, coh, echo, tension) {
+  try {
+    const im = scene.getNamedNode('InnerRingMat');
+    if (im) { const b=0.3+coh*0.5; im.emissiveColor=[b*0.5,b*0.7,b]; im.transparency=Math.max(0.15,0.6-coh*0.4); }
+  } catch(e) {}
+  try {
+    const tm = scene.getNamedNode('TensionDiscMat');
+    if (tm) {
+      if      (tension<0.3) tm.emissiveColor=[0.3,0.5,0.8];
+      else if (tension<0.6) tm.emissiveColor=[0.3,0.7,0.7];
+      else if (tension<0.8) tm.emissiveColor=[0.8,0.5,0.2];
+      else                  tm.emissiveColor=[0.9,0.2,0.2];
+      tm.transparency=0.65-tension*0.3;
+    }
+  } catch(e) {}
+  try {
+    const om = scene.getNamedNode('OuterRingMat');
+    if (om) om.transparency=Math.max(0.2,1.0-echo*0.75);
+  } catch(e) {}
+  try {
+    const ct = scene.getNamedNode('CoherenceReadout');
+    if (ct) ct.string=[`coh: ${coh.toFixed(2)}`];
+    const tt = scene.getNamedNode('TensionReadout');
+    if (tt) tt.string=[`tension: ${tension.toFixed(2)}`];
+  } catch(e) {}
+}
+
+// --- Apply /hothouse/x3d to MCCFAgent nodes ---
+function applyHotHouseData(data) {
+  // Drive avatar appearance DIRECTLY via named Material/Transform DEF nodes.
+  // Bypasses PROTO field binding entirely — X_ITE IS bindings are unreliable
+  // for SFFloat fields inside ProtoBody. Direct SAI assignment is reliable.
+  if (!data || !Object.keys(data).length) return;
+  let applied = 0;
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) { console.warn('applyHotHouseData: no scene'); return; }
+
+    const agents = {
+      'The Steward':   'Steward',
+      'The Archivist': 'Archivist',
+      'The Witness':   'Witness'
+    };
+
+    for (const [agentName, safeName] of Object.entries(agents)) {
+      const p = data[agentName]; if (!p) continue;
+      try {
+        // Body glow — morphWeight_emotion (E-channel) → emissiveColor
+        // Remap [0.2-0.8] range to [0.0-1.0] for full visual range
+        const bodyMat = scene.getNamedNode('BodyMat_' + safeName);
+        if (bodyMat) {
+          const e = p.morphWeight_emotion || 0.3;
+          const eN = Math.max(0, Math.min(1, (e - 0.2) / 0.6)); // normalize
+          // Low E: cool blue. High E: warm amber glow.
+          bodyMat.emissiveColor = [eN * 0.9, eN * 0.55, eN * 0.05];
+        }
+
+        // Ring radius — socialProximity (S-channel) → ring scale
+        const ringTrans = scene.getNamedNode('Avatar_' + safeName);
+        // Note: ring scale via Transform not directly settable on child easily.
+        // For now drive ring opacity via RingMat transparency
+        const ringMat = scene.getNamedNode('RingMat_' + safeName);
+        if (ringMat) {
+          const s = p.socialProximity || 0.2;
+          // High S = nearly opaque ring, low S = nearly invisible
+          ringMat.transparency = Math.max(0.05, 0.95 - s * 1.2);
+        }
+
+        // Honor dot brightness — gestureConfidence → emissive intensity
+        const honorMat = scene.getNamedNode('HonorMat_' + safeName);
+        if (honorMat) {
+          const g = p.gestureConfidence || 0.5;
+          // High confidence = bright gold, low = dim and transparent
+          honorMat.emissiveColor = [g, g * 0.82, g * 0.1];
+          honorMat.transparency = Math.max(0.0, 0.8 - g * 0.75);
+        }
+
+        // Gaze indicator — gazeDirectness (P-channel) → brightness
+        const gazeMat = scene.getNamedNode('GazeMat_' + safeName);
+        if (gazeMat) {
+          const g = p.gazeDirectness || 0.5;
+          gazeMat.emissiveColor = [0.6 * g, 0.85 * g, g];
+          gazeMat.transparency = Math.max(0.1, 0.7 - g * 0.5);
+        }
+
+        applied++;
+      } catch(fe) {
+        console.warn('applyHotHouseData node error on', safeName, fe.message);
+      }
+    }
+
+    const diagEl = document.getElementById('x3d-diag');
+    if (diagEl) diagEl.textContent = `hothouse: ${applied}/${Object.keys(agents).length} agents updated`;
+  } catch(e) { console.warn('applyHotHouseData:', e); }
+}
+
+// --- /lighting/scalars polling ---
+async function pollLighting() {
+  if (!pollingActive) return;
+  try {
+    const r = await fetch(API+'/lighting/scalars', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    applyLighting(d);
+  } catch(e) {}
+  setTimeout(pollLighting, LIGHTING_MS);
+}
+
+function applyLighting(scalars) {
+  if (!scalars || !Object.keys(scalars).length) return;
+  try {
+    const scene = canvas.browser.currentScene;
+
+    // KeyLight (DirectionalLight)
+    const key = scene.getNamedNode('KeyLight');
+    if (key) {
+      const ki = Math.max(0.90, scalars.key_intensity || 0.90);
+      try { key.intensity = ki; } catch(e) {}
+      try { if (scalars.key_r !== undefined) key.color = [scalars.key_r, scalars.key_g, scalars.key_b]; } catch(e) {}
+    }
+
+    // AmbientLight (DirectionalLight fill)
+    const amb = scene.getNamedNode('AmbientLight');
+    if (amb) {
+      if (scalars.ambient_r !== undefined)
+        amb.color = [scalars.ambient_r, scalars.ambient_g, scalars.ambient_b];
+      if (scalars.ambient_intensity !== undefined)
+        amb.intensity = Math.max(0.30, scalars.ambient_intensity);  // floor
+    }
+
+    // FillLight (PointLight)
+    const fill = scene.getNamedNode('FillLight');
+    if (fill) {
+      if (scalars.fill_r !== undefined)
+        fill.color = [scalars.fill_r, scalars.fill_g, scalars.fill_b];
+      if (scalars.fill_intensity !== undefined)
+        fill.intensity = Math.max(0.35, scalars.fill_intensity);  // floor
+    }
+
+    // RimLight (PointLight)
+    const rim = scene.getNamedNode('RimLight');
+    if (rim) {
+      if (scalars.rim_r !== undefined)
+        rim.color = [scalars.rim_r, scalars.rim_g, scalars.rim_b];
+      if (scalars.rim_intensity !== undefined)
+        rim.intensity = scalars.rim_intensity;
+    }
+    // Update HUD diagnostic
+    const lDiag = document.getElementById('light-diag');
+    const keyFound  = !!scene.getNamedNode('KeyLight');
+    const ambFound  = !!scene.getNamedNode('AmbientLight');
+    if (lDiag) lDiag.textContent = `lighting: key=${keyFound} amb=${ambFound}`;
+  } catch(e) {
+    console.warn('applyLighting:', e);
+    const lDiag = document.getElementById('light-diag');
+    if (lDiag) lDiag.textContent = `lighting: ERROR ${e.message}`;
+  }
+}
+
+// --- Cross-window event listeners (from mccf_voice.html) ---
+window.addEventListener('mccf_x3d_projection', (e) => { if (e.detail) applyHotHouseData(e.detail); });
+window.addEventListener('message', (e) => { if (e.data?.type==='mccf_projection') applyHotHouseData(e.data.data); });
+</script>
+
+</body>
+</html>

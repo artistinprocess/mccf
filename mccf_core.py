@@ -562,6 +562,12 @@ class Agent:
         self.ccs = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
         self._ccs_history: list = []   # track drift over time
 
+        # v2.0 — Δ history: rolling outcome delta record for temporal coherence
+        # Feeds back into prompt construction as emotional inertia signal.
+        # Window of 20 matches HISTORY_WINDOW — same temporal scale as memory.
+        self.delta_history: list = []  # list of float outcome_delta values
+        self._DELTA_WINDOW: int = 20
+
     def _validate_weights(self):
         total = sum(self.weights.values())
         if abs(total - 1.0) > 0.01:
@@ -610,9 +616,12 @@ class Agent:
         self.identity.update(self.meta_state, cv)
 
         # v1.4.0: update CCS based on episode consistency
-        # Consistent behavior (low channel variance) → CCS drifts up
-        # Inconsistent behavior (high channel variance) → CCS drifts down
         self._update_ccs(cv)
+
+        # v2.0: append outcome_delta to rolling Δ history
+        self.delta_history.append(cv.outcome_delta)
+        if len(self.delta_history) > self._DELTA_WINDOW:
+            self.delta_history = self.delta_history[-self._DELTA_WINDOW:]
 
     def _update_ccs(self, cv: ChannelVector):
         """
@@ -669,6 +678,57 @@ class Agent:
                 "weak"     if self.ccs >= 0.30 else
                 "decoupled"
             )
+        }
+
+
+    def delta_context(self, window: int = 5) -> dict:
+        """
+        v2.0 — Return delta summary for prompt injection.
+
+        Summarizes recent outcome trajectory as emotional inertia signal.
+        Injected into the system prompt so the LLM knows whether
+        the agent has been experiencing improving or declining coherence.
+        """
+        recent = self.delta_history[-window:] if self.delta_history else []
+        if not recent:
+            return {
+                "sum": 0.0, "mean": 0.0,
+                "trend": "neutral",
+                "trajectory": "No interaction history yet.",
+                "window": 0
+            }
+        total = sum(recent)
+        mean  = total / len(recent)
+        mid = len(recent) // 2
+        if mid > 0:
+            first_half  = sum(recent[:mid]) / mid
+            second_half = sum(recent[mid:]) / (len(recent) - mid)
+            slope = second_half - first_half
+        else:
+            slope = 0.0
+
+        if mean > 0.1 and slope >= 0:
+            trend = "improving"
+            trajectory = "Recent interactions have been constructive and coherence is building."
+        elif mean > 0.1 and slope < 0:
+            trend = "declining from positive"
+            trajectory = "Interactions were positive but coherence is beginning to slip."
+        elif mean < -0.1 and slope <= 0:
+            trend = "deteriorating"
+            trajectory = "Recent interactions have been dissonant. Recovery may be needed."
+        elif mean < -0.1 and slope > 0:
+            trend = "recovering"
+            trajectory = "Interactions were difficult but coherence appears to be stabilizing."
+        else:
+            trend = "stable"
+            trajectory = "Interaction history is near neutral — no strong drift in either direction."
+
+        return {
+            "sum":        round(total, 4),
+            "mean":       round(mean, 4),
+            "trend":      trend,
+            "trajectory": trajectory,
+            "window":     len(recent)
         }
 
     def compute_meta_state(self) -> MetaState:
@@ -753,6 +813,7 @@ class Agent:
             "name":       self.name,
             "role":       self.role,
             "regulation": self._affect_regulation,
+            "weights":    dict(self.weights),          # v2.1 — required by editor
             "known_agents": list(self._known_agents.keys()),
             "fidelity_active": {
                 k: v.fidelity_active for k, v in self._known_agents.items()
@@ -930,6 +991,114 @@ class CoherenceField:
                         }
         return risks
 
+    def entanglement_negativity(self) -> dict:
+        """
+        v1.6.0 — Proxy measure of deep structural coupling between agent pairs.
+
+        Distinct from echo_chamber_risk() which measures surface coherence level.
+        This measures whether two agents can be modeled independently.
+
+        Method: partial transpose proxy — reverse the channel vector of one agent
+        and measure the L1 norm difference from the original joint state.
+        Larger values indicate higher non-separability.
+
+        IMPORTANT: This is a proxy measure, not a rigorous quantum computation.
+        It produces a relative metric useful for comparing pairs within the field.
+        Do not treat the absolute values as formally equivalent to quantum
+        entanglement negativity. Document as proxy in any published results.
+
+        Interpretation:
+          0.00 - 0.10  : agents effectively independent
+          0.10 - 0.25  : moderate coupling (healthy relationship, earned)
+          0.25 - 0.40  : strong coupling (deep bond or dependency)
+          > 0.40       : very high non-separability (investigate: co-dependence,
+                         coordinated inauthentic behavior, or deep alignment)
+
+        Use alongside echo_chamber_risk():
+          High coherence + low episode count + high negativity
+          → coherence-without-history anomaly → possible exogenous coordination
+
+          High coherence + high episode count + high negativity
+          → deep organic coupling → healthy or pathological depending on context
+        """
+        names = list(self.agents.keys())
+        result = {}
+        for i, n in enumerate(names):
+            for j, m in enumerate(names):
+                if n < m:
+                    psi_n = [self.agents[n].weights.get(ch, 0.25)
+                             for ch in CHANNEL_NAMES]
+                    psi_m = [self.agents[m].weights.get(ch, 0.25)
+                             for ch in CHANNEL_NAMES]
+                    # Joint state (stacked)
+                    joint = psi_n + psi_m
+                    joint_norm = sum(abs(x) for x in joint)
+                    # Partial transpose: reverse psi_m dimensions
+                    pt = psi_n + list(reversed(psi_m))
+                    pt_norm = sum(abs(x) for x in pt)
+                    # Negativity proxy: deviation under partial transpose
+                    negativity = abs(pt_norm - joint_norm) / (joint_norm + 1e-8)
+                    # Episode count for coherence-without-history detection
+                    episode_count = sum(
+                        len(self.agents[n].records.get(m, type('', (), {'history': []})()).history)
+                        for _ in [None]
+                    ) if hasattr(self.agents[n], 'records') else 0
+                    result[f"{n}↔{m}"] = {
+                        "negativity": round(negativity, 4),
+                        "level": (
+                            "very_high" if negativity > 0.40 else
+                            "strong"    if negativity > 0.25 else
+                            "moderate"  if negativity > 0.10 else
+                            "low"
+                        )
+                    }
+        return result
+
+    def alignment_coherence(self) -> dict:
+        """
+        v1.6.0 — H_alignment operator: measure each agent's coherence
+        with its cultivar ideology (channel weight baseline).
+
+        This is the formal expression of what the cultivar weight system
+        was always computing — how closely the agent's current state
+        aligns with its declared ideological attractor.
+
+        H_alignment = Σ_i α_i · (current_weight_i - ideology_i)²
+
+        Where ideology = cultivar baseline (Identity._baseline).
+        Lower H_alignment = higher alignment with cultivar ideology.
+        Higher H_alignment = agent has drifted from its ideological attractor.
+
+        The evaluative gate (H_eval) is the Shibboleth CPI threshold.
+        Agents with alignment_coherence > drift_cap are candidates for
+        Gardener intervention — their ideology is no longer governing behavior.
+        """
+        result = {}
+        for name, agent in self.agents.items():
+            baseline = agent.identity._baseline
+            current  = agent.weights
+            # Alignment distance: sum of squared deviations from ideology
+            alignment_distance = sum(
+                (current.get(ch, 0.25) - baseline.get(ch, 0.25)) ** 2
+                for ch in CHANNEL_NAMES
+            )
+            alignment_coherence = 1.0 - min(1.0, alignment_distance * 4.0)
+            # Identity drift from baseline
+            drift = agent.identity.as_dict()["drift"]
+            max_drift = max(abs(v) for v in drift.values()) if drift else 0.0
+            result[name] = {
+                "alignment_coherence": round(alignment_coherence, 4),
+                "ideology_distance":   round(alignment_distance, 4),
+                "max_channel_drift":   round(max_drift, 4),
+                "evaluative_gate":     "OPEN" if alignment_coherence > 0.75 else "CLOSED",
+                "note": (
+                    "ideology governing behavior"
+                    if alignment_coherence > 0.75
+                    else "ideology drift — Gardener review recommended"
+                )
+            }
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Governance roles (unchanged, Gardener now has mode-aware intervention)
@@ -947,13 +1116,15 @@ class Librarian:
 
     def snapshot(self, label: str = ""):
         snap = {
-            "label":         label,
-            "timestamp":     time.time(),
-            "matrix":        self.field.field_matrix(),
-            "echo_risks":    self.field.echo_chamber_risk(),
-            "episode_count": len(self.field.episode_log),
-            "agent_states":  self.field.agent_states(),   # v1.1.0
-            "mode_summary":  self.field.mode_summary()    # v1.1.0
+            "label":               label,
+            "timestamp":           time.time(),
+            "matrix":              self.field.field_matrix(),
+            "echo_risks":          self.field.echo_chamber_risk(),
+            "entanglement":        self.field.entanglement_negativity(),   # v1.6.0
+            "alignment_coherence": self.field.alignment_coherence(),       # v1.6.0
+            "episode_count":       len(self.field.episode_log),
+            "agent_states":        self.field.agent_states(),              # v1.1.0
+            "mode_summary":        self.field.mode_summary()               # v1.1.0
         }
         self.snapshots.append(snap)
         return snap

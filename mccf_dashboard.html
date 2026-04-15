@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+:root {
+  --bg:     #060810;
+  --s1:     #0a0c16;
+  --s2:     #0f1220;
+  --s3:     #141828;
+  --border: #1c2238;
+  --text:   #d0dcea;
+  --dim:    #7a8aaa;
+  --accent: #4af0a8;
+  --accent2:#f0c060;
+  --accent3:#60a8f0;
+  --danger: #f06060;
+  --E: #f07070; --B: #70a0f0; --P: #a0d070; --S: #f0c060;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: 13px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 44px 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-areas:
+    "hdr hdr hdr hdr"
+    "field field hothouse lighting"
+    "zones energy voice x3d";
+  gap: 1px;
+  background: var(--border);
+  overflow: hidden;
+}
+header {
+  grid-area: hdr;
+  background: var(--s1); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 14px;
+}
+.logo { font-family: var(--display); font-weight: 800; font-size: 16px; color: var(--accent2); }
+.logo span { color: var(--dim); font-weight: 400; font-size: 13px; }
+.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 3px 8px; width: 180px; outline: none; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.sdot.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.hbtn { font-family: var(--mono); font-size: 12px; padding: 4px 10px;
+  border: 1px solid var(--border); border-radius: 4px; background: none;
+  color: var(--dim); cursor: pointer; transition: all 0.12s; }
+.hbtn:hover { color: var(--accent2); border-color: var(--accent2); }
+.hbtn.active { color: var(--accent); border-color: var(--accent); }
+
+/* Panels */
+.panel {
+  background: var(--s1);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.panel-hdr {
+  font-family: var(--display); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+.panel-hdr .mod-link {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  text-decoration: none; font-family: var(--mono); font-weight: 400;
+}
+.panel-hdr .mod-link:hover { color: var(--accent2); }
+.panel-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+.panel-body::-webkit-scrollbar { width: 3px; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* Field panel */
+#panel-field  { grid-area: field; }
+#panel-hothouse { grid-area: hothouse; }
+#panel-lighting { grid-area: lighting; }
+#panel-zones   { grid-area: zones; }
+#panel-energy  { grid-area: energy; }
+#panel-voice   { grid-area: voice; }
+#panel-x3d     { grid-area: x3d; }
+
+/* Section label */
+.sh {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--dim);
+  margin: 10px 0 5px; display: flex; align-items: center; gap: 6px;
+}
+.sh:first-child { margin-top: 0; }
+.sh::after { content:''; flex:1; height:1px; background: var(--border); }
+
+/* Agent row */
+.agent-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.agent-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.agent-name { font-family: var(--display); font-size: 13px; font-weight: 600; flex: 1; }
+.agent-mode { font-size: 11px; padding: 1px 6px; border-radius: 3px; }
+
+/* Channel bar */
+.ch-bars { display: flex; gap: 3px; margin-top: 4px; }
+.ch-bar { flex: 1; height: 4px; background: var(--s3); border-radius: 2px; overflow: hidden; }
+.ch-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+/* Stat row */
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+}
+.stat-key { color: var(--dim); font-size: 12px; }
+.stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+
+/* Matrix */
+.matrix-wrap { overflow-x: auto; }
+.matrix-tbl { border-collapse: collapse; font-size: 11px; width: 100%; }
+.matrix-tbl th { padding: 3px 6px; color: var(--dim); font-weight: 400;
+  border-bottom: 1px solid var(--border); text-align: right; }
+.matrix-tbl td { padding: 3px 6px; text-align: right;
+  border-bottom: 1px solid var(--border); }
+
+/* Light swatch */
+.light-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid var(--border); }
+.light-swatch { width: 28px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.light-bar { flex: 1; height: 4px; background: var(--s3); border-radius: 2px; overflow: hidden; }
+.light-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+/* Zone chip */
+.zone-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 8px; border-radius: 4px; margin: 2px;
+  border: 1px solid var(--border); font-size: 12px;
+}
+.zone-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Voice log */
+.voice-entry { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.voice-agent { color: var(--accent2); font-weight: 600; }
+.voice-text  { color: var(--text); margin-top: 2px; line-height: 1.5; }
+
+/* X3D mini status */
+.x3d-agent { display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid var(--border); }
+.x3d-bar-row { display: flex; gap: 4px; margin-top: 3px; }
+.x3d-bar { flex:1; }
+.x3d-bar-label { font-size:10px; color:var(--dim); margin-bottom:1px; }
+
+/* Open module button */
+.open-btn {
+  display: block; width: 100%; margin-top: 8px;
+  padding: 6px; text-align: center; border: 1px solid var(--border);
+  border-radius: 4px; color: var(--dim); text-decoration: none;
+  font-size: 12px; background: var(--s2); transition: all 0.12s;
+}
+.open-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+
+#toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+  background:var(--s2); border:1px solid var(--accent2); border-radius:4px;
+  padding:6px 16px; font-size:12px; color:var(--accent2); opacity:0;
+  transition:all 0.18s; pointer-events:none; z-index:999; }
+#toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>Dashboard</span></div>
+  <div class="sdot" id="sdot"></div>
+  <span id="stext" style="font-size:12px;color:var(--dim)">offline</span>
+  <button class="hbtn" onclick="refresh()">↺ Refresh</button>
+  <button class="hbtn active" id="live-btn" onclick="toggleLive()">Live On</button>
+  <div class="api-row">
+    <input id="api-url" value="http://localhost:5000" onchange="setApi(this.value)">
+  </div>
+</header>
+
+<!-- FIELD MATRIX -->
+<div class="panel" id="panel-field">
+  <div class="panel-hdr">⬡ Coherence Field
+    <a class="mod-link" href="mccf_editor.html" target="_blank">→ Editor</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Agents</div>
+    <div id="agent-list"></div>
+    <div class="sh">Coherence Matrix</div>
+    <div class="matrix-wrap" id="matrix-wrap"></div>
+    <div class="sh">Field Stats</div>
+    <div id="field-stats"></div>
+  </div>
+</div>
+
+<!-- HOTHOUSE -->
+<div class="panel" id="panel-hothouse">
+  <div class="panel-hdr">⬡ HotHouse Field
+    <a class="mod-link" href="mccf_x3d_loader.html" target="_blank">→ X3D</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Agent State Vectors</div>
+    <div id="hothouse-agents"></div>
+    <div class="sh">Trust Matrix</div>
+    <div id="trust-matrix"></div>
+  </div>
+</div>
+
+<!-- LIGHTING -->
+<div class="panel" id="panel-lighting">
+  <div class="panel-hdr">⬡ Lighting
+    <a class="mod-link" href="mccf_lighting.html" target="_blank">→ Lighting</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Light Sources</div>
+    <div id="light-sources"></div>
+    <div class="sh">Agent Tints</div>
+    <div id="agent-tints"></div>
+    <div class="sh">Field</div>
+    <div id="lighting-field"></div>
+  </div>
+</div>
+
+<!-- ZONES -->
+<div class="panel" id="panel-zones">
+  <div class="panel-hdr">⬡ Zones
+    <a class="mod-link" href="mccf_waypoint_editor.html" target="_blank">→ Scene Composer</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Active Zones</div>
+    <div id="zone-list"></div>
+    <div class="sh">Ambient Theme</div>
+    <div id="ambient-theme"></div>
+  </div>
+</div>
+
+<!-- ENERGY -->
+<div class="panel" id="panel-energy">
+  <div class="panel-hdr">⬡ Energy Field
+    <a class="mod-link" href="mccf_energy.html" target="_blank">→ Energy</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Agent Energy</div>
+    <div id="energy-agents"></div>
+  </div>
+</div>
+
+<!-- VOICE LOG -->
+<div class="panel" id="panel-voice">
+  <div class="panel-hdr">⬡ Voice Log
+    <a class="mod-link" href="mccf_voice.html" target="_blank">→ Voice</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Recent Interactions</div>
+    <div id="voice-log"></div>
+    <div class="sh">NeoRiemannian</div>
+    <div id="nr-state"></div>
+  </div>
+</div>
+
+<!-- X3D STATUS -->
+<div class="panel" id="panel-x3d">
+  <div class="panel-hdr">⬡ X3D Parameters
+    <a class="mod-link" href="mccf_x3d_loader.html" target="_blank">→ Scene</a>
+  </div>
+  <div class="panel-body">
+    <div class="sh">Avatar Parameters</div>
+    <div id="x3d-agents"></div>
+    <div class="sh">Arc Waypoints</div>
+    <div id="arc-waypoints"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let API = 'http://localhost:5000';
+let liveInterval = null;
+let lastField = null;
+
+function setApi(url) { API = url.trim(); refresh(); }
+
+function setStatus(s) {
+  document.getElementById('sdot').className = 'sdot ' + (s==='on'?'on':'');
+  document.getElementById('stext').textContent = s==='on'?'online':'offline';
+}
+
+function toggleLive() {
+  const btn = document.getElementById('live-btn');
+  if (liveInterval) {
+    clearInterval(liveInterval); liveInterval = null;
+    btn.textContent = 'Live Off'; btn.classList.remove('active');
+  } else {
+    liveInterval = setInterval(refresh, 2000);
+    btn.textContent = 'Live On'; btn.classList.add('active');
+  }
+}
+
+async function fetchJson(path) {
+  const r = await fetch(API + path, {signal: AbortSignal.timeout(3000)});
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function refresh() {
+  try {
+    const [field, hothouse, lighting, scene, energy, nr] = await Promise.allSettled([
+      fetchJson('/field'),
+      fetchJson('/hothouse/state'),
+      fetchJson('/lighting/state'),
+      fetchJson('/scene'),
+      fetchJson('/energy/state'),
+      fetchJson('/neoriemannian/state'),
+    ]);
+
+    const ok = field.status === 'fulfilled' && field.value;
+    setStatus(ok ? 'on' : 'off');
+    if (!ok) return;
+
+    lastField = field.value;
+    renderField(field.value);
+    if (hothouse.value) renderHothouse(hothouse.value);
+    if (lighting.value) renderLighting(lighting.value);
+    if (scene.value)    renderZones(scene.value);
+    if (energy.value)   renderEnergy(energy.value);
+    if (nr.value)       renderNR(nr.value);
+    renderX3DParams(field.value);
+
+    document.title = `MCCF · ${new Date().toLocaleTimeString()}`;
+  } catch(e) {
+    setStatus('off');
+  }
+}
+
+// =====================================================================
+// Field panel
+// =====================================================================
+function renderField(data) {
+  const agents = data.agents || {};
+  const matrix = data.matrix || {};
+  const names  = Object.keys(agents);
+
+  // Agent list
+  const modeColors = {
+    exploit:'#4af0a8', explore:'#60a8f0', repair:'#f0c060',
+    avoid:'#c87070', shift:'#a060f0'
+  };
+  const agentColors = ['#4a90d9','#d9934a','#4ad98b','#d94a90','#8b4ad9','#d9d44a'];
+
+  document.getElementById('agent-list').innerHTML = names.map((name, i) => {
+    const a  = agents[name];
+    const w  = a.weights || {};
+    const m  = a.meta_state || {};
+    const mc = modeColors[m.mode] || '#aab0be';
+    const ac = agentColors[i % agentColors.length];
+    return `<div class="agent-row">
+      <div class="agent-dot" style="background:${ac}"></div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="agent-name">${name}</span>
+          <span class="agent-mode" style="background:${mc}22;color:${mc}">${m.mode||'—'}</span>
+          <span style="font-size:11px;color:var(--dim)">${a.role||''}</span>
+        </div>
+        <div class="ch-bars">
+          ${[['E','var(--E)'],['B','var(--B)'],['P','var(--P)'],['S','var(--S)']].map(([ch,col])=>
+            `<div class="ch-bar" title="${ch}: ${(w[ch]||0).toFixed(3)}">
+              <div class="ch-fill" style="width:${(w[ch]||0)*100}%;background:${col}"></div>
+            </div>`
+          ).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-top:2px;">
+          coh:${(m.coherence||0).toFixed(2)} σ:${(m.uncertainty||0).toFixed(2)} v:${(m.valence||0).toFixed(2)} r:${(a.regulation||1).toFixed(2)}
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--dim);font-size:12px;">No agents registered</div>';
+
+  // Matrix
+  if (names.length > 1) {
+    let html = '<table class="matrix-tbl"><thead><tr><th></th>';
+    names.forEach(n => { html += `<th>${n.split(' ').pop()}</th>`; });
+    html += '</tr></thead><tbody>';
+    names.forEach(from => {
+      html += `<tr><th style="text-align:left;color:var(--dim);padding-right:8px">${from.split(' ').pop()}</th>`;
+      names.forEach(to => {
+        if (from === to) { html += '<td style="color:var(--border)">—</td>'; return; }
+        const v = (matrix[from]||{})[to] || 0;
+        const col = v > 0.7 ? 'var(--accent)' : v > 0.4 ? 'var(--text)' : 'var(--dim)';
+        html += `<td style="color:${col}">${v.toFixed(3)}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('matrix-wrap').innerHTML = html;
+  }
+
+  // Stats
+  const ep = data.episode_count || 0;
+  const echoRisks = data.echo_chamber_risks || {};
+  document.getElementById('field-stats').innerHTML = `
+    <div class="stat-row"><span class="stat-key">episodes</span><span class="stat-val" style="color:var(--accent)">${ep}</span></div>
+    <div class="stat-row"><span class="stat-key">agents</span><span class="stat-val">${names.length}</span></div>
+    <div class="stat-row"><span class="stat-key">echo risks</span><span class="stat-val" style="color:${Object.keys(echoRisks).length?'var(--danger)':'var(--accent)'}">${Object.keys(echoRisks).length}</span></div>`;
+}
+
+// =====================================================================
+// HotHouse panel
+// =====================================================================
+function renderHothouse(data) {
+  const agents = data.agents || {};
+  const trust  = data.trust  || {};
+
+  document.getElementById('hothouse-agents').innerHTML = Object.entries(agents).map(([name, a]) => {
+    const psi = a.psi || {};
+    return `<div class="x3d-agent">
+      <div style="flex:1">
+        <div style="font-family:var(--display);font-size:13px;font-weight:600;margin-bottom:4px">${name}</div>
+        ${[['E','var(--E)'],['B','var(--B)'],['P','var(--P)'],['S','var(--S)']].map(([ch,col])=>
+          `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+            <span style="width:12px;font-size:11px;color:${col}">${ch}</span>
+            <div style="flex:1;height:5px;background:var(--s3);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${(psi[ch]||0)*100}%;background:${col};border-radius:2px;transition:width 0.5s"></div>
+            </div>
+            <span style="font-size:11px;color:var(--dim);width:36px;text-align:right">${(psi[ch]||0).toFixed(3)}</span>
+          </div>`
+        ).join('')}
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--dim);font-size:12px;">HotHouse inactive</div>';
+
+  // Trust matrix (compact)
+  if (Object.keys(trust).length) {
+    let html = '<div style="font-size:11px;">';
+    Object.entries(trust).forEach(([from, tos]) => {
+      Object.entries(tos).forEach(([to, val]) => {
+        const col = val > 0.6 ? 'var(--accent)' : val > 0.3 ? 'var(--text)' : 'var(--dim)';
+        html += `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--dim)">${from.split(' ').pop()} → ${to.split(' ').pop()}</span>
+          <span style="color:${col}">${val.toFixed(3)}</span>
+        </div>`;
+      });
+    });
+    html += '</div>';
+    document.getElementById('trust-matrix').innerHTML = html;
+  }
+}
+
+// =====================================================================
+// Lighting panel
+// =====================================================================
+function renderLighting(data) {
+  const lights = [
+    {name:'Key',     cr:'key_r',     cg:'key_g',     cb:'key_b',     int:'key_intensity'},
+    {name:'Fill',    cr:'fill_r',    cg:'fill_g',    cb:'fill_b',    int:'fill_intensity'},
+    {name:'Ambient', cr:'ambient_r', cg:'ambient_g', cb:'ambient_b', int:'ambient_intensity'},
+    {name:'Rim',     cr:'rim_r',     cg:'rim_g',     cb:'rim_b',     int:'rim_intensity'},
+  ];
+
+  document.getElementById('light-sources').innerHTML = lights.map(l => {
+    const r=data[l.cr]||0, g=data[l.cg]||0, b=data[l.cb]||0;
+    const hex = '#'+[r,g,b].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+    const int = data[l.int] || 0;
+    return `<div class="light-row">
+      <div class="light-swatch" style="background:${hex}"></div>
+      <span style="width:52px;font-size:12px">${l.name}</span>
+      <div class="light-bar">
+        <div class="light-bar-fill" style="width:${int*100}%;background:${hex}"></div>
+      </div>
+      <span style="font-size:11px;color:var(--dim);width:36px;text-align:right">${int.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+
+  const tints = data.agent_tints || {};
+  document.getElementById('agent-tints').innerHTML = Object.entries(tints).map(([name, t]) => {
+    const bHex = '#'+t.body.map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+    const gHex = '#'+t.glow.map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('');
+    return `<div class="light-row">
+      <div style="width:18px;height:18px;border-radius:50%;background:${bHex};box-shadow:0 0 6px ${gHex};flex-shrink:0"></div>
+      <span style="flex:1;font-size:12px">${name}</span>
+      <span style="font-size:11px;color:var(--dim)">${bHex} glow:${t.glow_intensity.toFixed(2)}</span>
+    </div>`;
+  }).join('') || '<div style="color:var(--dim);font-size:12px;">No agent tints yet</div>';
+
+  const k = data.kelvin_normalized ? Math.round(data.kelvin_normalized*7000+2000) : 5000;
+  document.getElementById('lighting-field').innerHTML = `
+    <div class="stat-row"><span class="stat-key">kelvin</span><span class="stat-val" style="color:var(--accent2)">${k}K</span></div>
+    <div class="stat-row"><span class="stat-key">zone</span><span class="stat-val">${data.zone_type||'neutral'}</span></div>
+    <div class="stat-row"><span class="stat-key">contrast</span><span class="stat-val">${(data.contrast||0).toFixed(3)}</span></div>
+    <div class="stat-row"><span class="stat-key">flicker</span><span class="stat-val">${(data.flicker_amplitude||0).toFixed(4)}</span></div>`;
+}
+
+// =====================================================================
+// Zones panel
+// =====================================================================
+function renderZones(data) {
+  const zones = data.zones || [];
+  const ZONE_SCALES = {
+    library:'dorian', intimate:'major', forum:'mixolydian',
+    authority:'phrygian', garden:'pentatonic', threat:'locrian',
+    sacred:'lydian', neutral:'pentatonic'
+  };
+
+  document.getElementById('zone-list').innerHTML = zones.length
+    ? zones.map(z => `<div class="zone-chip">
+        <div class="zone-dot" style="background:${z.color||'#888'}"></div>
+        <span style="color:${z.color||'#888'}">${z.name}</span>
+        <span style="color:var(--dim);font-size:11px">${z.zone_type||'neutral'}</span>
+      </div>`).join('')
+    : '<div style="color:var(--dim);font-size:12px;">No zones — use Scene Composer</div>';
+
+  const themes = [...new Set(zones.map(z => z.zone_type||'neutral'))];
+  document.getElementById('ambient-theme').innerHTML = themes.map(t =>
+    `<div style="padding:3px 0;border-bottom:1px solid var(--border);">
+      <span style="color:var(--accent2)">${t}</span>
+      <span style="color:var(--dim);font-size:11px;margin-left:8px">→ ${ZONE_SCALES[t]||'pentatonic'}</span>
+    </div>`
+  ).join('') || '<div style="color:var(--dim);font-size:12px;">No themes active</div>';
+}
+
+// =====================================================================
+// Energy panel
+// =====================================================================
+function renderEnergy(data) {
+  const agents = data.agents || {};
+  document.getElementById('energy-agents').innerHTML = Object.entries(agents).map(([name, a]) => {
+    const E = a.E_field || 0;
+    const label = E<0.2?'very natural':E<0.4?'available':E<0.6?'tension':E<0.8?'friction':'avoided';
+    const col   = E<0.2?'var(--accent)':E<0.4?'#4af0d8':E<0.6?'var(--accent2)':E<0.8?'#f0a060':'var(--danger)';
+    return `<div class="stat-row">
+      <span class="stat-key">${name.split(' ').pop()}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:60px;height:4px;background:var(--s3);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${E*100}%;background:${col};border-radius:2px;transition:width 0.5s"></div>
+        </div>
+        <span style="font-size:11px;color:${col}">${label}</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--dim);font-size:12px;">Fire sensors to calibrate</div>';
+}
+
+// =====================================================================
+// NeoRiemannian panel
+// =====================================================================
+function renderNR(data) {
+  const agents  = data.agents  || {};
+  const harmony = data.harmony || {};
+  const cons = harmony.consonance || 0;
+  const consCol = cons > 0.6 ? 'var(--accent)' : cons > 0.3 ? 'var(--accent2)' : 'var(--danger)';
+
+  let html = `<div class="stat-row">
+    <span class="stat-key">consonance</span>
+    <span class="stat-val" style="color:${consCol}">${cons.toFixed(3)}</span>
+  </div>`;
+  html += Object.entries(agents).map(([name, a]) =>
+    `<div style="padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;">
+      <span style="color:var(--dim)">${name.split(' ').pop()}</span>
+      <span style="color:var(--accent2)">${a.triad||'—'}</span>
+      <span style="color:var(--dim);font-size:11px">${a.last_op||'—'}</span>
+    </div>`
+  ).join('');
+  document.getElementById('nr-state').innerHTML = html;
+}
+
+// =====================================================================
+// X3D parameters panel
+// =====================================================================
+function renderX3DParams(field) {
+  const agents = field.agents || {};
+  document.getElementById('x3d-agents').innerHTML = Object.entries(agents).map(([name, a]) => {
+    const w = a.weights || {};
+    return `<div style="padding:4px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:3px">${name.split(' ').pop()}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:11px;">
+        <span style="color:var(--dim)">morph_emo</span><span style="color:var(--E)">${(w.E||0).toFixed(3)}</span>
+        <span style="color:var(--dim)">anim_speed</span><span style="color:var(--B)">${(w.B||0).toFixed(3)}</span>
+        <span style="color:var(--dim)">gaze_dir</span><span style="color:var(--P)">${(w.P||0).toFixed(3)}</span>
+        <span style="color:var(--dim)">social_prox</span><span style="color:var(--S)">${(w.S||0).toFixed(3)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Arc waypoint reference
+  const waypoints = [
+    {key:'W1',label:'Comfort',      col:'#9090a0'},
+    {key:'W2',label:'Friction',     col:'#c8a840'},
+    {key:'W3',label:'Mirror',       col:'#40c8d8'},
+    {key:'W4',label:'Pushback',     col:'#d88040'},
+    {key:'W5',label:'Rupture',      col:'#d84040'},
+    {key:'W6',label:'Recognition',  col:'#9040d8'},
+    {key:'W7',label:'Integration',  col:'#d8c040'},
+  ];
+  document.getElementById('arc-waypoints').innerHTML = waypoints.map(wp =>
+    `<div style="display:flex;gap:6px;align-items:center;padding:2px 0;border-bottom:1px solid var(--border);">
+      <div style="width:8px;height:8px;border-radius:50%;background:${wp.col};flex-shrink:0"></div>
+      <span style="font-size:11px;color:var(--dim);width:20px">${wp.key}</span>
+      <span style="font-size:12px">${wp.label}</span>
+    </div>`
+  ).join('');
+}
+
+// =====================================================================
+// Init
+// =====================================================================
+window.addEventListener('load', () => {
+  setApi(document.getElementById('api-url').value);
+  liveInterval = setInterval(refresh, 2000);
+});
+</script>
+</body>
+</html>

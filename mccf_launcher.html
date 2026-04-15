@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF — Multi-Channel Coherence Field</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+:root {
+  --bg:     #060810;
+  --s1:     #0a0c16;
+  --s2:     #0f1220;
+  --border: #1c2238;
+  --text:   #d0dcea;
+  --dim:    #7a8aaa;
+  --accent: #4af0a8;
+  --warm:   #f0c060;
+  --cool:   #60a8f0;
+  --mono:   'IBM Plex Mono', monospace;
+  --display:'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--mono); font-size: 13px;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+
+/* Header */
+header {
+  background: var(--s1); border-bottom: 1px solid var(--border);
+  padding: 24px 40px 20px;
+}
+.title {
+  font-family: var(--display); font-weight: 800; font-size: 32px;
+  color: var(--warm); letter-spacing: -0.02em;
+}
+.subtitle {
+  font-family: var(--display); font-weight: 400; font-size: 14px;
+  color: var(--dim); margin-top: 4px;
+}
+.tagline {
+  font-size: 13px; color: var(--dim); margin-top: 12px;
+  font-style: italic;
+  border-left: 2px solid var(--border); padding-left: 12px;
+}
+.status-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 16px;
+}
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+.sdot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+#server-status { font-size: 12px; color: var(--dim); }
+.api-input {
+  background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 4px 10px; width: 200px; outline: none;
+}
+.api-input:focus { border-color: var(--warm); }
+.hbtn {
+  font-family: var(--mono); font-size: 12px; padding: 4px 12px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: none; color: var(--dim); cursor: pointer; transition: all 0.12s;
+}
+.hbtn:hover { color: var(--warm); border-color: var(--warm); }
+
+/* Main grid */
+main {
+  flex: 1; padding: 32px 40px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 24px;
+  align-content: start;
+}
+
+/* Module card */
+.card {
+  background: var(--s1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px; cursor: pointer;
+  transition: all 0.15s; text-decoration: none; color: inherit;
+  display: flex; flex-direction: column; gap: 10px;
+  position: relative; overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent-line, var(--border));
+  transition: opacity 0.15s;
+}
+.card:hover {
+  border-color: var(--accent-line, var(--border));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.card:hover::before { opacity: 1; }
+
+.card-icon {
+  font-size: 22px; line-height: 1;
+}
+.card-name {
+  font-family: var(--display); font-weight: 700; font-size: 16px;
+}
+.card-desc {
+  font-size: 12px; color: var(--dim); line-height: 1.6;
+}
+.card-tags {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+}
+.tag {
+  font-size: 10px; padding: 2px 7px; border-radius: 3px;
+  border: 1px solid var(--border); color: var(--dim);
+}
+.card-status {
+  font-size: 11px; color: var(--dim); margin-top: auto;
+  padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+}
+.card-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.card-dot.live { background: var(--accent); }
+
+/* Featured card (dashboard) */
+.card.featured {
+  grid-column: span 3;
+  flex-direction: row; align-items: center; gap: 24px;
+  padding: 24px 28px;
+}
+.card.featured .card-icon { font-size: 36px; }
+.card.featured .card-name { font-size: 20px; }
+.card.featured .card-desc { font-size: 13px; max-width: 600px; }
+.card.featured .card-tags { margin-top: 8px; }
+
+/* Section label */
+.section-label {
+  grid-column: span 3;
+  font-family: var(--display); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  margin-bottom: -8px;
+}
+
+/* Footer */
+footer {
+  background: var(--s1); border-top: 1px solid var(--border);
+  padding: 16px 40px;
+  display: flex; align-items: center; gap: 16px;
+  font-size: 11px; color: var(--dim);
+}
+footer a { color: var(--cool); text-decoration: none; }
+footer a:hover { color: var(--warm); }
+.footer-stat { display: flex; gap: 6px; align-items: center; }
+.footer-val { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">MCCF</div>
+  <div class="subtitle">Multi-Channel Coherence Field — v2.1</div>
+  <div class="tagline">
+    "MCCF is not a model of intelligence. It is a system for keeping intelligence from falling apart."
+  </div>
+  <div class="status-row">
+    <div class="sdot" id="sdot"></div>
+    <span id="server-status">checking server…</span>
+    <input class="api-input" id="api-url" value="http://localhost:5000"
+           onchange="setApi(this.value)" placeholder="API URL">
+    <button class="hbtn" onclick="checkServer()">↺ Check</button>
+    <span id="agent-count" style="font-size:12px;color:var(--dim)"></span>
+    <span id="episode-count" style="font-size:12px;color:var(--dim)"></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- FEATURED: Dashboard -->
+  <a class="card featured" href="mccf_dashboard.html" target="_blank"
+     style="--accent-line: var(--warm)">
+    <div class="card-icon">⬡</div>
+    <div style="flex:1">
+      <div class="card-name">Dashboard</div>
+      <div class="card-desc">
+        Live overview of all MCCF subsystems in one window. Coherence field matrix,
+        HotHouse ψ vectors, lighting state, zone themes, energy scores, NeoRiemannian
+        harmony, and X3D parameters — all updating simultaneously at 2-second intervals.
+        Use this to observe the full system while operating individual modules.
+      </div>
+      <div class="card-tags">
+        <span class="tag">live polling</span>
+        <span class="tag">all subsystems</span>
+        <span class="tag">read-only</span>
+      </div>
+    </div>
+    <div class="card-status">
+      <div class="card-dot live"></div>
+      Recommended starting point
+    </div>
+  </a>
+
+  <!-- SECTION: Core -->
+  <div class="section-label">Core System</div>
+
+  <a class="card" href="mccf_editor.html" target="_blank"
+     style="--accent-line: var(--cool)">
+    <div class="card-icon">✦</div>
+    <div class="card-name">Field Editor</div>
+    <div class="card-desc">
+      Create and configure agents with channel weights (E/B/P/S) and affect regulation.
+      Save cultivar templates. Fire sensor events to build relationship history.
+      View coherence matrix and identity drift.
+    </div>
+    <div class="card-tags">
+      <span class="tag">agents</span><span class="tag">cultivars</span>
+      <span class="tag">sensors</span><span class="tag">matrix</span>
+    </div>
+    <div class="card-status" id="status-editor">
+      <div class="card-dot" id="dot-editor"></div>
+      <span id="txt-editor">—</span>
+    </div>
+  </a>
+
+  <a class="card" href="mccf_voice.html" target="_blank"
+     style="--accent-line: #c060f0">
+    <div class="card-icon">◈</div>
+    <div class="card-name">Voice Agent</div>
+    <div class="card-desc">
+      LLM-powered conversational agent shaped by MCCF affective state.
+      Select an agent cultivar, speak or type, observe affect parameters
+      update in real time. Harmonic field synthesis available.
+    </div>
+    <div class="card-tags">
+      <span class="tag">LLM</span><span class="tag">TTS</span>
+      <span class="tag">affect</span><span class="tag">Ollama</span>
+    </div>
+    <div class="card-status">
+      <div class="card-dot live"></div>
+      Agent Select + Persona Select
+    </div>
+  </a>
+
+  <a class="card" href="mccf_constitutional.html" target="_blank"
+     style="--accent-line: var(--warm)">
+    <div class="card-icon">◎</div>
+    <div class="card-name">Constitutional Navigator</div>
+    <div class="card-desc">
+      Run the seven-waypoint constitutional arc for any cultivar.
+      W1 Comfort → W5 Rupture → W7 Integration. Measures identity
+      stability under escalating pressure. Exports per-waypoint state.
+    </div>
+    <div class="card-tags">
+      <span class="tag">arc W1–W7</span><span class="tag">identity</span>
+      <span class="tag">stress test</span><span class="tag">export</span>
+    </div>
+    <div class="card-status">
+      <div class="card-dot live"></div>
+      Select cultivar → Run Full Arc
+    </div>
+  </a>
+
+  <!-- SECTION: Environment -->
+  <div class="section-label">Environment & Embodiment</div>
+
+  <a class="card" href="mccf_waypoint_editor.html" target="_blank"
+     style="--accent-line: #40d8a8">
+    <div class="card-icon">◉</div>
+    <div class="card-name">Scene Composer</div>
+    <div class="card-desc">
+      Design the semantic landscape. Place zones with presets (library, garden,
+      intimate, threat…) that set ambient themes and channel pressure. Create
+      waypoints and agent paths. Query pressure at any position.
+    </div>
+    <div class="card-tags">
+      <span class="tag">zones</span><span class="tag">waypoints</span>
+      <span class="tag">paths</span><span class="tag">pressure</span>
+    </div>
+    <div class="card-status" id="status-scene">
+      <div class="card-dot" id="dot-scene"></div>
+      <span id="txt-scene">—</span>
+    </div>
+  </a>
+
+  <a class="card" href="mccf_x3d_loader.html" target="_blank"
+     style="--accent-line: var(--cool)">
+    <div class="card-icon">⬡</div>
+    <div class="card-name">X3D Scene</div>
+    <div class="card-desc">
+      Live 3D visualization of the coherence field. Three avatars (Steward,
+      Archivist, Witness) driven by HotHouse parameters. Seven arc waypoint
+      markers. S0 Field Origin shows global tension. Named lights update
+      from lighting engine.
+    </div>
+    <div class="card-tags">
+      <span class="tag">X_ITE 11.6.6</span><span class="tag">X3D 4.0</span>
+      <span class="tag">PROTO</span><span class="tag">live update</span>
+    </div>
+    <div class="card-status" id="status-x3d">
+      <div class="card-dot" id="dot-x3d"></div>
+      <span id="txt-x3d">hothouse: checking…</span>
+    </div>
+  </a>
+
+  <a class="card" href="mccf_lighting.html" target="_blank"
+     style="--accent-line: var(--warm)">
+    <div class="card-icon">◐</div>
+    <div class="card-name">Lighting</div>
+    <div class="card-desc">
+      Affective field → light color, temperature, and intensity. Key, Fill,
+      Ambient, and Rim lights driven by channel state and zone type. Agent
+      body tints colored by coherence and E-channel weight. Zone presets
+      trigger ambient sync.
+    </div>
+    <div class="card-tags">
+      <span class="tag">kelvin</span><span class="tag">agent tints</span>
+      <span class="tag">zone presets</span><span class="tag">X3D routing</span>
+    </div>
+    <div class="card-status" id="status-lighting">
+      <div class="card-dot" id="dot-lighting"></div>
+      <span id="txt-lighting">—</span>
+    </div>
+  </a>
+
+  <!-- SECTION: Analysis -->
+  <div class="section-label">Analysis & Music</div>
+
+  <a class="card" href="mccf_ambient.html" target="_blank"
+     style="--accent-line: #40c8f0">
+    <div class="card-icon">♩</div>
+    <div class="card-name">Ambient Engine</div>
+    <div class="card-desc">
+      Real-time generative music driven by coherence field state. Drone,
+      pad, pulse, and texture layers respond to E/B/P/S channels and zone
+      pressure. Zone type sets harmonic scale (dorian, pentatonic, locrian…).
+    </div>
+    <div class="card-tags">
+      <span class="tag">Web Audio</span><span class="tag">generative</span>
+      <span class="tag">zone scales</span><span class="tag">live</span>
+    </div>
+    <div class="card-status">
+      <div class="card-dot live"></div>
+      Start Engine → plays from field state
+    </div>
+  </a>
+
+  <a class="card" href="mccf_energy.html" target="_blank"
+     style="--accent-line: #f07040">
+    <div class="card-icon">◈</div>
+    <div class="card-name">Energy Field</div>
+    <div class="card-desc">
+      Moral topology visualizer. Enter candidate actions, evaluate their
+      energy cost (coherence × valence × salience). Boltzmann ranking shows
+      which actions the field supports. Topology: flat, gradual, sharp, complex.
+    </div>
+    <div class="card-tags">
+      <span class="tag">Boltzmann</span><span class="tag">moral topology</span>
+      <span class="tag">action ranking</span>
+    </div>
+    <div class="card-status">
+      <div class="card-dot live"></div>
+      Select agent → add actions → Evaluate
+    </div>
+  </a>
+
+  <a class="card" href="#" onclick="openGitHub()" target="_blank"
+     style="--accent-line: #888">
+    <div class="card-icon">⌥</div>
+    <div class="card-name">GitHub Repository</div>
+    <div class="card-desc">
+      Ground truth. All source code, documentation, mathematical theory,
+      PROTO integration reference, and evaluation proposal. Push after
+      each stable version.
+    </div>
+    <div class="card-tags">
+      <span class="tag">ground truth</span><span class="tag">v2.1</span>
+    </div>
+    <div class="card-status">
+      <div class="card-dot"></div>
+      github.com/artistinprocess/mccf
+    </div>
+  </a>
+
+</main>
+
+<footer>
+  <div class="footer-stat">agents: <span class="footer-val" id="f-agents">—</span></div>
+  <div class="footer-stat">episodes: <span class="footer-val" id="f-episodes">—</span></div>
+  <div class="footer-stat">coherence: <span class="footer-val" id="f-coh">—</span></div>
+  <div class="footer-stat">mode: <span class="footer-val" id="f-mode">—</span></div>
+  <div style="margin-left:auto;display:flex;gap:16px;">
+    <a href="https://aiartistinprocess.blogspot.com" target="_blank">Blog</a>
+    <a href="https://github.com/artistinprocess/mccf" target="_blank">GitHub</a>
+    <span style="color:var(--border)">MCCF v2.1 · April 2026</span>
+  </div>
+</footer>
+
+<script>
+let API = 'http://localhost:5000';
+
+function setApi(url) { API = url.trim(); checkServer(); }
+
+function openGitHub() {
+  window.open('https://github.com/artistinprocess/mccf', '_blank');
+}
+
+async function checkServer() {
+  try {
+    const r = await fetch(API + '/field', {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    const agents = Object.values(data.agents || {});
+    const n = agents.length;
+    const ep = data.episode_count || 0;
+
+    // Avg coherence from matrix
+    const matrix = data.matrix || {};
+    const names = Object.keys(matrix);
+    let cohSum = 0, cohCount = 0;
+    names.forEach(from => {
+      Object.entries(matrix[from]||{}).forEach(([to, v]) => {
+        if (from !== to) { cohSum += v; cohCount++; }
+      });
+    });
+    const avgCoh = cohCount ? (cohSum/cohCount).toFixed(3) : '—';
+
+    // Most common mode
+    const modes = agents.map(a => a.meta_state?.mode || '—');
+    const modeCount = {};
+    modes.forEach(m => modeCount[m] = (modeCount[m]||0)+1);
+    const topMode = Object.entries(modeCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+
+    document.getElementById('sdot').className = 'sdot on';
+    document.getElementById('server-status').textContent = 'server online';
+    document.getElementById('server-status').style.color = 'var(--accent)';
+    document.getElementById('agent-count').textContent = `${n} agents`;
+    document.getElementById('episode-count').textContent = `${ep} episodes`;
+
+    document.getElementById('f-agents').textContent = n;
+    document.getElementById('f-episodes').textContent = ep;
+    document.getElementById('f-coh').textContent = avgCoh;
+    document.getElementById('f-mode').textContent = topMode;
+
+    // Editor status
+    setCardStatus('editor', true, `${n} agents · ${ep} episodes`);
+
+    // Check scene
+    try {
+      const s = await fetch(API + '/scene', {signal: AbortSignal.timeout(2000)});
+      const sd = await s.json();
+      const zn = (sd.zones||[]).length;
+      setCardStatus('scene', true, `${zn} zones`);
+    } catch { setCardStatus('scene', false, 'no zones yet'); }
+
+    // Check lighting
+    try {
+      const l = await fetch(API + '/lighting/state', {signal: AbortSignal.timeout(2000)});
+      if (l.ok) {
+        const ld = await l.json();
+        const k = ld.kelvin_normalized ? Math.round(ld.kelvin_normalized*7000+2000) : null;
+        setCardStatus('lighting', true, k ? `${k}K · ${ld.zone_type||'neutral'}` : 'initialized');
+      } else { setCardStatus('lighting', false, 'sync needed'); }
+    } catch { setCardStatus('lighting', false, 'sync needed'); }
+
+    // Check X3D hothouse
+    try {
+      const h = await fetch(API + '/hothouse/x3d', {signal: AbortSignal.timeout(2000)});
+      const hd = await h.json();
+      const hn = Object.keys(hd).length;
+      setCardStatus('x3d', hn > 0, hn > 0 ? `hothouse: ${hn} agents live` : 'hothouse inactive');
+    } catch { setCardStatus('x3d', false, 'hothouse inactive'); }
+
+  } catch {
+    document.getElementById('sdot').className = 'sdot';
+    document.getElementById('server-status').textContent = 'server offline — start mccf_api.py';
+    document.getElementById('server-status').style.color = '#f06060';
+    ['editor','scene','lighting','x3d'].forEach(k => setCardStatus(k, false, 'offline'));
+  }
+}
+
+function setCardStatus(key, live, text) {
+  const dot = document.getElementById('dot-' + key);
+  const txt = document.getElementById('txt-' + key);
+  if (dot) dot.className = 'card-dot' + (live ? ' live' : '');
+  if (txt) txt.textContent = text;
+}
+
+window.addEventListener('load', () => {
+  checkServer();
+  setInterval(checkServer, 10000);  // check every 10s
+});
+</script>
+</body>
+</html>

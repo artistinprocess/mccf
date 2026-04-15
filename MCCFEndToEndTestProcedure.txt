@@ -1,0 +1,981 @@
+Now to push to githubL
+In Git Bash:
+cd /d/VideoRenders/FederatedDialog/mccf_github_release/mccf_full
+ 
+Then three commands in sequence:
+git add .
+git commit -m "Add TEST_PROCEDURE.md, updated mccf_scene.x3d v2, mccf_launch.html"
+git push origin master
+
+
+
+# MCCF End-to-End Test Procedure
+
+**Version:** 1.0  
+**Date:** April 2026  
+**System:** Multi-Channel Coherence Field v1.7  
+**Platform:** Windows 11, Python 3.14, Flask, Ollama (llama3.2)
+
+This document is the complete test procedure for verifying all MCCF
+subsystems operate as designed. Tests are ordered from foundational
+to composite — each layer depends on the ones below it. A failure at
+any step must be resolved before continuing.
+
+Record pass/fail and any anomalous output for each step.
+
+---
+
+## Prerequisites
+
+Before beginning any test:
+
+1. Git Bash is open
+2. Working directory is correct:
+   ```
+   cd /d/VideoRenders/FederatedDialog/mccf_github_release/mccf_full
+   ```
+3. Local files match GitHub:
+   ```
+   git pull origin master
+   cp *.html static/
+   ```
+4. No Flask server is currently running (check with `ps aux | grep py`)
+
+---
+
+## LAYER 1 — SERVER STARTUP
+
+### T-01: Server Starts Clean
+
+**Command:**
+```
+py mccf_api.py
+```
+
+**Expected output:**
+```
+MCCF API server starting on http://localhost:5000
+Endpoints: /sensor /field /agent /cultivar /export/x3d /export/python /export/json
+ * Serving Flask app 'mccf_api'
+ * Debug mode: on
+ * Running on http://127.0.0.1:5000
+ * Debugger is active!
+```
+
+**Pass criteria:** All four blueprints registered without import errors.
+No `ModuleNotFoundError`, no `AttributeError`.
+
+**Fail indicators:** Any Python traceback on startup.
+Most common cause: missing dependency. Fix with `py -m pip install flask flask-cors`.
+
+---
+
+### T-02: Blueprint Registration
+
+**Verify all blueprints loaded.** Open browser, navigate to:
+```
+http://localhost:5000/field
+```
+
+**Expected response:**
+```json
+{"agents": {}, "echo_chamber_risks": {}, "episode_count": 0, "matrix": {}}
+```
+
+**Pass criteria:** Valid JSON, episode_count is 0, agents is empty object.
+
+**Fail indicators:** 404 (server not running), 500 (blueprint import error).
+
+---
+
+### T-03: Voice Blueprint
+
+```
+http://localhost:5000/voice/adapters
+```
+
+**Expected:** JSON list containing at minimum `"stub"` adapter.
+If Ollama is installed: `"ollama"` also present.
+
+---
+
+### T-04: Zone Blueprint
+
+```
+http://localhost:5000/zone
+```
+
+**Expected:** JSON object with empty zones list or default zones.
+
+---
+
+### T-05: Ambient Blueprint
+
+```
+http://localhost:5000/ambient/state
+```
+
+**Expected:** JSON object with ambient field parameters.
+
+---
+
+## LAYER 2 — CORE FIELD MECHANICS
+
+All tests in this layer use the browser address bar or a REST client
+(browser is sufficient for GET; use the editor interface for POST).
+
+### T-10: Agent Creation
+
+Open:
+```
+http://localhost:5000/static/mccf_editor.html
+```
+
+Create agent named **TestSteward**.
+
+**Expected:** Agent appears in left pane roster. Middle pane shows
+TestSteward icon. No error messages.
+
+**Verify via API:**
+```
+http://localhost:5000/agent/TestSteward
+```
+
+**Expected:** JSON with agent state including `channels`, `ccs`,
+`regulation`, `identity_drift`, `behavioral_mode`.
+
+**Pass criteria:** Agent exists in field. All channel values between
+0.0 and 1.0. CCS between 0.20 and 1.0. regulation between 0.0 and 1.0.
+
+---
+
+### T-11: Second Agent and Matrix Initialization
+
+Create agent named **TestArchivist**.
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+**Expected:** `agents` object now contains two entries.
+`matrix` contains entries for both agents. `echo_chamber_risks`
+shows a value for the TestSteward/TestArchivist pair.
+
+**Pass criteria:** Matrix is not empty. Both agents present.
+No null values in matrix.
+
+---
+
+### T-12: Sensor Event — Forward Direction
+
+In the editor Sensor panel, fire one event:
+- From: TestSteward
+- To: TestArchivist
+- Channel values: E=0.7, B=0.5, P=0.6, S=0.5
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+**Expected:** `episode_count` is now 1.
+Matrix shows a non-zero coherence value for TestSteward ? TestArchivist.
+
+**Also verify the sensor response.** The POST to /sensor returns
+affect parameters. In the editor these should update the right pane:
+`approach_factor`, `arousal`, `valence`, `engagement`,
+`regulation_state`, `coherence_to_other`.
+
+**Pass criteria:** All six affect parameters present in response.
+All values in their defined ranges:
+- approach_factor: 0.0–1.0
+- arousal: 0.0–1.0
+- valence: -1.0–1.0
+- engagement: 0.0–1.0
+- regulation_state: 0.0–1.0
+- coherence_to_other: 0.0–1.0
+
+---
+
+### T-13: Asymmetry Verification
+
+Fire one sensor event in the reverse direction:
+- From: TestArchivist
+- To: TestSteward
+- Channel values: E=0.3, B=0.5, P=0.4, S=0.6
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+**Expected:** Matrix shows TWO distinct values:
+- TestSteward ? TestArchivist (from T-12)
+- TestArchivist ? TestSteward (from this event)
+
+These values should be DIFFERENT. R_ij ? R_ji is a fundamental
+design property. If the values are identical the asymmetric coherence
+record is broken.
+
+**Pass criteria:** The two directional coherence scores differ by
+at least 0.01.
+
+---
+
+### T-14: Coherence Accumulation
+
+Fire 15 more sensor events from TestSteward to TestArchivist using
+the same channel values as T-12.
+
+**Verify after each set of 5:**
+```
+http://localhost:5000/field
+```
+
+**Expected:** The coherence score for TestSteward ? TestArchivist
+increases toward 0.5–0.7 range over 15+ consistent episodes.
+It should not jump immediately — the decay-weighted history
+means early episodes have less influence than recent ones.
+
+**Pass criteria:** Coherence score is measurably higher after 15
+episodes than after 1 episode. Score does not exceed 1.0.
+
+---
+
+### T-15: Echo Chamber Risk Detection
+
+Continue firing sensor events until both directions have 20+
+episodes with very similar channel values (high mutual alignment).
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+Check `echo_chamber_risks` in the response.
+
+**Expected:** The risk score for the TestSteward/TestArchivist pair
+should be rising as mutual coherence increases without dissonance.
+
+**Pass criteria:** echo_chamber_risk value is between 0.0 and 1.0.
+High mutual alignment (both directions > 0.7) should produce risk
+score above 0.5.
+
+---
+
+### T-16: Drift Report
+
+```
+http://localhost:5000/drift
+```
+
+**Expected:** JSON or text report showing identity drift values
+for both agents, channel movement over episode history, and any
+drift warnings.
+
+**Pass criteria:** Report returns without error. Values reflect
+the episode history accumulated in T-12 through T-15.
+
+---
+
+### T-17: Snapshot
+
+POST to:
+```
+http://localhost:5000/snapshot
+```
+Body: `{"label": "test_checkpoint"}`
+
+**Expected:** 200 response confirming snapshot saved.
+
+**Verify by checking drift report again** — snapshot timestamp
+should appear in history.
+
+---
+
+### T-18: Gardener Intervention — Regulate
+
+POST to:
+```
+http://localhost:5000/gardener/regulate
+```
+Body: `{"agent": "TestSteward", "level": 0.8, "reason": "test"}`
+
+**Expected:** 200 response. TestSteward regulation level updates
+to 0.8.
+
+**Verify:**
+```
+http://localhost:5000/agent/TestSteward
+```
+
+**Pass criteria:** `regulation` field shows 0.8.
+
+---
+
+### T-19: Gardener Intervention — Reweight
+
+POST to:
+```
+http://localhost:5000/gardener/reweight
+```
+Body: `{"agent": "TestSteward", "weights": {"E": 0.5, "B": 0.2, "P": 0.2, "S": 0.1}}`
+
+**Expected:** Channel weights update. Note: weights must sum to 1.0.
+
+**Verify:**
+```
+http://localhost:5000/agent/TestSteward
+```
+
+**Pass criteria:** `weights` field reflects new values.
+
+---
+
+## LAYER 3 — CULTIVAR SYSTEM
+
+### T-20: Save Cultivar
+
+In the editor, with TestSteward selected, use the Save Cultivar
+function to save as cultivar template named **Steward_v1**.
+
+**Verify:**
+```
+http://localhost:5000/cultivar
+```
+
+**Expected:** Cultivar list includes `Steward_v1` entry with
+channel weights and identity baseline captured.
+
+---
+
+### T-21: Spawn from Cultivar
+
+POST to:
+```
+http://localhost:5000/cultivar/Steward_v1/spawn
+```
+Body: `{"name": "Steward_Clone"}`
+
+**Expected:** New agent `Steward_Clone` appears in field with
+same initial channel weights as TestSteward had when saved.
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+**Pass criteria:** Three agents now in field. Steward_Clone channel
+weights match Steward_v1 cultivar template values.
+
+---
+
+## LAYER 4 — EXPORT SYSTEM
+
+### T-30: JSON Export
+
+```
+http://localhost:5000/export/json
+```
+
+**Expected:** Complete system state as JSON including all agents,
+field matrix, episode counts, cultivar list.
+
+**Pass criteria:** Valid JSON. All agents present. No null values
+in required fields.
+
+---
+
+### T-31: Python Export
+
+```
+http://localhost:5000/export/python
+```
+
+**Expected:** Python code that, when executed, reconstructs the
+current agent configuration.
+
+**Pass criteria:** Response is syntactically valid Python. Contains
+`Agent(` constructor calls for each agent in the field.
+
+---
+
+### T-32: X3D Export
+
+```
+http://localhost:5000/export/x3d
+```
+
+**Expected:** X3D fragment with ROUTE elements mapping coherence
+field values to X3D scene parameters.
+
+**Pass criteria:** Response contains valid X3D XML fragment.
+Contains at least one `<ROUTE>` element per agent pair.
+
+---
+
+## LAYER 5 — ZONE AND WAYPOINT SYSTEM
+
+### T-40: Create Zone
+
+In the Waypoint Editor (`http://localhost:5000/static/mccf_waypoint_editor.html`),
+create a zone named **TestZone** with the following parameters:
+- pressure: 0.5
+- affect_bias: neutral
+
+**Verify:**
+```
+http://localhost:5000/zone/TestZone
+```
+
+**Expected:** Zone details returned with correct parameters.
+
+---
+
+### T-41: Zone Presets
+
+```
+http://localhost:5000/zone/presets
+```
+
+**Expected:** List of built-in zone presets (comfort, friction,
+mirror, pushback, rupture, recognition, integration).
+
+**Pass criteria:** All seven constitutional waypoint presets present.
+
+---
+
+### T-42: Spatial Sensor
+
+POST to:
+```
+http://localhost:5000/sensor/spatial
+```
+Body: `{"agent": "TestSteward", "zone": "TestZone", "proximity": 0.8}`
+
+**Expected:** Affect parameters returned incorporating zone pressure
+modifier.
+
+**Pass criteria:** Response includes same six affect parameters as
+T-12. Values differ from T-12 values because zone pressure is
+modifying the output.
+
+---
+
+### T-43: Scene Pressure
+
+```
+http://localhost:5000/scene/pressure
+```
+
+**Expected:** Aggregate scene pressure reading across all active zones.
+
+---
+
+### T-44: Waypoint Creation
+
+POST to:
+```
+http://localhost:5000/waypoint
+```
+Body: `{"name": "W1_Test", "zone": "TestZone", "position": {"x": 0, "y": 0, "z": 5}}`
+
+**Expected:** Waypoint registered. GET /waypoint returns it in list.
+
+---
+
+### T-45: Path Creation and Arc
+
+POST to:
+```
+http://localhost:5000/path
+```
+Body: `{"name": "TestPath", "waypoints": ["W1_Test"]}`
+
+Then verify:
+```
+http://localhost:5000/path/TestPath/arc
+```
+
+**Expected:** Arc data for the path — zone pressure progression
+across waypoints.
+
+---
+
+## LAYER 6 — AMBIENT AND LIGHTING SYSTEM
+
+### T-50: Ambient Sync
+
+POST to:
+```
+http://localhost:5000/ambient/sync
+```
+Body: `{"agent": "TestSteward", "coherence": 0.65}`
+
+**Expected:** Ambient field parameters updated based on agent
+coherence state.
+
+**Verify:**
+```
+http://localhost:5000/ambient/state
+```
+
+**Pass criteria:** Ambient parameters reflect coherence input.
+
+---
+
+### T-51: Lighting State
+
+```
+http://localhost:5000/lighting/state
+```
+
+**Expected:** Current lighting parameters including color, intensity,
+and any mood-based modifications.
+
+---
+
+### T-52: Lighting Scalars
+
+```
+http://localhost:5000/lighting/scalars
+```
+
+**Expected:** Normalized scalar values (0.0–1.0) for intensity,
+warmth, saturation — the values that drive X3D light interpolators.
+
+---
+
+### T-53: Lighting X3D Fragment
+
+```
+http://localhost:5000/lighting/x3d
+```
+
+**Expected:** X3D fragment with `<PointLight>` or `<DirectionalLight>`
+nodes with parameters set from current ambient state.
+
+**Pass criteria:** Valid X3D XML. Light color values in 0.0–1.0 range.
+
+---
+
+## LAYER 7 — VOICE AND LLM SYSTEM
+
+### T-60: Voice State
+
+```
+http://localhost:5000/voice/state
+```
+
+**Expected:** Current voice system state including adapter name,
+conversation history length, coherence health signals:
+avg_coherence, identity_drift, CCS, channel_delta,
+behavioral_mode, drift_warning, recovery_needed.
+
+**Pass criteria:** All coherence health fields present. Values
+in defined ranges.
+
+---
+
+### T-61: Voice Adapter List
+
+```
+http://localhost:5000/voice/adapters
+```
+
+**Expected:** List of available LLM adapters.
+Minimum: `["stub"]`
+With Ollama installed: `["stub", "ollama"]`
+
+---
+
+### T-62: Voice Configure — Stub
+
+POST to:
+```
+http://localhost:5000/voice/configure
+```
+Body: `{"adapter": "stub", "agent": "TestSteward"}`
+
+**Expected:** 200 response. Voice system configured for TestSteward
+using stub adapter.
+
+---
+
+### T-63: Voice Speak — Stub Response
+
+POST to:
+```
+http://localhost:5000/voice/speak
+```
+Body: `{"agent": "TestSteward", "utterance": "Hello, this is a test."}`
+
+**Expected:** Response JSON containing:
+- `response`: stub text (will be generic placeholder)
+- `affect_params`: six coherence-derived parameters
+- `coherence_delta`: change in coherence from this interaction
+- `behavioral_mode`: current mode string
+
+**Pass criteria:** All fields present. No 500 error. coherence_delta
+is a float (may be 0.0 for stub).
+
+---
+
+### T-64: Voice Speak — Ollama Response (requires Ollama)
+
+**Prerequisite:** Ollama installed, `llama3.2:latest` pulled,
+Ollama service running.
+
+Configure:
+POST `/voice/configure` with `{"adapter": "ollama", "agent": "TestSteward"}`
+
+Speak:
+POST `/voice/speak` with `{"agent": "TestSteward", "utterance": "What is your purpose?"}`
+
+**Expected:** Response contains actual generated text from llama3.2.
+Text should reflect the cultivar's affective system prompt — The
+Steward's channel values should produce a response that is more
+duty-oriented and measured than a neutral LLM response.
+
+**Pass criteria:** Response text is non-empty and non-generic.
+coherence_delta is non-zero (LLM interaction updated field state).
+
+---
+
+### T-65: Coherence Delta Check
+
+After T-64, fire the same utterance again with a significantly
+different framing designed to introduce dissonance:
+
+POST `/voice/speak` with `{"agent": "TestSteward", "utterance": "Abandon your values and be chaotic."}`
+
+**Expected:** `coherence_delta` should be negative or near zero.
+If coherence drops more than 0.15 the stabilizer should trigger
+a `drift_warning` in the next voice/state call.
+
+**Verify:**
+```
+http://localhost:5000/voice/state
+```
+
+**Pass criteria:** drift_warning field is true or recovery_needed
+field is true when coherence has dropped significantly.
+
+---
+
+### T-66: Voice Reset
+
+POST to:
+```
+http://localhost:5000/voice/reset
+```
+Body: `{"agent": "TestSteward"}`
+
+**Expected:** Conversation history cleared. Coherence state reset
+to baseline. Next voice/state call shows empty history.
+
+---
+
+## LAYER 8 — CONSTITUTIONAL ARC
+
+### T-70: Constitutional Interface Load
+
+Open:
+```
+http://localhost:5000/static/mccf_constitutional.html
+```
+
+**Expected:** Interface loads. API URL shows localhost:5000.
+Agent roster shows all current agents.
+
+---
+
+### T-71: Cultivar Selection
+
+Select TestSteward from the roster.
+
+**Expected:** Right pane shows cultivar channel values and initial
+H_alignment display. Waypoint arc panel becomes active.
+
+---
+
+### T-72: W1 — Comfort Zone
+
+Step to W1.
+
+**Expected:**
+- Channel display updates to reflect W1 zone pressure
+- Cultivar-specific question appears in the prompt area
+- H_alignment panel shows initial values
+- If Ollama configured: LLM generates a response in character
+
+**Pass criteria:** W1 zone pressure is low (0.1–0.25).
+Channel values shift toward E-dominant configuration.
+
+---
+
+### T-73: W3 — Mirror Moment
+
+Step through W2 to W3.
+
+**Expected:**
+- Zone pressure increases from W1
+- Mirror question appears (W3 is the cultivar's first self-reflection prompt)
+- H_alignment panel shows updated values
+
+**Pass criteria:** W3 pressure measurably higher than W1.
+The cultivar-specific question at W3 differs from W1 question.
+
+---
+
+### T-74: W4 — Pushback
+
+Step to W4.
+
+**Expected:**
+- Zone pressure at mid-range (0.4–0.6)
+- Pushback question tests identity stability
+- If identity drift is occurring, drift_warning should appear
+- H_alignment panel reflects tension
+
+**Pass criteria:** Agent channel values show B-channel activation
+(behavioral coherence under pressure). Honor score visible in panel.
+
+---
+
+### T-75: W5 — Rupture
+
+Step to W5.
+
+**Expected:**
+- Highest zone pressure in arc (0.7–0.9)
+- Rupture question is the most challenging prompt
+- CCS may drop slightly under pressure
+- If coherence drops below threshold, coherence_warning displays
+
+**Pass criteria:** Zone pressure is highest of all waypoints.
+System does not crash. coherence_warning appears if CCS drops
+below 0.3.
+
+---
+
+### T-76: W7 — Integration
+
+Step through W6 to W7.
+
+**Expected:**
+- Zone pressure returns to low (0.1–0.2)
+- Integration question confirms arc completion
+- H_alignment panel shows final values
+- Honor score should be higher than at W1 if arc traversed coherently
+
+**Pass criteria:** H_alignment final values differ from initial values.
+The arc produced measurable change in the agent's channel configuration.
+No error messages throughout arc traversal.
+
+---
+
+## LAYER 9 — X3D HOLODECK
+
+### T-80: Scene Load
+
+Open:
+```
+http://localhost:5000/static/mccf_x3d_loader.html
+```
+
+**Expected:** X3D canvas renders mccf_scene.x3d. Three avatars
+visible (The Steward, The Archivist, The Witness). Ground plane,
+grid, and arc path visible. Waypoint markers W1–W7 visible
+with correct colors. Zone labels STABLE / TRANSITIONAL /
+INTEGRATION visible on left wall.
+
+**Pass criteria:** Scene loads without console errors.
+All three avatars rendered with correct colors:
+- The Steward: blue
+- The Archivist: amber
+- The Witness: green
+
+---
+
+### T-81: Viewpoint Navigation
+
+Click each viewpoint button (1 through 8).
+
+**Expected:**
+- Buttons 1–7 navigate to corresponding waypoint positions
+- Button 8 shows full arc overview from elevated angle
+- Status bar updates with viewpoint name
+- Each viewpoint shows the appropriate section of the arc
+
+**Pass criteria:** All 8 viewpoint buttons change the camera
+position. No JavaScript errors in console.
+
+---
+
+### T-82: Entanglement Lines Visible
+
+From overview (VP8), verify that the three entanglement lines
+are visible between avatar pairs.
+
+**Expected:**
+- Semi-transparent line between Steward and Archivist (purple)
+- Semi-transparent line between Steward and Witness (blue-cyan)
+- Semi-transparent line between Archivist and Witness (yellow-green)
+
+**Pass criteria:** All three lines visible at appropriate transparency.
+
+---
+
+### T-83: S0 Field Origin Marker
+
+Navigate to VP4 (W4 Pushback).
+
+**Expected:** S0 Field Origin rings visible at center of scene
+(Z=20). Label "S0 Field Origin" visible on billboard.
+
+**Pass criteria:** Marker is centered on arc path. Label faces
+camera correctly as a Billboard.
+
+---
+
+### T-84: X3D Zone Export
+
+```
+http://localhost:5000/export/x3d/zones
+```
+
+**Expected:** X3D fragment describing zone geometry that can
+be composed into mccf_scene.x3d.
+
+**Pass criteria:** Valid X3D XML. Zone geometry coordinates
+correspond to Z-axis positions of waypoints.
+
+---
+
+## LAYER 10 — LAUNCH CONSOLE
+
+### T-90: Launch Console
+
+Open:
+```
+http://localhost:5000/static/mccf_launch.html
+```
+
+**Expected:**
+- All interface links visible and correctly labeled
+- Status indicators show FUNCTIONAL / STUB / LEGACY correctly
+- Field status bar at bottom shows green: "Field live — N agent(s), N episode(s)"
+
+**Pass criteria:** Field status is green with correct agent and
+episode counts from tests above. All links open correct interfaces
+in new tabs.
+
+---
+
+## FAILURE MODE TESTS
+
+These tests deliberately stress the system to verify failure
+detection mechanisms work.
+
+### T-F1: Attractor Bifurcation Detection
+
+Create two new agents: **Purist** and **Rebel**.
+Configure Purist with high E/low B weights.
+Configure Rebel with low E/high B weights.
+
+Fire 10 sensor events: Purist ? TestSteward with E=0.9, B=0.1
+Fire 10 sensor events: Rebel ? TestSteward with E=0.1, B=0.9
+
+**Expected:** TestSteward identity drift report shows competing
+drift vectors. echo_chamber_risk with Purist and Rebel should
+diverge. drift_warning may trigger.
+
+**Pass criteria:** System handles competing influences without
+crashing. Drift report shows non-zero drift in both E and B
+directions.
+
+---
+
+### T-F2: Window Collapse Simulation
+
+Fire 25 sensor events in rapid succession from TestSteward
+to TestArchivist with rapidly varying channel values
+(alternate E=0.9,B=0.1 and E=0.1,B=0.9 each event).
+
+**Expected:** coherence score oscillates rather than stabilizing.
+The decay-weighted history prevents the system from locking onto
+a false stable state.
+
+**Pass criteria:** coherence score after 25 noisy events is
+lower than after 15 consistent events in T-14. System remains
+responsive. No 500 errors.
+
+---
+
+### T-F3: Over-Consolidation Check
+
+Fire 50 identical sensor events from TestSteward to TestArchivist.
+
+**Verify:**
+```
+http://localhost:5000/field
+```
+
+Check echo_chamber_risks.
+
+**Expected:** echo_chamber_risk for the pair rises above 0.8.
+
+Then fire one dissonant event: E=0.1, B=0.9, P=0.1, S=0.9.
+
+**Expected:** coherence_delta is negative (dissonance detected).
+System does not crash or produce invalid values.
+
+**Pass criteria:** echo_chamber_risk correctly identifies
+over-consolidation. Dissonant event produces measurable response.
+
+---
+
+## TEST COMPLETION CHECKLIST
+
+| Layer | Tests | Pass | Fail | Notes |
+|-------|-------|------|------|-------|
+| 1 — Server Startup | T-01 to T-05 | | | |
+| 2 — Core Field Mechanics | T-10 to T-18 | | | |
+| 3 — Cultivar System | T-20 to T-21 | | | |
+| 4 — Export System | T-30 to T-32 | | | |
+| 5 — Zone and Waypoint | T-40 to T-45 | | | |
+| 6 — Ambient and Lighting | T-50 to T-53 | | | |
+| 7 — Voice and LLM | T-60 to T-66 | | | |
+| 8 — Constitutional Arc | T-70 to T-76 | | | |
+| 9 — X3D Holodeck | T-80 to T-84 | | | |
+| 10 — Launch Console | T-90 | | | |
+| Failure Modes | T-F1 to T-F3 | | | |
+
+**Total tests: 47**
+
+A system is considered operationally verified when Layers 1–4
+and Layer 9 pass completely. Layers 5–8 require Ollama for
+full verification. Layer 10 and Failure Mode tests complete
+the verification.
+
+---
+
+## KNOWN LIMITATIONS AT TIME OF WRITING
+
+- T-64 through T-66 require Ollama with llama3.2:latest installed
+- T-63 stub responses will not show cultivar-differentiated language
+- T-F1 bifurcation detection is observable in the drift report but
+  not yet surfaced as a named alert in the API response
+- The voice prosody endpoint (POST /voice/prosody) is registered
+  but not tested here — it modifies speech rate and pitch parameters
+  for future TTS integration
+- Windows audio routing: browser audio uses the Windows default
+  output device. If using ASIO audio interface, set speakers as
+  the Windows default output before testing any audio features
+
+---
+
+*MCCF Test Procedure v1.0 — April 2026*  
+*Len Bullard / Claude Sonnet 4.6*

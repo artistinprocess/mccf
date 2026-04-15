@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MCCF X3D Scene</title>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.6/dist/x_ite.min.js"></script>
+<style>
+  body { margin: 0; background: #0a0a0f; font-family: monospace; }
+  x3d-canvas { width: 100vw; height: 88vh; display: block; }
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.88);
+    padding: 6px 14px;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    z-index: 100;
+  }
+  button {
+    background: #1a2030; color: #4af0a8;
+    border: 1px solid #4af0a8; border-radius: 3px;
+    padding: 3px 10px; cursor: pointer;
+    font-family: monospace; font-size: 11px;
+  }
+  button:hover { background: #4af0a8; color: #111; }
+  button.active { background: #4af0a8; color: #111; }
+  #status { color: #6a7890; font-size: 11px; margin-left: auto; }
+  #poll-indicator {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #333; display: inline-block; margin-right: 4px;
+    transition: background 0.2s;
+  }
+  #field-overlay {
+    position: fixed; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.75);
+    border: 1px solid #2a3545;
+    padding: 8px 12px;
+    font-size: 10px; color: #6a8090;
+    border-radius: 3px; min-width: 180px; z-index: 100;
+  }
+  #field-overlay .row { display: flex; justify-content: space-between; margin: 2px 0; }
+  #field-overlay .val { color: #a0c0d0; }
+  .tension-low  { color: #4a8adf; }
+  .tension-mid  { color: #4adfc0; }
+  .tension-high { color: #df8a4a; }
+  .tension-crit { color: #df4a4a; }
+</style>
+</head>
+<body>
+
+<x3d-canvas id="x3d" src="mccf_scene.x3d" update="auto" contentScale="auto"></x3d-canvas>
+
+<div id="field-overlay">
+  <div style="color:#7ab8f5;margin-bottom:4px;font-size:11px;">⬡ MCCF FIELD</div>
+  <div class="row"><span>coherence</span><span class="val" id="ov-coh">—</span></div>
+  <div class="row"><span>echo risk</span><span class="val" id="ov-echo">—</span></div>
+  <div class="row"><span>episodes</span><span class="val" id="ov-ep">—</span></div>
+  <div class="row"><span>agents</span><span class="val" id="ov-agents">—</span></div>
+  <div class="row"><span>tension</span><span class="val" id="ov-tension">—</span></div>
+  <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
+  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
+  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
+</div>
+
+<div id="controls">
+  <span style="color:#6a7890;font-size:11px;">Viewpoints:</span>
+  <button onclick="gotoVP('VP1')" id="btn-VP1">W1</button>
+  <button onclick="gotoVP('VP2')" id="btn-VP2">W2</button>
+  <button onclick="gotoVP('VP3')" id="btn-VP3">W3</button>
+  <button onclick="gotoVP('VP4')" id="btn-VP4">W4</button>
+  <button onclick="gotoVP('VP5')" id="btn-VP5">W5</button>
+  <button onclick="gotoVP('VP6')" id="btn-VP6">W6</button>
+  <button onclick="gotoVP('VP7')" id="btn-VP7">W7</button>
+  <button onclick="gotoVP('VP8')" id="btn-VP8">Overview</button>
+  <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
+  <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
+  <span id="status"><span id="poll-indicator"></span>Loading…</span>
+</div>
+
+<script>
+const API        = 'http://localhost:5000';
+const POLL_MS    = 750;
+const HOTHOUSE_MS= 1000;
+const LIGHTING_MS= 2000;  // lighting changes are slower than field/hothouse
+const canvas     = document.getElementById('x3d');
+let pollingActive= true;
+let activeVP     = null;
+
+// --- Viewpoint navigation ---
+function gotoVP(id) {
+  try {
+    const vp = canvas.browser.currentScene.getNamedNode(id);
+    if (vp) {
+      vp.set_bind = true;
+      setStatus('Viewpoint: ' + id);
+      if (activeVP) document.getElementById('btn-'+activeVP)?.classList.remove('active');
+      document.getElementById('btn-'+id)?.classList.add('active');
+      activeVP = id;
+    }
+  } catch(e) { console.warn('VP nav:', e); }
+}
+
+function setStatus(msg) {
+  document.getElementById('status').innerHTML = '<span id="poll-indicator"></span>' + msg;
+}
+
+canvas.addEventListener('load', () => {
+  setStatus('Scene loaded');
+  setTimeout(() => gotoVP('VP1'), 400);
+  startPolling();
+});
+canvas.addEventListener('error', () => setStatus('Load error — check console'));
+
+// --- Polling toggle ---
+function togglePolling() {
+  pollingActive = !pollingActive;
+  document.getElementById('poll-btn').textContent = pollingActive ? '⏸ Pause' : '▶ Resume';
+  if (pollingActive) { pollField(); pollHotHouse(); }
+}
+
+function flash(ok) {
+  const el = document.getElementById('poll-indicator');
+  if (el) { el.style.background = ok ? '#4af0a8' : '#df4a4a'; setTimeout(()=>{ if(el) el.style.background='#333'; }, 200); }
+}
+
+function startPolling() {
+  // Trigger ambient sync first so lighting has state immediately
+  fetch(API + '/ambient/sync', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({zone_hint:'neutral'})
+  }).catch(() => {});
+  pollField();
+  pollHotHouse();
+  pollLighting();
+}
+
+// --- /field polling ---
+async function pollField() {
+  if (!pollingActive) return;
+  try {
+    const r = await fetch(API+'/field', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    flash(true);
+    applyFieldData(d);
+    document.getElementById('ov-poll').textContent = 'synced '+new Date().toLocaleTimeString();
+  } catch(e) {
+    flash(false);
+    document.getElementById('ov-poll').textContent = 'poll error';
+  }
+  setTimeout(pollField, POLL_MS);
+}
+
+// --- /hothouse/x3d polling ---
+async function pollHotHouse() {
+  if (!pollingActive) return;
+  try {
+    const r = await fetch(API+'/hothouse/x3d', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (d && Object.keys(d).length > 0) {
+      applyHotHouseData(d);
+    } else {
+      // HotHouse empty — drive agents from /field channel weights directly
+      applyFieldChannelsToAgents();
+    }
+  } catch(e) {
+    applyFieldChannelsToAgents();
+  }
+  setTimeout(pollHotHouse, HOTHOUSE_MS);
+}
+
+function applyFieldChannelsToAgents() {
+  // Fallback: map E/B/P/S channel weights to basic visual params
+  // so agents are visible even without HotHouse running
+  const agents = Object.entries((window._lastFieldData || {}).agents || {});
+  if (!agents.length) return;
+  const mockHotHouse = {};
+  agents.forEach(([name, data]) => {
+    const w = data.weights || {E:0.35,B:0.25,P:0.20,S:0.20};
+    mockHotHouse[name] = {
+      morphWeight_emotion:  w.E || 0.35,
+      animationSpeed:       w.B || 0.25,
+      gazeDirectness:       w.P || 0.20,
+      socialProximity:      w.S || 0.20,
+      gestureConfidence:    0.5,
+      interactionOpenness:  1.0
+    };
+  });
+  applyHotHouseData(mockHotHouse);
+}
+
+// --- Apply /field to scene ---
+function applyFieldData(d) {
+  window._lastFieldData = d;  // store for HotHouse fallback
+  try {
+    const scene   = canvas.browser.currentScene;
+    const agents  = Object.keys(d.agents || {});
+    const epCount = d.episode_count || 0;
+    const ac      = d.alignment_coherence || {};
+    const coh     = typeof ac.global_coherence === 'number' ? ac.global_coherence : 0.5;
+    const echoArr = Object.values(d.echo_chamber_risks || {});
+    const echo    = echoArr.length > 0 ? Math.max(...echoArr) : 0.0;
+    const tension = Math.min(1.0, (1.0 - coh)*0.6 + echo*0.4);
+
+    document.getElementById('ov-coh').textContent    = coh.toFixed(3);
+    document.getElementById('ov-echo').textContent   = echo.toFixed(3);
+    document.getElementById('ov-ep').textContent     = epCount;
+    document.getElementById('ov-agents').textContent = agents.length;
+    const tel = document.getElementById('ov-tension');
+    tel.textContent = tension.toFixed(3);
+    tel.className = 'val '+(tension<0.3?'tension-low':tension<0.6?'tension-mid':tension<0.8?'tension-high':'tension-crit');
+
+    // MCCFField node
+    const fn = scene.getNamedNode('GlobalField');
+    if (fn) { fn.globalCoherence=coh; fn.echoRisk=echo; fn.tensionLevel=tension; fn.episodeCount=epCount; }
+
+    // Update field ring materials
+    updateFieldMaterials(scene, coh, echo, tension);
+
+    // MCCFChannel nodes
+    const mx = d.matrix || {};
+    updateChannelNode(scene, 'Ch_SA', mx, 'The Steward',   'The Archivist');
+    updateChannelNode(scene, 'Ch_SW', mx, 'The Steward',   'The Witness');
+    updateChannelNode(scene, 'Ch_AW', mx, 'The Archivist', 'The Witness');
+  } catch(e) { console.warn('applyFieldData:', e); }
+}
+
+function updateChannelNode(scene, def, matrix, from, to) {
+  // SAI DISABLED — V2.1 KNOWN LIMITATION
+}
+
+function updateFieldMaterials(scene, coh, echo, tension) {
+  // SAI DISABLED — V2.1 KNOWN LIMITATION (see applyHotHouseData note)
+  try {
+    const ct = scene.getNamedNode('CoherenceReadout');
+    if (ct) ct.string=[`coh: ${coh.toFixed(2)}`];
+    const tt = scene.getNamedNode('TensionReadout');
+    if (tt) tt.string=[`tension: ${tension.toFixed(2)}`];
+  } catch(e) {}
+}
+
+// --- Apply /hothouse/x3d to MCCFAgent nodes ---
+function applyHotHouseData(data) {
+  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
+  // X_ITE 11.6.6: SAI property assignments on Material nodes (emissiveColor,
+  // transparency) are accepted without error but have no visual effect.
+  // Confirmed: scene is bright before polling starts, dims after SAI fires.
+  // SAI overwrites valid baked-in scene values with broken state.
+  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
+  // HUD tracking still active — only visual node assignment is disabled.
+  if (!data || !Object.keys(data).length) return;
+  const agents = {
+    'The Steward': 'Steward', 'The Archivist': 'Archivist', 'The Witness': 'Witness'
+  };
+  let tracked = 0;
+  for (const agentName of Object.keys(agents)) {
+    if (data[agentName]) tracked++;
+  }
+  const diagEl = document.getElementById('x3d-diag');
+  if (diagEl) diagEl.textContent =
+    `hothouse: ${tracked}/${Object.keys(agents).length} tracked (SAI visual update pending X_ITE fix)`;
+}
+
+function applyLighting(scalars) {
+  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
+  // X_ITE 11.6.6: light node intensity and color SAI assignments accepted
+  // without error but have no visual effect in Firefox or Edge.
+  // Scene file contains correct light values; local PointLights provide fill.
+  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
+  if (!scalars) return;
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) return;
+    const keyFound = !!scene.getNamedNode('KeyLight');
+    const ambFound = !!scene.getNamedNode('AmbientLight');
+    const lDiag = document.getElementById('light-diag');
+    if (lDiag) lDiag.textContent =
+      `lighting: key=${keyFound} amb=${ambFound} (SAI visual update pending X_ITE fix)`;
+  } catch(e) {}
+}
+
+
+// --- Cross-window event listeners (from mccf_voice.html) ---
+window.addEventListener('mccf_x3d_projection', (e) => { if (e.detail) applyHotHouseData(e.detail); });
+window.addEventListener('message', (e) => { if (e.data?.type==='mccf_projection') applyHotHouseData(e.data.data); });
+</script>
+
+</body>
+</html>
