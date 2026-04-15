@@ -742,8 +742,13 @@
       </div>
     </div>
 
-    <div class="section-head">Coherence State</div>
-    <div id="coherence-toward-display" style="font-size:11px;color:var(--text-dim);">
+    <div class="section-head">Coherence State
+      <span style="font-size:11px;color:#aab0be;font-weight:normal;margin-left:6px;">
+        <span style="color:var(--accent)">→ out</span>
+        <span style="color:var(--accent3);margin-left:4px;">← in</span>
+      </span>
+    </div>
+    <div id="coherence-toward-display" style="font-size:13px;color:#aab0be;">
       No interactions yet.
     </div>
 
@@ -762,7 +767,7 @@
 // State
 // ============================================================
 let API_URL = 'http://localhost:5000';
-let fieldState = { agents: {}, matrix: {}, echo_chamber_risks: {} };
+let fieldState = { agents: {}, matrix: {}, echo_chamber_risks: {}, entanglement: {}, alignment_coherence: {} };
 let selectedAgent = null;
 let liveInterval = null;
 let autoSimInterval = null;
@@ -936,12 +941,13 @@ function renderCoherenceState() {
       ? matrix[other][selectedAgent].toFixed(3) : '—';
     const gap = matrix[other] ? Math.abs(row[other] - matrix[other][selectedAgent]) : 0;
     const gapClass = gap > 0.15 ? 'gap-high' : gap > 0.08 ? 'gap-med' : 'gap-low';
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-      <span style="flex:1;">${other}</span>
-      <span style="color:var(--accent);">${rij}</span>
-      <span style="color:var(--text-dim)">↔</span>
-      <span style="color:var(--accent3);">${rji}</span>
-      <span class="sym-gap-badge ${gapClass}">Δ${gap.toFixed(2)}</span>
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
+      <span style="flex:1;font-size:13px;">${other}</span>
+      <span style="color:#aab0be;font-size:11px;">→</span>
+      <span style="color:var(--accent);font-size:13px;" title="${selectedAgent} toward ${other}">${rij}</span>
+      <span style="color:#aab0be;font-size:11px;">←</span>
+      <span style="color:var(--accent3);font-size:13px;" title="${other} toward ${selectedAgent}">${rji}</span>
+      <span class="sym-gap-badge ${gapClass}" style="font-size:11px;">Δ${gap.toFixed(2)}</span>
     </div>`;
   }).join('');
 }
@@ -1175,6 +1181,34 @@ function renderMatrix() {
     });
     html += '</div>';
   }
+
+  // v1.6.0 — Entanglement negativity
+  const entanglement = fieldState.entanglement || {};
+  const highNeg = Object.entries(entanglement).filter(([,d]) => d.level === 'strong' || d.level === 'very_high');
+  if (highNeg.length > 0) {
+    html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">';
+    html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Entanglement (structural coupling)</div>';
+    highNeg.forEach(([pair, d]) => {
+      const col = d.level === 'very_high' ? 'var(--accent2)' : 'var(--accent3)';
+      html += `<div style="font-size:10px;color:${col};margin-top:3px;">
+        ⬡ ${pair} — negativity ${d.negativity} [${d.level}]</div>`;
+    });
+    html += '</div>';
+  }
+
+  // v1.6.0 — Alignment coherence (ideology drift warnings)
+  const alignments = fieldState.alignment_coherence || {};
+  const drifting = Object.entries(alignments).filter(([,d]) => d.evaluative_gate === 'CLOSED');
+  if (drifting.length > 0) {
+    html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">';
+    html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Ideology drift (H_alignment)</div>';
+    drifting.forEach(([name, d]) => {
+      html += `<div style="font-size:10px;color:var(--accent2);margin-top:3px;">
+        ↯ ${name} — coherence ${d.alignment_coherence} — gate CLOSED</div>`;
+    });
+    html += '</div>';
+  }
+
   wrap.innerHTML = html;
 }
 

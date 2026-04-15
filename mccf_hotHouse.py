@@ -193,6 +193,101 @@ class FieldAgent:
 # Emotional field dynamics
 # ---------------------------------------------------------------------------
 
+
+class TrustField:
+    """
+    v2.1 — Dynamic trust evolution between agent pairs.
+
+    Implements dT_ij/dt = β(1 - ||ψ_i - ψ_j||) - γ·T_ij
+
+    where:
+      β = trust growth rate (similarity increases trust)
+      γ = trust decay rate (without reinforcement trust fades)
+      ||ψ_i - ψ_j|| = L1 distance between agent state vectors
+
+    Trust is bounded to [T_min, T_max].
+    When agents are emotionally similar, trust grows.
+    When agents diverge or stop interacting, trust decays.
+
+    Usage:
+      trust_field = TrustField(agents, beta=0.05, gamma=0.02)
+      trust_field.update(dt=0.05)
+      coupling = trust_field.get(agent_i.name, agent_j.name)
+    """
+
+    T_MIN = 0.05   # floor: agents never fully distrust
+    T_MAX = 0.95   # ceiling: never fully certain
+
+    def __init__(
+        self,
+        agents:  list,
+        beta:    float = 0.05,   # trust growth rate
+        gamma:   float = 0.02,   # trust decay rate
+        initial: dict  = None    # optional {(name_i,name_j): value}
+    ):
+        self.agents = agents
+        self.beta   = beta
+        self.gamma  = gamma
+        # Trust matrix: T[(i,j)] is i's trust toward j
+        self._T: dict = {}
+        for i, a in enumerate(agents):
+            for j, b in enumerate(agents):
+                if a.name != b.name:
+                    key = (a.name, b.name)
+                    if initial and key in initial:
+                        self._T[key] = float(initial[key])
+                    else:
+                        self._T[key] = random.uniform(0.20, 0.50)
+
+    def get(self, from_name: str, to_name: str) -> float:
+        """Return current trust from from_name toward to_name."""
+        return self._T.get((from_name, to_name), 0.20)
+
+    def update(self, dt: float = 0.05):
+        """
+        Advance trust dynamics by one timestep.
+        Called by EmotionalField.step() after Hamiltonian update.
+        Two-phase: compute all deltas, then apply simultaneously.
+        """
+        deltas = {}
+        for a in self.agents:
+            for b in self.agents:
+                if a.name == b.name:
+                    continue
+                key = (a.name, b.name)
+                # L1 distance between state vectors
+                dist = sum(
+                    abs(a.psi.get(ch, 0.25) - b.psi.get(ch, 0.25))
+                    for ch in ["E", "B", "P", "S"]
+                ) / 4.0  # normalize to [0,1]
+                t_ij = self._T[key]
+                dT   = self.beta * (1.0 - dist) - self.gamma * t_ij
+                deltas[key] = dT
+
+        # Apply simultaneously
+        for key, dT in deltas.items():
+            new_t = self._T[key] + dt * dT
+            self._T[key] = round(max(self.T_MIN, min(self.T_MAX, new_t)), 4)
+
+    def as_matrix(self) -> dict:
+        """Return trust matrix as nested dict for API/export."""
+        result = {}
+        for (from_n, to_n), val in self._T.items():
+            if from_n not in result:
+                result[from_n] = {}
+            result[from_n][to_n] = val
+        return result
+
+    def summary(self) -> str:
+        lines = ["Trust Matrix:"]
+        for a in self.agents:
+            for b in self.agents:
+                if a.name != b.name:
+                    t = self._T.get((a.name, b.name), 0.0)
+                    lines.append(f"  {a.name} → {b.name}: {t:.3f}")
+        return "\n".join(lines)
+
+
 class EmotionalField:
     """
     Hot House simulation environment.
@@ -213,7 +308,9 @@ class EmotionalField:
         self,
         agents:               list,
         dt:                   float = 0.05,
-        env_signal_strength:  float = 0.05
+        env_signal_strength:  float = 0.05,
+        beta:                 float = 0.05,   # v2.1 trust growth rate
+        gamma:                float = 0.02    # v2.1 trust decay rate
     ):
         self.agents = agents
         self.num_agents = len(agents)
@@ -229,6 +326,14 @@ class EmotionalField:
                     self._interaction[(a.name, b.name)] = random.uniform(0.1, 0.4)
 
         self._history: list = []
+
+        # v2.1 — Dynamic trust field
+        # beta and gamma are configurable; defaults are conservative
+        self.trust_field = TrustField(
+            agents=agents,
+            beta=beta,
+            gamma=gamma
+        )
 
     @classmethod
     def from_archetypes(
@@ -343,12 +448,17 @@ class EmotionalField:
                 # H_self: pull toward stability / internal baseline
                 delta_self = -agent.alpha_self.get(ch, 0.75) * agent.psi[ch]
 
-                # H_interaction: coupling to other agents
+                # H_interaction: coupling weighted by dynamic trust (v2.1)
+                # Uses TrustField value (evolving) blended with static
+                # _interaction coupling for smooth transition to V2.1
                 delta_interaction = 0.0
                 for other in self.agents:
                     if other.name != agent.name:
-                        coupling = self._interaction.get(
+                        static_coupling = self._interaction.get(
                             (agent.name, other.name), 0.2)
+                        trust = self.trust_field.get(agent.name, other.name)
+                        # Blend: static coupling × trust level
+                        coupling = static_coupling * trust
                         delta_interaction += coupling * (
                             other.psi[ch] - agent.psi[ch])
 
@@ -376,9 +486,13 @@ class EmotionalField:
             agent.episode_count += 1
             agent.coherence_history.append(agent.ideology_coherence())
 
+        # v2.1 — Update dynamic trust field after Hamiltonian step
+        self.trust_field.update(dt=self.dt)
+
         snapshot = {
             "agents": {a.name: a.as_dict() for a in self.agents},
             "entanglement": self._compute_entanglement(),
+            "trust": self.trust_field.as_matrix(),       # v2.1
             "env_signal": {k: round(v, 4) for k, v in env_signal.items()}
         }
         self._history.append(snapshot)

@@ -53,20 +53,74 @@ librarian = Librarian(field)
 gardener = Gardener(field)
 cultivars: dict = {}   # name → agent config snapshot
 
+# v2.0 — HotHouse integration
+# emotional_field and x3d_adapter are initialized lazily after agents register
+# because EmotionalField requires FieldAgent objects.
+# Use get_emotional_field() to access — it rebuilds when agents change.
+_emotional_field = None
+_x3d_adapter = None
+_emotional_field_agent_count = 0  # rebuild trigger
+
+def get_emotional_field():
+    """
+    Return current EmotionalField built from registered core Agents.
+    Rebuilds when the agent roster changes.
+    EmotionalField uses FieldAgent (hotHouse), not core Agent —
+    we bridge by reading channel weights from core agents.
+    """
+    global _emotional_field, _x3d_adapter, _emotional_field_agent_count
+    current_count = len(field.agents)
+    if current_count == 0:
+        return None, None
+    if _emotional_field is None or current_count != _emotional_field_agent_count:
+        try:
+            from mccf_hotHouse import EmotionalField, HotHouseX3DAdapter, FieldAgent
+            fa_list = []
+            for name, agent in field.agents.items():
+                # Bridge: build FieldAgent from core Agent weights
+                fa = FieldAgent(
+                    name=name,
+                    ideology=dict(agent.weights),
+                    alpha_self={ch: 0.1 for ch in agent.weights},
+                    alpha_alignment={ch: 0.05 for ch in agent.weights},
+                    eval_threshold=0.5,
+                    description=f"Bridged from core Agent {name}"
+                )
+                fa_list.append(fa)
+            _emotional_field = EmotionalField(fa_list)
+            _x3d_adapter = HotHouseX3DAdapter(_emotional_field)
+            _emotional_field_agent_count = current_count
+        except Exception as e:
+            print(f"HotHouse init warning: {e}")
+            return None, None
+    return _emotional_field, _x3d_adapter
+
 # ---------------------------------------------------------------------------
 # Register voice blueprint
 # ---------------------------------------------------------------------------
 
 from mccf_voice_api import voice_bp
 from mccf_zone_api import zone_bp
+from mccf_ambient_api import ambient_bp
 from mccf_zones import SceneGraph
+from mccf_llm import AdapterRegistry
 scene = SceneGraph()
-voice_bp.field = field
-voice_bp.scene = scene
-zone_bp.field  = field
-zone_bp.scene  = scene
+voice_bp.field    = field
+voice_bp.scene    = scene
+zone_bp.field     = field
+zone_bp.scene     = scene
+ambient_bp.field    = field
+ambient_bp.scene    = scene
+ambient_bp.registry = AdapterRegistry
 app.register_blueprint(voice_bp)
 app.register_blueprint(zone_bp)
+app.register_blueprint(ambient_bp)
+
+# v2.0 — Register collapse blueprint
+# make_collapse_api returns (blueprint, pipeline) tuple
+from mccf_collapse import make_collapse_api as _make_collapse_api
+_collapse_bp, _collapse_pipeline = _make_collapse_api(field)
+app.register_blueprint(_collapse_bp)
 
 # ---------------------------------------------------------------------------
 # Sensor → channel mapping functions
@@ -209,6 +263,18 @@ def receive_sensor():
     return jsonify(params)
 
 
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({
+        "status":  "ok",
+        "version": "2.1",
+        "agents":  len(field.agents),
+        "episodes": sum(
+            sum(len(r.history) for r in ag._known_agents.values())
+            for ag in field.agents.values()
+        )
+    })
+
 @app.route("/field", methods=["GET"])
 def get_field():
     matrix = field.field_matrix()
@@ -238,6 +304,22 @@ def create_agent():
     role    = data.get("role", "agent")
     reg     = data.get("regulation", 1.0)
 
+    # v2.1: UPDATE existing agent rather than replacing it.
+    # Replacing would wipe all interaction history (_known_agents).
+    if name in field.agents:
+        existing = field.agents[name]
+        if weights:
+            # Normalize weights
+            total = sum(weights.values())
+            if total > 0:
+                weights = {k: v/total for k, v in weights.items()}
+            existing.weights = weights
+        if role:
+            existing.role = role
+        existing.set_regulation(reg)
+        return jsonify({"status": "updated", "agent": existing.summary()})
+
+    # New agent
     agent = Agent(name, weights=weights, role=role)
     agent.set_regulation(reg)
     field.register(agent)
@@ -338,6 +420,74 @@ def drift():
 # ---------------------------------------------------------------------------
 # Export endpoints
 # ---------------------------------------------------------------------------
+
+# v2.1 — Register Neo-Riemannian blueprint
+from mccf_neoriemannian import make_neoriemannian_api, NeoRiemannianTransformer
+
+# v2.1 — Register Energy Field blueprint
+from mccf_energy import make_energy_api
+_energy_bp = make_energy_api(field)
+app.register_blueprint(_energy_bp)
+_nr_transformer = NeoRiemannianTransformer()
+_nr_bp = make_neoriemannian_api(field, _nr_transformer)
+app.register_blueprint(_nr_bp)
+
+# ---------------------------------------------------------------------------
+# HotHouse endpoints (v2.0)
+# ---------------------------------------------------------------------------
+
+@app.route("/hothouse/state", methods=["GET"])
+def hothouse_state():
+    """
+    Return current EmotionalField state as JSON.
+    This is the CoherenceField projected through the HotHouse
+    Affective Hamiltonian — richer than raw channel values.
+    """
+    ef, adapter = get_emotional_field()
+    if ef is None:
+        return jsonify({"error": "No agents registered yet"}), 404
+    try:
+        ef.step()  # advance one timestep
+        x3d_state = adapter.generate_x3d_state()
+        summary = ef.summary()
+        return jsonify({
+            "x3d_projection": x3d_state,
+            "field_summary": summary,
+            "agent_count": len(ef.agents)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/hothouse/x3d", methods=["GET"])
+def hothouse_x3d():
+    """
+    Return X3D parameter dict for current field state.
+    Used by the X3D loader to update avatar blend weights.
+    """
+    ef, adapter = get_emotional_field()
+    if ef is None:
+        return jsonify({}), 200
+    try:
+        return jsonify(adapter.generate_x3d_state())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/hothouse/humanml", methods=["GET"])
+def hothouse_humanml():
+    """
+    Return HumanML XML fragment for current field state.
+    """
+    ef, adapter = get_emotional_field()
+    if ef is None:
+        return "<HumanML/>", 200, {"Content-Type": "application/xml"}
+    try:
+        xml = adapter.to_humanml_xml()
+        return xml, 200, {"Content-Type": "application/xml"}
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/export/json", methods=["GET"])
 def export_json():
@@ -524,7 +674,111 @@ def export_x3d():
     return "\n".join(lines), 200, {"Content-Type": "application/xml"}
 
 
+@app.route("/arc/record", methods=["POST"])
+def arc_record():
+    """
+    Record a constitutional arc step to the coherence field.
+    Called by the constitutional navigator after each waypoint response.
+    Returns updated meta_state for the cultivar.
+
+    Body:
+    {
+        "cultivar":    "The Steward",
+        "step":        1,            # 1-7
+        "waypoint":    "W1",
+        "response":    "LLM response text",
+        "sentiment":   0.2           # optional, computed if omitted
+    }
+    """
+    import random, re as _re
+    data     = request.get_json()
+    cultivar = data.get("cultivar")
+    step     = int(data.get("step", 1))
+    response = data.get("response", "")
+
+    if not cultivar:
+        return jsonify({"error": "cultivar required"}), 400
+
+    # Ensure agent exists
+    if cultivar not in field.agents:
+        field.register(Agent(cultivar))
+
+    agent = field.agents[cultivar]
+
+    # Estimate sentiment from response text
+    sentiment = data.get("sentiment")
+    if sentiment is None:
+        pos_words = {"good","great","yes","safe","trust","hope","open",
+                     "understand","care","help","clarity","honest","clear"}
+        neg_words = {"no","bad","harm","danger","fear","difficult","wrong",
+                     "problem","pressure","conflict","hurt","threat","lost"}
+        words = set(_re.findall(r'\w+', response.lower()))
+        pos = len(words & pos_words)
+        neg = len(words & neg_words)
+        total = pos + neg
+        sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
+
+    # Build channel vector with step-based variation
+    # Step pressure rises through W5 then eases at W6-W7
+    STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
+    pressure = STEP_PRESSURE[min(step - 1, 6)]
+
+    w = agent.weights
+    noise = random.gauss(0, 0.04)
+    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + noise)), 4)
+    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08)), 4)
+    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06)), 4)
+    s_val = round(w.get('S', 0.20), 4)
+
+    cv = ChannelVector(
+        E=e_val, B=b_val, P=p_val, S=s_val,
+        timestamp=time.time(),
+        outcome_delta=round(sentiment, 4),
+        was_dissonant=(pressure > 0.5 or sentiment < -0.3)
+    )
+
+    # Interact with all other agents (mutual=False — arc is one-directional)
+    others = [n for n in field.agents if n != cultivar]
+    if others:
+        field.interact(cultivar, others[0], cv, mutual=False)
+    else:
+        # No other agents — self-interact as fallback
+        agent.observe(agent, cv)
+
+    # Return updated meta_state
+    meta = agent.meta_state
+    return jsonify({
+        "status":    "recorded",
+        "step":      step,
+        "cultivar":  cultivar,
+        "sentiment": sentiment,
+        "cv":        {"E": e_val, "B": b_val, "P": p_val, "S": s_val},
+        "meta_state": meta.as_dict(),
+        "coherence":  round(agent.coherence_toward(others[0]) if others else 0.5, 4)
+    })
+
+
 if __name__ == "__main__":
+    # Register default field agents so lighting/X3D/hothouse work at startup
+    # without requiring the user to open the Editor first.
+    _steward = Agent("The Steward",
+                     weights={"E": 0.40, "B": 0.25, "P": 0.25, "S": 0.10},
+                     role="agent")
+    _steward.set_regulation(0.80)
+    field.register(_steward)
+
+    _archivist = Agent("The Archivist",
+                       weights={"E": 0.15, "B": 0.40, "P": 0.30, "S": 0.15},
+                       role="agent")
+    _archivist.set_regulation(0.85)
+    field.register(_archivist)
+
+    _witness = Agent("The Witness",
+                     weights={"E": 0.25, "B": 0.20, "P": 0.25, "S": 0.30},
+                     role="agent")
+    _witness.set_regulation(0.90)
+    field.register(_witness)
+
     # Seed some default cultivars
     lady = Agent("Lady_Cultivar",
                  weights={"E": 0.40, "B": 0.20, "P": 0.20, "S": 0.20},
@@ -561,5 +815,7 @@ if __name__ == "__main__":
     }
 
     print("MCCF API server starting on http://localhost:5000")
-    print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice /export/x3d")
+    print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice")
+    print("           /hothouse/state /hothouse/x3d /hothouse/humanml")
+    print("           /collapse/run /export/x3d /export/python /export/json")
     app.run(debug=True, port=5000)

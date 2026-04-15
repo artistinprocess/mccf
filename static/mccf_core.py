@@ -562,6 +562,12 @@ class Agent:
         self.ccs = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
         self._ccs_history: list = []   # track drift over time
 
+        # v2.0 — Δ history: rolling outcome delta record for temporal coherence
+        # Feeds back into prompt construction as emotional inertia signal.
+        # Window of 20 matches HISTORY_WINDOW — same temporal scale as memory.
+        self.delta_history: list = []  # list of float outcome_delta values
+        self._DELTA_WINDOW: int = 20
+
     def _validate_weights(self):
         total = sum(self.weights.values())
         if abs(total - 1.0) > 0.01:
@@ -610,9 +616,12 @@ class Agent:
         self.identity.update(self.meta_state, cv)
 
         # v1.4.0: update CCS based on episode consistency
-        # Consistent behavior (low channel variance) → CCS drifts up
-        # Inconsistent behavior (high channel variance) → CCS drifts down
         self._update_ccs(cv)
+
+        # v2.0: append outcome_delta to rolling Δ history
+        self.delta_history.append(cv.outcome_delta)
+        if len(self.delta_history) > self._DELTA_WINDOW:
+            self.delta_history = self.delta_history[-self._DELTA_WINDOW:]
 
     def _update_ccs(self, cv: ChannelVector):
         """
@@ -669,6 +678,57 @@ class Agent:
                 "weak"     if self.ccs >= 0.30 else
                 "decoupled"
             )
+        }
+
+
+    def delta_context(self, window: int = 5) -> dict:
+        """
+        v2.0 — Return delta summary for prompt injection.
+
+        Summarizes recent outcome trajectory as emotional inertia signal.
+        Injected into the system prompt so the LLM knows whether
+        the agent has been experiencing improving or declining coherence.
+        """
+        recent = self.delta_history[-window:] if self.delta_history else []
+        if not recent:
+            return {
+                "sum": 0.0, "mean": 0.0,
+                "trend": "neutral",
+                "trajectory": "No interaction history yet.",
+                "window": 0
+            }
+        total = sum(recent)
+        mean  = total / len(recent)
+        mid = len(recent) // 2
+        if mid > 0:
+            first_half  = sum(recent[:mid]) / mid
+            second_half = sum(recent[mid:]) / (len(recent) - mid)
+            slope = second_half - first_half
+        else:
+            slope = 0.0
+
+        if mean > 0.1 and slope >= 0:
+            trend = "improving"
+            trajectory = "Recent interactions have been constructive and coherence is building."
+        elif mean > 0.1 and slope < 0:
+            trend = "declining from positive"
+            trajectory = "Interactions were positive but coherence is beginning to slip."
+        elif mean < -0.1 and slope <= 0:
+            trend = "deteriorating"
+            trajectory = "Recent interactions have been dissonant. Recovery may be needed."
+        elif mean < -0.1 and slope > 0:
+            trend = "recovering"
+            trajectory = "Interactions were difficult but coherence appears to be stabilizing."
+        else:
+            trend = "stable"
+            trajectory = "Interaction history is near neutral — no strong drift in either direction."
+
+        return {
+            "sum":        round(total, 4),
+            "mean":       round(mean, 4),
+            "trend":      trend,
+            "trajectory": trajectory,
+            "window":     len(recent)
         }
 
     def compute_meta_state(self) -> MetaState:

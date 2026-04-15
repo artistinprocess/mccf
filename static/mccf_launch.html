@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCCF Launch Console</title>
+<style>
+  body {
+    background: #0a0a0a;
+    color: #c8c8c8;
+    font-family: monospace;
+    padding: 40px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  h1 {
+    color: #7ab8f5;
+    font-size: 1.2em;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 12px;
+    margin-bottom: 30px;
+  }
+  .section {
+    margin-bottom: 28px;
+  }
+  .section-title {
+    color: #888;
+    font-size: 0.75em;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  a {
+    display: block;
+    color: #a0d4a0;
+    text-decoration: none;
+    padding: 8px 12px;
+    border: 1px solid #222;
+    margin-bottom: 6px;
+    border-radius: 3px;
+    transition: background 0.15s;
+  }
+  a:hover {
+    background: #1a1a2e;
+    border-color: #7ab8f5;
+    color: #fff;
+  }
+  .desc {
+    font-size: 0.75em;
+    color: #666;
+    margin-left: 4px;
+  }
+  .status {
+    float: right;
+    font-size: 0.7em;
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .ok   { background: #1a3a1a; color: #6a6; }
+  .warn { background: #3a2a00; color: #aa6; }
+  #field-status {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 30px;
+    border-top: 1px solid #222;
+    padding-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>⬡ MCCF LAUNCH CONSOLE</h1>
+
+<div class="section">
+  <div class="section-title">Core Interfaces</div>
+  <a href="/static/mccf_editor.html" target="_blank">
+    mccf_editor
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— agent creation, field visualization, coherence matrix</span>
+  </a>
+  <a href="/static/mccf_constitutional.html" target="_blank">
+    mccf_constitutional
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— seven-waypoint arc, cultivar testing, H_alignment panel</span>
+  </a>
+  <a href="/static/mccf_voice.html" target="_blank">
+    mccf_voice
+    <span class="status warn">STUB</span>
+    <span class="desc">— voice agent, multi-turn stabilizer (needs Ollama for responses)</span>
+  </a>
+</div>
+
+<div class="section">
+  <div class="section-title">Field Monitors</div>
+  <a href="/static/mccf_energy.html" target="_blank">
+    mccf_energy
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— field energy display, reads /field</span>
+  </a>
+  <a href="/static/mccf_waypoint_editor.html" target="_blank">
+    mccf_waypoint_editor
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— zone, waypoint, and path configuration</span>
+  </a>
+  <a href="/static/mccf_ambient.html" target="_blank">
+    mccf_ambient
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— ambient field parameters</span>
+  </a>
+  <a href="/static/mccf_lighting.html" target="_blank">
+    mccf_lighting
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— lighting routes via ambient_bp</span>
+  </a>
+</div>
+
+<div class="section">
+  <div class="section-title">X3D / Holodeck</div>
+  <a href="/static/mccf_x3d_loader.html" target="_blank">
+    mccf_x3d_loader
+    <span class="status ok">FUNCTIONAL</span>
+    <span class="desc">— X3D scene via external src, confirmed rendering</span>
+  </a>
+  <a href="/static/mccf_x3d_demo.html" target="_blank">
+    mccf_x3d_demo
+    <span class="status warn">LEGACY</span>
+    <span class="desc">— inline X3D, use loader instead</span>
+  </a>
+</div>
+
+<div id="field-status">Checking field… <span id="fs"></span></div>
+
+<script>
+fetch('http://localhost:5000/field')
+  .then(r => r.json())
+  .then(d => {
+    const agents = Object.keys(d.agents || {}).length;
+    const episodes = d.episode_count || 0;
+    document.getElementById('fs').textContent =
+      `Field live — ${agents} agent(s), ${episodes} episode(s)`;
+    document.getElementById('field-status').style.color = '#6a6';
+  })
+  .catch(() => {
+    document.getElementById('fs').textContent = 'Server not reachable';
+    document.getElementById('field-status').style.color = '#a44';
+  });
+</script>
+
+</body>
+</html>
