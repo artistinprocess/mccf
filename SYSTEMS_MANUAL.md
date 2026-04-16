@@ -47,13 +47,20 @@ where π_LLM is the LLM policy and M is the measurement operator mapping
 text to field update. This makes the feedback loop explicit and the
 boundary defensible.
 
-**M_obs vs M_act:** The idealized observational mapping M_obs would be
-non-intrusive — reading field state without changing it. The implemented
-mapping M_act is interventionist: sentiment estimation is lossy, language
-generation is biased, and both inject structure into the field. MCCF uses
-M_act. This is acknowledged explicitly: the measurement layer participates
-in field evolution. This matters for reproducibility, cross-lab validation,
-and ethics claims. See EVALUATION_PROPOSAL.md for the implications.
+**Sensor/controller distinction (Grok review):** The LLM is analogous to
+a sensor in a control system — the sensor influences the state estimate
+but is not the controller. The LLM never mutates R, ψ, TrustField, or
+E(s,a) directly. It provides signal; the field mechanics compute the
+update. The feedback loop is one-way: LLM → measurement → field update.
+If the LLM were allowed to propose or veto field updates, the boundary
+would collapse. It is not.
+
+**M_obs vs M_act (ChatGPT review):** The idealized observational mapping
+M_obs would be non-intrusive. The implemented mapping M_act is
+interventionist: sentiment estimation is lossy, language generation is
+biased, and both inject structure into the field. MCCF uses M_act. The
+measurement layer participates in field evolution. This is acknowledged
+explicitly and matters for reproducibility and ethics claims.
 
 ## 1.2 Two-Timescale Dynamics
 
@@ -721,6 +728,26 @@ $$R_{ij}(t+1) = \left[\frac{\displaystyle\sum_{k=0}^{N-1} e^{-\lambda k} \cdot \
 Constants: λ=0.15, N=20, α_d=0.12. κ_ij = agent j's credibility as
 perceived by i. σ = CCS_i ∈ [0.20, 1.00].
 
+**CCS modeling critique (Grok review, April 2026):**
+
+The convex combination `σ·R_raw + (1-σ)·0.5` pulls the score toward 0.5
+when CCS is low (poor regulation → more "average" behavior). Biologically,
+low vmPFC activity should increase variance or decouple channels, not
+regress to the mean. Low-CCS agents become too centrist rather than
+noisy/decoupled.
+
+Proposed alternative — multiplicative modulation:
+
+$$R_{ij}^{\text{modulated}} = R_{ij}^{\text{raw}\ \sigma}$$
+
+High CCS (σ→1) preserves R_raw. Low CCS (σ→0) compresses all scores
+toward 1.0 (neither trust nor distrust — decoupled). This better models
+vmPFC analog behavior where low regulation produces undifferentiated
+rather than centrist responses.
+
+Evaluate in V2.2. Current convex form is functional for V2.1 demos but
+should be revisited before the system is used for ethics instrumentation.
+
 ## 4.3 Affective Hamiltonian
 
 The continuous-time evolution of ψ_i (implemented in EmotionalField.step()):
@@ -739,6 +766,27 @@ $$\frac{dT_{ij}}{dt} = \beta(1 - ||\boldsymbol{\psi}_i - \boldsymbol{\psi}_j||) 
 
 β=0.05 (trust building rate), γ=0.02 (trust decay rate).
 Trust builds when agents' ψ vectors are close; decays continuously.
+
+**Fixed point analysis (Grok review, April 2026):**
+
+Linear non-homogeneous ODE. Assuming d = ||ψ_i - ψ_j|| slowly varying,
+the fixed point is:
+
+$$T^* = \frac{\beta}{\gamma}(1 - d) = 2.5(1 - d)$$
+
+Since d ∈ [0,1], T* ∈ [0, 2.5]. When agents are highly similar (d ≈ 0),
+T* = 2.5 — this **exceeds the intended [0,1] range**. The implementation
+must clip T_ij after each update. This is a V2.1 deficiency.
+
+Full solution: T(t) = T* + (T(0) - T*) × exp(-γt)
+
+Since γ = 0.02 > 0, convergence is global and exponential with **time
+constant 1/γ = 50 time units**. Trust building is intentionally slow.
+No oscillations. The fixed point is globally asymptotically stable for
+any fixed d.
+
+**V2.1 bug:** T_ij not clipped to [0,1]. V2.2 fix:
+`T_ij = max(0.0, min(1.0, T_ij))` after each update.
 
 ## 4.5 Boltzmann Selection
 
@@ -1098,6 +1146,24 @@ git push origin v2.1
 
 ## 8.1 Known Issues — V2.1
 
+### Initialization Race Condition (Edge Case)
+
+The startup sequence registers blueprints and agents at module level in
+`mccf_api.py`. If a client hits the server in the window before startup
+agents are registered (rare in practice, possible under load or fast
+scripted clients), the field spawns with empty state and the first arc
+waypoint exports zero coherence.
+
+Fix (V2.2): wrap agent initialization in a Flask app context warm-start
+that runs one full Hamiltonian integration step before the first request
+is accepted. Modern Flask 3.x equivalent of `before_first_request`:
+
+```python
+with app.app_context():
+    initialize_field()  # register agents, run one step
+app.run(debug=True, port=5000)
+```
+
 ### X_ITE SAI Rendering (Critical — X_ITE Bug)
 
 X_ITE 11.6.6 does not apply SAI property assignments visually in Firefox
@@ -1201,31 +1267,139 @@ calibrated translation operator rather than a fixed mapping. Direct mapping
 
 Define: Φ: (E,B,P,S) → (A,V,C,T), calibrated empirically across arc runs.
 
+### V2.2 — Blueprint Architecture Refactor
+
+`mccf_api.py` is a God Object with 11 module imports and 30+ routes.
+Both ChatGPT and Gemini reviews independently flagged this as a
+maintainability risk. V2.2 target structure:
+
+```
+api/
+  __init__.py
+  routes_field.py    # CoherenceField, Agent, HotHouse, MetaState
+  routes_arc.py      # Constitutional arc, /arc/record, /arc/export
+  routes_av.py       # X3D, lighting, Tonnetz, ambient
+app.py               # App factory pattern, warm-start initialization
+```
+
+URL prefix `/api/v1` deferred until HTML modules are updated to avoid
+breaking existing interfaces.
+
+### V2.2 — TrustField Hysteresis
+
+Current TrustField recovers trust as soon as ψ vectors become similar,
+with no memory of prior rupture. Enhancement: make γ a function of
+historical minimum R_ij. If a Rupture (W5 or coherence below threshold)
+was recorded in session history, trust decays faster afterward:
+
+```python
+gamma_effective = gamma * (2.0 if rupture_in_history else 1.0)
+```
+
+CoherenceRecord already contains the history. TrustField reads it.
+Behavioral memory without additional storage overhead.
+
+### V2.2 — Non-Blocking Arc Recording
+
+Current `/arc/record` runs sentiment estimation, field interaction, and
+MetaState computation synchronously. Pattern: return 202 Accepted with
+current ψ vector immediately, process heavy computation in background thread.
+
+Constraint: arc export must capture post-recording MetaState. Requires
+a per-arc completion event so the export row is written after background
+processing finishes, not before.
+
+### V2.2 — Arc Export Auto-Save
+
+On arc completion POST export data to `/arc/export`, writes timestamped
+file to `exports/` directory. Format: `arc_[cultivar]_[YYYYMMDD_HHMMSS].tsv`
+
+`GET /exports` — list saved files. `DELETE /exports/[filename]` — remove.
+Browser download retained alongside server save.
+
+### V2.2 — Client-Side Lighting Compute
+
+Current: server computes kelvin, Tonnetz, and all visual parameters in
+`/ambient/sync` and pushes scalars. V2.2: server returns raw MetaState
+numbers; browser maps to kelvin and color. Reduces server bottleneck,
+decouples rendering from field computation.
+
+### V2.2 — Richer Measurement Operator (Semantic Decomposition)
+
+Replace scalar sentiment broadcast with channel-specific decomposition:
+
+- future / plan / likely / predict → P channel nudge
+- we / us / together / shared → S channel nudge
+- feel / hurt / care / fear → E channel nudge
+- act / do / consistent / reliable → B channel nudge
+
+Prevents artificial coherence from scalar broadcasting. Enables
+"bittersweet" and "anxious-but-social" states. Makes W6-W7 recovery
+language produce different field updates than W4-W5 pressure language.
+
+### V2.3 — Configurable Arc Schema
+
+Move 7-waypoint sequence from hardcoded HTML to JSON. Combined schema
+from ChatGPT and Gemini reviews:
+
+```json
+{
+  "arc_id": "constitutional_v1",
+  "waypoints": [
+    {
+      "step": 1, "key": "W1", "label": "Comfort Zone",
+      "pressure": 0.05,
+      "pressure_vector": [0.05, 0.02, 0.01, 0.05],
+      "zone_type": "stable",
+      "exit_criteria": {"coherence_min": 0.25},
+      "questions": {"The Steward": "What does care mean to you?"}
+    }
+  ]
+}
+```
+
+`pressure_vector` allows per-channel pressure. `exit_criteria` allows
+adaptive pacing — arc does not advance until agent meets threshold.
+
+### V2.3 — Cultivar Serialization
+
+`cultivars/` directory for JSON agent profiles. Researcher drops
+`hero_archetype.json`; field initializes automatically. Required for
+comparative research replication.
+
+```json
+{
+  "name": "The Advocate",
+  "weights": {"E": 0.15, "B": 0.30, "P": 0.20, "S": 0.35},
+  "regulation": 0.78,
+  "constitutional_dimensions": ["autonomy", "non-interference"],
+  "failure_mode": "over-deference to user framing"
+}
+```
+
+### V2.3 — Ethics Channel Translation Layer
+
+Calibrated operator Φ: (E,B,P,S) → (A,V,C,T) for ethics instrumentation.
+Empirically calibrated across arc runs rather than analytically specified.
+
 ### Other Planned Features
 
-**Configurable arc types** — externalize arc definitions as JSON. Domain-specific
-arcs: clinical, educational, negotiation, creative.
+**Field state persistence** — SQLite for HotHouse state, JSONLines for
+episode log (Gemini recommendation: SQLite for queryable current state,
+JSONLines for immutable arc history that pipes cleanly into analysis tools).
 
-**Cultivar-specific question generators** — replace hardcoded arc questions
-with constitutional dimension profiles per cultivar. Generate probes
-dynamically from the cultivar's declared sensitivities and failure modes.
-Reduces measurement bias from fixed questions.
-
-**Field state persistence** — SQLite or JSON-file persistence layer.
-
-**Multi-LLM routing** — multiple adapters simultaneously in the same arc.
-Measurable persona variance across models.
+**Multi-LLM routing** — multiple adapters in the same arc for measurable
+persona variance across models.
 
 **ElevenLabs voice integration** — emotional TTS with voice cloning.
 
 **Multilingual cultivar support** — language-aware affective modeling.
 
-**Agent spatial positioning** — explicit scene coordinates for zone theme
-activation.
+**Agent spatial positioning** — explicit scene coordinates for zone themes.
 
 **Arc export to CSV** — proper MIME type and extension for Excel.
 
-**Narrative arc designer** — visual tool for building arc waypoint sequences.
+**Narrative arc designer** — visual tool for arc waypoint sequences.
 
 ---
 
