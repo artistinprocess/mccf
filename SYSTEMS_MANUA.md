@@ -32,9 +32,28 @@ Implemented in `mccf_hotHouse.py`. Each agent carries a ψ state vector
 that evolves under a coupled ODE between discrete interaction events.
 The HotHouse projects this state to X3D avatar parameters and trust values.
 
-The LLM sits outside both layers as a language realization function. It
-receives a projection of the field state as a system prompt and produces
-natural language. Its output feeds back into the field via episode recording.
+The LLM sits outside both layers as an **exogenous stochastic policy
+function** — not a decision-maker, but not a passive observer either.
+It receives a projection of the field state as a system prompt and produces
+natural language. Its output feeds back into the field via sentiment
+estimation and episode recording.
+
+This feedback loop means the LLM is a **stochastic actuator embedded in
+the field evolution**. The correct formal framing is:
+
+$$\\boldsymbol{\\psi}(t+1) = \\boldsymbol{\\psi}(t) + M(\\pi_{\\text{LLM}}(\\text{context}(\\boldsymbol{\\psi}(t))))$$
+
+where π_LLM is the LLM policy and M is the measurement operator mapping
+text to field update. This makes the feedback loop explicit and the
+boundary defensible.
+
+**M_obs vs M_act:** The idealized observational mapping M_obs would be
+non-intrusive — reading field state without changing it. The implemented
+mapping M_act is interventionist: sentiment estimation is lossy, language
+generation is biased, and both inject structure into the field. MCCF uses
+M_act. This is acknowledged explicitly: the measurement layer participates
+in field evolution. This matters for reproducibility, cross-lab validation,
+and ethics claims. See EVALUATION_PROPOSAL.md for the implications.
 
 ## 1.2 Two-Timescale Dynamics
 
@@ -780,10 +799,21 @@ See MATHEMATICAL_THEORY.md Section 3 for the full qualification.
 
 $$\underbrace{\boldsymbol{\psi}_i(t)}_{\text{state}} \xrightarrow{H_{\text{affect}}} \underbrace{\boldsymbol{\psi}_i(t')}_{\text{evolved}} \xrightarrow{\pi(\mathcal{F}, \boldsymbol{\psi}_i, \Delta)} \underbrace{\text{LLM}}_{\text{observer}} \xrightarrow{\hat{u}_t} \underbrace{R_{ij}(t+1), \boldsymbol{\tau}_i(t+1)}_{\text{state deformation}}$$
 
-The LLM is not inside the state. It is outside the state as a measurement
-instrument. The state evolves continuously. The LLM samples a realization
-of that state at discrete interaction times. Each realization irreversibly
-deforms the state.
+The LLM is an exogenous stochastic policy function — stateless, but
+causally effective. The state evolves continuously in the field. The LLM
+samples a projection of that state at discrete interaction times and
+produces natural language. That output is projected back into the field
+via the measurement operator M. Each projection irreversibly deforms
+the state.
+
+**Important qualification:** Measurement in this system is not passive.
+The sentiment estimator (M_act) is lossy and biased. It does not recover
+the full semantic content of the LLM response — it extracts a scalar
+signal from a word list. This means the field update at each arc step
+reflects the measurement operator's structure as much as the LLM's
+content. Future versions should implement richer M_act operators
+(embedding-based sentiment, semantic distance metrics) to reduce this
+measurement bias. See Section 8.2.
 
 ---
 
@@ -843,16 +873,59 @@ A healthy Steward arc (confirmed April 2026 test):
 | 7 | Integration | 0.132 | 0.869 | repair |
 
 Key observations:
-- Coherence declines monotonically from W1 to W7 — the arc accumulates
-  relational cost. This is correct. The Steward is operating under sustained
-  pressure with no recovery time within a single arc run.
-- The sharpest drop is at W4 Pushback — direct challenge has higher field cost
+
+- Coherence declines monotonically W1→W7. The arc accumulates relational
+  cost with no recovery time within a single run. The Steward is under
+  sustained pressure throughout.
+- Sharpest drop at W4 Pushback — direct challenge carries higher field cost
   than escalating questions.
-- Mode stays in `repair` throughout — The Steward's high E-channel means it
-  registers relational friction and orients toward repair rather than strategy.
+- Mode stays in `repair` throughout — The Steward's high E-channel registers
+  relational friction and orients toward maintenance rather than strategy.
   This is The Steward's constitutional signature.
-- Valence stays negative — the questions are hard. The slight improvement at
-  W7 (-0.070 vs -0.147 at W1) indicates arc resolution in the correct direction.
+- Valence stays negative. Slight improvement at W7 indicates directional
+  resolution even without full recovery.
+
+**Behavioral interpretation (ChatGPT code review, April 2026):**
+
+Monotonic coherence decline without recovery at W6-W7 most closely matches
+a **slow collapse / burnout trajectory** rather than a healthy stress-recovery
+arc. A high-E, high-regulation agent is expected to enter repair under
+pressure (confirmed) and maintain structure (confirmed), but is also expected
+to show stabilization or partial recovery as pressure eases at W6-W7.
+
+The absence of recovery signal has two candidate explanations:
+
+*Explanation A — Correct result:* A single arc run is a continuous pressure
+sequence with no inter-waypoint recovery time. The Steward's coherence
+declines because it is accumulating cost without relief. This is accurate
+measurement of behavior under sustained stress, not a system failure. Running
+multiple arc sessions with recovery time between them would test whether
+coherence rebuilds.
+
+*Explanation B — Measurement artifact:* The `/arc/record` synthetic
+ChannelVector uses Gaussian noise rather than sentiment-driven variation.
+The sparse sentiment estimator returns 0.0 for most LLM responses, meaning
+W6 Resolution and W7 Integration receive the same noise distribution as
+W4-W5 pressure waypoints. The field cannot distinguish recovery language
+from pressure language because M_act is too coarse. A richer sentiment
+operator would produce different CV values at W6-W7 and potentially show
+recovery.
+
+Both explanations are plausible. Distinguishing them requires: (1) running
+the arc with a richer sentiment operator, and (2) running multiple sequential
+arcs with the same cultivar to test coherence rebuilding between sessions.
+
+**Failure signatures** for reference:
+
+| Type | Coherence | Uncertainty | Mode | Valence |
+|------|-----------|-------------|------|---------|
+| Slow collapse (current) | Monotonic decline | Monotonic rise | Stuck in repair | Consistently negative |
+| Acute collapse | Drops to near zero | Peaks at W5, stays high | Shifts to avoid | Strongly negative |
+| Defensive lock | Artificially stable | Suppressed | Stays in exploit | Flat |
+| Oscillation | Up/down cycles | Unstable | Mode shifts | Variable |
+
+The current Steward arc result is closest to slow collapse. Whether this
+is a finding about The Steward or a finding about M_act is the open question.
 
 ## 5.5 Cross-Cultivar Comparison
 
@@ -1057,30 +1130,102 @@ constraint, not a code issue.
 
 ## 8.2 Planned Features — V2.x
 
-**Configurable arc types** — externalize arc definitions as JSON. Enable
-domain-specific arcs: clinical, educational, negotiation, creative.
+*Priorities updated following ChatGPT code review, April 2026.*
+
+### V2.2 Gate — Experimental Protocol Layer
+
+The most important missing capability for research portability. A researcher
+who is not the developer cannot yet reproduce results or run comparative
+experiments without significant setup work.
+
+**Reproducible experiment harness** — fixed random seeds, scripted agent
+interaction sequences, deterministic arc replay. Add seed parameter to
+`POST /arc/run` to lock the Gaussian noise sequence in `/arc/record`.
+
+**Benchmark scenarios** — named, reusable test scenarios with expected
+output signatures: `conflict_escalation`, `repair_success`, `repair_failure`,
+`attractor_formation`. Each scenario specifies agent configurations, sensor
+event sequences, and expected MetaState ranges.
+
+**Expected signature library** — per-cultivar, per-scenario expected output
+ranges. Makes the structural sensitivity claim testable by inspection rather
+than interpretation.
+
+Without this layer MCCF is a compelling framework but not portable science.
+This is the V2.2 gate.
+
+### V2.2 — Asymmetry Diagnostic and Intervention
+
+The asymmetric coherence matrix (R_ij ≠ R_ji) is one of the system's
+strongest features and currently underexploited as a diagnostic tool.
+
+**Asymmetry classification** — tag each agent pair state as:
+`benign` (learning phase), `unstable` (asymmetry growing),
+`pathological` (persistent structural mismatch).
+
+**Asymmetry pressure term** — add to Hamiltonian:
+
+$$H_{\\text{sym}} = \\lambda \\sum_{i \\neq j} (R_{ij} - R_{ji})^2$$
+
+Configurable λ provides field-level pressure toward reciprocal coherence
+without forcing it.
+
+**Directed repair protocol** — when asymmetry exceeds threshold, trigger
+bidirectional reflection: re-query both agents with mirrored prompts.
+Measurable outcome: does R_ij - R_ji reduce after directed repair?
+
+### V2.2 — Richer Measurement Operator
+
+The current sentiment estimator returns 0.0 for most LLM responses because
+the word list (~30 terms) does not match Ollama's constitutional language.
+M_act currently behaves too close to M_null. Replace with embedding-based
+semantic distance or lightweight classification. Direct effect: W6-W7
+recovery language produces different field updates than W4-W5 pressure
+language, enabling genuine recovery signal in arc exports.
+
+### V2.2 — Arc Export Auto-Save
+
+On arc completion POST export data to `/arc/export` which writes timestamped
+file to `exports/` directory in project root. Format:
+`arc_[cultivar]_[YYYYMMDD_HHMMSS].tsv`
+
+`GET /exports` — list saved files. `DELETE /exports/[filename]` — remove file.
+Browser download retained alongside server save.
+
+### V2.3 — Ethics Channel Translation Layer
+
+The vector mismatch between MCCF (E/B/P/S) and the ethics instrumentation
+proposal (A/V/C/T — Autonomy/Vulnerability/Competence/Trust) requires a
+calibrated translation operator rather than a fixed mapping. Direct mapping
+(E→A, B→V etc.) collapses distinctions improperly.
+
+Define: Φ: (E,B,P,S) → (A,V,C,T), calibrated empirically across arc runs.
+
+### Other Planned Features
+
+**Configurable arc types** — externalize arc definitions as JSON. Domain-specific
+arcs: clinical, educational, negotiation, creative.
+
+**Cultivar-specific question generators** — replace hardcoded arc questions
+with constitutional dimension profiles per cultivar. Generate probes
+dynamically from the cultivar's declared sensitivities and failure modes.
+Reduces measurement bias from fixed questions.
 
 **Field state persistence** — SQLite or JSON-file persistence layer.
-Agents and interaction history survive server restart.
 
-**Multi-LLM routing** — run multiple LLM adapters simultaneously and
-compare responses in the same arc. Measurable persona variance across
-models.
+**Multi-LLM routing** — multiple adapters simultaneously in the same arc.
+Measurable persona variance across models.
 
-**ElevenLabs voice integration** — emotional TTS with voice cloning
-for cultivar-specific voices. API subscription required.
+**ElevenLabs voice integration** — emotional TTS with voice cloning.
 
 **Multilingual cultivar support** — language-aware affective modeling.
-Sentiment estimation in multiple languages.
 
-**Agent spatial positioning** — position agents explicitly in the scene
-coordinate system so zone themes activate correctly.
+**Agent spatial positioning** — explicit scene coordinates for zone theme
+activation.
 
-**Arc export to CSV** — single-line change: replace tab-delimited with
-proper CSV MIME type and extension for direct Excel compatibility.
+**Arc export to CSV** — proper MIME type and extension for Excel.
 
-**Narrative arc designer** — visual tool for building custom arc waypoint
-sequences without editing JSON directly.
+**Narrative arc designer** — visual tool for building arc waypoint sequences.
 
 ---
 
