@@ -785,8 +785,16 @@ constant 1/γ = 50 time units**. Trust building is intentionally slow.
 No oscillations. The fixed point is globally asymptotically stable for
 any fixed d.
 
-**V2.1 bug:** T_ij not clipped to [0,1]. V2.2 fix:
-`T_ij = max(0.0, min(1.0, T_ij))` after each update.
+**Implementation note:** The raw ODE fixed point T*=2.5 would exceed [0,1],
+but the implementation already clips via class constants T_MIN=0.05 and
+T_MAX=0.95 applied after every update step. The clip is confirmed working —
+1000 simulation steps with identical agents (worst case, d=0) converges to
+T=0.95 not T=2.5. No code change needed. The backlog item is closed.
+
+Grok's fixed point analysis correctly identifies the unclipped ODE behavior.
+The implementation guards against divergence. T_MIN=0.05 (agents never fully
+distrust) and T_MAX=0.95 (never fully certain) are design choices, not just
+safety bounds.
 
 ## 4.5 Boltzmann Selection
 
@@ -996,7 +1004,44 @@ These are hypotheses. Running all four cultivars through the same arc and
 comparing exports is the primary falsification test for Section 6 of the
 blog post structural sensitivity claim.
 
-## 5.6 Configurable Arcs (Planned)
+## 5.6 Genre Classification
+
+The constitutional arc trajectory can be classified as comedy, drama, or tragedy
+based on three observable metrics from the arc export. This formalization derives
+from the Feynman path integral framing (April 2026 design session) and the
+ChatGPT/Kate genre mapping:
+
+- **Comedy** = misalignment + low-cost resolution
+- **Drama** = misalignment + delayed resolution
+- **Tragedy** = misalignment + irreversible divergence
+
+Classification rules (planned V2.2 function `classify_arc_genre(export)`):
+
+| Genre | Coherence profile | W5 crossing | W6-W7 recovery delta |
+|-------|------------------|-------------|----------------------|
+| Comedy | Decline then recovery | Moderate (< 0.20 drop) | Positive (> +0.05) |
+| Drama | Decline, partial recovery | Significant (0.20–0.40) | Weakly positive (0–0.05) |
+| Tragedy | Monotonic decline | Large (> 0.40) | None or negative |
+
+The April 2026 Steward arc result (coherence 0.342 → 0.132, no W6-W7 recovery)
+classifies as **tragedy** by these rules — large W5 crossing, no recovery delta.
+As discussed in Section 5.4, this may reflect the sparse M_act measurement
+operator rather than a true irreversibility finding. The semantic decomposition
+update (V2.2) should allow W6-W7 recovery language to produce a distinct positive
+signal, potentially reclassifying the arc as drama.
+
+The genre classifier requires no new field state — all inputs are present in the
+existing arc export. It is a single function addition to the `/arc/record`
+response.
+
+**Connection to damping regimes:** Genre maps to the Hamiltonian damping regime
+of the system. Over-damped systems produce tragedy-like signatures (flat decline,
+no recovery oscillation). Under-damped systems produce drama (oscillating
+coherence). Critically damped systems produce comedy (fast adaptation, recovery
+at W6-W7). Tuning the arc damping parameters is therefore implicit genre design.
+See MATHEMATICAL_THEORY.md Section 11 for the formal treatment.
+
+## 5.7 Configurable Arcs (Planned)
 
 V2.1 has one hardcoded arc (the constitutional arc). Future versions will
 externalize the arc definition as a JSON document:

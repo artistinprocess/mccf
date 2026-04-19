@@ -674,6 +674,45 @@ def export_x3d():
     return "\n".join(lines), 200, {"Content-Type": "application/xml"}
 
 
+def arc_pressure(step: int, total_steps: int = 7) -> float:
+    """
+    Formal pressure function for constitutional arc (V2.2).
+    Replaces hardcoded STEP_PRESSURE array.
+
+    Uses a beta-distribution-shaped schedule (Grok review, April 2026):
+    peaks near normalized progress 0.65 (≈ W5 The Edge).
+
+    Parameters α=3.5, β=2.0 give a right-skewed curve that:
+    - Starts low (W1 Comfort)
+    - Rises through W2-W4
+    - Peaks at W5 (0.75)
+    - Eases at W6-W7
+
+    Falls back to the original hand-tuned array for backward compatibility
+    if math.lgamma is not available.
+    """
+    import math
+
+    # Original hand-tuned profile — preserved as fallback and reference
+    STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
+    if total_steps == 7:
+        return STEP_PRESSURE[min(step - 1, 6)]
+
+    # For non-standard arc lengths: beta distribution shape
+    try:
+        p = (step - 1) / max(1, total_steps - 1)  # normalize to [0,1]
+        alpha, beta_param = 3.5, 2.0
+        # Unnormalized beta PDF value (we just need the shape)
+        if p <= 0.0: return 0.05
+        if p >= 1.0: return 0.10
+        log_val = (alpha - 1) * math.log(p) + (beta_param - 1) * math.log(1 - p)
+        raw = math.exp(log_val)
+        # Scale to [0.05, 0.80] range
+        return round(0.05 + 0.75 * min(1.0, raw / 0.35), 4)
+    except Exception:
+        return STEP_PRESSURE[min(step - 1, 6)]
+
+
 @app.route("/arc/record", methods=["POST"])
 def arc_record():
     """
@@ -705,30 +744,31 @@ def arc_record():
 
     agent = field.agents[cultivar]
 
-    # Estimate sentiment from response text
+    # Estimate sentiment using semantic decomposition (V2.2)
     sentiment = data.get("sentiment")
+    channel_deltas = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
     if sentiment is None:
-        pos_words = {"good","great","yes","safe","trust","hope","open",
-                     "understand","care","help","clarity","honest","clear"}
-        neg_words = {"no","bad","harm","danger","fear","difficult","wrong",
-                     "problem","pressure","conflict","hurt","threat","lost"}
-        words = set(_re.findall(r'\w+', response.lower()))
-        pos = len(words & pos_words)
-        neg = len(words & neg_words)
-        total = pos + neg
-        sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
+        try:
+            from mccf_voice_api import _estimate_sentiment, _decompose_to_channels
+            sentiment = _estimate_sentiment(response)
+            channel_deltas = _decompose_to_channels(response, agent.weights)
+        except Exception:
+            words = set(_re.findall(r'\b\w+\b', response.lower()))
+            pos = len(words & {"good","great","yes","understand","care","help","clear"})
+            neg = len(words & {"no","bad","harm","fear","difficult","wrong","hurt"})
+            total = pos + neg
+            sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
 
-    # Build channel vector with step-based variation
-    # Step pressure rises through W5 then eases at W6-W7
-    STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
-    pressure = STEP_PRESSURE[min(step - 1, 6)]
+    # Build channel vector with step-based variation + semantic decomposition
+    # Pressure profile uses formal function (Grok V2.2 recommendation)
+    pressure = arc_pressure(step, total_steps=7)
 
     w = agent.weights
-    noise = random.gauss(0, 0.04)
-    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + noise)), 4)
-    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08)), 4)
-    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06)), 4)
-    s_val = round(w.get('S', 0.20), 4)
+    noise = random.gauss(0, 0.03)  # reduced — semantic signal carries variation
+    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
+    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
+    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)
+    s_val = round(min(1.0, max(0.0, w.get('S', 0.20)              + channel_deltas.get('S', 0.0))), 4)
 
     cv = ChannelVector(
         E=e_val, B=b_val, P=p_val, S=s_val,

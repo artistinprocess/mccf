@@ -58,6 +58,10 @@
   <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
   <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
   <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
+  <div style="color:#f0c060;font-size:11px;margin-top:4px;border-top:1px solid #1c2238;padding-top:4px;" id="sai-test">SAI test: not run</div>
+  <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
+    padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
+    color:#f0c060;cursor:pointer;">▶ Test SAI</button>
 </div>
 
 <div id="controls">
@@ -277,6 +281,69 @@ function applyLighting(scalars) {
   } catch(e) {}
 }
 
+
+// ================================================================
+// SAI Diagnostic Test — X3D. prefix investigation (John Carlson)
+// Tests whether X3D.SFFloat constructor enables visual field assignment
+// in X_ITE external SAI context.
+// ================================================================
+function runSAITest() {
+  const out = document.getElementById('sai-test');
+  if (!out) return;
+  out.textContent = 'SAI test: running...';
+  out.style.color = '#f0c060';
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) { out.textContent = 'SAI test: no scene'; return; }
+    const key = scene.getNamedNode('KeyLight');
+    if (!key) { out.textContent = 'SAI test: KeyLight not found'; return; }
+
+    const startVal = key.intensity;
+    const results = [];
+
+    // Test 1: plain number (current approach)
+    try { key.intensity = 0.1; results.push(`plain=>${key.intensity}`); } catch(e) { results.push(`plain=>err`); }
+
+    // Test 2: X3D.SFFloat constructor
+    try {
+      if (typeof X3D !== 'undefined' && X3D.SFFloat) {
+        key.intensity = new X3D.SFFloat(0.95);
+        results.push(`X3D.SFFloat=>${key.intensity}`);
+      } else {
+        results.push('X3D.SFFloat=unavailable');
+      }
+    } catch(e) { results.push('X3D.SFFloat=>err:'+e.message.slice(0,20)); }
+
+    // Test 3: set_intensity (inputOnly naming)
+    try {
+      key.set_intensity = 0.5;
+      results.push(`set_intensity=>${key.intensity}`);
+    } catch(e) { results.push('set_intensity=>err'); }
+
+    // Restore
+    try { key.intensity = startVal; } catch(e) {}
+
+    const report = results.join(' | ');
+    const anyChanged = results.some(r => {
+      const val = parseFloat(r.split('=>')[1]);
+      return !isNaN(val) && Math.abs(val - startVal) > 0.01;
+    });
+
+    if (anyChanged) {
+      out.style.color = '#4af0a8';
+      out.textContent = '✓ SAI assignment works: ' + report;
+      window.SAI_ENABLED = true;
+      console.log('MCCF: SAI confirmed working —', report);
+    } else {
+      out.style.color = '#f06060';
+      out.textContent = '✗ No assignment changed value: ' + report;
+      console.log('MCCF: SAI still broken —', report);
+    }
+  } catch(e) {
+    out.style.color = '#f06060';
+    out.textContent = 'SAI test ERROR: ' + e.message;
+  }
+}
 
 // --- Cross-window event listeners (from mccf_voice.html) ---
 window.addEventListener('mccf_x3d_projection', (e) => { if (e.detail) applyHotHouseData(e.detail); });
