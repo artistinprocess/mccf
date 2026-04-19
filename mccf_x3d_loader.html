@@ -228,57 +228,159 @@ function applyFieldData(d) {
 }
 
 function updateChannelNode(scene, def, matrix, from, to) {
-  // SAI DISABLED — V2.1 KNOWN LIMITATION
+  // Re-enabled V2.1.3 — SAI confirmed working (X3D.SFFloat test passed)
+  try {
+    if (!matrix) return;
+    const coh = (matrix[from] && matrix[from][to]) ? matrix[from][to] : 0.3;
+    // Coherence → line opacity/transparency via channel material
+    const matDef = def.replace('Ch_', 'ChMat_');
+    const mat = scene.getNamedNode(matDef);
+    if (mat) {
+      mat.transparency = Math.max(0.0, Math.min(0.9, 1.0 - coh));
+    }
+  } catch(e) {}
 }
 
 function updateFieldMaterials(scene, coh, echo, tension) {
-  // SAI DISABLED — V2.1 KNOWN LIMITATION (see applyHotHouseData note)
+  // RE-ENABLED V2.1.3 — text string assignments confirmed working
   try {
+    // Text readouts (array assignment — confirmed working)
     const ct = scene.getNamedNode('CoherenceReadout');
-    if (ct) ct.string=[`coh: ${coh.toFixed(2)}`];
+    if (ct) ct.string = [`coh: ${coh.toFixed(2)}`];
     const tt = scene.getNamedNode('TensionReadout');
-    if (tt) tt.string=[`tension: ${tension.toFixed(2)}`];
+    if (tt) tt.string = [`tension: ${tension.toFixed(2)}`];
+
+    // S0 Field Origin marker — pulse intensity with tension
+    const s0 = scene.getNamedNode('S0Light');
+    if (s0) s0.intensity = Math.max(0.3, Math.min(1.2, 0.5 + tension * 0.7));
+
   } catch(e) {}
 }
 
 // --- Apply /hothouse/x3d to MCCFAgent nodes ---
 function applyHotHouseData(data) {
-  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
-  // X_ITE 11.6.6: SAI property assignments on Material nodes (emissiveColor,
-  // transparency) are accepted without error but have no visual effect.
-  // Confirmed: scene is bright before polling starts, dims after SAI fires.
-  // SAI overwrites valid baked-in scene values with broken state.
-  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
-  // HUD tracking still active — only visual node assignment is disabled.
+  // RE-ENABLED V2.1.3 — SAI confirmed working (Test: plain=>0.1 X3D.SFFloat=>0.95)
+  // Plain number assignment works for intensity. Arrays work for color.
   if (!data || !Object.keys(data).length) return;
-  const agents = {
-    'The Steward': 'Steward', 'The Archivist': 'Archivist', 'The Witness': 'Witness'
+
+  const agentMap = {
+    'The Steward': 'Steward',
+    'The Archivist': 'Archivist',
+    'The Witness': 'Witness'
   };
+
   let tracked = 0;
-  for (const agentName of Object.keys(agents)) {
-    if (data[agentName]) tracked++;
+  let applied = 0;
+
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) return;
+
+    for (const [agentName, suffix] of Object.entries(agentMap)) {
+      const d = data[agentName];
+      if (!d) continue;
+      tracked++;
+
+      // Body material: emissiveColor driven by E-channel (emotional warmth)
+      const bodyMat = scene.getNamedNode(`BodyMat_${suffix}`);
+      if (bodyMat) {
+        const e = d.morphWeight_emotion || 0.4;
+        const b = d.animationSpeed || 0.3;
+        // E channel → warm tint; B channel → cool tint
+        bodyMat.emissiveColor = [e * 0.3, b * 0.1, (1 - e) * 0.15];
+        applied++;
+      }
+
+      // Gaze material: transparency driven by gazeDirectness
+      const gazeMat = scene.getNamedNode(`GazeMat_${suffix}`);
+      if (gazeMat) {
+        const gaze = d.gazeDirectness || 0.5;
+        gazeMat.transparency = Math.max(0.1, Math.min(0.8, 1.0 - gaze));
+        applied++;
+      }
+
+      // Ring material: transparency driven by interactionOpenness
+      const ringMat = scene.getNamedNode(`RingMat_${suffix}`);
+      if (ringMat) {
+        const open = d.interactionOpenness || 0.7;
+        ringMat.transparency = Math.max(0.2, Math.min(0.75, 0.8 - open * 0.4));
+        applied++;
+      }
+
+      // Honor ring: emissiveColor driven by gestureConfidence
+      const honorMat = scene.getNamedNode(`HonorMat_${suffix}`);
+      if (honorMat) {
+        const conf = d.gestureConfidence || 0.8;
+        honorMat.emissiveColor = [0.9 * conf, 0.75 * conf, 0.1 * conf];
+        applied++;
+      }
+    }
+  } catch(e) {
+    console.warn('applyHotHouseData error:', e.message);
   }
+
   const diagEl = document.getElementById('x3d-diag');
   if (diagEl) diagEl.textContent =
-    `hothouse: ${tracked}/${Object.keys(agents).length} tracked (SAI visual update pending X_ITE fix)`;
+    `hothouse: ${tracked}/${Object.keys(agentMap).length} agents | ${applied} nodes updated`;
 }
 
 function applyLighting(scalars) {
-  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
-  // X_ITE 11.6.6: light node intensity and color SAI assignments accepted
-  // without error but have no visual effect in Firefox or Edge.
-  // Scene file contains correct light values; local PointLights provide fill.
-  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
+  // RE-ENABLED V2.1.3 — SAI confirmed working (plain number + array assignments work)
   if (!scalars) return;
   try {
     const scene = canvas.browser.currentScene;
     if (!scene) return;
-    const keyFound = !!scene.getNamedNode('KeyLight');
-    const ambFound = !!scene.getNamedNode('AmbientLight');
+
+    let applied = 0;
+
+    // KeyLight — warm/cool driven by kelvin_normalized
+    const key = scene.getNamedNode('KeyLight');
+    if (key) {
+      key.intensity = Math.max(0.3, Math.min(1.8, scalars.key_intensity || 0.9));
+      if (scalars.key_r !== undefined) {
+        key.color = [scalars.key_r, scalars.key_g, scalars.key_b];
+      }
+      applied++;
+    }
+
+    // AmbientLight — cool fill
+    const amb = scene.getNamedNode('AmbientLight');
+    if (amb) {
+      amb.intensity = Math.max(0.2, Math.min(1.2, scalars.ambient_intensity || 0.5));
+      if (scalars.ambient_r !== undefined) {
+        amb.color = [scalars.ambient_r, scalars.ambient_g, scalars.ambient_b];
+      }
+      applied++;
+    }
+
+    // FillLight — coherence-driven
+    const fill = scene.getNamedNode('FillLight');
+    if (fill) {
+      fill.intensity = Math.max(0.3, Math.min(1.5, scalars.fill_intensity || 0.6));
+      if (scalars.fill_r !== undefined) {
+        fill.color = [scalars.fill_r, scalars.fill_g, scalars.fill_b];
+      }
+      applied++;
+    }
+
+    // RimLight — emotional arc accent
+    const rim = scene.getNamedNode('RimLight');
+    if (rim) {
+      rim.intensity = Math.max(0.1, Math.min(1.0, scalars.rim_intensity || 0.4));
+      if (scalars.rim_r !== undefined) {
+        rim.color = [scalars.rim_r, scalars.rim_g, scalars.rim_b];
+      }
+      applied++;
+    }
+
     const lDiag = document.getElementById('light-diag');
     if (lDiag) lDiag.textContent =
-      `lighting: key=${keyFound} amb=${ambFound} (SAI visual update pending X_ITE fix)`;
-  } catch(e) {}
+      `lighting: ${applied} lights updated | kelvin=${((scalars.kelvin_normalized||0.5)*3000+3000).toFixed(0)}K`;
+
+  } catch(e) {
+    const lDiag = document.getElementById('light-diag');
+    if (lDiag) lDiag.textContent = `lighting error: ${e.message}`;
+  }
 }
 
 
