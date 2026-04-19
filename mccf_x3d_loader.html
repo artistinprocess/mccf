@@ -171,6 +171,34 @@ async function pollHotHouse() {
   setTimeout(pollHotHouse, HOTHOUSE_MS);
 }
 
+async function pollLighting() {
+  if (!pollingActive) return;
+  try {
+    // First ensure ambient/sync has been called so lighting state exists
+    const syncR = await fetch(API + '/ambient/sync', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({zone_hint:'neutral'}),
+      signal: AbortSignal.timeout(3000)
+    });
+    if (syncR.ok) {
+      // Now fetch the computed scalars
+      const r = await fetch(API + '/lighting/scalars', {
+        signal: AbortSignal.timeout(2000)
+      });
+      if (r.ok) {
+        const scalars = await r.json();
+        applyLighting(scalars);
+      }
+    }
+  } catch(e) {
+    const lDiag = document.getElementById('light-diag');
+    if (lDiag && lDiag.textContent.includes('waiting'))
+      lDiag.textContent = 'lighting: sync pending...';
+  }
+  setTimeout(pollLighting, LIGHTING_MS);
+}
+
 function applyFieldChannelsToAgents() {
   // Fallback: map E/B/P/S channel weights to basic visual params
   // so agents are visible even without HotHouse running
@@ -285,9 +313,14 @@ function applyHotHouseData(data) {
       const bodyMat = scene.getNamedNode(`BodyMat_${suffix}`);
       if (bodyMat) {
         const e = d.morphWeight_emotion || 0.4;
+        const e = d.morphWeight_emotion || 0.4;
         const b = d.animationSpeed || 0.3;
-        // E channel → warm tint; B channel → cool tint
-        bodyMat.emissiveColor = [e * 0.3, b * 0.1, (1 - e) * 0.15];
+        const p = d.gazeDirectness || 0.25;
+        // E→warm, B→cool, P→green accent. Floor 0.08 prevents black.
+        const rr = Math.max(0.08, e * 0.55 + p * 0.10);
+        const gg = Math.max(0.06, b * 0.20 + p * 0.25);
+        const bb = Math.max(0.10, (1 - e) * 0.40 + b * 0.20);
+        bodyMat.emissiveColor = [rr, gg, bb];
         applied++;
       }
 
