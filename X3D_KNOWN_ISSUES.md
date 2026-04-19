@@ -1,4 +1,29 @@
-# X3D Scene — Known Issues (V2.1)
+# X3D Scene — Known Issues (V2.1 → V2.1.3)
+
+## ✓ RESOLVED V2.1.3 — SAI Confirmed Working (April 2026)
+
+SAI diagnostic test confirmed all three assignment methods work in X_ITE 11.6.6
+external SAI context (HTML page with `<x3d-canvas>`):
+
+```
+plain number → intensity = 0.1  ✓
+X3D.SFFloat  → intensity = 0.95 ✓
+set_intensity → intensity = 0.5  ✓
+```
+
+All SAI visual assignments re-enabled in `mccf_x3d_loader.html` V2.1.3:
+- `applyLighting()` — 4 lights with intensity + color
+- `applyHotHouseData()` — BodyMat, GazeMat, RingMat, HonorMat per agent
+- `updateFieldMaterials()` — CoherenceReadout, TensionReadout, S0Light
+- `updateChannelNode()` — channel line transparency from coherence matrix
+
+The issue with SAI assignments having no visual effect (V2.1) was likely caused
+by missing `X3D.` namespace prefix on type constructors rather than a fundamental
+X_ITE bug. John Carlson's (X3DJSONLD) guidance confirmed this. Issues below are
+retained for reference and documentation completeness.
+
+---
+
 
 ## X_ITE 11.6.6 SAI Property Assignment Has No Visual Effect
 
