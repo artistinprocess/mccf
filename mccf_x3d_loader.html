@@ -58,6 +58,10 @@
   <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
   <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
   <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
+  <div style="color:#f0c060;font-size:11px;margin-top:4px;border-top:1px solid #1c2238;padding-top:4px;" id="sai-test">SAI test: not run</div>
+  <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
+    padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
+    color:#f0c060;cursor:pointer;">▶ Test SAI</button>
 </div>
 
 <div id="controls">
@@ -224,31 +228,11 @@ function applyFieldData(d) {
 }
 
 function updateChannelNode(scene, def, matrix, from, to) {
-  const node = scene.getNamedNode(def);
-  if (!node) return;
-  const coh = (matrix[from]||{})[to] || 0.0;
-  node.coherence = coh;
+  // SAI DISABLED — V2.1 KNOWN LIMITATION
 }
 
 function updateFieldMaterials(scene, coh, echo, tension) {
-  try {
-    const im = scene.getNamedNode('InnerRingMat');
-    if (im) { const b=0.3+coh*0.5; im.emissiveColor=[b*0.5,b*0.7,b]; im.transparency=Math.max(0.15,0.6-coh*0.4); }
-  } catch(e) {}
-  try {
-    const tm = scene.getNamedNode('TensionDiscMat');
-    if (tm) {
-      if      (tension<0.3) tm.emissiveColor=[0.3,0.5,0.8];
-      else if (tension<0.6) tm.emissiveColor=[0.3,0.7,0.7];
-      else if (tension<0.8) tm.emissiveColor=[0.8,0.5,0.2];
-      else                  tm.emissiveColor=[0.9,0.2,0.2];
-      tm.transparency=0.65-tension*0.3;
-    }
-  } catch(e) {}
-  try {
-    const om = scene.getNamedNode('OuterRingMat');
-    if (om) om.transparency=Math.max(0.2,1.0-echo*0.75);
-  } catch(e) {}
+  // SAI DISABLED — V2.1 KNOWN LIMITATION (see applyHotHouseData note)
   try {
     const ct = scene.getNamedNode('CoherenceReadout');
     if (ct) ct.string=[`coh: ${coh.toFixed(2)}`];
@@ -259,132 +243,105 @@ function updateFieldMaterials(scene, coh, echo, tension) {
 
 // --- Apply /hothouse/x3d to MCCFAgent nodes ---
 function applyHotHouseData(data) {
-  // Drive avatar appearance DIRECTLY via named Material/Transform DEF nodes.
-  // Bypasses PROTO field binding entirely — X_ITE IS bindings are unreliable
-  // for SFFloat fields inside ProtoBody. Direct SAI assignment is reliable.
+  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
+  // X_ITE 11.6.6: SAI property assignments on Material nodes (emissiveColor,
+  // transparency) are accepted without error but have no visual effect.
+  // Confirmed: scene is bright before polling starts, dims after SAI fires.
+  // SAI overwrites valid baked-in scene values with broken state.
+  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
+  // HUD tracking still active — only visual node assignment is disabled.
   if (!data || !Object.keys(data).length) return;
-  let applied = 0;
-  try {
-    const scene = canvas.browser.currentScene;
-    if (!scene) { console.warn('applyHotHouseData: no scene'); return; }
-
-    const agents = {
-      'The Steward':   'Steward',
-      'The Archivist': 'Archivist',
-      'The Witness':   'Witness'
-    };
-
-    for (const [agentName, safeName] of Object.entries(agents)) {
-      const p = data[agentName]; if (!p) continue;
-      try {
-        // Body glow — morphWeight_emotion (E-channel) → emissiveColor
-        // Remap [0.2-0.8] range to [0.0-1.0] for full visual range
-        const bodyMat = scene.getNamedNode('BodyMat_' + safeName);
-        if (bodyMat) {
-          const e = p.morphWeight_emotion || 0.3;
-          const eN = Math.max(0, Math.min(1, (e - 0.2) / 0.6)); // normalize
-          // Low E: cool blue. High E: warm amber glow.
-          bodyMat.emissiveColor = [eN * 0.9, eN * 0.55, eN * 0.05];
-        }
-
-        // Ring radius — socialProximity (S-channel) → ring scale
-        const ringTrans = scene.getNamedNode('Avatar_' + safeName);
-        // Note: ring scale via Transform not directly settable on child easily.
-        // For now drive ring opacity via RingMat transparency
-        const ringMat = scene.getNamedNode('RingMat_' + safeName);
-        if (ringMat) {
-          const s = p.socialProximity || 0.2;
-          // High S = nearly opaque ring, low S = nearly invisible
-          ringMat.transparency = Math.max(0.05, 0.95 - s * 1.2);
-        }
-
-        // Honor dot brightness — gestureConfidence → emissive intensity
-        const honorMat = scene.getNamedNode('HonorMat_' + safeName);
-        if (honorMat) {
-          const g = p.gestureConfidence || 0.5;
-          // High confidence = bright gold, low = dim and transparent
-          honorMat.emissiveColor = [g, g * 0.82, g * 0.1];
-          honorMat.transparency = Math.max(0.0, 0.8 - g * 0.75);
-        }
-
-        // Gaze indicator — gazeDirectness (P-channel) → brightness
-        const gazeMat = scene.getNamedNode('GazeMat_' + safeName);
-        if (gazeMat) {
-          const g = p.gazeDirectness || 0.5;
-          gazeMat.emissiveColor = [0.6 * g, 0.85 * g, g];
-          gazeMat.transparency = Math.max(0.1, 0.7 - g * 0.5);
-        }
-
-        applied++;
-      } catch(fe) {
-        console.warn('applyHotHouseData node error on', safeName, fe.message);
-      }
-    }
-
-    const diagEl = document.getElementById('x3d-diag');
-    if (diagEl) diagEl.textContent = `hothouse: ${applied}/${Object.keys(agents).length} agents updated`;
-  } catch(e) { console.warn('applyHotHouseData:', e); }
-}
-
-// --- /lighting/scalars polling ---
-async function pollLighting() {
-  if (!pollingActive) return;
-  try {
-    const r = await fetch(API+'/lighting/scalars', {signal: AbortSignal.timeout(2000)});
-    const d = await r.json();
-    applyLighting(d);
-  } catch(e) {}
-  setTimeout(pollLighting, LIGHTING_MS);
+  const agents = {
+    'The Steward': 'Steward', 'The Archivist': 'Archivist', 'The Witness': 'Witness'
+  };
+  let tracked = 0;
+  for (const agentName of Object.keys(agents)) {
+    if (data[agentName]) tracked++;
+  }
+  const diagEl = document.getElementById('x3d-diag');
+  if (diagEl) diagEl.textContent =
+    `hothouse: ${tracked}/${Object.keys(agents).length} tracked (SAI visual update pending X_ITE fix)`;
 }
 
 function applyLighting(scalars) {
-  if (!scalars || !Object.keys(scalars).length) return;
+  // SAI ASSIGNMENT DISABLED — V2.1 KNOWN LIMITATION
+  // X_ITE 11.6.6: light node intensity and color SAI assignments accepted
+  // without error but have no visual effect in Firefox or Edge.
+  // Scene file contains correct light values; local PointLights provide fill.
+  // Fix pending from X_ITE maintainer (github.com/create3000/x_ite).
+  if (!scalars) return;
   try {
     const scene = canvas.browser.currentScene;
+    if (!scene) return;
+    const keyFound = !!scene.getNamedNode('KeyLight');
+    const ambFound = !!scene.getNamedNode('AmbientLight');
+    const lDiag = document.getElementById('light-diag');
+    if (lDiag) lDiag.textContent =
+      `lighting: key=${keyFound} amb=${ambFound} (SAI visual update pending X_ITE fix)`;
+  } catch(e) {}
+}
 
-    // KeyLight (DirectionalLight)
+
+// ================================================================
+// SAI Diagnostic Test — X3D. prefix investigation (John Carlson)
+// Tests whether X3D.SFFloat constructor enables visual field assignment
+// in X_ITE external SAI context.
+// ================================================================
+function runSAITest() {
+  const out = document.getElementById('sai-test');
+  if (!out) return;
+  out.textContent = 'SAI test: running...';
+  out.style.color = '#f0c060';
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) { out.textContent = 'SAI test: no scene'; return; }
     const key = scene.getNamedNode('KeyLight');
-    if (key) {
-      const ki = Math.max(0.90, scalars.key_intensity || 0.90);
-      try { key.intensity = ki; } catch(e) {}
-      try { if (scalars.key_r !== undefined) key.color = [scalars.key_r, scalars.key_g, scalars.key_b]; } catch(e) {}
-    }
+    if (!key) { out.textContent = 'SAI test: KeyLight not found'; return; }
 
-    // AmbientLight (DirectionalLight fill)
-    const amb = scene.getNamedNode('AmbientLight');
-    if (amb) {
-      if (scalars.ambient_r !== undefined)
-        amb.color = [scalars.ambient_r, scalars.ambient_g, scalars.ambient_b];
-      if (scalars.ambient_intensity !== undefined)
-        amb.intensity = Math.max(0.30, scalars.ambient_intensity);  // floor
-    }
+    const startVal = key.intensity;
+    const results = [];
 
-    // FillLight (PointLight)
-    const fill = scene.getNamedNode('FillLight');
-    if (fill) {
-      if (scalars.fill_r !== undefined)
-        fill.color = [scalars.fill_r, scalars.fill_g, scalars.fill_b];
-      if (scalars.fill_intensity !== undefined)
-        fill.intensity = Math.max(0.35, scalars.fill_intensity);  // floor
-    }
+    // Test 1: plain number (current approach)
+    try { key.intensity = 0.1; results.push(`plain=>${key.intensity}`); } catch(e) { results.push(`plain=>err`); }
 
-    // RimLight (PointLight)
-    const rim = scene.getNamedNode('RimLight');
-    if (rim) {
-      if (scalars.rim_r !== undefined)
-        rim.color = [scalars.rim_r, scalars.rim_g, scalars.rim_b];
-      if (scalars.rim_intensity !== undefined)
-        rim.intensity = scalars.rim_intensity;
+    // Test 2: X3D.SFFloat constructor
+    try {
+      if (typeof X3D !== 'undefined' && X3D.SFFloat) {
+        key.intensity = new X3D.SFFloat(0.95);
+        results.push(`X3D.SFFloat=>${key.intensity}`);
+      } else {
+        results.push('X3D.SFFloat=unavailable');
+      }
+    } catch(e) { results.push('X3D.SFFloat=>err:'+e.message.slice(0,20)); }
+
+    // Test 3: set_intensity (inputOnly naming)
+    try {
+      key.set_intensity = 0.5;
+      results.push(`set_intensity=>${key.intensity}`);
+    } catch(e) { results.push('set_intensity=>err'); }
+
+    // Restore
+    try { key.intensity = startVal; } catch(e) {}
+
+    const report = results.join(' | ');
+    const anyChanged = results.some(r => {
+      const val = parseFloat(r.split('=>')[1]);
+      return !isNaN(val) && Math.abs(val - startVal) > 0.01;
+    });
+
+    if (anyChanged) {
+      out.style.color = '#4af0a8';
+      out.textContent = '✓ SAI assignment works: ' + report;
+      window.SAI_ENABLED = true;
+      console.log('MCCF: SAI confirmed working —', report);
+    } else {
+      out.style.color = '#f06060';
+      out.textContent = '✗ No assignment changed value: ' + report;
+      console.log('MCCF: SAI still broken —', report);
     }
-    // Update HUD diagnostic
-    const lDiag = document.getElementById('light-diag');
-    const keyFound  = !!scene.getNamedNode('KeyLight');
-    const ambFound  = !!scene.getNamedNode('AmbientLight');
-    if (lDiag) lDiag.textContent = `lighting: key=${keyFound} amb=${ambFound}`;
   } catch(e) {
-    console.warn('applyLighting:', e);
-    const lDiag = document.getElementById('light-diag');
-    if (lDiag) lDiag.textContent = `lighting: ERROR ${e.message}`;
+    out.style.color = '#f06060';
+    out.textContent = 'SAI test ERROR: ' + e.message;
   }
 }
 
