@@ -312,31 +312,37 @@ function applyHotHouseData(data) {
       // Body material: emissiveColor driven by E-channel (emotional warmth)
       const bodyMat = scene.getNamedNode(`BodyMat_${suffix}`);
       if (bodyMat) {
-        const e = d.morphWeight_emotion || 0.4;
-        const e = d.morphWeight_emotion || 0.4;
-        const b = d.animationSpeed || 0.3;
-        const p = d.gazeDirectness || 0.25;
-        // E→warm, B→cool, P→green accent. Floor 0.08 prevents black.
-        const rr = Math.max(0.08, e * 0.55 + p * 0.10);
-        const gg = Math.max(0.06, b * 0.20 + p * 0.25);
-        const bb = Math.max(0.10, (1 - e) * 0.40 + b * 0.20);
-        bodyMat.emissiveColor = [rr, gg, bb];
+        // V2.1.9 — use X3D.SFColor typed constructor (required for X_ITE external SAI)
+        // Plain array assignments are silently ignored for SFColor fields.
+        // Confirmed working: X3D.SFColor produces visible color change.
+        const eRaw = d.morphWeight_emotion || 0.13;
+        const bRaw = d.animationSpeed || 0.09;
+        const pRaw = d.gazeDirectness || 0.07;
+        // Normalize HotHouse range [0.05-0.50] → visible emissive [0.25-0.85]
+        const e = Math.min(0.85, Math.max(0.25, (eRaw - 0.05) * 1.78 + 0.25));
+        const b = Math.min(0.85, Math.max(0.25, (bRaw - 0.05) * 1.78 + 0.25));
+        const p = Math.min(0.85, Math.max(0.25, (pRaw - 0.05) * 1.78 + 0.25));
+        // E→warm red/orange glow, B→cool blue glow, P→green accent
+        // These add visible color on top of baked-in diffuse identity colors
+        bodyMat.emissiveColor = new X3D.SFColor(e * 0.70, p * 0.25, b * 0.55);
         applied++;
       }
 
       // Gaze material: transparency driven by gazeDirectness
       const gazeMat = scene.getNamedNode(`GazeMat_${suffix}`);
       if (gazeMat) {
-        const gaze = d.gazeDirectness || 0.5;
-        gazeMat.transparency = Math.max(0.1, Math.min(0.8, 1.0 - gaze));
+        const gaze = d.gazeDirectness || 0.07;
+        // Normalize gaze [0.05-0.5] → transparency [0.2-0.7]
+        const gazeNorm = Math.min(0.85, Math.max(0.15, (gaze-0.05)*1.78+0.15));
+        gazeMat.transparency = new X3D.SFFloat(Math.max(0.2, Math.min(0.7, 1.0 - gazeNorm)));
         applied++;
       }
 
       // Ring material: transparency driven by interactionOpenness
       const ringMat = scene.getNamedNode(`RingMat_${suffix}`);
       if (ringMat) {
-        const open = d.interactionOpenness || 0.7;
-        ringMat.transparency = Math.max(0.2, Math.min(0.75, 0.8 - open * 0.4));
+        const open = d.interactionOpenness || 1.0;
+        ringMat.transparency = new X3D.SFFloat(Math.max(0.2, Math.min(0.75, 0.8 - open * 0.4)));
         applied++;
       }
 
@@ -344,7 +350,7 @@ function applyHotHouseData(data) {
       const honorMat = scene.getNamedNode(`HonorMat_${suffix}`);
       if (honorMat) {
         const conf = d.gestureConfidence || 0.8;
-        honorMat.emissiveColor = [0.9 * conf, 0.75 * conf, 0.1 * conf];
+        honorMat.emissiveColor = new X3D.SFColor(0.9 * conf, 0.75 * conf, 0.1 * conf);
         applied++;
       }
     }
@@ -358,62 +364,17 @@ function applyHotHouseData(data) {
 }
 
 function applyLighting(scalars) {
-  // RE-ENABLED V2.1.3 — SAI confirmed working (plain number + array assignments work)
+  // V2.1.7 — Light node SAI assignments disabled.
+  // ANY SAI write to DirectionalLight/PointLight nodes in X_ITE degrades
+  // the visual state regardless of value written. Baked-in scene values
+  // are correct and must not be touched via external SAI.
+  // TODO V2.2: implement Light Master Script Node inside mccf_scene.x3d
+  // so lighting is driven by internal X3D scripting, not external SAI.
+  // (Gemini code review recommendation, April 2026)
   if (!scalars) return;
-  try {
-    const scene = canvas.browser.currentScene;
-    if (!scene) return;
-
-    let applied = 0;
-
-    // KeyLight — warm/cool driven by kelvin_normalized
-    const key = scene.getNamedNode('KeyLight');
-    if (key) {
-      key.intensity = Math.max(0.3, Math.min(1.8, scalars.key_intensity || 0.9));
-      if (scalars.key_r !== undefined) {
-        key.color = [scalars.key_r, scalars.key_g, scalars.key_b];
-      }
-      applied++;
-    }
-
-    // AmbientLight — cool fill
-    const amb = scene.getNamedNode('AmbientLight');
-    if (amb) {
-      amb.intensity = Math.max(0.2, Math.min(1.2, scalars.ambient_intensity || 0.5));
-      if (scalars.ambient_r !== undefined) {
-        amb.color = [scalars.ambient_r, scalars.ambient_g, scalars.ambient_b];
-      }
-      applied++;
-    }
-
-    // FillLight — coherence-driven
-    const fill = scene.getNamedNode('FillLight');
-    if (fill) {
-      fill.intensity = Math.max(0.3, Math.min(1.5, scalars.fill_intensity || 0.6));
-      if (scalars.fill_r !== undefined) {
-        fill.color = [scalars.fill_r, scalars.fill_g, scalars.fill_b];
-      }
-      applied++;
-    }
-
-    // RimLight — emotional arc accent
-    const rim = scene.getNamedNode('RimLight');
-    if (rim) {
-      rim.intensity = Math.max(0.1, Math.min(1.0, scalars.rim_intensity || 0.4));
-      if (scalars.rim_r !== undefined) {
-        rim.color = [scalars.rim_r, scalars.rim_g, scalars.rim_b];
-      }
-      applied++;
-    }
-
-    const lDiag = document.getElementById('light-diag');
-    if (lDiag) lDiag.textContent =
-      `lighting: ${applied} lights updated | kelvin=${((scalars.kelvin_normalized||0.5)*3000+3000).toFixed(0)}K`;
-
-  } catch(e) {
-    const lDiag = document.getElementById('light-diag');
-    if (lDiag) lDiag.textContent = `lighting error: ${e.message}`;
-  }
+  const lDiag = document.getElementById('light-diag');
+  if (lDiag) lDiag.textContent =
+    `lighting: baked-in | kelvin=${((scalars.kelvin_normalized||0.5)*3000+3000).toFixed(0)}K (light SAI pending Script Node)`;
 }
 
 
