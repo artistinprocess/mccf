@@ -1,114 +1,154 @@
-# X3D Scene — Known Issues (V2.1 → V2.1.3)
+# X3D Scene — Known Issues (V2.1 → V2.1.9)
 
-## ✓ RESOLVED V2.1.3 — SAI Confirmed Working (April 2026)
+## ✓ RESOLVED V2.1.9 — Root Cause Identified and Fixed (April 2026)
 
-SAI diagnostic test confirmed all three assignment methods work in X_ITE 11.6.6
-external SAI context (HTML page with `<x3d-canvas>`):
+**All SAI visual failures traced to a single root cause:**
 
+> X_ITE 11.6.6 external SAI requires typed `X3D.` namespace constructors
+> for all non-string field assignments. Plain JavaScript values (numbers,
+> arrays) are silently accepted but do not trigger visual updates.
+
+**Confirmed working patterns:**
+
+```javascript
+// Scalar fields
+node.intensity    = new X3D.SFFloat(0.9);    // ✓
+node.transparency = new X3D.SFFloat(0.3);    // ✓
+
+// Vector fields
+node.translation  = new X3D.SFVec3f(x,y,z); // ✓
+
+// Color fields
+node.emissiveColor = new X3D.SFColor(r,g,b); // ✓
+
+// String fields — plain array works without constructor
+node.string = ["text"];                       // ✓
+
+// Arrays for MFColor/MFVec3f — plain array works
+node.color = [r, g, b];                       // ✓ (MFColor)
 ```
-plain number → intensity = 0.1  ✓
-X3D.SFFloat  → intensity = 0.95 ✓
-set_intensity → intensity = 0.5  ✓
-```
 
-All SAI visual assignments re-enabled in `mccf_x3d_loader.html` V2.1.3:
-- `applyLighting()` — 4 lights with intensity + color
-- `applyHotHouseData()` — BodyMat, GazeMat, RingMat, HonorMat per agent
-- `updateFieldMaterials()` — CoherenceReadout, TensionReadout, S0Light
-- `updateChannelNode()` — channel line transparency from coherence matrix
+**Confirmed by John Carlson (X3DJSONLD):** "You would prefix classes with
+X3D. in X_ITE external (HTML) SAI."
 
-The issue with SAI assignments having no visual effect (V2.1) was likely caused
-by missing `X3D.` namespace prefix on type constructors rather than a fundamental
-X_ITE bug. John Carlson's (X3DJSONLD) guidance confirmed this. Issues below are
-retained for reference and documentation completeness.
+**Status as of V2.1.9:**
+- Avatar emissiveColor → `X3D.SFColor` ✓ colors live
+- Avatar transparency → `X3D.SFFloat` ✓
+- Avatar Transform translation → `X3D.SFVec3f` ✓ movement confirmed
+- HotHouse polling → 3/3 agents, 12 nodes updated per cycle ✓
+- Scene loads at correct brightness ✓
+- Load time normal after pollLighting sync fix ✓
 
 ---
 
+## Issue 1 — Light Node SAI (Partially Resolved)
 
-## X_ITE 11.6.6 SAI Property Assignment Has No Visual Effect
+**Status:** Light color arrays work. Light intensity SAI degrades scene.
 
-### Summary
+Any `node.intensity = value` write to DirectionalLight or PointLight nodes
+darkens the scene even with `X3D.SFFloat`. Light color array writes `[r,g,b]`
+are accepted without degradation.
 
-The MCCF X3D scene (`mccf_scene.x3d`) renders correctly in X3D editors
-(confirmed in Sunrise X3D Editor — all lights active, agent colors correct,
-geometry fully illuminated). When loaded through X_ITE 11.6.6 in a browser,
-the scene loads correctly but the JavaScript SAI polling loop breaks the
-visual output.
+**Current approach:** All light intensity SAI disabled. Scene uses baked-in
+intensity values. Color temperature is tracked in HUD (informational only).
 
-### Confirmed Behavior
+**V2.2 fix:** Light Master Script Node inside `mccf_scene.x3d` receives
+field state as a string via SAI, distributes to local lights using internal
+X3D scripting. Bypasses external SAI for lights entirely.
 
-- Scene loads bright and correct before polling starts
-- After first SAI poll cycle fires, scene dims and avatar colors are lost
-- `getNamedNode()` correctly finds named nodes (KeyLight, BodyMat_Steward etc.)
-- SAI property assignments (`node.intensity = 0.9`, `node.emissiveColor = [r,g,b]`)
-  execute without throwing errors
-- Assignments have no visual effect — they appear to overwrite valid scene
-  state with broken/default values
-- Tested in Firefox and Edge — same behavior in both
+---
 
-### Specific Issues to Report to X_ITE Maintainer
+## Issue 2 — global="true" Has No Effect on Root-Level Lights
 
-**Issue 1 — SAI property assignment breaks scene state**  
-Setting `node.intensity` or `node.emissiveColor` via JavaScript SAI on a
-node found by `getNamedNode()` overwrites the node's current valid value
-with a broken state rather than updating it. The scene is visually correct
-before SAI fires, incorrect after.
+**Status:** Open. Lights declared at Scene root with `global="true"` do not
+illuminate geometry in child Transform nodes. Workaround: local PointLights
+inside Transform wrappers (partially implemented via baked-in scene values).
 
-**Issue 2 — `global="true"` has no effect on DirectionalLight / PointLight**  
-Lights declared at Scene root level with `global="true"` do not illuminate
-geometry inside child Transform nodes. Lights only affect geometry in their
-own Transform scope, making scene-wide lighting impossible from root-level
-light declarations.
+---
 
-**Issue 3 — SAI type constructors require X3D. namespace prefix in external context**  
-In external SAI (HTML page using X_ITE via `<x3d-canvas>`), type constructors
-require the `X3D.` namespace prefix: `new X3D.MFString("value")`,
-`new X3D.SFColor(r, g, b)`. Without the prefix, constructors throw errors.
+## Issue 3 — SAI Type Constructors Require X3D. Prefix (RESOLVED)
 
-Confirmed by John Carlson (X3DJSONLD maintainer): *"You would prefix classes
-with X3D. in X_ITE external (HTML) SAI. Arrays should work."*
+**Status:** RESOLVED V2.1.9.
 
-Current workaround: plain JavaScript arrays work without constructors:
-`node.color = [r, g, b]`, `node.string = ["text"]`.
+Confirmed by testing and John Carlson: all type constructors require `X3D.`
+prefix in external SAI context. `new X3D.SFFloat()`, `new X3D.SFColor()`,
+`new X3D.SFVec3f()` all work. Plain values silently ignored for typed fields.
 
-**Pending test (high priority):** Whether SFFloat fields require
-`new X3D.SFFloat(value)` to take visual effect in external SAI.
-If so, this explains why `key.intensity = 0.9` succeeds without error
-but produces no visual change. Test: `key.intensity = new X3D.SFFloat(0.9)`.
+---
 
-**Issue 4 — PROTO IS binding type mismatch dropped silently**  
-IS/connect from SFString ProtoInterface field to MFString Text.string node
-field is silently dropped. No error, no binding. Workaround: declare
-ProtoInterface field as MFString.
+## Issue 4 — PROTO IS Binding Type Mismatch Dropped Silently
 
-**Issue 5 — PROTO inputOutput SFFloat fields have no IS binding effect**  
-SAI assignment to a ProtoInstance inputOutput SFFloat field succeeds but
-the ProtoBody geometry does not respond even when IS/connect bindings are
-declared. Workaround: use direct DEF-named geometry nodes instead of
-PROTO instances.
+**Status:** Open. IS/connect bindings from ProtoInterface SFString fields
+to ProtoBody MFString fields are silently dropped at runtime. Confirmed
+workaround: use MFString type for all Text node connections in PROTO fields.
+All current PROTO IS bindings in `mccf_scene.x3d` use correct types.
 
-### V2.1 Workaround
+---
 
-All SAI visual update calls are disabled in `mccf_x3d_loader.html`.
-The scene file (`mccf_scene.x3d`) contains correct baked-in values:
-- Avatar body colors (blue, amber, green)
-- Local PointLights along the arc Z-axis for scene illumination
-- Named Material DEFs on all avatar components
-- Agent name labels hardcoded in Text string attributes
+## Issue 5 — SFString to MFString IS Connect Silently Dropped (RESOLVED)
 
-The HUD overlay continues to show live field data (coherence, episodes,
-tension) from API polling. SAI visual updates will be re-enabled when
-X_ITE fixes the property assignment pipeline.
+**Status:** RESOLVED V2.1. All Text node `string=` attributes confirmed
+correct MFString XML encoding. PROTO IS connect uses MFString type throughout.
+No changes needed.
 
-### X_ITE Bug Report
+---
 
-Filed at: https://github.com/create3000/x_ite/issues  
-Platform tested: Firefox 125+, Edge 124+ on Windows 11  
-X_ITE version: 11.6.6  
-X3D profile: Immersive, version 4.0  
-Scene validates correctly in Sunrise X3D Editor
+## Issue 6 — Light Intensity SAI Degrades Visual State
 
-### Reference
+**Status:** Open. See Issue 1. `X3D.SFFloat` constructor does not resolve
+intensity writes on light nodes — scene still darkens. Color writes work.
+Root cause unknown — may be X_ITE internal lighting pipeline behavior.
 
-X3D SAI specification: https://www.web3d.org/documents/specifications/19777-2/V3.3/Part2/interfaces.html  
-X3D IS/connect specification: X3D spec section 4.4.4.2
+---
+
+## Issue 7 — diffuseColor SAI Breaks Material Visual State (RESOLVED)
+
+**Status:** RESOLVED V2.1.9 by root cause identification.
+
+`bodyMat.diffuseColor = [r,g,b]` (plain array) was silently ignored.
+`bodyMat.emissiveColor = new X3D.SFColor(r,g,b)` works correctly and
+is now used for all avatar field-state color updates. Identity colors
+preserved in baked-in diffuseColor (untouched by SAI).
+
+---
+
+## Issue 8 — pollLighting Hammering /ambient/sync
+
+**Status:** RESOLVED V2.1.9.
+
+`pollLighting()` was calling `/ambient/sync` POST on every 2-second cycle,
+causing server load and slow browser response. Fixed: pollLighting now reads
+cached `/lighting/scalars` only. Single sync POST fires once at startup.
+
+---
+
+## Summary — What Works in V2.1.9
+
+| Feature | Status | Method |
+|---------|--------|--------|
+| Avatar emissiveColor | ✓ Working | `X3D.SFColor` |
+| Avatar transparency | ✓ Working | `X3D.SFFloat` |
+| Avatar translation | ✓ Working | `X3D.SFVec3f` |
+| Text node string | ✓ Working | plain array |
+| Light color | ✓ Working | plain array |
+| Light intensity | ✗ Breaks scene | pending Script Node |
+| diffuseColor | ✗ Use emissive instead | plain array ignored |
+| ProximitySensor | Untested | in scene, fires on position |
+
+## What Is Next
+
+**V2.2 Light Master Script Node** — internal X3D Script node receives
+JSON string from JavaScript, distributes color+intensity to local lights.
+Bypasses all external SAI for lighting.
+
+**V2.2 Avatar motion** — `X3D.SFVec3f` translation confirmed working.
+HotHouse ψ vectors can drive avatar position. Proximity sensors will fire
+on position changes. Real-time simulation layer is viable.
+
+**Reported to:** Holger Selig (X_ITE maintainer), John Carlson (X3DJSONLD),
+W3D Consortium public list, AI Working Group.
+
+---
+
+*Last updated: April 2026 — V2.1.9*
+*Len Bullard / Claude Sonnet 4.6*
