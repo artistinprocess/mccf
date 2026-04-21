@@ -1029,7 +1029,6 @@ function exportArcState() {
     body: JSON.stringify({ cultivar, timestamp, rows })
   }).then(r => r.json())
     .then(d => { if (d.status === 'saved') toast('Auto-saved: ' + d.filename); })
-    .catch(() => {});
     .catch(() => toast('Arc exported — check downloads'));
 }
 
