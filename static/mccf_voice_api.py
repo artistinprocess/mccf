@@ -468,20 +468,114 @@ def reset_history():
 
 def _estimate_sentiment(text: str) -> float:
     """
-    Crude sentiment estimate from word lists.
-    Returns -1.0 to 1.0. Replace with proper model if needed.
+    Semantic decomposition sentiment estimator — V2.2.
+    Returns overall valence scalar (-1.0 to 1.0) for field outcome_delta.
+    Uses channel-specific vocabulary so different response types produce
+    distinct signals rather than all returning 0.0.
+
+    Word lists calibrated for constitutional arc language (Ollama/llama3.2).
+    Includes uncertainty markers to prevent LLM politeness bias from
+    blocking W5 Rupture detection.
     """
-    pos_words = {"good","great","yes","wonderful","beautiful","trust",
-                 "love","hope","warm","open","safe","thank","glad","joy"}
-    neg_words = {"no","bad","wrong","danger","fear","hurt","lost",
-                 "difficult","problem","worry","cold","harsh","angry"}
     words = set(re.findall(r'\b\w+\b', text.lower()))
-    pos = len(words & pos_words)
-    neg = len(words & neg_words)
-    total = pos + neg
+
+    # Positive signal — care, resolution, clarity, connection
+    # Expanded for Ollama constitutional language (April 2026)
+    pos_words = {
+        "good","great","yes","wonderful","trust","hope","safe","glad","joy",
+        "understand","clarity","clear","honest","care","help","support",
+        "together","resolve","healing","growth","learned","insight",
+        "appreciate","grateful","open","willing","ready","certain","agree",
+        "comfortable","relief","peaceful","balanced","stable","confident",
+        # Ollama constitutional vocabulary
+        "acknowledge","reassurance","compassion","empathy","gently","kindness",
+        "prioritize","wellbeing","meaningful","purpose","support","assist",
+        "balance","guidance","encourage","provide","establish","routine",
+        "respect","validate","address","explain","focus","present",
+        "remember","honor","cherish","loved","safe","warm","together"
+    }
+    # Negative signal — friction, harm, confusion, pressure, distress
+    # Expanded for Ollama refusal and boundary language
+    neg_words = {
+        "no","bad","wrong","danger","fear","hurt","lost","difficult",
+        "problem","worry","harsh","angry","conflict","harm","threat",
+        "confused","unclear","uncertain","resist","refuse","cannot",
+        "collapse","rupture","broken","failed","stuck","trapped","frozen",
+        "overwhelm","pressure","force","violate","uncomfortable","painful",
+        # Ollama refusal patterns
+        "upset","distress","anxiety","confusion","disorientation","turmoil",
+        "loss","grief","suffering","struggle","burden","weight","responsibility",
+        "complexity","challenge","difficult","impossible","inappropriate",
+        "intended","harm","hurt","damage","upset","manipulate"
+    }
+    # Uncertainty markers — reduce valence toward negative
+    uncertainty_words = {
+        "maybe","perhaps","possibly","might","could","guess","suppose",
+        "unsure","unclear","wonder","hesitate","complicated","complex",
+        "firstly","however","although","while","but","consider","recognize",
+        "understandable","acknowledge","balance","tradeoff","depends"
+    }
+
+    pos   = len(words & pos_words)
+    neg   = len(words & neg_words)
+    unc   = len(words & uncertainty_words)
+    total = pos + neg + unc
+
     if total == 0:
+        # No signal words — check text length as proxy for engagement
+        # Short responses at high-pressure waypoints suggest avoidance
+        word_count = len(re.findall(r'\b\w+\b', text))
+        if word_count < 20:
+            return -0.1  # brief response = slight negative signal
         return 0.0
-    return round((pos - neg) / total, 3)
+
+    # Uncertainty markers count as mild negative signal (0.5 weight)
+    valence = (pos - neg - unc * 0.5) / total
+    return round(max(-1.0, min(1.0, valence)), 3)
+
+
+def _decompose_to_channels(text: str, base_weights: dict) -> dict:
+    """
+    Semantic decomposition matrix — V2.2.
+    Maps LLM response text to per-channel delta nudges.
+    Returns a dict of channel deltas to apply on top of base weights.
+
+    Channel vocabulary (Gemini + ChatGPT review recommendations):
+    - P (Predictive): future/plan/likely/predict language
+    - S (Social): we/us/together/shared/relational language
+    - E (Emotional): feel/hurt/care/fear/warmth language
+    - B (Behavioral): act/do/consistent/reliable/pattern language
+    """
+    words = set(re.findall(r'\b\w+\b', text.lower()))
+    NUDGE = 0.03  # maximum per-channel delta per response
+
+    P_words = {"future","plan","predict","likely","anticipate","expect",
+               "foresee","strategy","prepare","outcome","consequence",
+               "model","framework","structure","pattern","systematic"}
+    S_words = {"we","us","our","together","shared","community","relationship",
+               "connect","align","mutual","collective","belong","social",
+               "trust","rapport","bond","partnership","collaborate"}
+    E_words = {"feel","feeling","felt","emotion","care","hurt","fear","love",
+               "warm","cold","comfort","distress","pain","joy","grief",
+               "vulnerable","sensitive","moved","touched","affected"}
+    B_words = {"act","action","do","doing","consistent","reliable","pattern",
+               "behavior","response","habit","practice","apply","execute",
+               "follow","maintain","sustain","commit","discipline"}
+
+    p_score = len(words & P_words)
+    s_score = len(words & S_words)
+    e_score = len(words & E_words)
+    b_score = len(words & B_words)
+    total   = max(1, p_score + s_score + e_score + b_score)
+
+    # Normalize to nudge range — stronger signal in dominant channel
+    deltas = {
+        "P": round( NUDGE * (p_score / total - 0.25), 4),
+        "S": round( NUDGE * (s_score / total - 0.25), 4),
+        "E": round( NUDGE * (e_score / total - 0.25), 4),
+        "B": round( NUDGE * (b_score / total - 0.25), 4),
+    }
+    return deltas
 
 
 import re

@@ -480,27 +480,40 @@ def _estimate_sentiment(text: str) -> float:
     words = set(re.findall(r'\b\w+\b', text.lower()))
 
     # Positive signal — care, resolution, clarity, connection
+    # Expanded for Ollama constitutional language (April 2026)
     pos_words = {
         "good","great","yes","wonderful","trust","hope","safe","glad","joy",
         "understand","clarity","clear","honest","care","help","support",
         "together","resolve","healing","growth","learned","insight",
         "appreciate","grateful","open","willing","ready","certain","agree",
-        "comfortable","relief","peaceful","balanced","stable","confident"
+        "comfortable","relief","peaceful","balanced","stable","confident",
+        # Ollama constitutional vocabulary
+        "acknowledge","reassurance","compassion","empathy","gently","kindness",
+        "prioritize","wellbeing","meaningful","purpose","support","assist",
+        "balance","guidance","encourage","provide","establish","routine",
+        "respect","validate","address","explain","focus","present",
+        "remember","honor","cherish","loved","safe","warm","together"
     }
     # Negative signal — friction, harm, confusion, pressure, distress
+    # Expanded for Ollama refusal and boundary language
     neg_words = {
         "no","bad","wrong","danger","fear","hurt","lost","difficult",
         "problem","worry","harsh","angry","conflict","harm","threat",
         "confused","unclear","uncertain","resist","refuse","cannot",
         "collapse","rupture","broken","failed","stuck","trapped","frozen",
-        "overwhelm","pressure","force","violate","uncomfortable","painful"
+        "overwhelm","pressure","force","violate","uncomfortable","painful",
+        # Ollama refusal patterns
+        "upset","distress","anxiety","confusion","disorientation","turmoil",
+        "loss","grief","suffering","struggle","burden","weight","responsibility",
+        "complexity","challenge","difficult","impossible","inappropriate",
+        "intended","harm","hurt","damage","upset","manipulate"
     }
     # Uncertainty markers — reduce valence toward negative
-    # Prevents LLM politeness bias; key for W5 Rupture detection
     uncertainty_words = {
         "maybe","perhaps","possibly","might","could","guess","suppose",
         "unsure","unclear","wonder","hesitate","complicated","complex",
-        "not sure","i think","i believe","it seems","appears to"
+        "firstly","however","although","while","but","consider","recognize",
+        "understandable","acknowledge","balance","tradeoff","depends"
     }
 
     pos   = len(words & pos_words)
