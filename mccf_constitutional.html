@@ -108,6 +108,10 @@ header {
 }
 .cultivar-btn:hover { border-color:#aab0be; }
 .cultivar-btn.selected { border-color: currentColor; }
+.genre-comedy   { color: #4af0a8; border-color: #4af0a8 !important; }
+.genre-drama    { color: #f0c060; border-color: #f0c060 !important; }
+.genre-tragedy  { color: #f06060; border-color: #f06060 !important; }
+.genre-pending  { color: #aab0be; }
 
 .cb-name {
   font-family: var(--serif); font-size: 13px; font-weight: 600;
@@ -417,6 +421,13 @@ header {
     <button class="btn" id="step-btn" onclick="stepArc()" disabled>Step →</button>
     <button class="btn" onclick="resetArc()">↺ Reset</button>
     <span class="progress-text" id="progress-text"></span>
+  </div>
+  <div id="genre-display" style="display:none;margin-top:8px;padding:6px 10px;
+       border:1px solid #1c2238;border-radius:4px;font-family:var(--mono);
+       font-size:12px;color:#aab0be;background:#0a0e1a;">
+    <span id="genre-label" style="font-size:13px;font-weight:bold;"></span>
+    <span id="genre-confidence" style="margin-left:8px;opacity:0.7;"></span>
+    <span id="genre-reason" style="margin-left:8px;opacity:0.6;font-style:italic;"></span>
   </div>
 </div>
 
@@ -742,6 +753,33 @@ function setStatus(s) {
 }
 
 // ================================================================
+// Genre Display
+// ================================================================
+function updateGenreDisplay(genreResult) {
+  if (!genreResult || genreResult.genre === 'pending' || genreResult.genre === 'unknown') return;
+  const display = document.getElementById('genre-display');
+  const label   = document.getElementById('genre-label');
+  const conf    = document.getElementById('genre-confidence');
+  const reason  = document.getElementById('genre-reason');
+  if (!display) return;
+
+  const genre = genreResult.genre;
+  const icons = { comedy: '◉ Comedy', drama: '◎ Drama', tragedy: '● Tragedy' };
+  const confidencePct = Math.round((genreResult.confidence || 0) * 100);
+
+  label.textContent   = icons[genre] || genre;
+  label.className     = `genre-${genre}`;
+  conf.textContent    = `${confidencePct}% confidence`;
+  reason.textContent  = genreResult.reason || '';
+
+  display.style.display = 'block';
+  display.className = `genre-${genre}`;
+  display.style.borderColor = {
+    comedy: '#4af0a8', drama: '#f0c060', tragedy: '#f06060'
+  }[genre] || '#1c2238';
+}
+
+// ================================================================
 // Roster
 // ================================================================
 function renderRoster() {
@@ -980,9 +1018,16 @@ function exportArcState() {
   };
 
   // CSV-style text for copy-paste
+  // Get genre from stored result (more reliable than DOM scraping)
+  const gr = window._lastGenreResult;
+  const genreLine = gr && gr.genre && gr.genre !== 'pending'
+    ? `Genre: ${gr.genre.charAt(0).toUpperCase() + gr.genre.slice(1)} (${Math.round((gr.confidence||0)*100)}% confidence) — ${gr.reason || ''}`
+    : 'Genre: pending';
+
   let text = `MCCF Constitutional Arc Export\n`;
   text += `Cultivar: ${cultivar}\n`;
-  text += `Timestamp: ${timestamp}\n\n`;
+  text += `Timestamp: ${timestamp}\n`;
+  text += `${genreLine}\n\n`;
   text += `Step\tWaypoint\tE\tB\tP\tS\tMode\tCoherence\tUncertainty\tValence\tReward\n`;
   exportData.waypoints.forEach(wp => {
     const c = wp.channels;
@@ -1112,6 +1157,10 @@ async function runStep(stepIndex) {
                 const arcData = await arcResp.json();
                 window._arcRecordCV = arcData.cv || null;
                 window._arcRecordCoherence = arcData.coherence || null;
+                if (arcData.genre) {
+                  window._lastGenreResult = arcData.genre;
+                  updateGenreDisplay(arcData.genre);
+                }
               }
             } catch {}
 
