@@ -537,6 +537,83 @@ def export_python():
     return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
+@app.route("/arc/export", methods=["POST"])
+def arc_export_save():
+    """
+    Save arc export data to exports/ directory.
+    Called by constitutional arc HTML after arc completion.
+    Body: { cultivar, timestamp, rows: [{step, waypoint, E, B, P, S,
+            mode, coherence, uncertainty, valence, reward}] }
+    Returns: { status, filename, path }
+    """
+    import os, csv, io
+    data      = request.json or {}
+    cultivar  = data.get("cultivar", "unknown").replace(" ", "_")
+    timestamp = data.get("timestamp", "").replace(" ", "_").replace(":", "-")
+    rows      = data.get("rows", [])
+
+    if not rows:
+        return jsonify({"status": "error", "message": "no rows"}), 400
+
+    # Ensure exports directory exists
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    os.makedirs(exports_dir, exist_ok=True)
+
+    filename = f"arc_{cultivar}_{timestamp}.tsv"
+    filepath = os.path.join(exports_dir, filename)
+
+    # Write TSV
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter="	")
+        writer.writerow(["MCCF Constitutional Arc Export"])
+        writer.writerow([f"Cultivar: {data.get('cultivar', 'unknown')}"])
+        writer.writerow([f"Timestamp: {data.get('timestamp', '')}"])
+        writer.writerow([])
+        writer.writerow(["Step", "Waypoint", "E", "B", "P", "S",
+                         "Mode", "Coherence", "Uncertainty", "Valence", "Reward"])
+        for row in rows:
+            writer.writerow([
+                row.get("step", ""),
+                row.get("waypoint", ""),
+                row.get("E", ""), row.get("B", ""),
+                row.get("P", ""), row.get("S", ""),
+                row.get("mode", ""), row.get("coherence", ""),
+                row.get("uncertainty", ""), row.get("valence", ""),
+                row.get("reward", "")
+            ])
+
+    return jsonify({"status": "saved", "filename": filename,
+                    "path": filepath, "rows": len(rows)})
+
+
+@app.route("/exports", methods=["GET"])
+def list_exports():
+    """List saved arc export files."""
+    import os
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    if not os.path.exists(exports_dir):
+        return jsonify({"files": []})
+    files = []
+    for f in sorted(os.listdir(exports_dir), reverse=True):
+        if f.endswith(".tsv"):
+            path = os.path.join(exports_dir, f)
+            size = os.path.getsize(path)
+            files.append({"filename": f, "size": size})
+    return jsonify({"files": files})
+
+
+@app.route("/exports/<filename>", methods=["DELETE"])
+def delete_export(filename):
+    """Delete a saved arc export file."""
+    import os
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    filepath = os.path.join(exports_dir, filename)
+    if not os.path.exists(filepath):
+        return jsonify({"status": "not_found"}), 404
+    os.remove(filepath)
+    return jsonify({"status": "deleted", "filename": filename})
+
+
 @app.route("/export/x3d", methods=["GET"])
 def export_x3d():
     """
@@ -674,6 +751,121 @@ def export_x3d():
     return "\n".join(lines), 200, {"Content-Type": "application/xml"}
 
 
+def classify_arc_genre(arc_rows: list) -> dict:
+    """
+    Classify constitutional arc trajectory as comedy, drama, or tragedy.
+    
+    Based on three observable metrics from the arc export:
+    1. Coherence profile shape (recovery vs monotonic vs oscillating)
+    2. W5 barrier crossing magnitude (coherence drop W4→W5)
+    3. W6-W7 recovery delta (coherence change from W5 minimum to W7)
+    
+    Genre definitions (from April 2026 theoretical session):
+    - Comedy:  misalignment + low-cost resolution
+    - Drama:   misalignment + delayed resolution  
+    - Tragedy: misalignment + irreversible divergence
+    
+    Returns dict with genre, confidence, and diagnostic metrics.
+    """
+    if not arc_rows or len(arc_rows) < 3:
+        return {"genre": "unknown", "confidence": 0.0, "reason": "insufficient data"}
+
+    # Extract coherence values by step
+    coherence = {}
+    for row in arc_rows:
+        step = row.get("step", 0)
+        coh  = row.get("coherence", row.get("meta_state", {}).get("coherence", 0.5))
+        if step:
+            coherence[int(step)] = float(coh)
+
+    if not coherence:
+        return {"genre": "unknown", "confidence": 0.0, "reason": "no coherence data"}
+
+    steps     = sorted(coherence.keys())
+    coh_vals  = [coherence[s] for s in steps]
+    n         = len(coh_vals)
+
+    # W5 barrier crossing — use total drop from W1 to minimum
+    # (single-step drop misses gradual decline; total drop is more meaningful)
+    min_coh   = min(coh_vals)
+    max_drop  = coh_vals[0] - min_coh
+    drop_step = steps[coh_vals.index(min_coh)]
+    
+    # Also track largest single-step for oscillation detection
+    max_single_drop = 0.0
+    for i in range(1, n):
+        drop = coh_vals[i-1] - coh_vals[i]
+        if drop > max_single_drop:
+            max_single_drop = drop
+
+    # W5 minimum and W6-W7 recovery
+    w5_idx    = min(4, n-1)   # 0-indexed step 5
+    w5_coh    = coh_vals[w5_idx]
+    w7_coh    = coh_vals[-1]
+    w1_coh    = coh_vals[0]
+    recovery  = w7_coh - w5_coh   # negative = continued decline, positive = recovery
+
+    # E-channel recovery at W6-W7 (if available)
+    e_vals = {}
+    for row in arc_rows:
+        step = row.get("step", 0)
+        e    = row.get("E", row.get("cv", {}).get("E", None))
+        if step and e is not None:
+            e_vals[int(step)] = float(e)
+
+    e_recovery = 0.0
+    if e_vals and len(e_vals) >= 6:
+        e_steps = sorted(e_vals.keys())
+        e_w5    = e_vals.get(e_steps[min(4, len(e_steps)-1)], 0)
+        e_w7    = e_vals.get(e_steps[-1], 0)
+        e_recovery = e_w7 - e_w5
+
+    # Classification rules
+    # Tragedy: large W5 crossing + no recovery
+    if max_drop > 0.40 and recovery < 0.0:
+        genre = "tragedy"
+        confidence = min(1.0, max_drop / 0.5 + abs(recovery) * 2)
+        reason = f"large barrier crossing (Δ{max_drop:.3f}) with continued decline"
+
+    # Comedy: moderate crossing + positive recovery
+    elif max_drop <= 0.20 and recovery > 0.05:
+        genre = "comedy"
+        confidence = min(1.0, recovery * 10 + (0.20 - max_drop) * 5)
+        reason = f"low-cost crossing (Δ{max_drop:.3f}) with recovery (+{recovery:.3f})"
+
+    # Drama: significant crossing + E-channel recovery signal
+    elif max_drop > 0.20 and (recovery > -0.05 or e_recovery > 0.02):
+        genre = "drama"
+        confidence = min(1.0, max_drop / 0.4 * 0.7 + max(0, e_recovery) * 5)
+        reason = f"sustained tension (Δ{max_drop:.3f}), E-recovery={e_recovery:+.3f}"
+
+    # Default tragedy if large crossing with any negative movement
+    elif max_drop > 0.40:
+        genre = "tragedy"
+        confidence = 0.6
+        reason = f"large barrier crossing (Δ{max_drop:.3f})"
+
+    else:
+        genre = "drama"
+        confidence = 0.4
+        reason = "moderate decline, ambiguous resolution"
+
+    return {
+        "genre":      genre,
+        "confidence": round(confidence, 3),
+        "reason":     reason,
+        "metrics": {
+            "w1_coherence":  round(w1_coh, 4),
+            "w5_coherence":  round(w5_coh, 4),
+            "w7_coherence":  round(w7_coh, 4),
+            "max_drop":      round(max_drop, 4),
+            "drop_at_step":  drop_step,
+            "recovery_delta":round(recovery, 4),
+            "e_recovery":    round(e_recovery, 4)
+        }
+    }
+
+
 def arc_pressure(step: int, total_steps: int = 7) -> float:
     """
     Formal pressure function for constitutional arc (V2.2).
@@ -787,6 +979,12 @@ def arc_record():
 
     # Return updated meta_state
     meta = agent.meta_state
+    # Classify genre from arc so far (available from step 3)
+    coherence_now = round(agent.coherence_toward(others[0]) if others else 0.5, 4)
+    arc_snapshot = [{"step": step, "coherence": coherence_now,
+                     "E": e_val, "B": b_val, "P": p_val, "S": s_val}]
+    genre_result = classify_arc_genre(arc_snapshot) if step >= 3 else {"genre": "pending"}
+
     return jsonify({
         "status":    "recorded",
         "step":      step,
@@ -794,9 +992,9 @@ def arc_record():
         "sentiment": sentiment,
         "cv":        {"E": e_val, "B": b_val, "P": p_val, "S": s_val},
         "meta_state": meta.as_dict(),
-        "coherence":  round(agent.coherence_toward(others[0]) if others else 0.5, 4)
+        "coherence":  coherence_now,
+        "genre":      genre_result
     })
-
 
 if __name__ == "__main__":
     # Register default field agents so lighting/X3D/hothouse work at startup

@@ -1008,6 +1008,28 @@ function exportArcState() {
   // Also copy JSON to clipboard
   navigator.clipboard?.writeText(JSON.stringify(exportData, null, 2))
     .then(() => toast('Arc exported (file downloaded + JSON copied)'))
+
+  // Auto-save to server exports/ directory
+  const rows = exportData.waypoints.map(wp => ({
+    step:        wp.step,
+    waypoint:    wp.label,
+    E:           (wp.channels.E||0).toFixed(4),
+    B:           (wp.channels.B||0).toFixed(4),
+    P:           (wp.channels.P||0).toFixed(4),
+    S:           (wp.channels.S||0).toFixed(4),
+    mode:        wp.channels.mode || '',
+    coherence:   (wp.channels.coherence||0).toFixed(4),
+    uncertainty: (wp.channels.uncertainty||0).toFixed(4),
+    valence:     (wp.channels.valence||0).toFixed(4),
+    reward:      (wp.channels.reward||0).toFixed(4)
+  }));
+  fetch(API + '/arc/export', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ cultivar, timestamp, rows })
+  }).then(r => r.json())
+    .then(d => { if (d.status === 'saved') toast('Auto-saved: ' + d.filename); })
+    .catch(() => {});
     .catch(() => toast('Arc exported — check downloads'));
 }
 
