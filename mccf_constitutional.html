@@ -1073,10 +1073,11 @@ async function runStep(stepIndex) {
             setStationResponse(stepIndex, fullText, false);
             arcSpeak(fullText);   // speak the completed response
 
-            // v2.1 — Record this arc step explicitly to coherence field
-            // This is more reliable than relying on voice/speak internals.
+            // v2.1.9 — Record arc step and capture CV from response
+            // arc/record returns computed cv with sentiment-driven channel values
+            window._arcRecordCV = null;
             try {
-              await fetch(API + '/arc/record', {
+              const arcResp = await fetch(API + '/arc/record', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1086,7 +1087,30 @@ async function runStep(stepIndex) {
                   response:  fullText
                 })
               });
+              if (arcResp.ok) {
+                const arcData = await arcResp.json();
+                window._arcRecordCV = arcData.cv || null;
+                window._arcRecordCoherence = arcData.coherence || null;
+              }
             } catch {}
+
+            // v2.1.11 — broadcast arc CV + coherence to X3D loader
+            if (window._arcRecordCV) {
+              try {
+                const bc = new BroadcastChannel('mccf_arc');
+                bc.postMessage({
+                  type: 'mccf_arc_cv',
+                  data: {
+                    cultivar:  selectedCultivar,
+                    cv:        window._arcRecordCV,
+                    step:      stepIndex + 1,
+                    waypoint:  wp.key,
+                    coherence: window._arcRecordCoherence || 0.35
+                  }
+                });
+                bc.close();
+              } catch(e) {}
+            }
 
             // v1.7.0 — coherence drop warning
             if (evt.coherence_warning) {
@@ -1111,9 +1135,11 @@ async function runStep(stepIndex) {
       const row       = matrix[selectedCultivar] || {};
       const others    = Object.keys(row).filter(k => k !== selectedCultivar);
       const agentData = fieldData.agents[selectedCultivar] || {};
-      const w         = agentData.weights || c.weights;
+      // v2.1.9 — use arcRecordCV (sentiment-computed) if available,
+      // fall back to agent weights only if arc/record failed
+      const w = window._arcRecordCV || agentData.weights || c.weights;
 
-      // Channel state: weights + MetaState for full picture
+      // Channel state: CV from arc/record + MetaState for full picture
       const meta = agentData.meta_state || {};
       const channelState = {
         E: w.E || 0.25,

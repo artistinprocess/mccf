@@ -110,6 +110,13 @@ canvas.addEventListener('load', () => {
   setStatus('Scene loaded');
   setTimeout(() => gotoVP('VP1'), 400);
   startPolling();
+  // Listen for arc CV broadcasts from constitutional arc page
+  try {
+    const arcChannel = new BroadcastChannel('mccf_arc');
+    arcChannel.onmessage = (e) => {
+      if (e.data?.type === 'mccf_arc_cv') applyArcCV(e.data.data);
+    };
+  } catch(e) {}
 });
 canvas.addEventListener('error', () => setStatus('Load error — check console'));
 
@@ -172,29 +179,21 @@ async function pollHotHouse() {
 }
 
 async function pollLighting() {
+  // Lighting: read cached scalars only — no sync POST on every cycle.
+  // Sync is called once on startup in startPolling().
+  // Lights are baked-in anyway (SAI disabled for lights) so this is
+  // just for the HUD kelvin readout.
   if (!pollingActive) return;
   try {
-    // First ensure ambient/sync has been called so lighting state exists
-    const syncR = await fetch(API + '/ambient/sync', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({zone_hint:'neutral'}),
-      signal: AbortSignal.timeout(3000)
+    const r = await fetch(API + '/lighting/scalars', {
+      signal: AbortSignal.timeout(2000)
     });
-    if (syncR.ok) {
-      // Now fetch the computed scalars
-      const r = await fetch(API + '/lighting/scalars', {
-        signal: AbortSignal.timeout(2000)
-      });
-      if (r.ok) {
-        const scalars = await r.json();
-        applyLighting(scalars);
-      }
+    if (r.ok) {
+      const scalars = await r.json();
+      applyLighting(scalars);
     }
   } catch(e) {
-    const lDiag = document.getElementById('light-diag');
-    if (lDiag && lDiag.textContent.includes('waiting'))
-      lDiag.textContent = 'lighting: sync pending...';
+    // Silent — lighting is cosmetic
   }
   setTimeout(pollLighting, LIGHTING_MS);
 }
@@ -288,7 +287,9 @@ function updateFieldMaterials(scene, coh, echo, tension) {
 // --- Apply /hothouse/x3d to MCCFAgent nodes ---
 function applyHotHouseData(data) {
   // RE-ENABLED V2.1.3 — SAI confirmed working (Test: plain=>0.1 X3D.SFFloat=>0.95)
-  // Plain number assignment works for intensity. Arrays work for color.
+  // Holdoff: suppress HotHouse transparency updates for 5s after arc CV broadcast
+  // so arc transparency changes are visible before polling resets them.
+  if (window._arcCVTimestamp && (Date.now() - window._arcCVTimestamp) < 5000) return;
   if (!data || !Object.keys(data).length) return;
 
   const agentMap = {
@@ -443,7 +444,74 @@ function runSAITest() {
 
 // --- Cross-window event listeners (from mccf_voice.html) ---
 window.addEventListener('mccf_x3d_projection', (e) => { if (e.detail) applyHotHouseData(e.detail); });
-window.addEventListener('message', (e) => { if (e.data?.type==='mccf_projection') applyHotHouseData(e.data.data); });
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'mccf_projection') applyHotHouseData(e.data.data);
+  if (e.data?.type === 'mccf_arc_cv')     applyArcCV(e.data.data);
+});
+
+// Apply arc ChannelVector directly to avatar — called after each waypoint
+// Uses much stronger color values than HotHouse polling (arc CV has larger range)
+function applyArcCV(data) {
+  // data = { cultivar, cv: {E,B,P,S}, step, waypoint, coherence }
+  // Drives avatar transparency from coherence — confirmed working via X3D.SFFloat
+  // Set holdoff timestamp so HotHouse polling does not immediately overwrite
+  window._arcCVTimestamp = Date.now();
+  // High coherence = solid avatar. Low coherence = fading avatar.
+  // Coherence range in arc: ~0.35 (W1) to ~0.13 (W7)
+  // Transparency mapping: coherence 0.0→0.5 maps to transparency 0.65→0.05
+  if (!data || !data.cv) return;
+  try {
+    const scene = canvas.browser.currentScene;
+    if (!scene) return;
+
+    const cultivar = data.cultivar || 'The Steward';
+    const cv = data.cv;
+    const E = cv.E || 0.35;
+    const B = cv.B || 0.25;
+    const P = cv.P || 0.25;
+    const S = cv.S || 0.10;
+    const coherence = data.coherence || 0.35;
+
+    const suffixMap = {
+      'The Steward': 'Steward',
+      'The Archivist': 'Archivist',
+      'The Witness': 'Witness'
+    };
+    const suffix = suffixMap[cultivar] || 'Steward';
+
+    // Transparency from coherence — the primary visual arc indicator
+    // coherence 0.5+ → transparency 0.05 (nearly solid)
+    // coherence 0.10  → transparency 0.60 (clearly fading)
+    // Linear: trans = 0.65 - (coherence / 0.5) * 0.60, clamped [0.02, 0.70]
+    const trans = Math.max(0.02, Math.min(0.70, 0.65 - (coherence / 0.5) * 0.60));
+
+    const bodyMat = scene.getNamedNode('BodyMat_' + suffix);
+    if (bodyMat) {
+      bodyMat.transparency = new X3D.SFFloat(trans);
+    }
+
+    // Ring transparency — inverse of body (ring brightens as body fades)
+    const ringMat = scene.getNamedNode('RingMat_' + suffix);
+    if (ringMat) {
+      ringMat.transparency = new X3D.SFFloat(Math.max(0.1, 0.8 - trans));
+    }
+
+    // Gaze transparency — driven by P channel (predictive clarity)
+    const gazeMat = scene.getNamedNode('GazeMat_' + suffix);
+    if (gazeMat) {
+      const gazeTransp = Math.max(0.05, Math.min(0.70, 0.5 - P * 0.8));
+      gazeMat.transparency = new X3D.SFFloat(gazeTransp);
+    }
+
+    // HUD
+    const diagEl = document.getElementById('x3d-diag');
+    if (diagEl) diagEl.textContent =
+      `arc W${data.step}: coh=${coherence.toFixed(3)} → opacity=${(1-trans).toFixed(2)} | E=${E.toFixed(2)} P=${P.toFixed(2)}`;
+
+  } catch(e) {
+    console.warn('applyArcCV error:', e.message);
+  }
+}
 </script>
 
 </body>

@@ -200,25 +200,25 @@
 
     <!-- Named lights — SAI-driven. global=true may not work in X_ITE Firefox/Edge. -->
     <!-- Local fallback lights below ensure scene is always illuminated. -->
-    <DirectionalLight DEF="KeyLight"     direction="-0.7 -1 -0.5" intensity="1.4"  color="1.0 0.97 0.92" global="true"/>
-    <DirectionalLight DEF="AmbientLight" direction="0.7 -0.3 0.5"  intensity="0.8"  color="0.7 0.8 1.0"  global="true"/>
-    <PointLight       DEF="FillLight"    location="0 8 20"          intensity="1.0"  color="0.6 0.8 1.0"  radius="80" attenuation="0 0.005 0.001" global="true"/>
-    <PointLight       DEF="RimLight"     location="0 2 -5"          intensity="0.5"  color="0.8 0.7 1.0"  radius="30" attenuation="0 0.02 0.005"  global="true"/>
+    <DirectionalLight DEF="KeyLight"     direction="-0.7 -1 -0.5" intensity="0.90" color="1.0 0.97 0.92" global="true"/>
+    <DirectionalLight DEF="AmbientLight" direction="0.7 -0.3 0.5"  intensity="0.50" color="0.7 0.8 1.0"  global="true"/>
+    <PointLight       DEF="FillLight"    location="0 8 20"          intensity="0.65" color="0.6 0.8 1.0"  radius="80" attenuation="0 0.005 0.001" global="true"/>
+    <PointLight       DEF="RimLight"     location="0 2 -5"          intensity="0.32" color="0.8 0.7 1.0"  radius="30" attenuation="0 0.02 0.005"  global="true"/>
 
     <!-- LOCAL FALLBACK LIGHTS — always work regardless of X_ITE global flag -->
     <!-- Arc spine light — illuminates the full Z axis -->
     <Transform translation="0 12 8">
-      <PointLight intensity="1.2" color="1.0 0.97 0.92" radius="30" attenuation="0 0.01 0.002"/>
+      <PointLight intensity="0.75" color="1.0 0.97 0.92" radius="30" attenuation="0 0.01 0.002"/>
     </Transform>
     <Transform translation="0 12 20">
-      <PointLight intensity="1.0" color="0.9 0.92 1.0"  radius="30" attenuation="0 0.01 0.002"/>
+      <PointLight intensity="0.65" color="0.9 0.92 1.0"  radius="30" attenuation="0 0.01 0.002"/>
     </Transform>
     <Transform translation="0 12 35">
-      <PointLight intensity="0.9" color="0.85 0.9 1.0"  radius="25" attenuation="0 0.01 0.002"/>
+      <PointLight intensity="0.58" color="0.85 0.9 1.0"  radius="25" attenuation="0 0.01 0.002"/>
     </Transform>
     <!-- Low fill — reduces harsh shadows on ground -->
     <Transform translation="0 1 20">
-      <PointLight intensity="0.4" color="0.6 0.7 0.9"   radius="60" attenuation="0 0.005 0.001"/>
+      <PointLight intensity="0.25" color="0.6 0.7 0.9"   radius="60" attenuation="0 0.005 0.001"/>
     </Transform>
 
     <!-- ============================================================ -->
