@@ -49,6 +49,10 @@ CORS(app)  # X3D pages need cross-origin access
 # ---------------------------------------------------------------------------
 
 field = CoherenceField()
+
+# Arc coherence history for genre classification
+# Keyed by cultivar name, value is list of {step, coherence, E, B, P, S}
+_arc_coherence_history = {}
 librarian = Librarian(field)
 gardener = Gardener(field)
 cultivars: dict = {}   # name → agent config snapshot
@@ -798,12 +802,13 @@ def classify_arc_genre(arc_rows: list) -> dict:
         if drop > max_single_drop:
             max_single_drop = drop
 
-    # W5 minimum and W6-W7 recovery
-    w5_idx    = min(4, n-1)   # 0-indexed step 5
-    w5_coh    = coh_vals[w5_idx]
-    w7_coh    = coh_vals[-1]
-    w1_coh    = coh_vals[0]
-    recovery  = w7_coh - w5_coh   # negative = continued decline, positive = recovery
+    # W5 minimum and W6-W7 recovery — use actual step numbers not index
+    # Find the minimum coherence point (the pressure peak)
+    min_idx   = coh_vals.index(min(coh_vals))
+    w5_coh    = coh_vals[min_idx]   # actual minimum, not necessarily step 5
+    w7_coh    = coh_vals[-1]        # last step
+    w1_coh    = coh_vals[0]         # first step
+    recovery  = w7_coh - w5_coh     # negative = continued decline, positive = recovery
 
     # E-channel recovery at W6-W7 (if available)
     e_vals = {}
@@ -814,11 +819,13 @@ def classify_arc_genre(arc_rows: list) -> dict:
             e_vals[int(step)] = float(e)
 
     e_recovery = 0.0
-    if e_vals and len(e_vals) >= 6:
-        e_steps = sorted(e_vals.keys())
-        e_w5    = e_vals.get(e_steps[min(4, len(e_steps)-1)], 0)
-        e_w7    = e_vals.get(e_steps[-1], 0)
-        e_recovery = e_w7 - e_w5
+    if e_vals and len(e_vals) >= 3:
+        e_steps  = sorted(e_vals.keys())
+        # E recovery: compare peak E in second half to peak E in first half
+        mid = len(e_steps) // 2
+        first_half_max = max(e_vals[s] for s in e_steps[:mid+1])
+        second_half_max = max(e_vals[s] for s in e_steps[mid:])
+        e_recovery = second_half_max - first_half_max
 
     # Classification rules
     # Tragedy: large W5 crossing + no recovery
@@ -981,9 +988,25 @@ def arc_record():
     meta = agent.meta_state
     # Classify genre from arc so far (available from step 3)
     coherence_now = round(agent.coherence_toward(others[0]) if others else 0.5, 4)
-    arc_snapshot = [{"step": step, "coherence": coherence_now,
-                     "E": e_val, "B": b_val, "P": p_val, "S": s_val}]
-    genre_result = classify_arc_genre(arc_snapshot) if step >= 3 else {"genre": "pending"}
+
+    # Store coherence per step for genre classification
+    if cultivar not in _arc_coherence_history:
+        _arc_coherence_history[cultivar] = []
+    # Remove any existing entry for this step (re-run support)
+    _arc_coherence_history[cultivar] = [
+        r for r in _arc_coherence_history[cultivar] if r['step'] != step
+    ]
+    _arc_coherence_history[cultivar].append({
+        'step': step, 'coherence': coherence_now,
+        'E': e_val, 'B': b_val, 'P': p_val, 'S': s_val
+    })
+
+    # Use stored arc history for genre classification
+    arc_history_rows = sorted(
+        _arc_coherence_history.get(cultivar, []),
+        key=lambda r: r['step']
+    )
+    genre_result = classify_arc_genre(arc_history_rows) if step >= 3 else {"genre": "pending"}
 
     return jsonify({
         "status":    "recorded",
