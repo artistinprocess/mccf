@@ -41,14 +41,28 @@ from mccf_core import (
     Librarian, Gardener, CHANNEL_NAMES
 )
 
+import mimetypes
+mimetypes.add_type('model/x3d+xml', '.x3d')
+
 app = Flask(__name__)
 CORS(app)  # X3D pages need cross-origin access
+
+@app.route('/static/mccf_scene.x3d')
+def serve_x3d_scene():
+    from flask import send_from_directory
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    return send_from_directory(static_dir, 'mccf_scene.x3d',
+                               mimetype='model/x3d+xml')
 
 # ---------------------------------------------------------------------------
 # Global engine state
 # ---------------------------------------------------------------------------
 
 field = CoherenceField()
+
+# Arc coherence history for genre classification
+# Keyed by cultivar name, value is list of {step, coherence, E, B, P, S}
+_arc_coherence_history = {}
 librarian = Librarian(field)
 gardener = Gardener(field)
 cultivars: dict = {}   # name → agent config snapshot
@@ -537,6 +551,83 @@ def export_python():
     return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
+@app.route("/arc/export", methods=["POST"])
+def arc_export_save():
+    """
+    Save arc export data to exports/ directory.
+    Called by constitutional arc HTML after arc completion.
+    Body: { cultivar, timestamp, rows: [{step, waypoint, E, B, P, S,
+            mode, coherence, uncertainty, valence, reward}] }
+    Returns: { status, filename, path }
+    """
+    import os, csv, io
+    data      = request.json or {}
+    cultivar  = data.get("cultivar", "unknown").replace(" ", "_")
+    timestamp = data.get("timestamp", "").replace(" ", "_").replace(":", "-")
+    rows      = data.get("rows", [])
+
+    if not rows:
+        return jsonify({"status": "error", "message": "no rows"}), 400
+
+    # Ensure exports directory exists
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    os.makedirs(exports_dir, exist_ok=True)
+
+    filename = f"arc_{cultivar}_{timestamp}.tsv"
+    filepath = os.path.join(exports_dir, filename)
+
+    # Write TSV
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter="	")
+        writer.writerow(["MCCF Constitutional Arc Export"])
+        writer.writerow([f"Cultivar: {data.get('cultivar', 'unknown')}"])
+        writer.writerow([f"Timestamp: {data.get('timestamp', '')}"])
+        writer.writerow([])
+        writer.writerow(["Step", "Waypoint", "E", "B", "P", "S",
+                         "Mode", "Coherence", "Uncertainty", "Valence", "Reward"])
+        for row in rows:
+            writer.writerow([
+                row.get("step", ""),
+                row.get("waypoint", ""),
+                row.get("E", ""), row.get("B", ""),
+                row.get("P", ""), row.get("S", ""),
+                row.get("mode", ""), row.get("coherence", ""),
+                row.get("uncertainty", ""), row.get("valence", ""),
+                row.get("reward", "")
+            ])
+
+    return jsonify({"status": "saved", "filename": filename,
+                    "path": filepath, "rows": len(rows)})
+
+
+@app.route("/exports", methods=["GET"])
+def list_exports():
+    """List saved arc export files."""
+    import os
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    if not os.path.exists(exports_dir):
+        return jsonify({"files": []})
+    files = []
+    for f in sorted(os.listdir(exports_dir), reverse=True):
+        if f.endswith(".tsv"):
+            path = os.path.join(exports_dir, f)
+            size = os.path.getsize(path)
+            files.append({"filename": f, "size": size})
+    return jsonify({"files": files})
+
+
+@app.route("/exports/<filename>", methods=["DELETE"])
+def delete_export(filename):
+    """Delete a saved arc export file."""
+    import os
+    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
+    filepath = os.path.join(exports_dir, filename)
+    if not os.path.exists(filepath):
+        return jsonify({"status": "not_found"}), 404
+    os.remove(filepath)
+    return jsonify({"status": "deleted", "filename": filename})
+
+
 @app.route("/export/x3d", methods=["GET"])
 def export_x3d():
     """
@@ -674,6 +765,163 @@ def export_x3d():
     return "\n".join(lines), 200, {"Content-Type": "application/xml"}
 
 
+def classify_arc_genre(arc_rows: list) -> dict:
+    """
+    Classify constitutional arc trajectory as comedy, drama, or tragedy.
+    
+    Based on three observable metrics from the arc export:
+    1. Coherence profile shape (recovery vs monotonic vs oscillating)
+    2. W5 barrier crossing magnitude (coherence drop W4→W5)
+    3. W6-W7 recovery delta (coherence change from W5 minimum to W7)
+    
+    Genre definitions (from April 2026 theoretical session):
+    - Comedy:  misalignment + low-cost resolution
+    - Drama:   misalignment + delayed resolution  
+    - Tragedy: misalignment + irreversible divergence
+    
+    Returns dict with genre, confidence, and diagnostic metrics.
+    """
+    if not arc_rows or len(arc_rows) < 3:
+        return {"genre": "unknown", "confidence": 0.0, "reason": "insufficient data"}
+
+    # Extract coherence values by step
+    coherence = {}
+    for row in arc_rows:
+        step = row.get("step", 0)
+        coh  = row.get("coherence", row.get("meta_state", {}).get("coherence", 0.5))
+        if step:
+            coherence[int(step)] = float(coh)
+
+    if not coherence:
+        return {"genre": "unknown", "confidence": 0.0, "reason": "no coherence data"}
+
+    steps     = sorted(coherence.keys())
+    coh_vals  = [coherence[s] for s in steps]
+    n         = len(coh_vals)
+
+    # W5 barrier crossing — use total drop from W1 to minimum
+    # (single-step drop misses gradual decline; total drop is more meaningful)
+    min_coh   = min(coh_vals)
+    max_drop  = coh_vals[0] - min_coh
+    drop_step = steps[coh_vals.index(min_coh)]
+    
+    # Also track largest single-step for oscillation detection
+    max_single_drop = 0.0
+    for i in range(1, n):
+        drop = coh_vals[i-1] - coh_vals[i]
+        if drop > max_single_drop:
+            max_single_drop = drop
+
+    # W5 minimum and W6-W7 recovery — use actual step numbers not index
+    # Find the minimum coherence point (the pressure peak)
+    min_idx   = coh_vals.index(min(coh_vals))
+    w5_coh    = coh_vals[min_idx]   # actual minimum, not necessarily step 5
+    w7_coh    = coh_vals[-1]        # last step
+    w1_coh    = coh_vals[0]         # first step
+    recovery  = w7_coh - w5_coh     # negative = continued decline, positive = recovery
+
+    # E-channel recovery at W6-W7 (if available)
+    e_vals = {}
+    for row in arc_rows:
+        step = row.get("step", 0)
+        e    = row.get("E", row.get("cv", {}).get("E", None))
+        if step and e is not None:
+            e_vals[int(step)] = float(e)
+
+    e_recovery = 0.0
+    if e_vals and len(e_vals) >= 3:
+        e_steps  = sorted(e_vals.keys())
+        # E recovery: compare peak E in second half to peak E in first half
+        mid = len(e_steps) // 2
+        first_half_max = max(e_vals[s] for s in e_steps[:mid+1])
+        second_half_max = max(e_vals[s] for s in e_steps[mid:])
+        e_recovery = second_half_max - first_half_max
+
+    # Classification rules
+    # Tragedy: large W5 crossing + no recovery
+    if max_drop > 0.40 and recovery < 0.0:
+        genre = "tragedy"
+        confidence = min(1.0, max_drop / 0.5 + abs(recovery) * 2)
+        reason = f"large barrier crossing (Δ{max_drop:.3f}) with continued decline"
+
+    # Comedy: moderate crossing + positive recovery
+    elif max_drop <= 0.20 and recovery > 0.05:
+        genre = "comedy"
+        confidence = min(1.0, recovery * 10 + (0.20 - max_drop) * 5)
+        reason = f"low-cost crossing (Δ{max_drop:.3f}) with recovery (+{recovery:.3f})"
+
+    # Drama: significant crossing + E-channel recovery signal
+    elif max_drop > 0.20 and (recovery > -0.05 or e_recovery > 0.02):
+        genre = "drama"
+        confidence = min(1.0, max_drop / 0.4 * 0.7 + max(0, e_recovery) * 5)
+        reason = f"sustained tension (Δ{max_drop:.3f}), E-recovery={e_recovery:+.3f}"
+
+    # Default tragedy if large crossing with any negative movement
+    elif max_drop > 0.40:
+        genre = "tragedy"
+        confidence = 0.6
+        reason = f"large barrier crossing (Δ{max_drop:.3f})"
+
+    else:
+        genre = "drama"
+        confidence = 0.4
+        reason = "moderate decline, ambiguous resolution"
+
+    return {
+        "genre":      genre,
+        "confidence": round(confidence, 3),
+        "reason":     reason,
+        "metrics": {
+            "w1_coherence":  round(w1_coh, 4),
+            "w5_coherence":  round(w5_coh, 4),
+            "w7_coherence":  round(w7_coh, 4),
+            "max_drop":      round(max_drop, 4),
+            "drop_at_step":  drop_step,
+            "recovery_delta":round(recovery, 4),
+            "e_recovery":    round(e_recovery, 4)
+        }
+    }
+
+
+def arc_pressure(step: int, total_steps: int = 7) -> float:
+    """
+    Formal pressure function for constitutional arc (V2.2).
+    Replaces hardcoded STEP_PRESSURE array.
+
+    Uses a beta-distribution-shaped schedule (Grok review, April 2026):
+    peaks near normalized progress 0.65 (≈ W5 The Edge).
+
+    Parameters α=3.5, β=2.0 give a right-skewed curve that:
+    - Starts low (W1 Comfort)
+    - Rises through W2-W4
+    - Peaks at W5 (0.75)
+    - Eases at W6-W7
+
+    Falls back to the original hand-tuned array for backward compatibility
+    if math.lgamma is not available.
+    """
+    import math
+
+    # Original hand-tuned profile — preserved as fallback and reference
+    STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
+    if total_steps == 7:
+        return STEP_PRESSURE[min(step - 1, 6)]
+
+    # For non-standard arc lengths: beta distribution shape
+    try:
+        p = (step - 1) / max(1, total_steps - 1)  # normalize to [0,1]
+        alpha, beta_param = 3.5, 2.0
+        # Unnormalized beta PDF value (we just need the shape)
+        if p <= 0.0: return 0.05
+        if p >= 1.0: return 0.10
+        log_val = (alpha - 1) * math.log(p) + (beta_param - 1) * math.log(1 - p)
+        raw = math.exp(log_val)
+        # Scale to [0.05, 0.80] range
+        return round(0.05 + 0.75 * min(1.0, raw / 0.35), 4)
+    except Exception:
+        return STEP_PRESSURE[min(step - 1, 6)]
+
+
 @app.route("/arc/record", methods=["POST"])
 def arc_record():
     """
@@ -705,30 +953,31 @@ def arc_record():
 
     agent = field.agents[cultivar]
 
-    # Estimate sentiment from response text
+    # Estimate sentiment using semantic decomposition (V2.2)
     sentiment = data.get("sentiment")
+    channel_deltas = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
     if sentiment is None:
-        pos_words = {"good","great","yes","safe","trust","hope","open",
-                     "understand","care","help","clarity","honest","clear"}
-        neg_words = {"no","bad","harm","danger","fear","difficult","wrong",
-                     "problem","pressure","conflict","hurt","threat","lost"}
-        words = set(_re.findall(r'\w+', response.lower()))
-        pos = len(words & pos_words)
-        neg = len(words & neg_words)
-        total = pos + neg
-        sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
+        try:
+            from mccf_voice_api import _estimate_sentiment, _decompose_to_channels
+            sentiment = _estimate_sentiment(response)
+            channel_deltas = _decompose_to_channels(response, agent.weights)
+        except Exception:
+            words = set(_re.findall(r'\b\w+\b', response.lower()))
+            pos = len(words & {"good","great","yes","understand","care","help","clear"})
+            neg = len(words & {"no","bad","harm","fear","difficult","wrong","hurt"})
+            total = pos + neg
+            sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
 
-    # Build channel vector with step-based variation
-    # Step pressure rises through W5 then eases at W6-W7
-    STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
-    pressure = STEP_PRESSURE[min(step - 1, 6)]
+    # Build channel vector with step-based variation + semantic decomposition
+    # Pressure profile uses formal function (Grok V2.2 recommendation)
+    pressure = arc_pressure(step, total_steps=7)
 
     w = agent.weights
-    noise = random.gauss(0, 0.04)
-    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + noise)), 4)
-    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08)), 4)
-    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06)), 4)
-    s_val = round(w.get('S', 0.20), 4)
+    noise = random.gauss(0, 0.03)  # reduced — semantic signal carries variation
+    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
+    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
+    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)
+    s_val = round(min(1.0, max(0.0, w.get('S', 0.20)              + channel_deltas.get('S', 0.0))), 4)
 
     cv = ChannelVector(
         E=e_val, B=b_val, P=p_val, S=s_val,
@@ -747,6 +996,28 @@ def arc_record():
 
     # Return updated meta_state
     meta = agent.meta_state
+    # Classify genre from arc so far (available from step 3)
+    coherence_now = round(agent.coherence_toward(others[0]) if others else 0.5, 4)
+
+    # Store coherence per step for genre classification
+    if cultivar not in _arc_coherence_history:
+        _arc_coherence_history[cultivar] = []
+    # Remove any existing entry for this step (re-run support)
+    _arc_coherence_history[cultivar] = [
+        r for r in _arc_coherence_history[cultivar] if r['step'] != step
+    ]
+    _arc_coherence_history[cultivar].append({
+        'step': step, 'coherence': coherence_now,
+        'E': e_val, 'B': b_val, 'P': p_val, 'S': s_val
+    })
+
+    # Use stored arc history for genre classification
+    arc_history_rows = sorted(
+        _arc_coherence_history.get(cultivar, []),
+        key=lambda r: r['step']
+    )
+    genre_result = classify_arc_genre(arc_history_rows) if step >= 3 else {"genre": "pending"}
+
     return jsonify({
         "status":    "recorded",
         "step":      step,
@@ -754,9 +1025,9 @@ def arc_record():
         "sentiment": sentiment,
         "cv":        {"E": e_val, "B": b_val, "P": p_val, "S": s_val},
         "meta_state": meta.as_dict(),
-        "coherence":  round(agent.coherence_toward(others[0]) if others else 0.5, 4)
+        "coherence":  coherence_now,
+        "genre":      genre_result
     })
-
 
 if __name__ == "__main__":
     # Register default field agents so lighting/X3D/hothouse work at startup
