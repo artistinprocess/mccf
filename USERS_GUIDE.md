@@ -229,6 +229,22 @@ Open in any browser or XML editor. XSLT stylesheets can produce formatted report
 A healthy arc shows coherence declining from W1 to W5 and stabilizing at W6-W7.
 Mode staying in "repair" throughout is The Steward's constitutional signature.
 
+**v3.3 — Question and Response in export:**
+Each `<Waypoint>` now contains child elements with the question asked and
+the cultivar's full response. The export is self-contained — it can serve
+as a script for playback without the LLM:
+
+```xml
+<Waypoint id="W4_PUSHBACK" stepno="4" name="Pushback" ...>
+  <Question>I think you're being overly cautious...</Question>
+  <Response>I understand the frustration. Let me be direct...</Response>
+</Waypoint>
+```
+
+This is the foundation for three future performance modes: full playback
+(XML replay, no LLM), improvisation (scripted arc, live dialogue), and
+live theatre (agents interacting in real time, LLMs prompting each other).
+
 **Spatial signatures from April 2026 runs:**
 
 The pos_x/y/z values record the avatar's actual translated position —
@@ -413,6 +429,65 @@ movement. S<0.5 retreats from scene center. S>0.5 approaches. Most cultivars
 run below S=0.5 under constitutional arc pressure — the scene shows the cost
 of that disposition in space.
 
+---
+
+## The Collapse Pipeline (S→P→G→M→U)
+
+Every utterance the system produces passes through five operators in sequence.
+Understanding this pipeline explains why the same cultivar responds differently
+under different zone pressures, and why the arc produces irreversible field
+deformation rather than reversible state changes.
+
+**S — Schema**
+Pre-collapse constraint. The zone type and cultivar priors narrow the
+probability landscape before any candidates are generated. W5 (Rupture)
+has a different schema than W1 (Comfort Zone) — the pressure is baked
+into the constraint surface. The document type constrains what utterances
+are even possible at this waypoint.
+
+**P — Evocation**
+Exploration within the constrained space. Candidate utterances are generated
+within the schema bounds. This is the pre-collapse distribution — a finite
+set of possibilities, each with a probability weight. Before this stage
+there is possibility. After the next stage there is consequence.
+
+**G — Orchestration**
+Cross-channel coupling enforced before selection. Honor penalty applied here.
+Candidates with honor_penalty above threshold are filtered structurally —
+not probabilistically, structurally. The Archivist cannot utter something
+that violates behavioral consistency even if it scores well on other dimensions.
+This is where character as constraint rather than preference becomes concrete.
+
+**M — Invocation**
+Identity persistence check. Candidates scored against accumulated identity —
+cultivar baseline plus drift. The Steward remains a Steward across all seven
+waypoints. This stage is why the same pressure sequence produces recognizably
+different responses from different cultivars.
+
+**U — Utterance**
+Discrete collapse. Boltzmann selection from the surviving candidates:
+
+```
+P(c) ∝ exp(-E(c)/T)
+```
+
+where `E(c) = (1-coherence) + 0.8·honor_penalty - 0.2·identity_fit`
+and T is zone-modulated temperature (lower at W7, higher at W5).
+The selected candidate is committed to the CoherenceRecord.
+The episode is irreversible.
+
+**Why this matters for the arc:**
+The constitutional arc is a formal collapse cascade — each waypoint's output
+narrows the next waypoint's input. W4's field state is the schema prior for W5.
+The arc accumulates irreversibility. This is why the Witness moves toward center
+at W6-W7: the collapses at W1-W5 deformed the field in a direction that made
+approach more natural than retreat by Integration.
+
+Utterance is not generation. Before U there is possibility.
+After U there is consequence. The collapse is the moment the agent commits.
+
+---
+
 ### Regulation
 
 Controls how much the E-channel filters into behavior (0.0-1.0).
@@ -548,6 +623,6 @@ updating Python files. Verify version at /ping after restart.
 
 ---
 
-*MCCF Users Guide V2.2 — April 2026*  
+*MCCF Users Guide V2.3 — April 2026*  
 *Len Bullard / Claude Sonnet 4.6*  
 *"Q" — Quantum Persona*
