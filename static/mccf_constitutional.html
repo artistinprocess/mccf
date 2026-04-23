@@ -884,6 +884,11 @@ function exportArcState() {
     const pz  = (zb + (S - 0.5) * Z_RANGE).toFixed(2);
     const wid = wp.key;
 
+    // XML-escape prose content — apostrophes, angles, ampersands
+    const xmlEsc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+    const question = xmlEsc(getWaypointQuestion(wp.key, cultivar) || '');
+    const response = xmlEsc(arcHistory[i] || '');
+
     xml += `    <Waypoint id="${wid}" stepno="${i+1}" name="${wp.label}"`;
     xml += ` E="${(c.E||0).toFixed(4)}" B="${(c.B||0).toFixed(4)}"`;
     xml += ` P="${(c.P||0).toFixed(4)}" S="${S.toFixed(4)}"`;
@@ -891,7 +896,10 @@ function exportArcState() {
     xml += ` Uncertainty="${(c.uncertainty||0).toFixed(4)}"`;
     xml += ` Valence="${(c.valence||0).toFixed(4)}"`;
     xml += ` Reward="${(c.reward||0).toFixed(4)}"`;
-    xml += ` pos_x="${px}" pos_y="${py}" pos_z="${pz}"/>\n`;
+    xml += ` pos_x="${px}" pos_y="${py}" pos_z="${pz}">\n`;
+    xml += `      <Question>${question}</Question>\n`;
+    xml += `      <Response>${response}</Response>\n`;
+    xml += `    </Waypoint>\n`;
   });
 
   xml += `  </Cultivar>\n`;
