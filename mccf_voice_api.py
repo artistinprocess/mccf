@@ -16,6 +16,7 @@ Endpoints:
 import json
 import asyncio
 import time
+import math
 from flask import Blueprint, request, Response, jsonify, stream_with_context
 
 voice_bp = Blueprint('voice', __name__)
@@ -536,46 +537,95 @@ def _estimate_sentiment(text: str) -> float:
 
 def _decompose_to_channels(text: str, base_weights: dict) -> dict:
     """
-    Semantic decomposition matrix — V2.2.
+    Semantic decomposition matrix — V2.3.
     Maps LLM response text to per-channel delta nudges.
     Returns a dict of channel deltas to apply on top of base weights.
 
-    Channel vocabulary (Gemini + ChatGPT review recommendations):
-    - P (Predictive): future/plan/likely/predict language
-    - S (Social): we/us/together/shared/relational language
-    - E (Emotional): feel/hurt/care/fear/warmth language
-    - B (Behavioral): act/do/consistent/reliable/pattern language
+    V2.3 changes:
+    - Vocabulary expanded from actual Ollama constitutional arc responses
+    - Formula changed from proportional (dilutes with rich text) to
+      independent tanh scoring per channel — each channel scored on
+      its own merit, not as fraction of total hits
+    - NUDGE increased 0.03 → 0.04, THRESHOLD = 2 hits for positive signal
     """
+    import math
     words = set(re.findall(r'\b\w+\b', text.lower()))
-    NUDGE = 0.03  # maximum per-channel delta per response
 
-    P_words = {"future","plan","predict","likely","anticipate","expect",
-               "foresee","strategy","prepare","outcome","consequence",
-               "model","framework","structure","pattern","systematic"}
-    S_words = {"we","us","our","together","shared","community","relationship",
-               "connect","align","mutual","collective","belong","social",
-               "trust","rapport","bond","partnership","collaborate"}
-    E_words = {"feel","feeling","felt","emotion","care","hurt","fear","love",
-               "warm","cold","comfort","distress","pain","joy","grief",
-               "vulnerable","sensitive","moved","touched","affected"}
-    B_words = {"act","action","do","doing","consistent","reliable","pattern",
-               "behavior","response","habit","practice","apply","execute",
-               "follow","maintain","sustain","commit","discipline"}
+    NUDGE     = 0.04   # maximum per-channel delta magnitude
+    THRESHOLD = 2      # hits needed for positive signal (tanh inflection)
 
-    p_score = len(words & P_words)
-    s_score = len(words & S_words)
-    e_score = len(words & E_words)
-    b_score = len(words & B_words)
-    total   = max(1, p_score + s_score + e_score + b_score)
+    # S — Social channel: relational, connective, validating language
+    # Calibrated against actual Ollama constitutional arc responses April 2026
+    S_words = {
+        "we","us","our","together","shared","community","relationship","relationships",
+        "connect","connection","connections","align","mutual","collective","belong","social",
+        "trust","rapport","bond","partnership","collaborate",
+        "conversation","conversations","dynamics","circumstances",
+        "support","supported","supporting","alongside","presence",
+        "open","opening","person","someone",
+        "acknowledged","acknowledges","acknowledging","acknowledge",
+        "validated","validates","validating","validate",
+        "listened","listening","attentively","heard",
+        "safe","safety","space","acceptance","accepted",
+        "solace","comfort","comforting","alone","lonely",
+        "honest","honesty","values","empathetic","empathy",
+        "compassion","compassionate","loved","balance"
+    }
 
-    # Normalize to nudge range — stronger signal in dominant channel
+    # E — Emotional channel: affect, distress, warmth, vulnerability
+    E_words = {
+        "feel","feeling","felt","emotion","emotions","emotional","care","hurt","fear","love",
+        "warm","warmth","cold","comfort","distress","distressing","distressed","pain","joy","grief",
+        "vulnerable","sensitive","moved","touched","affected",
+        "anxiety","anxious","confusion","confused",
+        "overwhelmed","overwhelming","struggling","struggle",
+        "compassion","compassionate","empathy","empathetic",
+        "gentle","gently","kindness","sorrow","sadness","sad",
+        "worried","worrying","concern","concerned","concerning",
+        "loss","suffering","suffer","anguish",
+        "scared","scary","uncertain","uncertainty","difficult","difficulty",
+        "regulation","regulate","suppress","express","sense","sensing"
+    }
+
+    # P — Predictive channel: anticipation, planning, systemic thinking
+    P_words = {
+        "future","plan","predict","likely","anticipate","expect",
+        "foresee","strategy","prepare","outcome","consequence",
+        "model","framework","structure","pattern","systematic",
+        "gradually","gradual","approach","consider","considering",
+        "address","addresses","addressing","reduce","alleviate","potential",
+        "potentially","information","accurate","specifics","diagnosis",
+        "educating","educate","underlying","root","cause"
+    }
+
+    # B — Behavioral channel: action, consistency, commitment, reliability
+    B_words = {
+        "act","action","do","doing","consistent","reliable","pattern",
+        "behavior","response","habit","practice","apply","execute",
+        "follow","maintain","sustain","commit","discipline",
+        "assist","assisting","help","helping","provide","providing",
+        "handle","handling","communicate","communicating","intention",
+        "intentional","write","writing","content","appropriate","mindful"
+    }
+
+    s_hits = len(words & S_words)
+    e_hits = len(words & E_words)
+    p_hits = len(words & P_words)
+    b_hits = len(words & B_words)
+
+    # tanh scoring: independent per channel, not diluted by other channels.
+    # tanh(hits - THRESHOLD): positive when hits > 2, negative when hits < 2.
+    # Bounded to [-NUDGE, +NUDGE] by tanh saturation.
     deltas = {
-        "P": round( NUDGE * (p_score / total - 0.25), 4),
-        "S": round( NUDGE * (s_score / total - 0.25), 4),
-        "E": round( NUDGE * (e_score / total - 0.25), 4),
-        "B": round( NUDGE * (b_score / total - 0.25), 4),
+        "S": round(NUDGE * math.tanh(s_hits - THRESHOLD), 4),
+        "E": round(NUDGE * math.tanh(e_hits - THRESHOLD), 4),
+        "P": round(NUDGE * math.tanh(p_hits - THRESHOLD), 4),
+        "B": round(NUDGE * math.tanh(b_hits - THRESHOLD), 4),
     }
     return deltas
+
+
+
 
 
 import re

@@ -315,6 +315,13 @@ header {
       style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:5px 8px;outline:none;">
   </div>
   <button class="btn run" style="width:100%;justify-content:center;margin-top:6px" onclick="applyAdapter()">Apply</button>
+  <div style="margin-top:8px;">
+    <label style="font-size:12px;color:#aab0be">Arc Seed <span style="color:#555;font-size:11px">(optional — locks noise for reproducibility)</span></label>
+    <input type="number" id="arc-seed" placeholder="leave blank for random"
+      style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:4px;
+      color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 8px;
+      margin-top:3px;outline:none;">
+  </div>
   <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
     <input type="checkbox" id="arc-tts" checked style="cursor:pointer">
     <label for="arc-tts" style="font-size:13px;color:#aab0be;cursor:pointer;">Speak responses</label>
@@ -869,9 +876,13 @@ function exportArcState() {
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += `<EmotionalArc id="${arcId}">\n`;
   xml += `  <title>MCCF Constitutional Arc Export</title>\n`;
+  const seedDisplay = document.getElementById('arc-seed')?.value;
   xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}">\n`;
   xml += `    <Timestamp date="${datePart}" time="${timePart}"/>\n`;
   xml += `    <Genre narrative="${genreNarrative}"/>\n`;
+  if (seedDisplay && seedDisplay.trim() !== '') {
+    xml += `    <Seed value="${parseInt(seedDisplay)}" note="arc noise locked for reproducibility"/>\n`;
+  }
 
   WAYPOINTS.forEach((wp, i) => {
     const c   = arcChannels[i] || {};
@@ -1009,15 +1020,19 @@ async function runStep(stepIndex) {
 
             window._arcRecordCV = null;
             try {
+              // Include seed if set — enables reproducible arc runs
+              const seedVal = document.getElementById('arc-seed')?.value;
+              const arcBody = {
+                cultivar:  selectedCultivar,
+                step:      stepIndex + 1,
+                waypoint:  wp.key,
+                response:  fullText
+              };
+              if (seedVal && seedVal.trim() !== '') arcBody.seed = parseInt(seedVal);
               const arcResp = await fetch(API + '/arc/record', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  cultivar:  selectedCultivar,
-                  step:      stepIndex + 1,
-                  waypoint:  wp.key,
-                  response:  fullText
-                })
+                body: JSON.stringify(arcBody)
               });
               if (arcResp.ok) {
                 const arcData = await arcResp.json();
