@@ -928,6 +928,11 @@ if __name__ == "__main__":
                         "filename":    _fname,
                         "created":     time.time()
                     }
+                    # Also register as field agent if not already present
+                    if _name not in field.agents:
+                        _agent = Agent(_name, weights=_w, role="agent")
+                        _agent.set_regulation(_r)
+                        field.register(_agent)
                     _loaded += 1
             except Exception as _e:
                 print(f"  Warning: could not load {_fname}: {_e}")
