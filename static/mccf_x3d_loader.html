@@ -419,7 +419,7 @@ function applyArcCV(data) {
 
     // v3.2: S-channel translation fires on EVERY arc step — no holdoff
     // Translation is a position update, not a material state — no conflict with polling
-    const Z_RANGE   = 2.5;
+    const Z_RANGE   = 8.0;  // display amplifier — physics unchanged, increase for visibility
     const zBaseline = { Steward: 12, Archivist: 18, Witness: 8 };
     const xBaseline = { Steward: -5, Archivist:  5, Witness: 0 };
     const posNode   = scene.getNamedNode('Pos_' + suffix);

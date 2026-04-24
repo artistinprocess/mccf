@@ -877,7 +877,10 @@ function exportArcState() {
   xml += `<EmotionalArc id="${arcId}">\n`;
   xml += `  <title>MCCF Constitutional Arc Export</title>\n`;
   const seedDisplay = document.getElementById('arc-seed')?.value;
-  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}">\n`;
+  // actor attribute — blank until multi-LLM routing implemented (V2.4)
+  const adapterVal = document.getElementById('adapter-sel')?.value || '';
+  const actorAttr  = adapterVal && adapterVal !== 'stub' ? ` actor="${adapterVal}"` : '';
+  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}"${actorAttr}>\n`;
   xml += `    <Timestamp date="${datePart}" time="${timePart}"/>\n`;
   xml += `    <Genre narrative="${genreNarrative}"/>\n`;
   if (seedDisplay && seedDisplay.trim() !== '') {
