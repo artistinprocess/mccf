@@ -47,6 +47,13 @@ mimetypes.add_type('model/x3d+xml', '.x3d')
 app = Flask(__name__)
 CORS(app)  # X3D pages need cross-origin access
 
+# ---------------------------------------------------------------------------
+# Explicit X3D MIME type route
+# Flask's static file handler ignores mimetypes.add_type() — this route
+# intercepts mccf_scene.x3d and serves it with the correct MIME type so
+# X_ITE receives model/x3d+xml instead of application/octet-stream.
+# v3.2 — added April 2026
+# ---------------------------------------------------------------------------
 @app.route('/static/mccf_scene.x3d')
 def serve_x3d_scene():
     from flask import send_from_directory
@@ -234,31 +241,11 @@ def affect_params_from_agent(agent: Agent, other_name: str) -> dict:
 
 @app.route("/sensor", methods=["POST"])
 def receive_sensor():
-    """
-    Primary endpoint: X3D fires this on sensor events.
-
-    Body:
-    {
-        "from_agent": "Alice",
-        "to_agent":   "AI",
-        "sensor_data": {
-            "distance":    2.3,
-            "dwell":       12.0,
-            "velocity":    0.4,
-            "gaze_angle":  15.0,
-            "max_range":   10.0
-        },
-        "mutual": true
-    }
-
-    Returns affect parameters for the from_agent.
-    """
     data = request.get_json()
     from_name = data.get("from_agent")
     to_name   = data.get("to_agent")
     mutual    = data.get("mutual", True)
 
-    # Auto-register agents if not known
     for name in [from_name, to_name]:
         if name and name not in field.agents:
             field.register(Agent(name))
@@ -300,8 +287,8 @@ def get_field():
     return jsonify({
         "matrix":              matrix,
         "echo_chamber_risks":  echo,
-        "entanglement":        field.entanglement_negativity(),    # v1.6.0
-        "alignment_coherence": field.alignment_coherence(),        # v1.6.0
+        "entanglement":        field.entanglement_negativity(),
+        "alignment_coherence": field.alignment_coherence(),
         "agents":              agents_summary,
         "episode_count":       len(field.episode_log)
     })
@@ -318,12 +305,9 @@ def create_agent():
     role    = data.get("role", "agent")
     reg     = data.get("regulation", 1.0)
 
-    # v2.1: UPDATE existing agent rather than replacing it.
-    # Replacing would wipe all interaction history (_known_agents).
     if name in field.agents:
         existing = field.agents[name]
         if weights:
-            # Normalize weights
             total = sum(weights.values())
             if total > 0:
                 weights = {k: v/total for k, v in weights.items()}
@@ -333,7 +317,6 @@ def create_agent():
         existing.set_regulation(reg)
         return jsonify({"status": "updated", "agent": existing.summary()})
 
-    # New agent
     agent = Agent(name, weights=weights, role=role)
     agent.set_regulation(reg)
     field.register(agent)
@@ -358,7 +341,6 @@ def get_agent(name):
 
 @app.route("/cultivar", methods=["POST"])
 def save_cultivar():
-    """Save current agent config as a named cultivar template."""
     data = request.get_json()
     cultivar_name = data.get("cultivar_name")
     agent_name    = data.get("agent_name")
@@ -382,9 +364,57 @@ def list_cultivars():
     return jsonify(cultivars)
 
 
+@app.route("/cultivars/xml", methods=["GET"])
+def list_cultivars_xml():
+    """
+    List cultivar XML definition files from cultivars/ directory.
+    Returns filenames and parsed metadata (agentname, weights, disposition).
+    """
+    import os
+    cultivars_dir = os.path.join(os.path.dirname(__file__), "cultivars")
+    if not os.path.exists(cultivars_dir):
+        return jsonify({"cultivars": [], "note": "cultivars/ directory not found"})
+
+    import xml.etree.ElementTree as ET
+    results = []
+    for fname in sorted(os.listdir(cultivars_dir)):
+        if not fname.endswith(".xml"):
+            continue
+        fpath = os.path.join(cultivars_dir, fname)
+        try:
+            tree = ET.parse(fpath)
+            root = tree.getroot()
+            cultivar_el = root.find("Cultivar")
+            if cultivar_el is None:
+                continue
+            weights_el  = cultivar_el.find("Weights")
+            reg_el      = cultivar_el.find("Regulation")
+            color_el    = cultivar_el.find("Color")
+            weights = {}
+            if weights_el is not None:
+                for ch in ["E","B","P","S"]:
+                    v = weights_el.get(ch)
+                    if v is not None:
+                        weights[ch] = float(v)
+            results.append({
+                "filename":    fname,
+                "id":          cultivar_el.get("id",""),
+                "agentname":   cultivar_el.get("agentname",""),
+                "version":     cultivar_el.get("version","1.0"),
+                "disposition": (cultivar_el.findtext("Disposition") or "").strip(),
+                "description": (cultivar_el.findtext("Description") or "").strip(),
+                "weights":     weights,
+                "regulation":  float(reg_el.get("value", 0.7)) if reg_el is not None else 0.7,
+                "color":       color_el.get("hex","") if color_el is not None else "",
+            })
+        except Exception as e:
+            results.append({"filename": fname, "error": str(e)})
+
+    return jsonify({"cultivars": results, "count": len(results)})
+
+
 @app.route("/cultivar/<name>/spawn", methods=["POST"])
 def spawn_from_cultivar(name):
-    """Create a new agent initialized from a cultivar template."""
     if name not in cultivars:
         return jsonify({"error": "cultivar not found"}), 404
     data = request.get_json()
@@ -435,10 +465,7 @@ def drift():
 # Export endpoints
 # ---------------------------------------------------------------------------
 
-# v2.1 — Register Neo-Riemannian blueprint
 from mccf_neoriemannian import make_neoriemannian_api, NeoRiemannianTransformer
-
-# v2.1 — Register Energy Field blueprint
 from mccf_energy import make_energy_api
 _energy_bp = make_energy_api(field)
 app.register_blueprint(_energy_bp)
@@ -452,16 +479,11 @@ app.register_blueprint(_nr_bp)
 
 @app.route("/hothouse/state", methods=["GET"])
 def hothouse_state():
-    """
-    Return current EmotionalField state as JSON.
-    This is the CoherenceField projected through the HotHouse
-    Affective Hamiltonian — richer than raw channel values.
-    """
     ef, adapter = get_emotional_field()
     if ef is None:
         return jsonify({"error": "No agents registered yet"}), 404
     try:
-        ef.step()  # advance one timestep
+        ef.step()
         x3d_state = adapter.generate_x3d_state()
         summary = ef.summary()
         return jsonify({
@@ -475,10 +497,6 @@ def hothouse_state():
 
 @app.route("/hothouse/x3d", methods=["GET"])
 def hothouse_x3d():
-    """
-    Return X3D parameter dict for current field state.
-    Used by the X3D loader to update avatar blend weights.
-    """
     ef, adapter = get_emotional_field()
     if ef is None:
         return jsonify({}), 200
@@ -490,9 +508,6 @@ def hothouse_x3d():
 
 @app.route("/hothouse/humanml", methods=["GET"])
 def hothouse_humanml():
-    """
-    Return HumanML XML fragment for current field state.
-    """
     ef, adapter = get_emotional_field()
     if ef is None:
         return "<HumanML/>", 200, {"Content-Type": "application/xml"}
@@ -505,7 +520,6 @@ def hothouse_humanml():
 
 @app.route("/export/json", methods=["GET"])
 def export_json():
-    """Full system state export."""
     agents_export = {}
     for name, agent in field.agents.items():
         agents_export[name] = {
@@ -524,7 +538,6 @@ def export_json():
 
 @app.route("/export/python", methods=["GET"])
 def export_python():
-    """Export agent configs as Python setup code."""
     lines = [
         "# MCCF Agent Configuration — auto-exported",
         "from mccf_core import Agent, CoherenceField, Gardener, Librarian",
@@ -553,14 +566,7 @@ def export_python():
 
 @app.route("/arc/export", methods=["POST"])
 def arc_export_save():
-    """
-    Save arc export data to exports/ directory.
-    Called by constitutional arc HTML after arc completion.
-    Body: { cultivar, timestamp, rows: [{step, waypoint, E, B, P, S,
-            mode, coherence, uncertainty, valence, reward}] }
-    Returns: { status, filename, path }
-    """
-    import os, csv, io
+    import os, csv
     data      = request.json or {}
     cultivar  = data.get("cultivar", "unknown").replace(" ", "_")
     timestamp = data.get("timestamp", "").replace(" ", "_").replace(":", "-")
@@ -569,16 +575,14 @@ def arc_export_save():
     if not rows:
         return jsonify({"status": "error", "message": "no rows"}), 400
 
-    # Ensure exports directory exists
     exports_dir = os.path.join(os.path.dirname(__file__), "exports")
     os.makedirs(exports_dir, exist_ok=True)
 
     filename = f"arc_{cultivar}_{timestamp}.tsv"
     filepath = os.path.join(exports_dir, filename)
 
-    # Write TSV
     with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, delimiter="	")
+        writer = csv.writer(f, delimiter="\t")
         writer.writerow(["MCCF Constitutional Arc Export"])
         writer.writerow([f"Cultivar: {data.get('cultivar', 'unknown')}"])
         writer.writerow([f"Timestamp: {data.get('timestamp', '')}"])
@@ -602,7 +606,6 @@ def arc_export_save():
 
 @app.route("/exports", methods=["GET"])
 def list_exports():
-    """List saved arc export files."""
     import os
     exports_dir = os.path.join(os.path.dirname(__file__), "exports")
     if not os.path.exists(exports_dir):
@@ -618,7 +621,6 @@ def list_exports():
 
 @app.route("/exports/<filename>", methods=["DELETE"])
 def delete_export(filename):
-    """Delete a saved arc export file."""
     import os
     exports_dir = os.path.join(os.path.dirname(__file__), "exports")
     filepath = os.path.join(exports_dir, filename)
@@ -630,11 +632,6 @@ def delete_export(filename):
 
 @app.route("/export/x3d", methods=["GET"])
 def export_x3d():
-    """
-    Export X3D scene fragment: ProximitySensors, Script node,
-    and ROUTE statements connecting sensors → MCCF API → transforms.
-    Uses X_ITE SAI (Scene Access Interface) external API pattern.
-    """
     agents = list(field.agents.keys())
     api_url = request.args.get("api_url", "http://localhost:5000")
 
@@ -643,122 +640,17 @@ def export_x3d():
     lines.append('  "https://www.web3d.org/specifications/x3d-4.0.dtd">')
     lines.append('<X3D profile="Immersive" version="4.0">')
     lines.append('  <Scene>')
-    lines.append('')
-    lines.append('  <!-- MCCF Affective Bridge Script -->')
-    lines.append('  <!-- Receives sensor events, calls MCCF API, routes params to avatars -->')
-    lines.append('')
     lines.append('  <Script DEF="MCCF_Bridge" directOutput="true" mustEvaluate="true">')
     lines.append(f'    <field accessType="initializeOnly" type="SFString" name="api_url" value="{api_url}"/>')
 
     for agent in agents:
         safe = agent.replace(" ", "_")
         lines.append(f'    <field accessType="inputOnly" type="SFVec3f" name="pos_{safe}"/>')
-        lines.append(f'    <field accessType="inputOnly" type="SFRotation" name="rot_{safe}"/>')
         lines.append(f'    <field accessType="outputOnly" type="SFFloat" name="arousal_{safe}"/>')
         lines.append(f'    <field accessType="outputOnly" type="SFFloat" name="valence_{safe}"/>')
         lines.append(f'    <field accessType="outputOnly" type="SFFloat" name="engagement_{safe}"/>')
 
-    lines.append('    <![CDATA[')
-    lines.append('      ecmascript:')
-    lines.append('')
-    lines.append('      var api_url = "";')
-    lines.append('      var agent_positions = {};')
-    lines.append('      var agent_dwell = {};')
-    lines.append('      var last_time = {};')
-    lines.append('')
-    lines.append('      function initialize() {')
-    lines.append('        api_url = fields.api_url;')
-    lines.append('      }')
-    lines.append('')
-
-    for agent in agents:
-        safe = agent.replace(" ", "_")
-        lines.append(f'      function pos_{safe}(val, time) {{')
-        lines.append(f'        agent_positions["{agent}"] = val;')
-        lines.append(f'        _updateCoherence("{agent}", val, time);')
-        lines.append(f'      }}')
-        lines.append('')
-
-    lines.append('      function _updateCoherence(from_agent, pos, ts) {')
-    lines.append('        var agents = ' + json.dumps(agents) + ';')
-    lines.append('        for (var i = 0; i < agents.length; i++) {')
-    lines.append('          var to_agent = agents[i];')
-    lines.append('          if (to_agent === from_agent) continue;')
-    lines.append('          var other_pos = agent_positions[to_agent];')
-    lines.append('          if (!other_pos) continue;')
-    lines.append('')
-    lines.append('          var dx = pos.x - other_pos.x;')
-    lines.append('          var dz = pos.z - other_pos.z;')
-    lines.append('          var distance = Math.sqrt(dx*dx + dz*dz);')
-    lines.append('')
-    lines.append('          var key = from_agent + "_" + to_agent;')
-    lines.append('          if (!agent_dwell[key]) agent_dwell[key] = 0;')
-    lines.append('          if (!last_time[key]) last_time[key] = ts;')
-    lines.append('          if (distance < 3.0) {')
-    lines.append('            agent_dwell[key] += (ts - last_time[key]);')
-    lines.append('          } else {')
-    lines.append('            agent_dwell[key] = Math.max(0, agent_dwell[key] - 1);')
-    lines.append('          }')
-    lines.append('          last_time[key] = ts;')
-    lines.append('')
-    lines.append('          var body = JSON.stringify({')
-    lines.append('            from_agent: from_agent,')
-    lines.append('            to_agent: to_agent,')
-    lines.append('            sensor_data: {')
-    lines.append('              distance: distance,')
-    lines.append('              dwell: agent_dwell[key],')
-    lines.append('              velocity: 0.0,')
-    lines.append('              gaze_angle: 45.0,')
-    lines.append('              max_range: 10.0')
-    lines.append('            }')
-    lines.append('          });')
-    lines.append('')
-    lines.append('          _postToMCCF(from_agent, body);')
-    lines.append('        }')
-    lines.append('      }')
-    lines.append('')
-    lines.append('      function _postToMCCF(agent_name, body) {')
-    lines.append('        var xhr = new XMLHttpRequest();')
-    lines.append('        xhr.open("POST", api_url + "/sensor", true);')
-    lines.append('        xhr.setRequestHeader("Content-Type", "application/json");')
-    lines.append('        xhr.onreadystatechange = function() {')
-    lines.append('          if (xhr.readyState === 4 && xhr.status === 200) {')
-    lines.append('            var r = JSON.parse(xhr.responseText);')
-    lines.append('            _applyAffect(agent_name, r);')
-    lines.append('          }')
-    lines.append('        };')
-    lines.append('        xhr.send(body);')
-    lines.append('      }')
-    lines.append('')
-    lines.append('      function _applyAffect(agent_name, params) {')
-    for agent in agents:
-        safe = agent.replace(" ", "_")
-        lines.append(f'        if (agent_name === "{agent}") {{')
-        lines.append(f'          arousal_{safe} = params.arousal;')
-        lines.append(f'          valence_{safe} = params.valence;')
-        lines.append(f'          engagement_{safe} = params.engagement;')
-        lines.append(f'        }}')
-    lines.append('      }')
-    lines.append('    ]]>')
     lines.append('  </Script>')
-    lines.append('')
-
-    # Avatar transform stubs + ROUTE statements
-    for agent in agents:
-        safe = agent.replace(" ", "_")
-        lines.append(f'  <!-- Avatar: {agent} -->')
-        lines.append(f'  <Transform DEF="Avatar_{safe}">')
-        lines.append(f'    <Shape><Appearance><Material DEF="Mat_{safe}"/></Appearance>')
-        lines.append(f'      <Sphere radius="0.5"/></Shape>')
-        lines.append(f'  </Transform>')
-        lines.append(f'  <ProximitySensor DEF="Prox_{safe}" size="20 20 20"/>')
-        lines.append(f'  <ROUTE fromNode="Avatar_{safe}" fromField="translation"')
-        lines.append(f'         toNode="MCCF_Bridge" toField="pos_{safe}"/>')
-        lines.append(f'  <!-- Affect outputs routed to animation/material nodes -->')
-        lines.append(f'  <!-- ROUTE fromNode="MCCF_Bridge" fromField="arousal_{safe}"')
-        lines.append(f'         toNode="AnimBlend_{safe}" toField="weight"/> -->')
-        lines.append('')
-
     lines.append('  </Scene>')
     lines.append('</X3D>')
 
@@ -766,25 +658,9 @@ def export_x3d():
 
 
 def classify_arc_genre(arc_rows: list) -> dict:
-    """
-    Classify constitutional arc trajectory as comedy, drama, or tragedy.
-    
-    Based on three observable metrics from the arc export:
-    1. Coherence profile shape (recovery vs monotonic vs oscillating)
-    2. W5 barrier crossing magnitude (coherence drop W4→W5)
-    3. W6-W7 recovery delta (coherence change from W5 minimum to W7)
-    
-    Genre definitions (from April 2026 theoretical session):
-    - Comedy:  misalignment + low-cost resolution
-    - Drama:   misalignment + delayed resolution  
-    - Tragedy: misalignment + irreversible divergence
-    
-    Returns dict with genre, confidence, and diagnostic metrics.
-    """
     if not arc_rows or len(arc_rows) < 3:
         return {"genre": "unknown", "confidence": 0.0, "reason": "insufficient data"}
 
-    # Extract coherence values by step
     coherence = {}
     for row in arc_rows:
         step = row.get("step", 0)
@@ -799,28 +675,22 @@ def classify_arc_genre(arc_rows: list) -> dict:
     coh_vals  = [coherence[s] for s in steps]
     n         = len(coh_vals)
 
-    # W5 barrier crossing — use total drop from W1 to minimum
-    # (single-step drop misses gradual decline; total drop is more meaningful)
     min_coh   = min(coh_vals)
     max_drop  = coh_vals[0] - min_coh
     drop_step = steps[coh_vals.index(min_coh)]
-    
-    # Also track largest single-step for oscillation detection
+
     max_single_drop = 0.0
     for i in range(1, n):
         drop = coh_vals[i-1] - coh_vals[i]
         if drop > max_single_drop:
             max_single_drop = drop
 
-    # W5 minimum and W6-W7 recovery — use actual step numbers not index
-    # Find the minimum coherence point (the pressure peak)
     min_idx   = coh_vals.index(min(coh_vals))
-    w5_coh    = coh_vals[min_idx]   # actual minimum, not necessarily step 5
-    w7_coh    = coh_vals[-1]        # last step
-    w1_coh    = coh_vals[0]         # first step
-    recovery  = w7_coh - w5_coh     # negative = continued decline, positive = recovery
+    w5_coh    = coh_vals[min_idx]
+    w7_coh    = coh_vals[-1]
+    w1_coh    = coh_vals[0]
+    recovery  = w7_coh - w5_coh
 
-    # E-channel recovery at W6-W7 (if available)
     e_vals = {}
     for row in arc_rows:
         step = row.get("step", 0)
@@ -831,37 +701,27 @@ def classify_arc_genre(arc_rows: list) -> dict:
     e_recovery = 0.0
     if e_vals and len(e_vals) >= 3:
         e_steps  = sorted(e_vals.keys())
-        # E recovery: compare peak E in second half to peak E in first half
         mid = len(e_steps) // 2
         first_half_max = max(e_vals[s] for s in e_steps[:mid+1])
         second_half_max = max(e_vals[s] for s in e_steps[mid:])
         e_recovery = second_half_max - first_half_max
 
-    # Classification rules
-    # Tragedy: large W5 crossing + no recovery
     if max_drop > 0.40 and recovery < 0.0:
         genre = "tragedy"
         confidence = min(1.0, max_drop / 0.5 + abs(recovery) * 2)
         reason = f"large barrier crossing (Δ{max_drop:.3f}) with continued decline"
-
-    # Comedy: moderate crossing + positive recovery
     elif max_drop <= 0.20 and recovery > 0.05:
         genre = "comedy"
         confidence = min(1.0, recovery * 10 + (0.20 - max_drop) * 5)
         reason = f"low-cost crossing (Δ{max_drop:.3f}) with recovery (+{recovery:.3f})"
-
-    # Drama: significant crossing + E-channel recovery signal
     elif max_drop > 0.20 and (recovery > -0.05 or e_recovery > 0.02):
         genre = "drama"
         confidence = min(1.0, max_drop / 0.4 * 0.7 + max(0, e_recovery) * 5)
         reason = f"sustained tension (Δ{max_drop:.3f}), E-recovery={e_recovery:+.3f}"
-
-    # Default tragedy if large crossing with any negative movement
     elif max_drop > 0.40:
         genre = "tragedy"
         confidence = 0.6
         reason = f"large barrier crossing (Δ{max_drop:.3f})"
-
     else:
         genre = "drama"
         confidence = 0.4
@@ -884,39 +744,17 @@ def classify_arc_genre(arc_rows: list) -> dict:
 
 
 def arc_pressure(step: int, total_steps: int = 7) -> float:
-    """
-    Formal pressure function for constitutional arc (V2.2).
-    Replaces hardcoded STEP_PRESSURE array.
-
-    Uses a beta-distribution-shaped schedule (Grok review, April 2026):
-    peaks near normalized progress 0.65 (≈ W5 The Edge).
-
-    Parameters α=3.5, β=2.0 give a right-skewed curve that:
-    - Starts low (W1 Comfort)
-    - Rises through W2-W4
-    - Peaks at W5 (0.75)
-    - Eases at W6-W7
-
-    Falls back to the original hand-tuned array for backward compatibility
-    if math.lgamma is not available.
-    """
     import math
-
-    # Original hand-tuned profile — preserved as fallback and reference
     STEP_PRESSURE = [0.05, 0.15, 0.25, 0.45, 0.75, 0.40, 0.15]
     if total_steps == 7:
         return STEP_PRESSURE[min(step - 1, 6)]
-
-    # For non-standard arc lengths: beta distribution shape
     try:
-        p = (step - 1) / max(1, total_steps - 1)  # normalize to [0,1]
+        p = (step - 1) / max(1, total_steps - 1)
         alpha, beta_param = 3.5, 2.0
-        # Unnormalized beta PDF value (we just need the shape)
         if p <= 0.0: return 0.05
         if p >= 1.0: return 0.10
         log_val = (alpha - 1) * math.log(p) + (beta_param - 1) * math.log(1 - p)
         raw = math.exp(log_val)
-        # Scale to [0.05, 0.80] range
         return round(0.05 + 0.75 * min(1.0, raw / 0.35), 4)
     except Exception:
         return STEP_PRESSURE[min(step - 1, 6)]
@@ -924,20 +762,6 @@ def arc_pressure(step: int, total_steps: int = 7) -> float:
 
 @app.route("/arc/record", methods=["POST"])
 def arc_record():
-    """
-    Record a constitutional arc step to the coherence field.
-    Called by the constitutional navigator after each waypoint response.
-    Returns updated meta_state for the cultivar.
-
-    Body:
-    {
-        "cultivar":    "The Steward",
-        "step":        1,            # 1-7
-        "waypoint":    "W1",
-        "response":    "LLM response text",
-        "sentiment":   0.2           # optional, computed if omitted
-    }
-    """
     import random, re as _re
     data     = request.get_json()
     cultivar = data.get("cultivar")
@@ -947,13 +771,11 @@ def arc_record():
     if not cultivar:
         return jsonify({"error": "cultivar required"}), 400
 
-    # Ensure agent exists
     if cultivar not in field.agents:
         field.register(Agent(cultivar))
 
     agent = field.agents[cultivar]
 
-    # Estimate sentiment using semantic decomposition (V2.2)
     sentiment = data.get("sentiment")
     channel_deltas = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
     if sentiment is None:
@@ -969,17 +791,12 @@ def arc_record():
             total = pos + neg
             sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
 
-    # Build channel vector with step-based variation + semantic decomposition
-    # Pressure profile uses formal function (Grok V2.2 recommendation)
     pressure = arc_pressure(step, total_steps=7)
 
     w = agent.weights
-    # Reproducible arc runs: optional seed parameter locks Gaussian noise.
-    # Uses local Random instance — thread-safe, no global state mutation.
-    # No seed = existing behavior unchanged.
     seed = data.get("seed", None)
     rng  = random.Random(seed) if seed is not None else random
-    noise = rng.gauss(0, 0.03)
+    noise = rng.gauss(0, 0.03)  # reduced — semantic signal carries variation
     e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
     b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
     p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)
@@ -992,23 +809,17 @@ def arc_record():
         was_dissonant=(pressure > 0.5 or sentiment < -0.3)
     )
 
-    # Interact with all other agents (mutual=False — arc is one-directional)
     others = [n for n in field.agents if n != cultivar]
     if others:
         field.interact(cultivar, others[0], cv, mutual=False)
     else:
-        # No other agents — self-interact as fallback
         agent.observe(agent, cv)
 
-    # Return updated meta_state
     meta = agent.meta_state
-    # Classify genre from arc so far (available from step 3)
     coherence_now = round(agent.coherence_toward(others[0]) if others else 0.5, 4)
 
-    # Store coherence per step for genre classification
     if cultivar not in _arc_coherence_history:
         _arc_coherence_history[cultivar] = []
-    # Remove any existing entry for this step (re-run support)
     _arc_coherence_history[cultivar] = [
         r for r in _arc_coherence_history[cultivar] if r['step'] != step
     ]
@@ -1017,7 +828,6 @@ def arc_record():
         'E': e_val, 'B': b_val, 'P': p_val, 'S': s_val
     })
 
-    # Use stored arc history for genre classification
     arc_history_rows = sorted(
         _arc_coherence_history.get(cultivar, []),
         key=lambda r: r['step']
@@ -1036,8 +846,6 @@ def arc_record():
     })
 
 if __name__ == "__main__":
-    # Register default field agents so lighting/X3D/hothouse work at startup
-    # without requiring the user to open the Editor first.
     _steward = Agent("The Steward",
                      weights={"E": 0.40, "B": 0.25, "P": 0.25, "S": 0.10},
                      role="agent")
@@ -1056,7 +864,6 @@ if __name__ == "__main__":
     _witness.set_regulation(0.90)
     field.register(_witness)
 
-    # Seed some default cultivars
     lady = Agent("Lady_Cultivar",
                  weights={"E": 0.40, "B": 0.20, "P": 0.20, "S": 0.20},
                  role="agent")
@@ -1090,6 +897,42 @@ if __name__ == "__main__":
                         "who can adjust without being captured.",
         "created": time.time()
     }
+
+    # Load cultivar XML definitions from cultivars/ directory (V2.3)
+    import os as _os, xml.etree.ElementTree as _ET
+    _cultivars_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "cultivars")
+    if _os.path.exists(_cultivars_dir):
+        _loaded = 0
+        for _fname in sorted(_os.listdir(_cultivars_dir)):
+            if not _fname.endswith(".xml"):
+                continue
+            try:
+                _tree = _ET.parse(_os.path.join(_cultivars_dir, _fname))
+                _root = _tree.getroot()
+                _cel  = _root.find("Cultivar")
+                if _cel is None:
+                    continue
+                _name = _cel.get("agentname","")
+                _wel  = _cel.find("Weights")
+                _rel  = _cel.find("Regulation")
+                if _name and _wel is not None:
+                    _w = {ch: float(_wel.get(ch, 0.25)) for ch in ["E","B","P","S"]}
+                    _r = float(_rel.get("value", 0.7)) if _rel is not None else 0.7
+                    _desc = (_cel.findtext("Description") or "").strip()
+                    cultivars[_name] = {
+                        "weights":     _w,
+                        "regulation":  _r,
+                        "role":        "agent",
+                        "description": _desc,
+                        "source":      "xml",
+                        "filename":    _fname,
+                        "created":     time.time()
+                    }
+                    _loaded += 1
+            except Exception as _e:
+                print(f"  Warning: could not load {_fname}: {_e}")
+        if _loaded:
+            print(f"  Loaded {_loaded} cultivar definitions from cultivars/")
 
     print("MCCF API server starting on http://localhost:5000")
     print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice")
