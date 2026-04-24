@@ -41,8 +41,18 @@ from mccf_core import (
     Librarian, Gardener, CHANNEL_NAMES
 )
 
+import mimetypes
+mimetypes.add_type('model/x3d+xml', '.x3d')
+
 app = Flask(__name__)
 CORS(app)  # X3D pages need cross-origin access
+
+@app.route('/static/mccf_scene.x3d')
+def serve_x3d_scene():
+    from flask import send_from_directory
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    return send_from_directory(static_dir, 'mccf_scene.x3d',
+                               mimetype='model/x3d+xml')
 
 # ---------------------------------------------------------------------------
 # Global engine state
@@ -951,6 +961,7 @@ def arc_record():
             from mccf_voice_api import _estimate_sentiment, _decompose_to_channels
             sentiment = _estimate_sentiment(response)
             channel_deltas = _decompose_to_channels(response, agent.weights)
+            sentiment = round(sentiment + channel_deltas.pop('valence_nudge', 0.0), 3)
         except Exception:
             words = set(_re.findall(r'\b\w+\b', response.lower()))
             pos = len(words & {"good","great","yes","understand","care","help","clear"})
@@ -963,7 +974,12 @@ def arc_record():
     pressure = arc_pressure(step, total_steps=7)
 
     w = agent.weights
-    noise = random.gauss(0, 0.03)  # reduced — semantic signal carries variation
+    # Reproducible arc runs: optional seed parameter locks Gaussian noise.
+    # Uses local Random instance — thread-safe, no global state mutation.
+    # No seed = existing behavior unchanged.
+    seed = data.get("seed", None)
+    rng  = random.Random(seed) if seed is not None else random
+    noise = rng.gauss(0, 0.03)
     e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
     b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
     p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)

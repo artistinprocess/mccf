@@ -315,6 +315,13 @@ header {
       style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:5px 8px;outline:none;">
   </div>
   <button class="btn run" style="width:100%;justify-content:center;margin-top:6px" onclick="applyAdapter()">Apply</button>
+  <div style="margin-top:8px;">
+    <label style="font-size:12px;color:#aab0be">Arc Seed <span style="color:#555;font-size:11px">(optional — locks noise for reproducibility)</span></label>
+    <input type="number" id="arc-seed" placeholder="leave blank for random"
+      style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:4px;
+      color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 8px;
+      margin-top:3px;outline:none;">
+  </div>
   <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
     <input type="checkbox" id="arc-tts" checked style="cursor:pointer">
     <label for="arc-tts" style="font-size:13px;color:#aab0be;cursor:pointer;">Speak responses</label>
@@ -869,9 +876,16 @@ function exportArcState() {
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += `<EmotionalArc id="${arcId}">\n`;
   xml += `  <title>MCCF Constitutional Arc Export</title>\n`;
-  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}">\n`;
+  const seedDisplay = document.getElementById('arc-seed')?.value;
+  // actor attribute — blank until multi-LLM routing implemented (V2.4)
+  const adapterVal = document.getElementById('adapter-sel')?.value || '';
+  const actorAttr  = adapterVal && adapterVal !== 'stub' ? ` actor="${adapterVal}"` : '';
+  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}"${actorAttr}>\n`;
   xml += `    <Timestamp date="${datePart}" time="${timePart}"/>\n`;
   xml += `    <Genre narrative="${genreNarrative}"/>\n`;
+  if (seedDisplay && seedDisplay.trim() !== '') {
+    xml += `    <Seed value="${parseInt(seedDisplay)}" note="arc noise locked for reproducibility"/>\n`;
+  }
 
   WAYPOINTS.forEach((wp, i) => {
     const c   = arcChannels[i] || {};
@@ -884,6 +898,11 @@ function exportArcState() {
     const pz  = (zb + (S - 0.5) * Z_RANGE).toFixed(2);
     const wid = wp.key;
 
+    // XML-escape prose content — apostrophes, angles, ampersands
+    const xmlEsc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+    const question = xmlEsc(getWaypointQuestion(wp.key, cultivar) || '');
+    const response = xmlEsc(arcHistory[i] || '');
+
     xml += `    <Waypoint id="${wid}" stepno="${i+1}" name="${wp.label}"`;
     xml += ` E="${(c.E||0).toFixed(4)}" B="${(c.B||0).toFixed(4)}"`;
     xml += ` P="${(c.P||0).toFixed(4)}" S="${S.toFixed(4)}"`;
@@ -891,7 +910,10 @@ function exportArcState() {
     xml += ` Uncertainty="${(c.uncertainty||0).toFixed(4)}"`;
     xml += ` Valence="${(c.valence||0).toFixed(4)}"`;
     xml += ` Reward="${(c.reward||0).toFixed(4)}"`;
-    xml += ` pos_x="${px}" pos_y="${py}" pos_z="${pz}"/>\n`;
+    xml += ` pos_x="${px}" pos_y="${py}" pos_z="${pz}">\n`;
+    xml += `      <Question>${question}</Question>\n`;
+    xml += `      <Response>${response}</Response>\n`;
+    xml += `    </Waypoint>\n`;
   });
 
   xml += `  </Cultivar>\n`;
@@ -1001,15 +1023,19 @@ async function runStep(stepIndex) {
 
             window._arcRecordCV = null;
             try {
+              // Include seed if set — enables reproducible arc runs
+              const seedVal = document.getElementById('arc-seed')?.value;
+              const arcBody = {
+                cultivar:  selectedCultivar,
+                step:      stepIndex + 1,
+                waypoint:  wp.key,
+                response:  fullText
+              };
+              if (seedVal && seedVal.trim() !== '') arcBody.seed = parseInt(seedVal);
               const arcResp = await fetch(API + '/arc/record', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  cultivar:  selectedCultivar,
-                  step:      stepIndex + 1,
-                  waypoint:  wp.key,
-                  response:  fullText
-                })
+                body: JSON.stringify(arcBody)
               });
               if (arcResp.ok) {
                 const arcData = await arcResp.json();
