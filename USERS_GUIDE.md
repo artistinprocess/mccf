@@ -234,6 +234,17 @@ Each `<Waypoint>` now contains child elements with the question asked and
 the cultivar's full response. The export is self-contained — it can serve
 as a script for playback without the LLM:
 
+**Actor attribute (V2.3):** When a non-stub adapter is selected (ollama,
+anthropathic, openai, google), the `<Cultivar>` element includes
+`actor="adapter_name"`. Blank when using stub. Prepared for multi-LLM
+scenes — when two models play different cultivars, the export identifies
+which model produced which arc.
+
+**Uncertainty markers (V2.3.1):** The decomposition matrix now detects
+hedging language (maybe, perhaps, uncertain, hesitant, etc.) and applies
+a negative valence nudge. This prevents LLM politeness bias from masking
+W5 Rupture pressure — when the model hedges, the field feels it.
+
 ```xml
 <Waypoint id="W4_PUSHBACK" stepno="4" name="Pushback" ...>
   <Question>I think you're being overly cautious...</Question>
@@ -244,6 +255,38 @@ as a script for playback without the LLM:
 This is the foundation for three future performance modes: full playback
 (XML replay, no LLM), improvisation (scripted arc, live dialogue), and
 live theatre (agents interacting in real time, LLMs prompting each other).
+
+**Cultivar XML definition files (V2.3):**
+Cultivars are defined as XML files in the `cultivars/` directory. Each file
+is a valid EmotionalArc document with no Waypoints populated — the same
+schema as the arc export, at a different lifecycle stage. On server startup,
+all XML files in `cultivars/` are loaded and registered as both cultivar
+templates and field agents automatically.
+
+The four default cultivars ship as XML files: `cultivar_the_steward.xml`,
+`cultivar_the_archivist.xml`, `cultivar_the_witness.xml`,
+`cultivar_the_advocate.xml`. The constitutional navigator fetches these
+on page load and merges them into its roster.
+
+To add a new cultivar: copy an existing XML file, edit the agentname,
+weights, disposition, phrases, and waypoint question overrides, save it
+to `cultivars/`, and restart the server. The new cultivar will appear in
+the constitutional navigator roster automatically.
+
+Waypoint questions in the XML file are sparse — only overrides from the
+shared defaults need to be specified. If a waypoint is not in the file,
+the shared default question is used.
+
+**Weight sync from Field Editor:** If you adjust a cultivar's weights in
+the Field Editor before running an arc, the constitutional navigator picks
+up the updated weights at the start of each arc run via `GET /agent/{name}`.
+The arc runs with the actual field state, not the hardcoded defaults.
+
+**Server XML export (V2.3.1):** When you click Export Arc State, the arc
+is saved as XML to the `exports/` directory on the server in addition to
+the browser download. The server XML is identical in format to the browser
+download — full EmotionalArc document with Question and Response elements.
+Previous TSV files in `exports/` are from earlier versions and can be deleted.
 
 **Spatial signatures from April 2026 runs:**
 
@@ -330,7 +373,7 @@ actual S-channel physics, not a visual amplification. Cultivars with low
 S-channel weights (The Steward: S=0.10) move very little. Cultivars with
 higher S weights (The Witness: S=0.30, The Advocate: S=0.35) show more
 visible drift. To amplify motion for visualization purposes, increase
-Z_RANGE in mccf_x3d_loader.html (default: 2.5 scene units).
+Z_RANGE in mccf_x3d_loader.html (default: 8.0 from V2.3 — display parameter only, does not affect channel values or XML export).
 
 **What to observe:** Use VP8 (Overview) to watch all three avatars
 simultaneously during an arc run. The Witness will show the most visible
@@ -575,9 +618,18 @@ updating Python files. Verify version at /ping after restart.
 * **Light intensity SAI disabled** — X\_ITE degrades scene on any intensity
   write to DirectionalLight/PointLight. Color writes work. Fix pending
   Light Master Script Node (V2.2). See X3D\_KNOWN\_ISSUES.md.
-* **S-channel translation range** — Z\_RANGE=2.5 produces subtle motion for
-  low-S cultivars (Steward, Archivist). Increase to 5.0-8.0 in
-  mccf\_x3d\_loader.html for more visible drift in demonstration contexts.
+* **S-channel translation range** — Z\_RANGE=8.0 (V2.3 default) produces
+  visible movement for most cultivars. Reduce to 2.5 for strict physics
+  representation. Z\_RANGE is a display parameter only — pos\_z in the
+  XML export always reflects true S-channel physics.
+* **Right panel weight display** — the detail panel in the constitutional
+  navigator shows hardcoded cultivar weights, not live field weights. Weights
+  used in the arc run ARE correct (synced from field at run time). Visual
+  display fix planned for Character Studio.
+* **GUI consolidation pending** — the current seven-module launcher has
+  overlapping functionality between the Field Editor, cultivar management,
+  and constitutional navigator. Character Studio (V2.4) will consolidate
+  cultivar definition and arc running into a single interface.
 * **Field state not persistent** — lost on server restart
 * **Single arc type** — only the constitutional arc (W1-W7) available
 * **Single LLM per session** — multi-LLM routing planned
@@ -618,11 +670,16 @@ updating Python files. Verify version at /ping after restart.
 | static/mccf\_lighting.html | Lighting display |
 | static/mccf\_ambient.html | Ambient music engine |
 | static/mccf\_energy.html | Energy field / moral topology |
+| cultivars/ | Cultivar XML definition files (EmotionalArc schema v1.0) |
+| cultivars/cultivar\_the\_steward.xml | The Steward cultivar definition |
+| cultivars/cultivar\_the\_archivist.xml | The Archivist cultivar definition |
+| cultivars/cultivar\_the\_witness.xml | The Witness cultivar definition |
+| cultivars/cultivar\_the\_advocate.xml | The Advocate cultivar definition |
 | mccf\_scene.x3d | X3D scene definition (v3.2 — Pos_* wrapper Transforms) |
 | X3D\_KNOWN\_ISSUES.md | X\_ITE SAI bug documentation |
 
 ---
 
-*MCCF Users Guide V2.3 — April 2026*  
+*MCCF Users Guide V2.3.2 — April 2026*  
 *Len Bullard / Claude Sonnet 4.6*  
 *"Q" — Quantum Persona*
