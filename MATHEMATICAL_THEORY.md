@@ -2,9 +2,9 @@
 
 ## Reconciling the Classical Constraint Framework, Zeilinger Information Ontology, and Quantum-Inspired Field Dynamics
 
-**Version:** 2.0 — April 2026  
+**Version:** 2.2 — April 2026  
 **Repository:** https://github.com/artistinprocess/mccf  
-**Ground truth:** mccf\_core.py, mccf\_hotHouse.py, mccf\_collapse.py (v1.7 / v2.0)
+**Ground truth:** mccf\_core.py v1.5, mccf\_hotHouse.py v2.2, mccf\_collapse.py v1.7, mccf\_voice\_api.py v2.3
 
 > "MCCF is not a model of intelligence. It is a system for keeping intelligence from falling apart."
 
@@ -142,6 +142,17 @@ This is **not** a standard Weyl, Dirac, or Clifford algebra spinor. It is a boun
 
 ## 4\. Affective / Emotional Parameters
 
+> **S channel — Other-Model (Theory of Mind):** Kate's formal specification
+> (April 2026) identifies S as the Other-Model channel — the agent's running
+> model of other agents' states and intentions. The asymmetric $R\_{ij}$ matrix
+> IS the implemented other-model representation: $R\_{ij}$ is agent $i$'s model
+> of its relationship with agent $j$, which need not equal $j$'s model of $i$.
+> The S channel weight controls how much weight an agent places on social/relational
+> modeling in its behavior. Renaming S = "Other-Model" in documentation is planned
+> for V2.3 — the implementation is already correct, only the label needs updating.
+
+
+
 **How are emotions encoded?**
 
 Emotions are encoded at two levels.
@@ -236,7 +247,16 @@ where:
 
 The discrete update (Euler integration, $\\Delta t = 0.05$):
 
-$$\\psi\_{i,c}(t+\\Delta t) = \\text{clip}!\\left(\\psi\_{i,c}(t) + \\Delta t \\cdot \\frac{d\\psi\_{i,c}}{dt},; 0,; 1\\right)$$
+$$\\psi\_{i,c}(t+\\Delta t) = \\text{clip}!\\left(\\psi\_{i,c}(t) + \\Delta t \\cdot \\left(\\frac{d\\psi\_{i,c}}{dt} - \\delta_c\\right),\\; 0,\\; 1\\right)$$
+
+where $\\delta\_c$ is the v2.2 viscous damping term:
+
+$$\\delta\_c = \\kappa \\cdot |\\psi\_{i,c} - w\_{i,c}^{\\text{ideology}}| \\cdot \\psi\_{i,c}, \\quad \\kappa = 0.08$$
+
+Friction scales with deviation from the ideology attractor and current channel value.
+At equilibrium $\\delta\_c \\approx 0$. Under pressure, overshoot is suppressed.
+This implements the critically damped narrative regime from Section 11.
+(`mccf\_hotHouse.py:DAMPING\_COEFFICIENT = 0.08`, v2.2)
 
 ### The H\_alignment Operator (Core Layer)
 
@@ -512,9 +532,14 @@ $$H\_{\\text{interaction},c} = \\sum\_{j \\neq i} J\_{ij}(\\psi\_{j,c} - \\psi\_
 
 $$H\_{\\text{align},c} = \\alpha\_c^{\\text{align}} \\cdot (w\_{i,c}^0 - \\psi\_{i,c}) \\cdot \\mathbf{1}\[\\text{gate}\_i]$$
 
-**TrustField hysteresis** — memory of rupture events (V2.2):
+**TrustField hysteresis** — memory of rupture events (V2.2 — **implemented**):
 
-$$\\gamma\_{\\text{eff}} = \\gamma \\times 2.0 \\quad \\text{if rupture in CoherenceRecord history}$$
+$$\\gamma\_{\\text{eff}} = \\gamma \\times 2.0 \\quad \\text{if } T\_{ij} < T\_\\text{hysteresis} = 0.15$$
+
+Once trust drops below the threshold, the `_ruptured` set permanently records that pair.
+`effective_gamma` doubles for all subsequent timesteps. Rupture flags exposed in
+`TrustField.as\_matrix()`. Biological analog: limbic scar tissue from betrayal.
+(`mccf\_hotHouse.py:HYSTERESIS\_THRESHOLD = 0.15`, v2.2)
 
 These compose into three observable narrative regimes:
 
@@ -539,7 +564,7 @@ observable metrics:
 2. **W5 barrier crossing magnitude** — coherence drop from W4 to W5
 3. **W6-W7 recovery delta** — coherence change from W5 minimum to W7
 
-Classification rules (proposed V2.2 feature):
+Classification rules (implemented V2.2 — `classify_arc_genre()` in `mccf_api.py`):
 
 |Genre|Coherence profile|W5 crossing|Recovery delta|
 |-|-|-|-|
@@ -636,6 +661,69 @@ The correct epistemological claim for MCCF is:
 theoretical design sessions with ChatGPT (Kate). Ground truth updated for
 V2.1.2.
 
+
+---
+
+## 13\. Asymmetry Pressure — H\_sym and classify\_asymmetry (V2.2)
+
+*This section formalizes the asymmetric coherence structure that was always
+present in $\mathbf{R}$ but not previously classified or acted upon.*
+
+### The Asymmetry Pressure Term H\_sym
+
+The asymmetric coherence matrix $R_{ij} \neq R_{ji}$ encodes a pressure term
+that the Hamiltonian does not yet explicitly represent. Define:
+
+$$H_\text{sym}(i,j) = |R_{ij} - R_{ji}|$$
+
+This is the structural asymmetry between agent $i$'s coherence toward $j$ and
+$j$'s coherence toward $i$. Large $H_\text{sym}$ values indicate relational
+instability — one agent is more invested in the relationship than the other.
+
+Three regimes:
+
+| $H_\text{sym}$ | Classification | Description |
+|---|---|---|
+| $< 0.15$ | **benign** | Normal relationship variance |
+| $0.15 - 0.40$ | **unstable** | Unrequited coherence, prone to rupture at W4-W5 |
+| $> 0.40$ or $\min(R_{ij}, R_{ji}) < 0.05$ | **pathological** | Parasocial or exploitative structure |
+
+### Reciprocity Metric
+
+$$\rho_{ij} = \frac{\min(R_{ij}, R_{ji})}{\max(R_{ij}, R_{ji})} \in [0, 1]$$
+
+$\rho = 1.0$ is symmetric. $\rho = 0.0$ is fully one-sided. Healthy relationships
+in the constitutional arc typically show $\rho > 0.6$.
+
+### Implementation: classify\_asymmetry()
+
+`mccf_core.py:CoherenceField.classify_asymmetry(agent_a, agent_b)` returns:
+
+- Gap $H_\text{sym}$, mutual coherence, reciprocity
+- Asymmetry type: benign / unstable / pathological
+- Dominance direction (which agent holds higher coherence)
+- Echo risk flag (mutual coherence $> 0.85$)
+
+### Extended echo\_chamber\_risk()
+
+The original `echo_chamber_risk()` only flagged high mutual coherence.
+V2.2 adds two new risk types:
+
+- **ASYMMETRIC** — gap $> 0.30$, regardless of mutual level
+- **PARASOCIAL** — $\min(R_{ij}, R_{ji}) < 0.08$ while the other side is moderate/high
+
+These risk types are structurally distinct from echo chambers: an echo chamber
+amplifies shared beliefs; an asymmetric relationship creates hidden pressure
+that may not be visible until the W4-W5 rupture zone.
+
+### Connection to Narrative Physics
+
+Unstable asymmetry predicts dramatic genre: one agent's investment in a
+relationship that the other barely reciprocates creates the pressure differential
+that W5 (The Edge) exploits. Pathological asymmetry predicts tragedy: the
+parasocial agent cannot recover because there is no relationship to recover into.
+
+---
 
 ## V2.3 — Kate's Formal MCCF Specification (April 2026)*
 
