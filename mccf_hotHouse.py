@@ -117,6 +117,26 @@ CULTIVAR_ARCHETYPES = {
 
 
 # ---------------------------------------------------------------------------
+# Dynamics configuration
+# ---------------------------------------------------------------------------
+
+# Damping coefficient (v2.2) — friction term in Euler integrator.
+# Reduces jitter and overshoot at high-pressure waypoints.
+# Physics: models viscous drag in the affective field.
+# At each step, a fraction of the current velocity is subtracted.
+# 0.0 = no damping (original behavior)
+# 0.05-0.15 = light damping (recommended for constitutional arc)
+# > 0.25 = heavy damping (slow convergence, use for stability testing)
+DAMPING_COEFFICIENT = 0.08
+
+# Hysteresis threshold (v2.2) — TrustField rupture memory.
+# If trust between a pair has ever fallen below this threshold (rupture),
+# the effective gamma (decay rate) is doubled for that pair.
+# Prevents rapid trust recovery after a rupture event.
+# Biological analog: limbic system scar tissue from betrayal.
+HYSTERESIS_THRESHOLD = 0.15
+
+# ---------------------------------------------------------------------------
 # Emotional field agent
 # ---------------------------------------------------------------------------
 
@@ -230,6 +250,10 @@ class TrustField:
         self.gamma  = gamma
         # Trust matrix: T[(i,j)] is i's trust toward j
         self._T: dict = {}
+        # v2.2: Hysteresis — track pairs that have experienced rupture
+        # Once a pair drops below HYSTERESIS_THRESHOLD, gamma doubles
+        # for that pair. Prevents rapid trust recovery after betrayal.
+        self._ruptured: set = set()
         for i, a in enumerate(agents):
             for j, b in enumerate(agents):
                 if a.name != b.name:
@@ -261,7 +285,15 @@ class TrustField:
                     for ch in ["E", "B", "P", "S"]
                 ) / 4.0  # normalize to [0,1]
                 t_ij = self._T[key]
-                dT   = self.beta * (1.0 - dist) - self.gamma * t_ij
+                # v2.2: Hysteresis — doubled gamma for ruptured pairs
+                # Once trust has fallen below threshold, decay rate
+                # is permanently increased for that pair.
+                if t_ij < HYSTERESIS_THRESHOLD:
+                    self._ruptured.add(key)
+                effective_gamma = (self.gamma * 2.0
+                                   if key in self._ruptured
+                                   else self.gamma)
+                dT   = self.beta * (1.0 - dist) - effective_gamma * t_ij
                 deltas[key] = dT
 
         # Apply simultaneously
@@ -270,12 +302,17 @@ class TrustField:
             self._T[key] = round(max(self.T_MIN, min(self.T_MAX, new_t)), 4)
 
     def as_matrix(self) -> dict:
-        """Return trust matrix as nested dict for API/export."""
+        """Return trust matrix as nested dict for API/export.
+        v2.2: includes rupture flags for ruptured pairs.
+        """
         result = {}
         for (from_n, to_n), val in self._T.items():
             if from_n not in result:
                 result[from_n] = {}
-            result[from_n][to_n] = val
+            result[from_n][to_n] = {
+                "trust":    val,
+                "ruptured": (from_n, to_n) in self._ruptured
+            }
         return result
 
     def summary(self) -> str:
@@ -473,10 +510,18 @@ class EmotionalField:
                 # H_environment: stochastic / zone pressure
                 delta_env = env_signal.get(ch, 0.0)
 
-                # Total update
+                # Total update — v2.2: damping term reduces jitter
+                # at high-pressure waypoints. Friction proportional to
+                # current psi deviation from ideology attractor.
+                # At equilibrium (psi ≈ ideology), damping is minimal.
+                # Under pressure (psi far from ideology), damping is maximal.
+                ideology_val = agent.ideology.get(ch, 0.25)
+                deviation    = abs(agent.psi[ch] - ideology_val)
+                damping      = DAMPING_COEFFICIENT * deviation * agent.psi[ch]
+
                 new_val = agent.psi[ch] + self.dt * (
                     delta_self + delta_interaction +
-                    delta_alignment + delta_env
+                    delta_alignment + delta_env - damping
                 )
                 psi_next[agent.name][ch] = max(0.0, min(1.0, new_val))
 
