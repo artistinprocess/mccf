@@ -638,9 +638,45 @@ function arcSpeak(text) {
 
 window.addEventListener('load', () => {
   loadArcVoices();
-  renderRoster();
   setApi(document.getElementById('api-url').value);
+  // v2.3.1: load cultivars from server XML definitions, then render roster
+  // This picks up any cultivar XML files dropped in cultivars/ directory
+  syncCultivarsFromServer().then(() => renderRoster());
 });
+
+async function syncCultivarsFromServer() {
+  try {
+    const r = await fetch(API + '/cultivars/xml', {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) return;
+    const data = await r.json();
+    (data.cultivars || []).forEach(c => {
+      if (!c.agentname || c.error) return;
+      const name = c.agentname;
+      if (CULTIVARS[name]) {
+        // Merge server weights into existing entry
+        if (c.weights && Object.keys(c.weights).length === 4) {
+          CULTIVARS[name].weights = c.weights;
+        }
+        if (c.regulation) CULTIVARS[name].regulation = c.regulation;
+        if (c.color)       CULTIVARS[name].color      = c.color;
+      } else {
+        // Add new cultivar not in hardcoded list
+        CULTIVARS[name] = {
+          weights:     c.weights || {E:0.25, B:0.25, P:0.25, S:0.25},
+          regulation:  c.regulation || 0.70,
+          color:       c.color || '#aab0be',
+          disposition: c.disposition || '',
+          description: c.description || '',
+          phrases:     [],
+          failure:     '',
+          zones:       []
+        };
+      }
+    });
+  } catch(e) {
+    // Server not up yet or cultivars/ missing — fall back to hardcoded list
+  }
+}
 
 function setApi(url) { API = url.trim(); ping(); }
 
@@ -931,6 +967,9 @@ function exportArcState() {
   toast('Arc exported as XML: ' + `mccf_arc_${arcId}.xml`);
 
   // ── Server auto-save (TSV — existing endpoint unchanged) ─────────
+  const seedValRaw  = document.getElementById('arc-seed')?.value;
+  const seedVal     = seedValRaw && seedValRaw.trim() !== '' ? parseInt(seedValRaw) : null;
+
   const rows = WAYPOINTS.map((wp, i) => {
     const c  = arcChannels[i] || {};
     const S  = c.S || 0.25;
@@ -950,14 +989,20 @@ function exportArcState() {
       reward:      (c.reward||0).toFixed(4),
       pos_x:       xb.toFixed(2),
       pos_y:       '0.00',
-      pos_z:       (zb + (S - 0.5) * Z_RANGE).toFixed(2)
+      pos_z:       (zb + (S - 0.5) * Z_RANGE).toFixed(2),
+      question:    getWaypointQuestion(wp.key, cultivar) || '',
+      response:    arcHistory[i] || ''
     };
   });
+
+  const serverBody = { cultivar, timestamp, rows };
+  if (seedVal !== null) serverBody.seed = seedVal;
+  if (gr && gr.genre && gr.genre !== 'pending') serverBody.genre = genreNarrative;
 
   fetch(API + '/arc/export', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ cultivar, timestamp, rows })
+    body: JSON.stringify(serverBody)
   }).then(r => r.json())
     .then(d => { if (d.status === 'saved') toast('Server saved: ' + d.filename); })
     .catch(() => {});
@@ -1159,6 +1204,32 @@ async function configureAgent() {
         name: selectedCultivar, weights: c.weights, role: 'agent', regulation: c.regulation
       })
     });
+
+    // v2.3.1: sync weights from field agent back into local CULTIVARS object.
+    // If user edited weights in the Field Editor, this picks them up so the
+    // arc runs with the actual field state, not the hardcoded JS defaults.
+    try {
+      const agentResp = await fetch(API + '/agent/' + encodeURIComponent(selectedCultivar));
+      if (agentResp.ok) {
+        const agentData = await agentResp.json();
+        if (agentData.weights && CULTIVARS[selectedCultivar]) {
+          CULTIVARS[selectedCultivar].weights = agentData.weights;
+          // Re-render weight display in detail panel so it matches field state
+          const wEl = document.getElementById('d-weights');
+          if (wEl) {
+            wEl.innerHTML = ['E','B','P','S'].map(ch => `
+              <div class="wd-row">
+                <span class="wd-ch" style="color:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}}[ch]">${ch}</span>
+                <div class="wd-track">
+                  <div class="wd-fill" style="width:${agentData.weights[ch]*100}%;background:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}}[ch]"></div>
+                </div>
+                <span class="wd-val">${agentData.weights[ch].toFixed(2)}</span>
+              </div>`).join('');
+          }
+        }
+      }
+    } catch {}
+
     await fetch(API + '/voice/configure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

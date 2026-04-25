@@ -566,11 +566,18 @@ def export_python():
 
 @app.route("/arc/export", methods=["POST"])
 def arc_export_save():
-    import os, csv
+    """
+    Save arc export as XML to exports/ directory (V2.3.1 — replaces TSV).
+    Body: { cultivar, timestamp, genre, seed, rows }
+    Returns: { status, filename, path }
+    """
+    import os
     data      = request.json or {}
-    cultivar  = data.get("cultivar", "unknown").replace(" ", "_")
-    timestamp = data.get("timestamp", "").replace(" ", "_").replace(":", "-")
+    cultivar  = data.get("cultivar", "unknown")
+    timestamp = data.get("timestamp", "")
     rows      = data.get("rows", [])
+    genre     = data.get("genre", "")
+    seed      = data.get("seed", None)
 
     if not rows:
         return jsonify({"status": "error", "message": "no rows"}), 400
@@ -578,27 +585,53 @@ def arc_export_save():
     exports_dir = os.path.join(os.path.dirname(__file__), "exports")
     os.makedirs(exports_dir, exist_ok=True)
 
-    filename = f"arc_{cultivar}_{timestamp}.tsv"
-    filepath = os.path.join(exports_dir, filename)
+    cultivar_slug = cultivar.replace(" ", "_")
+    ts_slug       = timestamp.replace(" ", "").replace(":", "")
+    arc_id        = f"{cultivar_slug}_{ts_slug}"
+    date_part     = timestamp[:10] if len(timestamp) >= 10 else timestamp
+    time_part     = timestamp[11:] if len(timestamp) >= 19 else ""
 
-    with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, delimiter="\t")
-        writer.writerow(["MCCF Constitutional Arc Export"])
-        writer.writerow([f"Cultivar: {data.get('cultivar', 'unknown')}"])
-        writer.writerow([f"Timestamp: {data.get('timestamp', '')}"])
-        writer.writerow([])
-        writer.writerow(["Step", "Waypoint", "E", "B", "P", "S",
-                         "Mode", "Coherence", "Uncertainty", "Valence", "Reward"])
-        for row in rows:
-            writer.writerow([
-                row.get("step", ""),
-                row.get("waypoint", ""),
-                row.get("E", ""), row.get("B", ""),
-                row.get("P", ""), row.get("S", ""),
-                row.get("mode", ""), row.get("coherence", ""),
-                row.get("uncertainty", ""), row.get("valence", ""),
-                row.get("reward", "")
-            ])
+    def xml_esc(s):
+        return (str(s)
+            .replace("&","&amp;").replace("<","&lt;")
+            .replace(">","&gt;").replace('"',"&quot;")
+            .replace("'","&apos;"))
+
+    xml  = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += f'<EmotionalArc id="{arc_id}">\n'
+    xml += f'  <title>MCCF Constitutional Arc Export</title>\n'
+    xml += f'  <Cultivar id="{arc_id}" agentname="{xml_esc(cultivar)}">\n'
+    xml += f'    <Timestamp date="{date_part}" time="{time_part}"/>\n'
+    if genre:
+        xml += f'    <Genre narrative="{xml_esc(genre)}"/>\n'
+    if seed is not None:
+        xml += f'    <Seed value="{seed}" note="arc noise locked for reproducibility"/>\n'
+
+    for row in rows:
+        wid = row.get("waypoint","").replace(" ","_").upper()
+        xml += f'    <Waypoint id="{wid}" stepno="{row.get("step","")}"'
+        xml += f' name="{xml_esc(row.get("waypoint",""))}"'
+        xml += f' E="{row.get("E","")}" B="{row.get("B","")}"'
+        xml += f' P="{row.get("P","")}" S="{row.get("S","")}"'
+        xml += f' Mode="{row.get("mode","")}" Coherence="{row.get("coherence","")}"'
+        xml += f' Uncertainty="{row.get("uncertainty","")}"'
+        xml += f' Valence="{row.get("valence","")}" Reward="{row.get("reward","")}"'
+        xml += f' pos_x="{row.get("pos_x","0.00")}" pos_y="{row.get("pos_y","0.00")}" pos_z="{row.get("pos_z","0.00")}">\n'
+        q = row.get("question","")
+        r = row.get("response","")
+        if q:
+            xml += f'      <Question>{xml_esc(q)}</Question>\n'
+        if r:
+            xml += f'      <Response>{xml_esc(r)}</Response>\n'
+        xml += f'    </Waypoint>\n'
+
+    xml += f'  </Cultivar>\n'
+    xml += f'</EmotionalArc>\n'
+
+    filename = f"arc_{arc_id}.xml"
+    filepath = os.path.join(exports_dir, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(xml)
 
     return jsonify({"status": "saved", "filename": filename,
                     "path": filepath, "rows": len(rows)})
