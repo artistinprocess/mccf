@@ -468,12 +468,28 @@ class CoherenceRecord:
         base = weighted_sum / total_weight if total_weight > 0 else 0.0
         raw  = min(1.0, base + dissonance_bonus / total_weight)
 
-        # v1.4.0: CCS modulation
-        # Pull toward mean (0.5) proportional to (1 - ccs)
-        # High CCS: score stays close to raw value
-        # Low CCS:  score pulled toward 0.5 (no strong integration signal)
-        ccs_clamped = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
-        modulated   = raw * ccs_clamped + 0.5 * (1.0 - ccs_clamped)
+        # v1.5.0: CCS modulation — compressed blend formulation.
+        #
+        # Previous (v1.4.0) convex form: raw * σ + 0.5 * (1-σ)
+        # Problem: low CCS pulls everything toward 0.5. A decoupled agent
+        # looks average rather than inconsistent. Grok review April 2026.
+        #
+        # New formulation: raw * σ + raw² * (1-σ)
+        #   High CCS (σ→1): modulated ≈ raw  (full signal)
+        #   Low CCS  (σ→0): modulated ≈ raw² (compressed toward low)
+        #
+        # Biological interpretation: low vmPFC activity means the agent
+        # struggles to BUILD coherence, not to recognize it. Weak
+        # relationships collapse toward zero; strong relationships are
+        # preserved but slightly reduced. The agent can still perceive
+        # strong coherence but cannot sustain it consistently.
+        #
+        # This produces undifferentiated behavior (Grok's correct term):
+        # the low-CCS agent's coherence signals are real but attenuated,
+        # not collapsed to a fictitious mean.
+        ccs_clamped  = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
+        raw_sq       = raw * raw          # compressed attenuator
+        modulated    = raw * ccs_clamped + raw_sq * (1.0 - ccs_clamped)
 
         return round(modulated * self.credibility, 4)
 
