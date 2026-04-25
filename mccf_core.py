@@ -813,7 +813,6 @@ class Agent:
             "name":       self.name,
             "role":       self.role,
             "regulation": self._affect_regulation,
-            "weights":    dict(self.weights),          # v2.1 — required by editor
             "known_agents": list(self._known_agents.keys()),
             "fidelity_active": {
                 k: v.fidelity_active for k, v in self._known_agents.items()
@@ -977,19 +976,126 @@ class CoherenceField:
         return "\n".join(lines)
 
     def echo_chamber_risk(self) -> dict:
+        """
+        v1.5.0 — Extended echo chamber risk detection.
+
+        Original: flags pairs with high mutual coherence (echo chamber).
+        Extension: also flags asymmetric risk patterns that the original
+        missed entirely — unstable and pathological asymmetry can be
+        as damaging as echo chambers but in different ways.
+
+        Risk types:
+          ECHO_HIGH     — mutual coherence > 0.92 (classic echo chamber)
+          ECHO_MODERATE — mutual coherence > 0.85
+          ASYMMETRIC    — large gap (> 0.30) regardless of mutual level.
+                          One agent may rupture suddenly when pressure hits.
+          PARASOCIAL    — one side near zero (< 0.08), other moderate/high.
+                          The coherent agent is broadcasting into a void.
+        """
         matrix = self.field_matrix()
-        names = list(self.agents.keys())
-        risks = {}
+        names  = list(self.agents.keys())
+        risks  = {}
         for n in names:
             for m in names:
                 if n < m:
-                    mutual = (matrix[n][m] + matrix[m][n]) / 2
+                    r_nm   = matrix[n][m]
+                    r_mn   = matrix[m][n]
+                    mutual = (r_nm + r_mn) / 2.0
+                    gap    = abs(r_nm - r_mn)
+                    key    = f"{n}↔{m}"
+
+                    # Classic echo chamber
                     if mutual > 0.85:
-                        risks[f"{n}↔{m}"] = {
+                        risks[key] = {
                             "mutual_coherence": round(mutual, 3),
-                            "risk": "HIGH" if mutual > 0.92 else "MODERATE"
+                            "gap":              round(gap, 3),
+                            "risk":             "ECHO_HIGH" if mutual > 0.92 else "ECHO_MODERATE",
+                            "note":             "high mutual coherence — echo chamber risk"
+                        }
+
+                    # Asymmetric risk — may not show as echo but still dangerous
+                    elif gap > 0.30:
+                        dominant  = n if r_nm > r_mn else m
+                        recessive = m if r_nm > r_mn else n
+                        risk_type = "PARASOCIAL" if min(r_nm, r_mn) < 0.08 else "ASYMMETRIC"
+                        risks[key] = {
+                            "mutual_coherence": round(mutual, 3),
+                            "gap":              round(gap, 3),
+                            f"{dominant}→{recessive}": round(max(r_nm, r_mn), 3),
+                            f"{recessive}→{dominant}": round(min(r_nm, r_mn), 3),
+                            "risk":             risk_type,
+                            "note":             (
+                                f"{dominant} coherent with {recessive} who barely registers them"
+                                if risk_type == "PARASOCIAL"
+                                else f"unrequited coherence — {dominant} more invested than {recessive}"
+                            )
                         }
         return risks
+
+    def classify_asymmetry(self, agent_a: str, agent_b: str) -> dict:
+        """
+        v1.5.0 — Classify the asymmetry between two agents' coherence.
+
+        The asymmetric R_ij matrix is the most expressive feature of the field —
+        what A feels toward B need not equal what B feels toward A. This method
+        classifies the structural character of that asymmetry.
+
+        Three categories:
+          benign      — small gap (|R_ab - R_ba| < 0.15), both sides moderate.
+                        Normal relationship variance. No intervention needed.
+          unstable    — large gap (0.15-0.40), one side significantly higher.
+                        Unrequited coherence. Prone to rupture at W4-W5 pressure.
+                        Gardener monitoring recommended.
+          pathological — extreme gap (> 0.40) or one side near zero.
+                        Parasocial or exploitative structure. One agent coherent
+                        with an other that barely registers them. Intervention
+                        likely needed if sustained.
+
+        Additional metrics:
+          dominance   — which agent has higher coherence toward the other
+          echo_risk   — whether mutual coherence is high enough for echo chamber
+          reciprocity — ratio of min/max coherence (1.0 = symmetric, 0.0 = one-sided)
+        """
+        if agent_a not in self.agents or agent_b not in self.agents:
+            return {"error": f"Unknown agent: {agent_a if agent_a not in self.agents else agent_b}"}
+
+        matrix = self.field_matrix()
+        r_ab = matrix[agent_a][agent_b]
+        r_ba = matrix[agent_b][agent_a]
+        gap  = abs(r_ab - r_ba)
+        mutual = (r_ab + r_ba) / 2.0
+        reciprocity = min(r_ab, r_ba) / max(r_ab, r_ba) if max(r_ab, r_ba) > 0 else 1.0
+
+        # Classification
+        if gap > 0.40 or min(r_ab, r_ba) < 0.05:
+            asymmetry_type = "pathological"
+            note = "extreme asymmetry — parasocial or exploitative structure"
+        elif gap > 0.15:
+            asymmetry_type = "unstable"
+            note = "unrequited coherence — prone to rupture under arc pressure"
+        else:
+            asymmetry_type = "benign"
+            note = "normal relationship variance — no intervention needed"
+
+        # Dominance: who holds higher coherence toward the other
+        if abs(r_ab - r_ba) < 0.02:
+            dominance = "symmetric"
+        elif r_ab > r_ba:
+            dominance = agent_a
+        else:
+            dominance = agent_b
+
+        return {
+            f"{agent_a}→{agent_b}": round(r_ab, 4),
+            f"{agent_b}→{agent_a}": round(r_ba, 4),
+            "gap":           round(gap, 4),
+            "mutual":        round(mutual, 4),
+            "reciprocity":   round(reciprocity, 4),
+            "asymmetry":     asymmetry_type,
+            "dominance":     dominance,
+            "echo_risk":     mutual > 0.85,
+            "note":          note
+        }
 
     def entanglement_negativity(self) -> dict:
         """

@@ -287,6 +287,11 @@ def get_field():
     return jsonify({
         "matrix":              matrix,
         "echo_chamber_risks":  echo,
+        "asymmetry":           {
+            f"{n}↔{m}": field.classify_asymmetry(n, m)
+            for i, n in enumerate(list(field.agents.keys()))
+            for m in list(field.agents.keys())[i+1:]
+        },
         "entanglement":        field.entanglement_negativity(),
         "alignment_coherence": field.alignment_coherence(),
         "agents":              agents_summary,
