@@ -761,6 +761,71 @@ def arc_export_save():
                     "path": filepath, "rows": len(rows)})
 
 
+@app.route("/arc/schema", methods=["GET"])
+def arc_schema():
+    """
+    Return the arc schema as XML or parsed JSON.
+    Default: returns parsed waypoint array as JSON for the constitutional navigator.
+    ?format=xml returns the raw XML document.
+
+    Reads from schemas/constitutional_arc.xml.
+    Falls back to hardcoded defaults if file not found.
+    """
+    import os, xml.etree.ElementTree as ET
+
+    schema_path = os.path.join(os.path.dirname(__file__), "schemas", "constitutional_arc.xml")
+
+    fmt = request.args.get("format", "json")
+
+    if fmt == "xml":
+        if os.path.exists(schema_path):
+            with open(schema_path, "r", encoding="utf-8") as f:
+                return f.read(), 200, {"Content-Type": "application/xml"}
+        return "<ArcSchema/>", 404, {"Content-Type": "application/xml"}
+
+    # Default: return parsed waypoints as JSON for the navigator
+    if not os.path.exists(schema_path):
+        return jsonify({"error": "schema not found", "fallback": True}), 404
+
+    try:
+        tree = ET.parse(schema_path)
+        root = tree.getroot()
+
+        # Parse pressure profile
+        pressure = {}
+        pp = root.find("PressureProfile")
+        if pp is not None:
+            for step in pp.findall("Step"):
+                pressure[int(step.get("no", 0))] = float(step.get("pressure", 0.25))
+
+        # Parse waypoints
+        waypoints = []
+        wps = root.find("Waypoints")
+        if wps is not None:
+            for wp in wps.findall("Waypoint"):
+                stepno = int(wp.get("stepno", 0))
+                waypoints.append({
+                    "key":              wp.get("key", ""),
+                    "label":            wp.get("label", ""),
+                    "zone":             wp.get("zone", ""),
+                    "stepno":           stepno,
+                    "pressure":         pressure.get(stepno, 0.25),
+                    "desc":             (wp.findtext("Desc") or "").strip(),
+                    "default_question": (wp.findtext("DefaultQuestion") or "").strip(),
+                })
+
+        return jsonify({
+            "id":          root.get("id", "constitutional_arc"),
+            "version":     root.get("version", "1.0"),
+            "title":       root.findtext("title") or "Constitutional Arc",
+            "waypoints":   waypoints,
+            "pressure":    pressure,
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e), "fallback": True}), 500
+
+
 @app.route("/exports", methods=["GET"])
 def list_exports():
     import os

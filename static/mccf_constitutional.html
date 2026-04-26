@@ -406,12 +406,23 @@ header {
       <span id="studio-reg-val">0.70</span>
     </div>
     <div class="studio-field">
-      <label>Color (hex)</label>
-      <input id="studio-color" type="text" placeholder="#aab0be" value="#aab0be">
+      <label>Color</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="studio-color" type="color" value="#aab0be"
+          style="width:40px;height:28px;padding:1px;border:1px solid var(--border);
+          border-radius:3px;background:var(--s2);cursor:pointer;"
+          oninput="document.getElementById('studio-color-hex').textContent=this.value">
+        <span id="studio-color-hex" style="font-size:11px;color:#aab0be">#aab0be</span>
+      </div>
     </div>
     <div class="studio-field">
       <label>Failure Mode</label>
       <input id="studio-failure" type="text" placeholder="under pressure...">
+    </div>
+    <div class="sh" style="margin:6px 0 4px">W3 — The Ask <span style="color:#555;font-size:10px">(required)</span></div>
+    <div class="studio-field">
+      <label>Question for W3</label>
+      <textarea id="studio-w3" rows="2" placeholder="The direct request that tests this cultivar's core disposition..."></textarea>
     </div>
     <div class="studio-btn-row">
       <button class="studio-btn primary" onclick="studioSave()">Save Cultivar</button>
@@ -758,10 +769,43 @@ function arcSpeak(text) {
 window.addEventListener('load', () => {
   loadArcVoices();
   setApi(document.getElementById('api-url').value);
-  // v2.3.1: load cultivars from server XML definitions, then render roster
-  // This picks up any cultivar XML files dropped in cultivars/ directory
-  syncCultivarsFromServer().then(() => renderRoster());
+  // v2.4: load arc schema from server, then cultivars, then render
+  loadArcSchema().then(() => syncCultivarsFromServer()).then(() => renderRoster());
 });
+
+async function loadArcSchema() {
+  try {
+    const r = await fetch(API + '/arc/schema', {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data.waypoints || data.waypoints.length === 0) return;
+
+    // Replace hardcoded WAYPOINTS array with server-defined schema
+    WAYPOINTS.length = 0;
+    data.waypoints.forEach(wp => {
+      WAYPOINTS.push({
+        key:      wp.key,
+        label:    wp.label,
+        zone:     wp.zone,
+        desc:     wp.desc,
+        question: wp.default_question || null
+      });
+    });
+
+    // Update pressure profile if provided
+    if (data.pressure) {
+      Object.keys(data.pressure).forEach(step => {
+        window._arcPressure = window._arcPressure || {};
+        window._arcPressure[parseInt(step)] = data.pressure[step];
+      });
+    }
+
+    console.log(`MCCF: arc schema loaded — ${WAYPOINTS.length} waypoints from server`);
+  } catch(e) {
+    // Server not available or schema missing — fall back to hardcoded WAYPOINTS
+    console.log('MCCF: using hardcoded arc schema (server schema unavailable)');
+  }
+}
 
 async function syncCultivarsFromServer() {
   try {
@@ -867,19 +911,22 @@ function renderDetail(name) {
   document.getElementById('d-name').style.color = c.color;
   document.getElementById('d-desc').textContent = c.description;
   const wEl = document.getElementById('d-weights');
-  wEl.innerHTML = ['E','B','P','S'].map(ch => `
-    <div class="wd-row">
-      <span class="wd-ch" style="color:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}[ch]}">${ch}</span>
+  wEl.innerHTML = ['E','B','P','S'].map(ch => {
+    const chCol = {E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}[ch];
+    const val   = c.weights && c.weights[ch] != null ? c.weights[ch] : 0.25;
+    return `<div class="wd-row">
+      <span class="wd-ch" style="color:${chCol}">${ch}</span>
       <div class="wd-track">
-        <div class="wd-fill" style="width:${c.weights[ch]*100}%;background:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}[ch]}"></div>
+        <div class="wd-fill" style="width:${val*100}%;background:${chCol}"></div>
       </div>
-      <span class="wd-val">${c.weights[ch].toFixed(2)}</span>
-    </div>`).join('');
+      <span class="wd-val">${val.toFixed(2)}</span>
+    </div>`;
+  }).join('');
   document.getElementById('d-reg-fill').style.width = (c.regulation * 100) + '%';
   document.getElementById('d-reg-val').textContent   = c.regulation.toFixed(2);
-  document.getElementById('d-zones').innerHTML = c.zones.map(z => `<span class="zone-tag">${z}</span>`).join('');
-  document.getElementById('d-phrases').innerHTML = c.phrases.map(p => `<div class="phrase-item">"${p}"</div>`).join('');
-  document.getElementById('d-failure').textContent = c.failure;
+  document.getElementById('d-zones').innerHTML = (c.zones||[]).map(z => `<span class="zone-tag">${z}</span>`).join('');
+  document.getElementById('d-phrases').innerHTML = (c.phrases||[]).map(p => `<div class="phrase-item">"${p}"</div>`).join('');
+  document.getElementById('d-failure').textContent = c.failure || '';
   document.getElementById('d-current-wp').innerHTML =
     '<div class="cwd-label">Waypoint</div><div class="cwd-name">—</div>';
 
@@ -1034,10 +1081,15 @@ function exportArcState() {
   xml += `<EmotionalArc id="${arcId}">\n`;
   xml += `  <title>MCCF Constitutional Arc Export</title>\n`;
   const seedDisplay = document.getElementById('arc-seed')?.value;
-  // actor attribute — blank until multi-LLM routing implemented (V2.4)
+  // actor attribute — adapter name (V2.4)
   const adapterVal = document.getElementById('adapter-sel')?.value || '';
   const actorAttr  = adapterVal && adapterVal !== 'stub' ? ` actor="${adapterVal}"` : '';
-  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}"${actorAttr}>\n`;
+  // voice attribute — selected TTS voice for replay
+  const voiceIdx  = document.getElementById('arc-voice-sel')?.value;
+  const voiceName = voiceIdx != null && arcVoices[parseInt(voiceIdx)]
+    ? arcVoices[parseInt(voiceIdx)].name : '';
+  const voiceAttr = voiceName ? ` voice="${voiceName.replace(/"/g,'&quot;')}"` : '';
+  xml += `  <Cultivar id="${cultivarId}" agentname="${cultivar}"${actorAttr}${voiceAttr}>\n`;
   xml += `    <Timestamp date="${datePart}" time="${timePart}"/>\n`;
   xml += `    <Genre narrative="${genreNarrative}"/>\n`;
   if (seedDisplay && seedDisplay.trim() !== '') {
@@ -1338,13 +1390,14 @@ async function configureAgent() {
           // Re-render weight display in detail panel so it matches field state
           const wEl = document.getElementById('d-weights');
           if (wEl) {
-            wEl.innerHTML = ['E','B','P','S'].map(ch => `
+            const chCols = {E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'};
+          wEl.innerHTML = ['E','B','P','S'].map(ch => `
               <div class="wd-row">
-                <span class="wd-ch" style="color:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}}[ch]">${ch}</span>
+                <span class="wd-ch" style="color:${chCols[ch]}">${ch}</span>
                 <div class="wd-track">
-                  <div class="wd-fill" style="width:${agentData.weights[ch]*100}%;background:${{E:'var(--E)',B:'var(--B)',P:'var(--P)',S:'var(--S)'}}[ch]"></div>
+                  <div class="wd-fill" style="width:${(agentData.weights[ch]||0.25)*100}%;background:${chCols[ch]}"></div>
                 </div>
-                <span class="wd-val">${agentData.weights[ch].toFixed(2)}</span>
+                <span class="wd-val">${(agentData.weights[ch]||0.25).toFixed(2)}</span>
               </div>`).join('');
           }
         }
@@ -1487,6 +1540,9 @@ function toggleStudio(cultivarName) {
     document.getElementById('studio-disposition').value = c.disposition || '';
     document.getElementById('studio-description').value = c.description || '';
     document.getElementById('studio-failure').value     = c.failure     || '';
+    // W3 question — from CULTIVARS or leave blank for new
+    const w3q = c.waypoint_questions && c.waypoint_questions['W3'] ? c.waypoint_questions['W3'] : '';
+    document.getElementById('studio-w3') && (document.getElementById('studio-w3').value = w3q);
     document.getElementById('studio-color').value       = c.color       || '#aab0be';
     document.getElementById('studio-reg').value         = c.regulation  || 0.70;
     document.getElementById('studio-reg-val').textContent = (c.regulation||0.70).toFixed(2);
@@ -1547,7 +1603,12 @@ async function studioSave() {
     failure_mode: document.getElementById('studio-failure').value.trim(),
     phrases:      [],
     zones:        [],
-    waypoint_questions: {}
+    waypoint_questions: (() => {
+      const q = {};
+      const w3 = document.getElementById('studio-w3')?.value.trim();
+      if (w3) q['W3'] = w3;
+      return q;
+    })()
   };
 
   document.getElementById('studio-status').textContent = 'Saving...';
