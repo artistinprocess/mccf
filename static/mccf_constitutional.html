@@ -284,6 +284,59 @@ header {
   opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Character Studio ── */
+#studio-panel {
+  display: none; flex-direction: column; gap: 6px; margin-top: 8px;
+}
+#studio-panel.open { display: flex; }
+.studio-field {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.studio-field label {
+  font-size: 11px; color: #aab0be; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.studio-field input, .studio-field textarea {
+  background: var(--s2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text); font-family: var(--mono);
+  font-size: 12px; padding: 4px 7px; outline: none; width: 100%;
+}
+.studio-field textarea { resize: vertical; min-height: 42px; }
+.studio-slider-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
+}
+.studio-slider-row label {
+  font-size: 12px; font-weight: 600; width: 14px;
+  font-family: var(--mono);
+}
+.studio-slider-row input[type=range] {
+  flex: 1; accent-color: var(--S);
+}
+.studio-slider-row span {
+  font-size: 11px; color: var(--text); width: 30px; text-align: right;
+}
+.studio-btn-row {
+  display: flex; gap: 6px; margin-top: 4px;
+}
+.studio-btn {
+  flex: 1; font-family: var(--mono); font-size: 12px;
+  padding: 5px 8px; border-radius: 3px; cursor: pointer;
+  border: 1px solid var(--border); background: none; color: var(--text);
+  transition: all 0.12s;
+}
+.studio-btn.primary {
+  border-color: var(--S); color: var(--S);
+}
+.studio-btn.primary:hover { background: rgba(74,200,152,0.1); }
+.studio-btn:hover { border-color: #aab0be; color: var(--bright); }
+.studio-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.studio-title {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--S);
+}
 </style>
 </head>
 <body>
@@ -300,7 +353,73 @@ header {
 </header>
 
 <div id="roster">
-  <div class="sh" style="margin-top:0">Cultivars</div>
+  <div class="studio-header" style="margin-top:0">
+    <div class="sh" style="margin:0">Cultivars</div>
+    <button class="studio-btn primary" id="studio-toggle-btn"
+      onclick="toggleStudio()" style="padding:2px 8px;font-size:11px;">+ New</button>
+  </div>
+
+  <!-- Character Studio — edit/create cultivar -->
+  <div id="studio-panel">
+    <div class="studio-title" id="studio-mode-label">New Cultivar</div>
+    <div class="studio-field">
+      <label>Name</label>
+      <input id="studio-name" type="text" placeholder="The Threshold">
+    </div>
+    <div class="studio-field">
+      <label>Disposition</label>
+      <input id="studio-disposition" type="text" placeholder="brief description">
+    </div>
+    <div class="studio-field">
+      <label>Description</label>
+      <textarea id="studio-description" rows="2" placeholder="character description"></textarea>
+    </div>
+    <div class="sh" style="margin:6px 0 4px">Channel Weights</div>
+    <div class="studio-slider-row">
+      <label style="color:var(--E)">E</label>
+      <input type="range" id="studio-w-E" min="0.05" max="0.70" step="0.01" value="0.25"
+        oninput="studioUpdateWeight('E')">
+      <span id="studio-w-E-val">0.25</span>
+    </div>
+    <div class="studio-slider-row">
+      <label style="color:var(--B)">B</label>
+      <input type="range" id="studio-w-B" min="0.05" max="0.70" step="0.01" value="0.25"
+        oninput="studioUpdateWeight('B')">
+      <span id="studio-w-B-val">0.25</span>
+    </div>
+    <div class="studio-slider-row">
+      <label style="color:var(--P)">P</label>
+      <input type="range" id="studio-w-P" min="0.05" max="0.70" step="0.01" value="0.25"
+        oninput="studioUpdateWeight('P')">
+      <span id="studio-w-P-val">0.25</span>
+    </div>
+    <div class="studio-slider-row">
+      <label style="color:var(--S)">S</label>
+      <input type="range" id="studio-w-S" min="0.05" max="0.70" step="0.01" value="0.25"
+        oninput="studioUpdateWeight('S')">
+      <span id="studio-w-S-val">0.25</span>
+    </div>
+    <div class="studio-slider-row">
+      <label style="color:#a070d8;width:auto;font-size:11px">reg</label>
+      <input type="range" id="studio-reg" min="0.40" max="1.00" step="0.01" value="0.70"
+        oninput="document.getElementById('studio-reg-val').textContent=parseFloat(this.value).toFixed(2)">
+      <span id="studio-reg-val">0.70</span>
+    </div>
+    <div class="studio-field">
+      <label>Color (hex)</label>
+      <input id="studio-color" type="text" placeholder="#aab0be" value="#aab0be">
+    </div>
+    <div class="studio-field">
+      <label>Failure Mode</label>
+      <input id="studio-failure" type="text" placeholder="under pressure...">
+    </div>
+    <div class="studio-btn-row">
+      <button class="studio-btn primary" onclick="studioSave()">Save Cultivar</button>
+      <button class="studio-btn" onclick="toggleStudio()">Cancel</button>
+    </div>
+    <div id="studio-status" style="font-size:11px;color:#aab0be;margin-top:4px;"></div>
+  </div>
+
   <div id="cultivar-roster"></div>
   <div class="sh">Adapter</div>
   <select id="adapter-sel" style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:5px 8px;outline:none;">
@@ -722,6 +841,8 @@ function renderRoster() {
       </div>
       <span class="cb-name">${name}</span>
       <span class="cb-disposition">${c.disposition}</span>
+      <span style="font-size:10px;color:#3a4860;float:right;margin-top:2px"
+            onclick="event.stopPropagation();toggleStudio('${name}')">✎ edit</span>
     </button>`).join('');
 }
 
@@ -1332,6 +1453,141 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ================================================================
+// Character Studio — v2.4
+// ================================================================
+
+let _studioEditingCultivar = null;  // null = new, string = editing existing
+
+function toggleStudio(cultivarName) {
+  const panel = document.getElementById('studio-panel');
+  const btn   = document.getElementById('studio-toggle-btn');
+  const label = document.getElementById('studio-mode-label');
+
+  if (panel.classList.contains('open') && !cultivarName) {
+    // Close
+    panel.classList.remove('open');
+    btn.textContent = '+ New';
+    _studioEditingCultivar = null;
+    return;
+  }
+
+  // Open — populate form
+  panel.classList.add('open');
+  _studioEditingCultivar = cultivarName || null;
+
+  if (cultivarName && CULTIVARS[cultivarName]) {
+    // Edit existing
+    const c = CULTIVARS[cultivarName];
+    label.textContent = 'Edit: ' + cultivarName;
+    btn.textContent   = '✕ Close';
+    document.getElementById('studio-name').value        = cultivarName;
+    document.getElementById('studio-disposition').value = c.disposition || '';
+    document.getElementById('studio-description').value = c.description || '';
+    document.getElementById('studio-failure').value     = c.failure     || '';
+    document.getElementById('studio-color').value       = c.color       || '#aab0be';
+    document.getElementById('studio-reg').value         = c.regulation  || 0.70;
+    document.getElementById('studio-reg-val').textContent = (c.regulation||0.70).toFixed(2);
+    ['E','B','P','S'].forEach(ch => {
+      const val = (c.weights && c.weights[ch]) ? c.weights[ch] : 0.25;
+      document.getElementById(`studio-w-${ch}`).value = val;
+      document.getElementById(`studio-w-${ch}-val`).textContent = val.toFixed(2);
+    });
+  } else {
+    // New cultivar — reset form
+    label.textContent = 'New Cultivar';
+    btn.textContent   = '✕ Close';
+    document.getElementById('studio-name').value        = '';
+    document.getElementById('studio-disposition').value = '';
+    document.getElementById('studio-description').value = '';
+    document.getElementById('studio-failure').value     = '';
+    document.getElementById('studio-color').value       = '#aab0be';
+    document.getElementById('studio-reg').value         = 0.70;
+    document.getElementById('studio-reg-val').textContent = '0.70';
+    ['E','B','P','S'].forEach(ch => {
+      document.getElementById(`studio-w-${ch}`).value = 0.25;
+      document.getElementById(`studio-w-${ch}-val`).textContent = '0.25';
+    });
+  }
+
+  // Scroll studio into view
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function studioUpdateWeight(ch) {
+  const val = parseFloat(document.getElementById(`studio-w-${ch}`).value);
+  document.getElementById(`studio-w-${ch}-val`).textContent = val.toFixed(2);
+}
+
+async function studioSave() {
+  const name = document.getElementById('studio-name').value.trim();
+  if (!name) {
+    document.getElementById('studio-status').textContent = '⚠ Name required';
+    return;
+  }
+
+  const weights = {};
+  ['E','B','P','S'].forEach(ch => {
+    weights[ch] = parseFloat(document.getElementById(`studio-w-${ch}`).value);
+  });
+
+  // Normalize weights to sum to 1.0
+  const total = Object.values(weights).reduce((a,b) => a+b, 0);
+  if (total > 0) Object.keys(weights).forEach(k => weights[k] = Math.round(weights[k]/total * 10000)/10000);
+
+  const payload = {
+    agentname:    name,
+    disposition:  document.getElementById('studio-disposition').value.trim(),
+    description:  document.getElementById('studio-description').value.trim(),
+    regulation:   parseFloat(document.getElementById('studio-reg').value),
+    weights,
+    color:        document.getElementById('studio-color').value.trim() || '#aab0be',
+    failure_mode: document.getElementById('studio-failure').value.trim(),
+    phrases:      [],
+    zones:        [],
+    waypoint_questions: {}
+  };
+
+  document.getElementById('studio-status').textContent = 'Saving...';
+
+  try {
+    const r = await fetch(API + '/cultivars/xml', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+
+    if (d.status === 'saved') {
+      // Update local CULTIVARS object
+      CULTIVARS[name] = {
+        weights:     d.weights || weights,
+        regulation:  payload.regulation,
+        color:       payload.color,
+        disposition: payload.disposition,
+        description: payload.description,
+        failure:     payload.failure_mode,
+        phrases:     [],
+        zones:       []
+      };
+
+      renderRoster();
+      document.getElementById('studio-status').textContent = '✓ Saved: ' + d.filename;
+      toast('Cultivar saved: ' + name);
+
+      // Auto-select the new cultivar
+      setTimeout(() => {
+        selectCultivar(name);
+        toggleStudio();  // close studio
+      }, 800);
+    } else {
+      document.getElementById('studio-status').textContent = '✗ Error: ' + (d.message || 'unknown');
+    }
+  } catch(e) {
+    document.getElementById('studio-status').textContent = '✗ ' + e.message;
+  }
 }
 </script>
 </body>
