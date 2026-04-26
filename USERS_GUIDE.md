@@ -234,6 +234,8 @@ Each `<Waypoint>` now contains child elements with the question asked and
 the cultivar's full response. The export is self-contained — it can serve
 as a script for playback without the LLM:
 
+**Seed scope:** The seed parameter locks MCCF field physics reproducibility — channel values (E/B/P/S), coherence, and spatial positions will be identical across runs with the same seed. LLM narrative content (the text in Question/Response elements) will vary between runs unless the LLM adapter also supports seeding. The `<Seed>` element in the XML export documents field physics reproducibility, not narrative reproducibility.
+
 **Actor attribute (V2.3):** When a non-stub adapter is selected (ollama,
 anthropathic, openai, google), the `<Cultivar>` element includes
 `actor="adapter_name"`. Blank when using stub. Prepared for multi-LLM
@@ -680,6 +682,6 @@ updating Python files. Verify version at /ping after restart.
 
 ---
 
-*MCCF Users Guide V2.3.2 — April 2026*  
+*MCCF Users Guide V2.3.3 — April 2026*  
 *Len Bullard / Claude Sonnet 4.6*  
 *"Q" — Quantum Persona*

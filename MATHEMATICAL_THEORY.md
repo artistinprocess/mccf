@@ -532,7 +532,25 @@ $$H\_{\\text{interaction},c} = \\sum\_{j \\neq i} J\_{ij}(\\psi\_{j,c} - \\psi\_
 
 $$H\_{\\text{align},c} = \\alpha\_c^{\\text{align}} \\cdot (w\_{i,c}^0 - \\psi\_{i,c}) \\cdot \\mathbf{1}\[\\text{gate}\_i]$$
 
-**TrustField hysteresis** — memory of rupture events (V2.2 — **implemented**):
+**TrustField as weighted directed graph** (Fidget review, April 2026):
+
+The theory uses manifold/tensor field language for $R_{ij}$, but the implementation
+is a **weighted directed graph** where $R_{ij}$ is a lookup in a dict keyed by
+agent pair. This is a semantic gap acknowledged here:
+
+- The code is correct and efficient for V2's discrete agent set
+- The manifold description is aspirational — it describes what the system
+  would be if agents were continuous points in a metric space
+- V3's spatial zones will require actual manifold mathematics as agents
+  acquire continuous positions and zone proximity becomes a continuous variable
+
+For V2: treat $R_{ij}$ as a directed graph edge weight. The tensor/manifold
+language in earlier sections should be read as describing the *limiting behavior*
+as the agent set grows dense in a metric space.
+
+---
+
+**TrustField hysteresis** — memory of rupture events (V2.2.1 — **implemented**):
 
 $$\\gamma\_{\\text{eff}} = \\gamma \\times 2.0 \\quad \\text{if } T\_{ij} < T\_\\text{hysteresis} = 0.15$$
 
@@ -814,7 +832,22 @@ parasocial agent cannot recover because there is no relationship to recover into
 *- Kate's formal spec as a convergence reference alongside the Feynman post.*
 
 
-****V1.5.1 — CCS power blend formulation** (replaces v1.5.0 compressed blend):
+****Arc pressure as scalar, not attractor shift** (Fidget review, April 2026):
+
+The `arc_pressure(step)` function returns a scalar $p \in [0, 0.75]$ that modifies
+channel update magnitudes, not attractor coordinates. The ideology vector $w_i$
+(the attractor) does not move during the arc. Instead:
+
+$$B_	ext{val} = B_	ext{baseline} - p 	imes 0.08$$
+$$P_	ext{val} = P_	ext{baseline} + p 	imes 0.06$$
+
+The attractor is fixed; pressure governs how far the agent is pushed from it
+at each step. This is a deliberate design choice — the cultivar's character
+(ideology) is invariant; only its behavioral expression varies under pressure.
+
+---
+
+**V1.5.1 — CCS power blend formulation** (replaces v1.5.0 compressed blend):
 
 $$\\text{modulated} = |R^{\\text{raw}}|^{\\alpha}, \\quad \\alpha = 1 + (1 - \\sigma)$$
 
@@ -828,3 +861,13 @@ $0.2^{1.8} = 0.055$ — attenuated proportionally, not collapsed.
 Biological interpretation: low vmPFC activity attenuates all coherence signals proportionally.
 The agent can still perceive weak relationships — it struggles to sustain them consistently.
 (`mccf\_core.py:weighted\_coherence()`, v1.5.1, Kate review April 2026)
+
+**Seed parameter scope** (Fidget review, April 2026):
+
+The seed parameter in `/arc/record` locks only MCCF Gaussian noise — the
+stochastic term in channel value computation. It does **not** lock the LLM's
+temperature or sampling parameters. Consequence: with the same seed, field
+physics (E/B/P/S channel values, coherence, spatial positions) are fully
+reproducible. LLM narrative content (Question/Response text) will vary between
+runs unless the LLM adapter also supports seeding. The XML export's `<Seed>`
+element documents field physics reproducibility, not narrative reproducibility.
