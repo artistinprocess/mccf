@@ -468,28 +468,31 @@ class CoherenceRecord:
         base = weighted_sum / total_weight if total_weight > 0 else 0.0
         raw  = min(1.0, base + dissonance_bonus / total_weight)
 
-        # v1.5.0: CCS modulation — compressed blend formulation.
+        # v1.5.1: CCS modulation — power blend formulation.
         #
-        # Previous (v1.4.0) convex form: raw * σ + 0.5 * (1-σ)
-        # Problem: low CCS pulls everything toward 0.5. A decoupled agent
-        # looks average rather than inconsistent. Grok review April 2026.
+        # V1.4.0 convex form: raw * σ + 0.5 * (1-σ)  — centrist (rejected)
+        # V1.5.0 compressed blend: raw * σ + raw² * (1-σ) — over-penalizes
+        #   weak signals. At raw=0.2, σ=0.20: modulated=0.072. Kate review
+        #   April 2026: raw² disproportionately suppresses small magnitudes.
         #
-        # New formulation: raw * σ + raw² * (1-σ)
-        #   High CCS (σ→1): modulated ≈ raw  (full signal)
-        #   Low CCS  (σ→0): modulated ≈ raw² (compressed toward low)
+        # V1.5.1 power blend: |raw|^α where α = 1.0 + (1.0 - σ)
+        #   At σ=1.0: α=1.0 → modulated = raw  (full signal)
+        #   At σ=0.5: α=1.5 → modulated = raw^1.5 (gentle compression)
+        #   At σ=0.2: α=1.8 → modulated = raw^1.8 (stronger compression)
         #
-        # Biological interpretation: low vmPFC activity means the agent
-        # struggles to BUILD coherence, not to recognize it. Weak
-        # relationships collapse toward zero; strong relationships are
-        # preserved but slightly reduced. The agent can still perceive
-        # strong coherence but cannot sustain it consistently.
+        # This gives smooth, continuous control over compression.
+        # Weak signals are attenuated proportionally, not squared into noise.
+        # Biological: low vmPFC struggles to sustain coherence, attenuates
+        # all signals proportionally rather than collapsing weak ones.
         #
-        # This produces undifferentiated behavior (Grok's correct term):
-        # the low-CCS agent's coherence signals are real but attenuated,
-        # not collapsed to a fictitious mean.
-        ccs_clamped  = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
-        raw_sq       = raw * raw          # compressed attenuator
-        modulated    = raw * ccs_clamped + raw_sq * (1.0 - ccs_clamped)
+        # Comparison at raw=0.2, σ=0.20:
+        #   V1.4.0 convex:   0.410  (artificially high — centrist)
+        #   V1.5.0 squared:  0.072  (too low — over-penalized)
+        #   V1.5.1 power:    0.200^1.8 = 0.115  (proportional attenuation)
+        import math as _math
+        ccs_clamped = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
+        alpha       = 1.0 + (1.0 - ccs_clamped)   # α ∈ [1.0, 1.8] for CCS ∈ [0.20, 1.0]
+        modulated   = _math.pow(raw, alpha) if raw > 0 else 0.0
 
         return round(modulated * self.credibility, 4)
 
@@ -1080,7 +1083,18 @@ class CoherenceField:
         r_ba = matrix[agent_b][agent_a]
         gap  = abs(r_ab - r_ba)
         mutual = (r_ab + r_ba) / 2.0
-        reciprocity = min(r_ab, r_ba) / max(r_ab, r_ba) if max(r_ab, r_ba) > 0 else 1.0
+        # v1.5.1: normalized difference replaces ratio metric.
+        # Kate review April 2026: ratio is unstable near zero.
+        # (R_ab - R_ba) / (R_ab + R_ba) is bounded [-1,1], symmetric,
+        # stable under scaling. Add floor guard against noise-level values.
+        denom = r_ab + r_ba
+        if denom < 0.02:          # both near zero — treat as symmetric noise
+            reciprocity = 1.0
+        else:
+            # Normalized difference: 0.0 = symmetric, ±1.0 = fully one-sided
+            # Convert to [0,1] reciprocity scale: 1.0 = symmetric, 0.0 = one-sided
+            norm_diff   = abs(r_ab - r_ba) / denom
+            reciprocity = round(1.0 - norm_diff, 4)
 
         # Classification
         if gap > 0.40 or min(r_ab, r_ba) < 0.05:

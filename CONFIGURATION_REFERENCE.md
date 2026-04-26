@@ -26,17 +26,20 @@ and the effect of increasing or decreasing the value.
 | `CCS_MINIMUM` | 0.20 | 0.05–0.50 | Floor for coherence coupling. Agents cannot decouple entirely — minimum social connectivity is preserved. Lower = more pathological decoupling possible. |
 | `CCS_MAXIMUM` | 1.00 | 0.70–1.00 | Ceiling for coherence coupling. 1.0 = full signal fidelity at high CCS. |
 
-**CCS formulation (V1.5.0 — compressed blend):**
+**CCS formulation (V1.5.1 — power blend):**
 
 ```
-modulated = raw * σ + raw² * (1 - σ)
+α = 1.0 + (1.0 - σ)
+modulated = raw^α
 ```
 
-At σ=1.0 (full coupling): modulated = raw  
-At σ=0.20 (minimum): modulated = raw * 0.20 + raw² * 0.80  
-Effect: low-CCS agents compress weak relationships toward zero while
-preserving strong ones. Low vmPFC activity means the agent struggles
-to *build* coherence, not to recognize it.
+At σ=1.0: α=1.0, modulated = raw (full signal)  
+At σ=0.5: α=1.5, modulated = raw^1.5 (gentle attenuation)  
+At σ=0.20: α=1.8, modulated = raw^1.8 (stronger attenuation)  
+Effect: all signals attenuated proportionally. Weak relationships
+are not collapsed to noise. Low vmPFC activity means the agent
+struggles to *sustain* coherence, not to perceive it.
+Previous V1.5.0 raw² formula over-penalized weak signals (Kate review, April 2026).
 
 ### MetaState
 
