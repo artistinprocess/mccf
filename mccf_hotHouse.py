@@ -136,6 +136,11 @@ DAMPING_COEFFICIENT = 0.08
 # Biological analog: limbic system scar tissue from betrayal.
 HYSTERESIS_THRESHOLD = 0.15
 
+# Scar decay rate (v2.2.1) — rate at which gamma multiplier returns to 1.0
+# after a rupture event. 0.01 per timestep ≈ 100 steps to full recovery.
+# Lower = slower recovery (deeper scar). Higher = faster recovery.
+SCAR_DECAY = 0.01
+
 # ---------------------------------------------------------------------------
 # Emotional field agent
 # ---------------------------------------------------------------------------
@@ -250,10 +255,12 @@ class TrustField:
         self.gamma  = gamma
         # Trust matrix: T[(i,j)] is i's trust toward j
         self._T: dict = {}
-        # v2.2: Hysteresis — track pairs that have experienced rupture
-        # Once a pair drops below HYSTERESIS_THRESHOLD, gamma doubles
-        # for that pair. Prevents rapid trust recovery after betrayal.
-        self._ruptured: set = set()
+        # v2.2.1: Hysteresis scar tissue — replaces permanent binary flag.
+        # After rupture, effective gamma starts at 2x and decays toward 1x.
+        # Recovery is mathematically possible (W6 narrative phase) but slower.
+        # Biological: scar tissue softens over time but never fully disappears.
+        # _scar[(i,j)] = current multiplier, decays toward 1.0 at SCAR_DECAY rate.
+        self._scar: dict = {}   # (from, to) → current gamma multiplier
         for i, a in enumerate(agents):
             for j, b in enumerate(agents):
                 if a.name != b.name:
@@ -285,14 +292,21 @@ class TrustField:
                     for ch in ["E", "B", "P", "S"]
                 ) / 4.0  # normalize to [0,1]
                 t_ij = self._T[key]
-                # v2.2: Hysteresis — doubled gamma for ruptured pairs
-                # Once trust has fallen below threshold, decay rate
-                # is permanently increased for that pair.
+                # v2.2.1: Scar tissue hysteresis (Fidget review, April 2026).
+                # After rupture, gamma multiplier starts at 2.0 and decays
+                # toward 1.0 at SCAR_DECAY per timestep. Recovery is slow
+                # but mathematically possible — supports W6 narrative recovery.
                 if t_ij < HYSTERESIS_THRESHOLD:
-                    self._ruptured.add(key)
-                effective_gamma = (self.gamma * 2.0
-                                   if key in self._ruptured
-                                   else self.gamma)
+                    # New or worsening rupture — set/reset scar to 2.0
+                    self._scar[key] = 2.0
+                elif key in self._scar:
+                    # Healing: decay scar tissue toward 1.0
+                    self._scar[key] = max(1.0, self._scar[key] - SCAR_DECAY)
+                    if self._scar[key] <= 1.0:
+                        del self._scar[key]   # fully healed
+
+                scar_multiplier = self._scar.get(key, 1.0)
+                effective_gamma = self.gamma * scar_multiplier
                 dT   = self.beta * (1.0 - dist) - effective_gamma * t_ij
                 deltas[key] = dT
 
@@ -303,15 +317,17 @@ class TrustField:
 
     def as_matrix(self) -> dict:
         """Return trust matrix as nested dict for API/export.
-        v2.2: includes rupture flags for ruptured pairs.
+        v2.2.1: includes scar multiplier for pairs with rupture history.
         """
         result = {}
         for (from_n, to_n), val in self._T.items():
             if from_n not in result:
                 result[from_n] = {}
+            scar = self._scar.get((from_n, to_n), 1.0)
             result[from_n][to_n] = {
-                "trust":    val,
-                "ruptured": (from_n, to_n) in self._ruptured
+                "trust":        val,
+                "ruptured":     scar > 1.0,
+                "scar_factor":  round(scar, 3)
             }
         return result
 

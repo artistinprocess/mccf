@@ -492,7 +492,10 @@ class CoherenceRecord:
         import math as _math
         ccs_clamped = max(CCS_MINIMUM, min(CCS_MAXIMUM, ccs))
         alpha       = 1.0 + (1.0 - ccs_clamped)   # α ∈ [1.0, 1.8] for CCS ∈ [0.20, 1.0]
-        modulated   = _math.pow(raw, alpha) if raw > 0 else 0.0
+        # Clamp raw before power — prevents non-monotonicity if float error
+        # pushes raw slightly above 1.0 (Fidget review, April 2026)
+        raw_clamped = max(0.0, min(1.0, raw))
+        modulated   = _math.pow(raw_clamped, alpha) if raw_clamped > 0 else 0.0
 
         return round(modulated * self.credibility, 4)
 
