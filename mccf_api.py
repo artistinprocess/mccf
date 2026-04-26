@@ -418,6 +418,125 @@ def list_cultivars_xml():
     return jsonify({"cultivars": results, "count": len(results)})
 
 
+@app.route("/cultivars/xml", methods=["POST"])
+def save_cultivar_xml():
+    """
+    Save a cultivar definition as XML to cultivars/ directory (V2.4).
+    Called by Character Studio when creating or editing a cultivar.
+    Body: {
+        agentname, disposition, description, regulation,
+        weights: {E, B, P, S},
+        color,
+        phrases: [...],
+        zones: [...],
+        failure_mode,
+        waypoint_questions: {W1: "...", W3: "...", ...}  (sparse overrides only)
+    }
+    Returns: { status, filename, agentname }
+    """
+    import os, xml.etree.ElementTree as ET
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "no data"}), 400
+
+    agentname = data.get("agentname", "").strip()
+    if not agentname:
+        return jsonify({"status": "error", "message": "agentname required"}), 400
+
+    cultivars_dir = os.path.join(os.path.dirname(__file__), "cultivars")
+    os.makedirs(cultivars_dir, exist_ok=True)
+
+    # Build filename from agentname
+    slug     = agentname.lower().replace(" ", "_").replace("the_", "")
+    filename = f"cultivar_{slug}.xml"
+    filepath = os.path.join(cultivars_dir, filename)
+
+    def xml_esc(s):
+        return (str(s or "")
+            .replace("&","&amp;").replace("<","&lt;")
+            .replace(">","&gt;").replace('"',"&quot;")
+            .replace("'","&apos;"))
+
+    w   = data.get("weights", {"E":0.25,"B":0.25,"P":0.25,"S":0.25})
+    reg = data.get("regulation", 0.70)
+    ts  = __import__("time").strftime("%Y-%m-%d")
+
+    xml  = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += f'<EmotionalArc id="cultivar_{slug}_v1">\n'
+    xml += f'  <title>MCCF Cultivar Definition — {xml_esc(agentname)}</title>\n'
+    xml += f'  <Cultivar id="{slug}_v1" agentname="{xml_esc(agentname)}" version="1.0">\n'
+    xml += f'    <Timestamp date="{ts}" time="00:00:00"/>\n'
+    xml += f'    <Disposition>{xml_esc(data.get("disposition",""))}</Disposition>\n'
+    xml += f'    <Description>{xml_esc(data.get("description",""))}</Description>\n'
+    xml += f'    <Weights E="{w.get("E",0.25)}" B="{w.get("B",0.25)}" P="{w.get("P",0.25)}" S="{w.get("S",0.25)}"/>\n'
+    xml += f'    <Regulation value="{reg}"/>\n'
+
+    color = data.get("color", "#aab0be")
+    xml += f'    <Color hex="{xml_esc(color)}"/>\n'
+
+    failure = data.get("failure_mode", "")
+    if failure:
+        xml += f'    <FailureMode>{xml_esc(failure)}</FailureMode>\n'
+
+    zones = data.get("zones", [])
+    if zones:
+        xml += f'    <Zones>\n'
+        for z in zones:
+            xml += f'      <Zone name="{xml_esc(z)}"/>\n'
+        xml += f'    </Zones>\n'
+
+    phrases = data.get("phrases", [])
+    if phrases:
+        xml += f'    <Phrases>\n'
+        for p in phrases:
+            if p.strip():
+                xml += f'      <Phrase>{xml_esc(p)}</Phrase>\n'
+        xml += f'    </Phrases>\n'
+
+    questions = data.get("waypoint_questions", {})
+    if questions:
+        xml += f'    <Waypoints>\n'
+        for wp_key, q in questions.items():
+            if q and q.strip():
+                xml += f'      <Question waypoint="{xml_esc(wp_key)}">{xml_esc(q)}</Question>\n'
+        xml += f'    </Waypoints>\n'
+
+    xml += f'  </Cultivar>\n'
+    xml += f'</EmotionalArc>\n'
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(xml)
+
+    # Register agent in field immediately
+    total = sum(float(v) for v in w.values())
+    norm_w = {k: round(float(v)/total, 4) for k, v in w.items()} if total > 0 else w
+    if agentname not in field.agents:
+        agent = Agent(agentname, weights=norm_w, role="agent")
+        agent.set_regulation(float(reg))
+        field.register(agent)
+    else:
+        existing = field.agents[agentname]
+        existing.weights = norm_w
+        existing.set_regulation(float(reg))
+
+    # Update cultivars dict
+    cultivars[agentname] = {
+        "weights":     norm_w,
+        "regulation":  float(reg),
+        "role":        "agent",
+        "description": data.get("description", ""),
+        "source":      "xml",
+        "filename":    filename,
+        "created":     __import__("time").time()
+    }
+
+    return jsonify({
+        "status":    "saved",
+        "filename":  filename,
+        "agentname": agentname,
+        "weights":   norm_w
+    })
+
 @app.route("/cultivar/<name>/spawn", methods=["POST"])
 def spawn_from_cultivar(name):
     if name not in cultivars:
