@@ -532,6 +532,22 @@ $$H\_{\\text{interaction},c} = \\sum\_{j \\neq i} J\_{ij}(\\psi\_{j,c} - \\psi\_
 
 $$H\_{\\text{align},c} = \\alpha\_c^{\\text{align}} \\cdot (w\_{i,c}^0 - \\psi\_{i,c}) \\cdot \\mathbf{1}\[\\text{gate}\_i]$$
 
+**Field collapse and recovery** (Grok review, April 2026):
+
+The theory describes field dynamics optimistically. The implementation reality:
+
+- The field **can collapse** to a trivial low-coherence state under sustained high
+  asymmetry, repeated low-CCS episodes, or strong negative outcome_delta
+- Damping (κ=0.08) and scar tissue hysteresis **slow** collapse but do not reverse it
+- **No automatic recovery mechanism exists** in V2 — recovery requires external
+  Gardener/Librarian intervention or new high-quality interaction episodes
+- Collapse is not formally proven absorbing but can become persistent without reset
+
+This is a known limitation documented for V3 remediation (automated Gardener
+triggers on pathological asymmetry classification, Master Clock event queue).
+
+---
+
 **TrustField as weighted directed graph** (Fidget review, April 2026):
 
 The theory uses manifold/tensor field language for $R_{ij}$, but the implementation
@@ -774,6 +790,27 @@ Unstable asymmetry predicts dramatic genre: one agent's investment in a
 relationship that the other barely reciprocates creates the pressure differential
 that W5 (The Edge) exploits. Pathological asymmetry predicts tragedy: the
 parasocial agent cannot recover because there is no relationship to recover into.
+
+---
+
+## Shibboleth CPI — Formal Grounding (Grok review, April 2026)
+
+The Shibboleth Coherence-to-Prompt Index (CPI) is referenced in the release notes
+as a governance mechanism. Formal grounding for the theory:
+
+**Definition:** CPI is a scalar $\\in [0,1]$ derived from the alignment coherence
+of an agent's current $\\psi$ vector relative to its ideology baseline. Agents with
+CPI above a threshold (default 0.75) have earned higher autonomy in scene interaction.
+
+**Formal expression:**
+$$\\text{CPI}_i = \\frac{H_\\text{alignment}(i)}{H_\\text{alignment}^\\text{max}}$$
+
+where $H_\\text{alignment}(i)$ is the agent's current alignment coherence score
+from `alignment_coherence()` in `mccf_core.py`.
+
+**V2 status:** Implemented in `mccf_shibboleth.py`. Not yet integrated into
+the automatic arc gate. V3 target: CPI gate determines whether an agent
+can advance to the next waypoint autonomously or requires human prompting.
 
 ---
 
