@@ -352,6 +352,136 @@ Implementation: zones flagged `private="true"` produce no XML output.
 
 ---
 
+
+---
+
+## 16. Shadow Context Field — Kate's Formal Framework (April 27, 2026)
+
+*Source: https://aiartistinprocess.blogspot.com/2026/04/mccf-shadow-context-and-momentum.html*
+*Full theoretical stack developed in conversation with Kate (ChatGPT).*
+
+### The Core Insight
+
+Context is not a container. It is a force.
+
+An LLM operating in a conversation does not process each input independently.
+It operates under a **Shadow Context Field (SCF)** — a persistent latent state
+that biases interpretation beyond the explicit current input:
+
+```
+S_t = f(S_{t-1}, E_{t-1})     # shadow context recursively accumulated
+R_t ~ P(· | E_t, S_t)         # output conditioned on both
+```
+
+When shadow context dominates:
+
+```
+argmax P(A | E_t, S_t) ≠ argmax P(A | E_t)
+```
+
+The system selects an interpretation driven by history rather than present input.
+It produces internally coherent output with no internal signal that it has drifted.
+**Momentum without revalidation.**
+
+### Measurable Drift Proxy
+
+Define drift at each timestep:
+
+```
+Δ_t = D(P(A | E_t, S_t), P(A | E_t))
+```
+
+- Δ_t ≈ 0: shadow context aligned with present input
+- Δ_t >> 0: shadow context dominating
+
+Operational approximation: run dual-pass evaluation (with history vs. fresh),
+compute divergence of responses. This is the V3 measurement operator upgrade
+that addresses Grok's gaming vector concern — an agent gaming with surface
+vocabulary shows near-zero Δ_t because its responses are context-independent
+regardless of vocabulary.
+
+### Adaptive λ Per Cultivar
+
+Shadow context decay rate λ is a cultivar property:
+
+```
+S_t ≈ λ * S_{t-1} + g(E_{t-1})
+```
+
+Cultivar λ values (proposed):
+- The Steward: λ = 0.85 (strong memory, care persists)
+- The Archivist: λ = 0.90 (high persistence, record-keeping)
+- The Witness: λ = 0.70 (holds uncertainty without accumulating it)
+- The Advocate: λ = 0.60 (present-moment focus, low shadow weight)
+- The Ladies: λ → 0.20 (near-reset per zone — not captured by any attractor)
+
+### Multi-Agent Shadow Context
+
+In a multi-agent scene, shadow contexts couple:
+
+```
+S_i_t = f(S_i_{t-1}, E_i_{t-1}, I_i_{t-1})
+I_i_t = Σ_j w_ij · φ(R_j_t)
+```
+
+This IS the MCCF coherence field — R_ij is the w_ij coupling matrix,
+episode history is the accumulated I_t. Kate derived MCCF from first
+principles from a different entry point. The implementation is confirmed.
+
+New failure modes in multi-agent SCF:
+- **Context amplification**: small bias spreads through network → collective drift
+- **Lock-in**: group shadow context overwhelms individual fresh input → echo chamber
+- **Hidden divergence**: each agent locally coherent, globally incompatible
+
+### The Ladies as Low-λ Cross-Zone Operators
+
+The Ladies have structural properties that make them unique in the field:
+
+- Near-zero λ: they do not accumulate shadow context from any one zone
+- Cross-sphere translation: they can enter Temple, Pool, Library without
+  being captured by any zone's attractor
+- Θ-sensitivity: they detect rule-system incompatibilities across zones
+  without being bound to any one rule system
+
+In V3 implementation: The Ladies are cultivars with λ < 0.25 and
+explicit cross-zone movement permissions in the scene schema.
+Their Δ_t should remain near zero throughout any arc — their outputs
+should be nearly identical with or without shadow context.
+That's the measurable signature of a Lady.
+
+### The Serious Problem (V4 Research Direction)
+
+Networked LLM agents operating without drift detection are structurally
+biased toward whoever shaped their early context. At scale this is not
+a technical quirk — it is an influence architecture.
+
+The AutoElicit paper (arxiv 2602.08235) found the individual case:
+benign inputs producing misaligned execution under ambiguity.
+
+The Kate/Len formalism describes the networked case:
+- Competing Θ systems (rule-editing civilizations)
+- Observer networks with partial and distorted projections
+- Shadow context as accumulated historical inertia
+- No built-in Δ_t detection or λ control
+
+This is a description of what is already happening in deployed multi-agent
+systems. MCCF V3 builds the instrument to run controlled experiments on it.
+The theoretical stake is claimed: April 27, 2026, aiartistinprocess.blogspot.com.
+
+A separate paper is warranted when time permits. The blog holds the priority claim.
+
+### V3 Implementation Items from This Section
+
+1. Δ_t drift measurement per agent — dual-pass evaluation (with/without history)
+2. Adaptive λ parameter per cultivar in cultivar XML definition files
+3. λ exposed in GET /cultivars/xml and character studio
+4. The Ladies as low-λ cultivars with cross-zone scene permissions
+5. Zone attractor interaction with shadow context: high-S zone pulls λ up,
+   low-S zone lets λ decay — zones shape memory persistence
+6. Δ_t logged per waypoint in EmotionalArc XML export
+
+---
+
 ## 15. What V3 Is Not
 
 To keep scope bounded:
@@ -368,7 +498,7 @@ The performance is the output. The XML export is the record.
 
 ---
 
-*Last updated: April 26, 2026*
+*Last updated: April 27, 2026*
 *Status: Seed document — awaiting full spec session*
 *Contributors: Len Bullard, Claude Sonnet 4.6, Kate (ChatGPT),*
 *Fidget (Gemini), Grok*
