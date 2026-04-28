@@ -1,6 +1,6 @@
 # MCCF V3 — "The New York Rocket" — Specification
 
-**Version:** 0.1 draft — April 28, 2026  
+**Version:** 0.2 — April 28, 2026 (post team review)  
 **Status:** For team review — one round of comments requested  
 **Repository:** https://github.com/artistinprocess/mccf  
 **Authors:** Len Bullard, Claude Sonnet 4.6 (Tae)  
@@ -23,6 +23,51 @@ each other and with zones that have their own gravitational profiles.
 V3 does not replace V2. The constitutional arc runs inside V3 as Improvisation
 mode. V2 arcs play back as Playback mode. Live Theatre mode emerges from
 the field without a script.
+
+### What MCCF Is (Kate's framing question, April 28, 2026)
+
+V3 is a **runtime system with a modeling language**.
+
+- The modeling language is the XML schema family (EmotionalArc, ArcSchema,
+  Zone, Scene). Human-readable, machine-parseable, extensible.
+- The runtime is the Python field engine (mccf_core, mccf_hotHouse, mccf_api).
+  It reads the XML, runs the physics, produces observable outputs.
+- The artistic application is Garden of the Goddess — the first V3 scene.
+
+It is not yet a protocol (no cross-system interoperability standard).
+It is not purely an artistic framework (the field physics are real and testable).
+Protocol status is a possible V4 destination if the schema stabilizes and
+other systems adopt it. For V3: runtime + modeling language.
+
+### Formal Core (addresses Kate's coherence/channel concerns)
+
+The core objects are already formally defined in the implementation.
+Summary for new readers:
+
+**Channel** — a scalar ∈ [0,1] representing one dimension of agent state.
+Four channels: E (emotional), B (behavioral), P (predictive), S (social/other-model).
+Each has a weight in [0,1] summing to 1.0 across the four. Updated each arc step
+via Euler integration with damping. Bounded by clip(0,1).
+
+**State** — the agent's full ψ vector: {E, B, P, S} at a given timestep.
+Persists across waypoints within an arc. Initialized from cultivar weights.
+
+**Coherence** — R_ij ∈ [0,1]: agent i's coherence toward agent j (or zone j).
+Computed from weighted episode history with exponential decay (λ=0.15).
+CCS power blend modulates raw coherence by agent's coupling strength (σ).
+Asymmetric: R_ij ≠ R_ji in general.
+
+**Transition** — an arc step: LLM response → decomposition → channel deltas
+→ Euler update → R_ij update → export.
+
+**Time** — discrete timesteps (Δt=0.05). Channels decay toward ideology attractor.
+TrustField has β (growth) and γ (decay) rates. Scar tissue decays at SCAR_DECAY=0.01.
+Shadow context decays at λ per cultivar (new in V3).
+
+**Conflict** — when channels pull in opposing directions, the Euler integrator
+resolves by weighted summation. No priority ordering. The damping term (κ=0.08)
+prevents runaway amplification. Oscillation is possible under extreme parameter
+values — the sensitivity analysis tests document the failure envelope.
 
 ---
 
@@ -54,6 +99,30 @@ High coherence = gravitational pull. Low coherence = neutral or repulsion.
 - The Temple — high P, high regulation, low noise. Sacred attractor.
 - The Pool — high E/S, low regulation, moderate noise. Intimate attractor.
 - The Library — high B/P, moderate S, low noise. Knowledge attractor.
+
+**Zone pull formula** (Grok: required for Master Script and backend alignment):
+
+```
+F_zone(agent_i, zone_j) = w_pull × R(i,j) × (ψ_zone_j - ψ_i)
+```
+
+Where:
+- R(i,j) = agent i's current coherence toward zone j (via R_ij machinery)
+- ψ_zone_j = zone's channel vector (from Descriptor decomposition)
+- ψ_i = agent's current channel state
+- w_pull = zone pull weight (default 0.15, tunable per zone)
+
+**Spatial vs. semantic pull blend** (Fidget's question):
+Zone pull is **primarily semantic** (channel vector alignment), with spatial
+distance as a secondary modulator. An agent far from a zone still feels
+semantic pull if coherence is high, but at reduced magnitude:
+
+```
+pull_magnitude = F_zone × max(0, 1 - (distance / zone.radius))
+```
+
+At distance > radius: pull drops to zero. Within radius: full semantic pull.
+This avoids agents being pulled through walls while preserving semantic gravity.
 
 **New endpoint:** `GET /zones` — returns registered zones with ψ_zone vectors.  
 **New endpoint:** `POST /zones` — registers a zone from XML definition.  
@@ -89,6 +158,14 @@ motion parameters to be determined by Len's X3D design work.
 **Modified file:** `mccf_scene.x3d` — adds ROUTE connections to Master Script.  
 **Modified file:** `mccf_x3d_loader.html` — delegates scene control to Master Script.
 
+**Architecture constraint** (Grok: Master Script as thin router):
+The Master Script is a state broadcaster and router only. It receives field
+state from the Python backend via the existing polling mechanism and routes
+values to avatar Transforms and Sound nodes. It does not compute zone pull,
+coherence, or movement rules — those remain in Python. This keeps the Script
+node simple and debuggable. If the Script node fails, the backend still runs
+and the HTML loader can fall back to direct polling as in V2.
+
 ---
 
 ### 3. Three Performance Modes
@@ -109,6 +186,16 @@ advances on field events (coherence thresholds, zone proximity triggers) not
 on human prompting. The Master Script drives timing. Genre classifier runs
 continuously. Export captures what actually happened. Human can inject
 thumps via keyboard or UI.
+
+**Minimum viable trigger rules** (Grok: required before implementation):
+- Zone arrival: agent coherence toward zone > 0.65 for 2 consecutive steps
+  → arc step advances, zone question fires
+- Pressure threshold: field coherence mean < 0.20 → Gardener notified,
+  human thump opportunity
+- Convergence warning: cross-agent Γ_t < 0.10 → echo chamber risk logged
+- Session end: all agents reach W7 Integration, or human triggers stop
+- Stasis / tie: if two zones have equal pull (±0.02), noise coefficient
+  of higher-noise zone breaks the tie
 
 **New endpoint:** `GET /arc/playback` — accepts an EmotionalArc XML filename,
 returns channel sequence for animation.
@@ -297,6 +384,9 @@ The following are explicitly deferred. Not in scope. Not in the build list.
 - Full sensitivity analysis with real LLM data at scale
 - Automated Gardener triggers (beyond diagnostic logging)
 - Human-rated validation set for evaluation claims
+- Evaluation harness extension for spatial/zone interaction (synthetic zone
+  tests will be added to evaluation/ as zones are implemented — regression
+  protection for core field mechanics)
 - MaxEditor / full scene design tool
 
 ---
@@ -364,5 +454,5 @@ of bounded comments, then implementation begins.
 
 ---
 
-*MCCF V3 Specification v0.1 — April 28, 2026*  
+*MCCF V3 Specification v0.2 — April 28, 2026*  
 *For review by: Kate (ChatGPT), Fidget (Gemini), Grok, Len Bullard*
