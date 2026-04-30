@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Scene Composer - V3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+:root {
+  --bg: #080a0e; --s1: #0e1117; --s2: #141820; --s3: #1c2230;
+  --border: #222840; --accent: #4af0a8; --warm: #f0c060;
+  --cool: #60a8f0; --danger: #f06060; --purple: #a060f0;
+  --text: #c0cce0; --dim: #5a6880;
+  --E: #f06060; --B: #60a8f0; --P: #f0c060; --S: #4af0a8;
+  --mono: 'IBM Plex Mono', monospace; --display: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px;
+  height: 100vh; display: grid; grid-template-rows: 44px 1fr;
+  grid-template-columns: 270px 1fr 310px;
+  grid-template-areas: "hdr hdr hdr" "left map right"; overflow: hidden; }
+header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 16px; }
+.logo { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--warm); }
+.logo span { color: var(--dim); font-weight: 400; }
+.vbadge { font-size: 9px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
+.mode-tabs { display: flex; gap: 2px; }
+.mtab { font-family: var(--mono); font-size: 10px; padding: 3px 10px;
+  border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
+.mtab:hover { color: var(--text); border-color: var(--dim); }
+.mtab.active { color: var(--warm); border-color: var(--warm); background: #1a1508; }
+.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); }
+.api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--mono); font-size: 10px; padding: 3px 8px; width: 160px; outline: none; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.sdot.on { background: var(--accent); }
+.sdot.off { background: var(--danger); }
+.panel { overflow-y: auto; padding: 12px; border-right: 1px solid var(--border); }
+#left-panel { grid-area: left; }
+#map-panel { grid-area: map; position: relative; overflow: hidden; padding: 0; }
+#right-panel { grid-area: right; border-right: none; }
+.sh { font-family: var(--display); font-size: 9px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--dim); margin: 14px 0 8px;
+  display: flex; align-items: center; gap: 6px; }
+.sh:first-child { margin-top: 0; }
+.sh::after { content:''; flex:1; height:1px; background: var(--border); }
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.obj-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; cursor: pointer; }
+.obj-item:hover { border-color: var(--dim); }
+.obj-item.sel { border-color: var(--warm); }
+.obj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.obj-name { flex: 1; font-family: var(--display); font-size: 11px; font-weight: 600; }
+.obj-tag { font-size: 9px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
+.agent-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; }
+.agent-item:hover { border-color: var(--cool); }
+.agent-item.placed { border-color: var(--accent); opacity: 0.6; }
+.agent-item.placing { border-color: var(--warm); background: #1a1508; }
+.aswatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.aname { flex: 1; font-family: var(--display); font-size: 11px; font-weight: 600; }
+.arole { font-size: 9px; color: var(--dim); }
+.wp-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 11px; }
+.wp-item:hover { border-color: var(--dim); }
+.wp-item.sel { border-color: var(--cool); }
+.wp-num { width: 18px; height: 18px; border-radius: 50%; background: var(--s3);
+  display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--cool); flex-shrink: 0; }
+label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
+label:first-child { margin-top: 0; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 8px; outline: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--warm); }
+textarea { resize: vertical; min-height: 48px; }
+.btn { display: inline-flex; align-items: center; gap: 5px; background: none;
+  border: 1px solid var(--border); color: var(--text); font-family: var(--mono);
+  font-size: 10px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+.btn:hover { border-color: var(--dim); color: var(--warm); }
+.btn.pri { background: var(--warm); border-color: var(--warm); color: #1a1000; font-weight: 600; }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+.btn.accent { border-color: var(--accent); color: var(--accent); }
+.btn.cool { border-color: var(--cool); color: var(--cool); }
+.btn.full { width: 100%; justify-content: center; }
+.btn-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.bias-row { display: grid; grid-template-columns: 14px 1fr 38px; align-items: center; gap: 6px; margin-bottom: 6px; }
+.bch { font-size: 10px; font-weight: 600; font-family: var(--display); }
+.bval { font-size: 10px; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--warm); }
+#scene-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.map-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px;
+  background: rgba(8,10,14,0.88); border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; }
+.tool-btn { font-family: var(--mono); font-size: 10px; padding: 3px 9px;
+  background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; }
+.tool-btn.active { color: var(--warm); border-color: var(--warm); }
+.coord-disp { position: absolute; bottom: 10px; left: 10px; background: rgba(8,10,14,0.85);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 10px; color: var(--dim); pointer-events: none; }
+.place-hint { position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+  background: rgba(240,192,96,0.15); border: 1px solid var(--warm); border-radius: 4px;
+  padding: 4px 14px; font-size: 10px; color: var(--warm); pointer-events: none; display: none; }
+#arc-canvas { width: 100%; height: 140px; display: block; border: 1px solid var(--border); border-radius: 4px; background: var(--s2); }
+.dsect { background: var(--s2); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+.chbr { display: grid; grid-template-columns: 14px 1fr 36px; align-items: center; gap: 5px; margin-bottom: 4px; }
+.chbar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.chfill { height: 100%; border-radius: 2px; }
+.expopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
+.explbl { flex: 1; font-size: 11px; }
+.expdsc { font-size: 9px; color: var(--dim); margin-top: 1px; }
+.path-seq { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
+.pwp { background: var(--s3); border: 1px solid var(--border); border-radius: 3px;
+  padding: 2px 7px; font-size: 10px; color: var(--cool); cursor: pointer; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
+  background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
+  padding: 6px 16px; font-size: 11px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.err { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">MCCF <span>Scene Composer</span></div>
+  <div class="vbadge">V3</div>
+  <div class="mode-tabs">
+    <button class="mtab active" onclick="setMode('scene')">Scene</button>
+    <button class="mtab" onclick="setMode('zones')">Zones</button>
+    <button class="mtab" onclick="setMode('agents')">Agents</button>
+    <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
+    <button class="mtab" onclick="setMode('paths')">Paths</button>
+    <button class="mtab" onclick="setMode('export')">Export</button>
+  </div>
+  <div class="api-row">
+    <div class="sdot" id="sdot"></div>
+    <span id="stext">offline</span>
+    <input id="api-url" value="http://localhost:5000" onchange="setApi(this.value)">
+    <button class="btn" onclick="ping()" style="padding:2px 8px">ping</button>
+  </div>
+</header>
+<div class="panel" id="left-panel">
+  <div id="mode-scene">
+    <div class="sh">Scene Setup</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
+      <label>Scene Name</label>
+      <input id="sc-name" type="text" value="garden_001" onchange="sceneChanged()">
+      <div class="setup-grid" style="margin-top:8px">
+        <div><label>Width (m)</label><input id="sc-width" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
+        <div><label>Depth (m)</label><input id="sc-depth" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
+      </div>
+      <label>Description</label>
+      <textarea id="sc-desc" rows="2" placeholder="Garden of the Goddess"></textarea>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn pri full" onclick="applyScene()">Apply Grid</button>
+      </div>
+    </div>
+    <div class="sh">Scene Summary</div>
+    <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:10px">Apply grid to begin.</div></div>
+    <div class="sh">Zone Set</div>
+    <div id="sc-zones" style="font-size:10px;color:var(--dim)">No zones placed.</div>
+  </div>
+  <div id="mode-zones" style="display:none">
+    <div class="sh">Zones</div>
+    <div id="zone-list"></div>
+    <button class="btn full" style="margin-top:6px" onclick="startPlace('zone')">+ Place Zone</button>
+    <div id="zone-form" style="display:none;margin-top:10px">
+      <div class="sh">New Zone</div>
+      <label>ID</label><input id="z-id" type="text" placeholder="the_pool">
+      <label>Name</label><input id="z-name" type="text" placeholder="The Pool">
+      <label>Type</label>
+      <select id="z-type" onchange="loadZonePreset()">
+        <option value="neutral">neutral</option><option value="library">library</option>
+        <option value="intimate">intimate</option><option value="forum">forum / plaza</option>
+        <option value="authority">authority / throne</option><option value="garden">garden path</option>
+        <option value="threat">threat zone</option><option value="sacred">sacred / memorial</option>
+      </select>
+      <label>Radius (m)</label><input id="z-radius" type="number" value="4" min="1" max="20" step="0.5">
+      <label>Descriptor</label>
+      <textarea id="z-desc" rows="2" placeholder="care warmth vulnerability comfort"></textarea>
+      <label>Noise</label><input id="z-noise" type="number" value="0.10" min="0" max="1" step="0.01">
+      <label>Ambient Scale</label>
+      <select id="z-ambient">
+        <option value="dorian">dorian</option><option value="major">major</option>
+        <option value="pentatonic">pentatonic</option><option value="mixolydian">mixolydian</option>
+        <option value="phrygian">phrygian</option><option value="lydian">lydian</option>
+        <option value="locrian">locrian</option><option value="whole_tone">whole tone</option>
+      </select>
+      <div class="sh">Channel Weights</div>
+      <div class="bias-row"><span class="bch" style="color:var(--E)">E</span>
+        <input type="range" id="zw-E" min="0" max="1" step="0.01" value="0.25" oninput="updW('E')">
+        <span class="bval" id="zwv-E">0.25</span></div>
+      <div class="bias-row"><span class="bch" style="color:var(--B)">B</span>
+        <input type="range" id="zw-B" min="0" max="1" step="0.01" value="0.25" oninput="updW('B')">
+        <span class="bval" id="zwv-B">0.25</span></div>
+      <div class="bias-row"><span class="bch" style="color:var(--P)">P</span>
+        <input type="range" id="zw-P" min="0" max="1" step="0.01" value="0.25" oninput="updW('P')">
+        <span class="bval" id="zwv-P">0.25</span></div>
+      <div class="bias-row"><span class="bch" style="color:var(--S)">S</span>
+        <input type="range" id="zw-S" min="0" max="1" step="0.01" value="0.25" oninput="updW('S')">
+        <span class="bval" id="zwv-S">0.25</span></div>
+      <div class="btn-row">
+        <button class="btn pri" onclick="confirmZone()">Place on Map</button>
+        <button class="btn" onclick="cancelPlace()">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div id="mode-agents" style="display:none">
+    <div class="sh">Agent Roster (from Character Editor)</div>
+    <div id="agent-roster"><div style="color:var(--dim);font-size:10px">Connect to API to load agents.</div></div>
+    <div style="margin-top:8px"><button class="btn full" onclick="loadAgents()">Refresh from API</button></div>
+    <div class="sh" style="margin-top:14px">Placed Agents</div>
+    <div id="placed-list"><div style="color:var(--dim);font-size:10px">No agents placed.</div></div>
+  </div>
+  <div id="mode-waypoints" style="display:none">
+    <div class="sh">Waypoints</div>
+    <div id="wp-list"></div>
+    <button class="btn full" style="margin-top:6px" onclick="startPlace('waypoint')">+ Place Waypoint</button>
+    <div id="wp-form" style="display:none;margin-top:10px">
+      <div class="sh">New Waypoint</div>
+      <label>Name</label><input id="wp-name" type="text" placeholder="W1_COMFORT">
+      <label>Label</label><input id="wp-label" type="text" placeholder="Comfort Zone">
+      <label>Zone (optional)</label>
+      <select id="wp-zone"><option value="">-- none --</option></select>
+      <label>Dwell (s)</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5">
+      <div class="btn-row">
+        <button class="btn pri" onclick="confirmWP()">Place on Map</button>
+        <button class="btn" onclick="cancelPlace()">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div id="mode-paths" style="display:none">
+    <div class="sh">Paths</div>
+    <div id="path-list"></div>
+    <div style="margin-top:10px">
+      <div class="sh">New Path</div>
+      <label>Path Name</label><input id="p-name" type="text" placeholder="path_witness">
+      <label>Agent</label><select id="p-agent"></select>
+      <label>Waypoints (click to add)</label>
+      <div id="p-wp-pick" style="max-height:120px;overflow-y:auto;background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px"></div>
+      <div id="p-seq" class="path-seq"></div>
+      <div class="btn-row">
+        <button class="btn pri" onclick="createPath()">Create Path</button>
+        <button class="btn" onclick="clearPathSeq()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div id="mode-export" style="display:none">
+    <div class="sh">X3D Export</div>
+    <div class="expopt">
+      <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE</div></div>
+      <button class="btn accent" onclick="exportX3D()">Export</button>
+    </div>
+    <div class="expopt">
+      <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
+      <button class="btn cool" onclick="exportZoneXML()">Export</button>
+    </div>
+    <div class="expopt">
+      <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml wrapper</div></div>
+      <button class="btn cool" onclick="exportSceneXML()">Export</button>
+    </div>
+    <div class="sh" style="margin-top:14px">Options</div>
+    <label><input type="checkbox" id="exp-sounds" checked style="width:auto;margin-right:6px">Sound node stubs</label>
+    <label style="margin-top:6px"><input type="checkbox" id="exp-protos" checked style="width:auto;margin-right:6px">Inline PROTOs</label>
+    <label style="margin-top:6px"><input type="checkbox" id="exp-interps" checked style="width:auto;margin-right:6px">PositionInterpolators</label>
+    <label style="margin-top:6px"><input type="checkbox" id="exp-script" checked style="width:auto;margin-right:6px">MCCFMaster Script stub</label>
+    <div class="sh" style="margin-top:14px">Last Export</div>
+    <div id="exp-log" style="font-size:10px;color:var(--dim)">Nothing exported yet.</div>
+  </div>
+</div>
+<div id="map-panel">
+  <canvas id="scene-canvas"></canvas>
+  <div class="map-toolbar">
+    <button class="tool-btn active" id="tool-select" onclick="setTool('select')">Select</button>
+    <button class="tool-btn" id="tool-move" onclick="setTool('move')">Move</button>
+    <button class="tool-btn" id="tool-query" onclick="setTool('query')">Query</button>
+  </div>
+  <div class="place-hint" id="place-hint">Click map to place</div>
+  <div class="coord-disp" id="coord-disp">x: 0.0  z: 0.0</div>
+</div>
+<div class="panel" id="right-panel">
+  <div id="detail-zone" style="display:none">
+    <div class="sh" style="margin-top:0">Zone Properties</div>
+    <div id="zd-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
+    <div id="zd-type" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="zd-weights"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:10px;color:var(--accent)"></div></div>
+    <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
+  </div>
+  <div id="detail-agent" style="display:none">
+    <div class="sh" style="margin-top:0">Agent</div>
+    <div id="ad-name" style="font-family:var(--display);font-size:14px;font-weight:700;margin-bottom:2px;"></div>
+    <div id="ad-disp" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:10px;color:var(--accent)"></div></div>
+    <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
+  </div>
+  <div id="detail-wp" style="display:none">
+    <div class="sh" style="margin-top:0">Waypoint</div>
+    <div id="wpd-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:10px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:10px;color:var(--dim)"></div></div>
+    <div class="btn-row"><button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button></div>
+  </div>
+  <div id="detail-arc">
+    <div class="sh" style="margin-top:0">Affective Arc</div>
+    <canvas id="arc-canvas"></canvas>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--E)"></div>E</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--B)"></div>B</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--P)"></div>P</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--S)"></div>S</div>
+    </div>
+    <div class="sh" style="margin-top:12px">Field State</div>
+    <div id="field-state" style="font-size:10px;color:var(--dim)">Connect to API.</div>
+    <div class="sh" style="margin-top:12px">Scene Stats</div>
+    <div style="font-size:10px;color:var(--dim)">
+      <div>Zones: <span id="stat-z" style="color:var(--accent)">0</span></div>
+      <div>Agents placed: <span id="stat-a" style="color:var(--accent)">0</span></div>
+      <div>Waypoints: <span id="stat-w" style="color:var(--accent)">0</span></div>
+      <div>Paths: <span id="stat-p" style="color:var(--accent)">0</span></div>
+    </div>
+  </div>
+  <div id="detail-query" style="display:none">
+    <div class="sh" style="margin-top:0">Position Query</div>
+    <div id="q-pos" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Active Zones</div><div id="q-zones" style="font-size:10px;color:var(--dim)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Combined Pressure</div><div id="q-pressure" style="font-size:10px;"></div></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+// MCCF Scene Composer V3 - Pure ASCII JavaScript
+var API = 'http://localhost:5000';
+var mode = 'scene';
+var tool = 'select';
+var placing = null;
+var pendingPos = null;
+var placingAgent = null;
+var sceneConfig = { name: 'garden_001', width: 40, depth: 40, description: '' };
+var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {};
+var selectedId = null, selectedType = null, pathSeq = [];
+var canvas, ctx, arcCanvas, arcCtx, W, H, SCALE = 18, OX = 0, OZ = 0;
+var ZONE_COLORS = {
+  library:'#60a8f0',intimate:'#f06060',forum:'#4af0a8',
+  authority:'#a060f0',garden:'#80d060',threat:'#f04040',sacred:'#f0c060',neutral:'#888888'
+};
+var ZONE_PRESETS = {
+  neutral:  {E:0.25,B:0.25,P:0.25,S:0.25,noise:0.10,ambient:'major'},
+  library:  {E:0.10,B:0.15,P:0.40,S:0.15,noise:0.05,ambient:'dorian'},
+  intimate: {E:0.40,B:0.10,P:0.20,S:0.30,noise:0.10,ambient:'major'},
+  forum:    {E:0.15,B:0.25,P:0.15,S:0.35,noise:0.12,ambient:'mixolydian'},
+  authority:{E:0.10,B:0.35,P:0.30,S:0.10,noise:0.08,ambient:'phrygian'},
+  garden:   {E:0.30,B:0.10,P:0.15,S:0.25,noise:0.15,ambient:'pentatonic'},
+  threat:   {E:0.40,B:0.20,P:0.30,S:0.05,noise:0.25,ambient:'locrian'},
+  sacred:   {E:0.25,B:0.20,P:0.25,S:0.25,noise:0.05,ambient:'lydian'}
+};
+var AGENT_COLORS = ['#60a8f0','#4af0a8','#f06060','#f0c060','#a060f0','#60d0f0','#f080a0','#80f0a0'];
+var colorIdx = 0, colorMap = {};
+function agentColor(n){if(!colorMap[n])colorMap[n]=AGENT_COLORS[colorIdx++%AGENT_COLORS.length];return colorMap[n];}
+
+window.addEventListener('load',function(){
+  canvas=document.getElementById('scene-canvas');ctx=canvas.getContext('2d');
+  arcCanvas=document.getElementById('arc-canvas');arcCtx=arcCanvas.getContext('2d');
+  resizeCanvas();window.addEventListener('resize',resizeCanvas);
+  canvas.addEventListener('mousemove',onMouseMove);
+  canvas.addEventListener('mousedown',onMouseDown);
+  canvas.addEventListener('mouseup',onMouseUp);
+  canvas.addEventListener('click',onCanvasClick);
+  setApi(document.getElementById('api-url').value);
+  applyScene();setInterval(pollField,3000);
+});
+
+function resizeCanvas(){
+  var wrap=document.getElementById('map-panel');
+  W=canvas.width=wrap.clientWidth;H=canvas.height=wrap.clientHeight;
+  arcCanvas.width=arcCanvas.parentElement.clientWidth-24;
+  computeScale();drawScene();
+}
+function computeScale(){
+  var m=60,sx=(W-m*2)/sceneConfig.width,sz=(H-m*2)/sceneConfig.depth;
+  SCALE=Math.min(sx,sz);OX=(W-sceneConfig.width*SCALE)/2;OZ=(H-sceneConfig.depth*SCALE)/2;
+}
+function w2c(wx,wz){return{cx:OX+wx*SCALE,cy:OZ+wz*SCALE};}
+function c2w(cx,cy){return{wx:Math.round(((cx-OX)/SCALE)*10)/10,wz:Math.round(((cy-OZ)/SCALE)*10)/10};}
+function clamp(wx,wz){return{wx:Math.max(0,Math.min(sceneConfig.width,wx)),wz:Math.max(0,Math.min(sceneConfig.depth,wz))};}
+function setApi(url){API=url.trim();ping();}
+function ping(){
+  fetch(API+'/ping',{signal:AbortSignal.timeout(2500)})
+    .then(function(r){if(r.ok){setStatus('on');loadAll();}else setStatus('off');})
+    .catch(function(){setStatus('off');});
+}
+function setStatus(s){
+  document.getElementById('sdot').className='sdot '+s;
+  document.getElementById('stext').textContent=s==='on'?'online':'offline';
+}
+function apiGet(p){return fetch(API+p).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
+function apiPost(p,b){return fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function loadAll(){
+  Promise.all([apiGet('/zone'),apiGet('/waypoint'),apiGet('/path'),apiGet('/field')])
+    .then(function(res){
+      zones=res[0]||{};waypoints=res[1]||{};paths=res[2]||{};
+      var fa=(res[3]||{}).agents||{};
+      Object.keys(fa).forEach(function(n){
+        if(!agents[n])agents[n]={name:n,weights:fa[n].weights||{E:0.25,B:0.25,P:0.25,S:0.25},
+          regulation:fa[n].regulation||0.7,role:fa[n].role||'agent',color:agentColor(n),disposition:''};
+      });
+      renderAll();
+    }).catch(function(e){console.warn('loadAll:',e);});
+}
+function loadAgents(){
+  apiGet('/field').then(function(fd){
+    var fa=(fd||{}).agents||{};
+    Object.keys(fa).forEach(function(n){
+      if(!agents[n])agents[n]={name:n,weights:fa[n].weights||{E:0.25,B:0.25,P:0.25,S:0.25},
+        regulation:fa[n].regulation||0.7,role:fa[n].role||'agent',color:agentColor(n),disposition:''};
+    });
+    return apiGet('/cultivars/xml');
+  }).then(function(cx){
+    ((cx||{}).cultivars||[]).forEach(function(c){
+      if(c.agentname&&agents[c.agentname]){
+        agents[c.agentname].color=c.color||agents[c.agentname].color;
+        agents[c.agentname].disposition=c.disposition||'';
+        agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
+      }
+    });
+    renderAgentRoster();renderPlaced();drawScene();
+    toast('Agents loaded: '+Object.keys(agents).length);
+  }).catch(function(){toast('Could not load agents',true);});
+}
+function pollField(){
+  apiGet('/field').then(function(fd){
+    var panel=document.getElementById('field-state');
+    var names=Object.keys((fd||{}).agents||{});
+    if(!names.length){panel.textContent='No agents in field.';return;}
+    var html='';
+    names.forEach(function(n){
+      var s=fd.agents[n],w=s.weights||{},col=agents[n]?agents[n].color:'#888';
+      html+='<div style="margin-bottom:6px"><span style="color:'+col+';font-family:var(--display);font-size:11px;font-weight:600">'+n+'</span>';
+      html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:2px">';
+      ['E','B','P','S'].forEach(function(ch){
+        var v=w[ch]||0;
+        html+='<div><div style="font-size:9px;color:var(--dim)">'+ch+'</div>';
+        html+='<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>';
+        html+='<div style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</div></div>';
+      });
+      html+='</div></div>';
+    });
+    panel.innerHTML=html;
+  }).catch(function(){});
+}
+function setMode(m){
+  mode=m;
+  var ms=['scene','zones','agents','waypoints','paths','export'];
+  ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
+  document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
+  if(m==='paths')populatePathUI();
+  if(m==='waypoints')populateWPZones();
+  if(m==='agents'){renderAgentRoster();renderPlaced();}
+  drawScene();
+}
+function setTool(t){
+  tool=t;
+  document.querySelectorAll('.tool-btn').forEach(function(b){b.classList.remove('active');});
+  document.getElementById('tool-'+t).classList.add('active');
+  if(t!=='query'){document.getElementById('detail-query').style.display='none';document.getElementById('detail-arc').style.display='block';}
+}
+function sceneChanged(){
+  sceneConfig.name=document.getElementById('sc-name').value.trim()||'scene';
+  sceneConfig.width=parseInt(document.getElementById('sc-width').value)||40;
+  sceneConfig.depth=parseInt(document.getElementById('sc-depth').value)||40;
+}
+function applyScene(){
+  sceneChanged();sceneConfig.description=document.getElementById('sc-desc').value;
+  computeScale();drawScene();updateSummary();toast('Grid: '+sceneConfig.width+'x'+sceneConfig.depth+'m');
+}
+function updateSummary(){
+  document.getElementById('scene-summary').innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px">'+
+    '<div style="color:var(--dim)">Name</div><div style="color:var(--warm)">'+sceneConfig.name+'</div>'+
+    '<div style="color:var(--dim)">Width</div><div>'+sceneConfig.width+' m</div>'+
+    '<div style="color:var(--dim)">Depth</div><div>'+sceneConfig.depth+' m</div>'+
+    '<div style="color:var(--dim)">Scale</div><div>'+SCALE.toFixed(1)+' px/m</div>'+
+    '</div>';
+  var zl=document.getElementById('sc-zones'),zn=Object.keys(zones);
+  if(!zn.length){zl.textContent='No zones placed.';return;}
+  zl.innerHTML=zn.map(function(id){
+    var z=zones[id],col=ZONE_COLORS[z.zone_type]||'#888';
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:10px">'+
+      '<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'+
+      '<span style="color:'+col+';font-family:var(--display);font-weight:600">'+(z.name||id)+'</span>'+
+      '<span style="color:var(--dim)">'+z.zone_type+'</span></div>';
+  }).join('');
+}
+function renderAll(){
+  renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();
+  updateStats();updateSummary();drawScene();
+}
+function renderZoneList(){
+  var el=document.getElementById('zone-list'),list=Object.values(zones);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No zones placed.</div>';return;}
+  el.innerHTML=list.map(function(z){
+    var col=ZONE_COLORS[z.zone_type]||'#888',sel=selectedType==='zone'&&selectedId===z.id;
+    return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'zone\',\''+z.id+'\')">'+
+      '<div class="obj-dot" style="background:'+col+'"></div>'+
+      '<span class="obj-name">'+(z.name||z.id)+'</span>'+
+      '<span class="obj-tag">'+z.zone_type+'</span></div>';
+  }).join('');
+}
+function renderWPList(){
+  var el=document.getElementById('wp-list'),list=Object.values(waypoints);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No waypoints.</div>';return;}
+  el.innerHTML=list.map(function(wp,i){
+    var sel=selectedType==='waypoint'&&selectedId===wp.name;
+    return '<div class="wp-item '+(sel?'sel':'')+'" onclick="selectObj(\'waypoint\',\''+wp.name+'\')">'+
+      '<div class="wp-num">'+(i+1)+'</div><span style="flex:1">'+wp.name+'</span>'+
+      '<span style="color:var(--dim);font-size:9px">'+(wp.label||'')+'</span></div>';
+  }).join('');
+}
+function renderPathList(){
+  var el=document.getElementById('path-list'),list=Object.values(paths);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No paths.</div>';return;}
+  el.innerHTML=list.map(function(p){
+    return '<div class="obj-item"><span class="obj-name">'+p.name+'</span>'+
+      '<span class="obj-tag">'+(p.agent||'?')+'</span></div>';
+  }).join('');
+}
+function renderAgentRoster(){
+  var el=document.getElementById('agent-roster'),list=Object.values(agents);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No agents. Use Character Editor.</div>';return;}
+  el.innerHTML=list.map(function(a){
+    var ip=!!placedAgents[a.name],ipl=placing==='agent'&&placingAgent===a.name;
+    return '<div class="agent-item '+(ip?'placed':'')+' '+(ipl?'placing':'')+'" onclick="startPlaceAgent(\''+a.name+'\')">'+
+      '<div class="aswatch" style="background:'+a.color+'"></div>'+
+      '<span class="aname" style="color:'+a.color+'">'+a.name+'</span>'+
+      '<span class="arole">'+(ip?'placed':a.role||'agent')+'</span></div>';
+  }).join('');
+}
+function renderPlaced(){
+  var el=document.getElementById('placed-list'),list=Object.values(placedAgents);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No agents placed.</div>';return;}
+  el.innerHTML=list.map(function(a){
+    var sel=selectedType==='agent'&&selectedId===a.name;
+    return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'agent\',\''+a.name+'\')">'+
+      '<div class="obj-dot" style="background:'+a.color+'"></div>'+
+      '<span class="obj-name">'+a.name+'</span>'+
+      '<span style="font-size:9px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
+  }).join('');
+}
+function updateStats(){
+  document.getElementById('stat-z').textContent=Object.keys(zones).length;
+  document.getElementById('stat-a').textContent=Object.keys(placedAgents).length;
+  document.getElementById('stat-w').textContent=Object.keys(waypoints).length;
+  document.getElementById('stat-p').textContent=Object.keys(paths).length;
+}
+function drawScene(){
+  if(!ctx)return;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='#2a3450';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);
+  ctx.strokeRect(OX,OZ,sceneConfig.width*SCALE,sceneConfig.depth*SCALE);ctx.setLineDash([]);
+  ctx.strokeStyle='#1a2035';ctx.lineWidth=1;
+  for(var x=0;x<=sceneConfig.width;x+=5){
+    var cx0=w2c(x,0).cx;ctx.beginPath();ctx.moveTo(cx0,OZ);ctx.lineTo(cx0,OZ+sceneConfig.depth*SCALE);ctx.stroke();
+    if(x%10===0&&x>0){ctx.fillStyle='#2a3450';ctx.font='9px IBM Plex Mono';ctx.textAlign='center';ctx.fillText(x,cx0,OZ-4);}
+  }
+  for(var z=0;z<=sceneConfig.depth;z+=5){
+    var cy0=w2c(0,z).cy;ctx.beginPath();ctx.moveTo(OX,cy0);ctx.lineTo(OX+sceneConfig.width*SCALE,cy0);ctx.stroke();
+    if(z%10===0&&z>0){ctx.fillStyle='#2a3450';ctx.font='9px IBM Plex Mono';ctx.textAlign='right';ctx.fillText(z,OX-4,cy0+3);}
+  }
+  Object.values(paths).forEach(drawPath);
+  Object.values(zones).forEach(drawZone);
+  Object.values(placedAgents).forEach(drawAgent);
+  Object.values(waypoints).forEach(function(wp,i){drawWP(wp,i);});
+}
+function drawZone(z){
+  var pos=z.location||z.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
+  var p=w2c(pos[0],pos[2]),r=(z.radius||4)*SCALE,col=ZONE_COLORS[z.zone_type]||'#888';
+  var sel=selectedType==='zone'&&selectedId===z.id;
+  var g=ctx.createRadialGradient(p.cx,p.cy,0,p.cx,p.cy,r);
+  g.addColorStop(0,col+'55');g.addColorStop(0.7,col+'22');g.addColorStop(1,col+'00');
+  ctx.beginPath();ctx.arc(p.cx,p.cy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.beginPath();ctx.arc(p.cx,p.cy,r,0,Math.PI*2);
+  ctx.strokeStyle=sel?col:col+'99';ctx.lineWidth=sel?2.5:1.5;ctx.setLineDash(sel?[]:[5,4]);ctx.stroke();ctx.setLineDash([]);
+  var br=Math.max(4,SCALE*0.3);
+  ctx.fillStyle=col+'88';ctx.fillRect(p.cx-br,p.cy-br,br*2,br*2);
+  ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(p.cx-br,p.cy-br,br*2,br*2);
+  ctx.fillStyle=col;ctx.font='bold 11px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText(z.name||z.id,p.cx,p.cy+br+3);
+  ctx.font='9px IBM Plex Mono';ctx.fillStyle=col+'aa';ctx.fillText(z.zone_type,p.cx,p.cy+br+14);
+}
+function drawAgent(a){
+  var pos=a.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
+  var p=w2c(pos[0],pos[2]),col=a.color||'#aab0be',sel=selectedType==='agent'&&selectedId===a.name;
+  ctx.beginPath();ctx.arc(p.cx,p.cy,14,0,Math.PI*2);ctx.fillStyle=col+'22';ctx.fill();
+  ctx.strokeStyle=col+'55';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(p.cx,p.cy,7,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+  if(sel){ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke();}
+  ctx.fillStyle=col;ctx.font='bold 10px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText(a.name,p.cx,p.cy+10);
+  ['E','B','P','S'].forEach(function(ch,i){
+    var ang=(i*Math.PI/2)-Math.PI/4,v=(a.weights&&a.weights[ch])||0.25,dr=10+v*6;
+    ctx.beginPath();ctx.arc(p.cx+Math.cos(ang)*dr,p.cy+Math.sin(ang)*dr,2.5,0,Math.PI*2);
+    ctx.fillStyle=['#f06060','#60a8f0','#f0c060','#4af0a8'][i];ctx.fill();
+  });
+}
+function drawWP(wp,idx){
+  var pos=wp.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
+  var p=w2c(pos[0],pos[2]),sel=selectedType==='waypoint'&&selectedId===wp.name;
+  ctx.beginPath();ctx.moveTo(p.cx,p.cy-9);ctx.lineTo(p.cx+7,p.cy);ctx.lineTo(p.cx,p.cy+9);ctx.lineTo(p.cx-7,p.cy);ctx.closePath();
+  ctx.fillStyle=sel?'#60a8f0':'#1c3050';ctx.fill();
+  ctx.strokeStyle=sel?'#80c8ff':'#60a8f0';ctx.lineWidth=sel?2:1;ctx.stroke();
+  ctx.fillStyle='#c0d8f0';ctx.font='bold 8px Syne';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(idx+1,p.cx,p.cy);
+  ctx.fillStyle='#60a8f0';ctx.font='9px IBM Plex Mono';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(wp.name,p.cx+9,p.cy-7);
+}
+function drawPath(path){
+  var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
+  if(wps.length<2)return;
+  ctx.strokeStyle='#3a5070';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();
+  wps.forEach(function(wp,i){var pos=wp.position||[0,0,0],p=w2c(pos[0],pos[2]);if(i===0)ctx.moveTo(p.cx,p.cy);else ctx.lineTo(p.cx,p.cy);});
+  ctx.stroke();ctx.setLineDash([]);
+}
+var isDrag=false,dragTgt=null,dragTyp=null,lastMX=0,lastMY=0;
+function onMouseMove(e){
+  var rect=canvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+  var wp=c2w(cx,cy);document.getElementById('coord-disp').textContent='x: '+wp.wx.toFixed(1)+'  z: '+wp.wz.toFixed(1);
+  if(isDrag&&dragTgt&&tool==='move'){
+    var dx=(cx-lastMX)/SCALE,dz=(cy-lastMY)/SCALE;
+    if(dragTyp==='zone'&&zones[dragTgt]){var pos=zones[dragTgt].location||zones[dragTgt].position,np=clamp(pos[0]+dx,pos[2]+dz);if(zones[dragTgt].location)zones[dragTgt].location=[np.wx,0,np.wz];else zones[dragTgt].position=[np.wx,0,np.wz];}
+    else if(dragTyp==='agent'&&placedAgents[dragTgt]){var ap=placedAgents[dragTgt].position,anp=clamp(ap[0]+dx,ap[2]+dz);placedAgents[dragTgt].position=[anp.wx,0,anp.wz];}
+    else if(dragTyp==='waypoint'&&waypoints[dragTgt]){var wpos=waypoints[dragTgt].position,wnp=clamp(wpos[0]+dx,wpos[2]+dz);waypoints[dragTgt].position=[wnp.wx,0,wnp.wz];}
+    drawScene();lastMX=cx;lastMY=cy;
+  }
+}
+function onMouseDown(e){
+  if(tool!=='move')return;var rect=canvas.getBoundingClientRect();
+  lastMX=e.clientX-rect.left;lastMY=e.clientY-rect.top;
+  var hit=hitTest(lastMX,lastMY);if(hit){isDrag=true;dragTgt=hit.id;dragTyp=hit.type;}
+}
+function onMouseUp(){isDrag=false;dragTgt=null;dragTyp=null;}
+function onCanvasClick(e){
+  var rect=canvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+  var wp=c2w(cx,cy);
+  if(placing){var cl=clamp(wp.wx,wp.wz);pendingPos=[cl.wx,0,cl.wz];
+    if(placing==='zone')confirmZone();else if(placing==='waypoint')confirmWP();
+    else if(placing==='agent'&&placingAgent)placeAgentAt(placingAgent,cl.wx,cl.wz);return;}
+  if(tool==='query'){showQuery(wp.wx,wp.wz);return;}
+  var hit=hitTest(cx,cy);if(hit)selectObj(hit.type,hit.id);else clearSel();
+}
+function hitTest(cx,cy){
+  var r=null;
+  Object.keys(placedAgents).forEach(function(n){var pos=placedAgents[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<14)r={type:'agent',id:n};});if(r)return r;
+  Object.keys(waypoints).forEach(function(n){var pos=waypoints[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'waypoint',id:n};});if(r)return r;
+  Object.keys(zones).forEach(function(id){var pos=zones[id].location||zones[id].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<16)r={type:'zone',id:id};});
+  return r;
+}
+function selectObj(type,id){
+  selectedType=type;selectedId=id;
+  ['zone','agent','wp','arc'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  if(type==='zone')showZD(id);else if(type==='agent')showAD(id);else if(type==='waypoint')showWD(id);
+  renderAll();
+}
+function clearSel(){
+  selectedType=null;selectedId=null;
+  ['zone','agent','wp','query'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  document.getElementById('detail-arc').style.display='block';drawScene();
+}
+function deleteSelected(t){
+  if(!selectedId)return;
+  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];
+  clearSel();renderAll();toast('Deleted.');
+}
+function chBars(w){
+  var h='';
+  ['E','B','P','S'].forEach(function(ch){
+    var v=(w&&w[ch])||0.25;
+    h+='<div class="chbr"><span style="font-size:10px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
+      '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
+      '<span style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';
+  });return h;
+}
+function showZD(id){
+  var z=zones[id];if(!z)return;
+  document.getElementById('detail-zone').style.display='block';
+  document.getElementById('zd-name').textContent=z.name||id;
+  document.getElementById('zd-type').textContent=z.zone_type||'neutral';
+  var pos=z.location||z.position||[0,0,0];
+  document.getElementById('zd-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1)+'  r='+(z.radius||4)+'m';
+  document.getElementById('zd-weights').innerHTML=chBars(z.weights);
+}
+function showAD(name){
+  var a=placedAgents[name];if(!a)return;
+  document.getElementById('detail-agent').style.display='block';
+  document.getElementById('ad-name').textContent=name;
+  document.getElementById('ad-name').style.color=a.color||'#aab0be';
+  document.getElementById('ad-disp').textContent=a.disposition||'';
+  var pos=a.position||[0,0,0];
+  document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
+  document.getElementById('ad-weights').innerHTML=chBars(a.weights);
+}
+function showWD(name){
+  var wp=waypoints[name];if(!wp)return;
+  document.getElementById('detail-wp').style.display='block';
+  document.getElementById('wpd-name').textContent=name;
+  var pos=wp.position||[0,0,0];
+  document.getElementById('wpd-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
+  var ov=[];Object.keys(zones).forEach(function(id){var zp=zones[id].location||zones[id].position||[0,0,0];if(Math.hypot(pos[0]-zp[0],pos[2]-zp[2])<=(zones[id].radius||4))ov.push(zones[id].name||id);});
+  document.getElementById('wpd-zones').textContent=ov.length?ov.join(', '):'No zones here';
+}
+function showQuery(wx,wz){
+  document.getElementById('detail-arc').style.display='none';document.getElementById('detail-query').style.display='block';
+  document.getElementById('q-pos').textContent='X='+wx.toFixed(1)+' Z='+wz.toFixed(1);
+  var active=[],combined={E:0,B:0,P:0,S:0},tw=0;
+  Object.keys(zones).forEach(function(id){
+    var z=zones[id],pos=z.location||z.position||[0,0,0],dist=Math.hypot(wx-pos[0],wz-pos[2]),r=z.radius||4;
+    if(dist<=r){var wt=1-(dist/r);active.push((z.name||id)+' (d='+dist.toFixed(1)+'m)');
+      ['E','B','P','S'].forEach(function(ch){combined[ch]+=(z.weights&&z.weights[ch]||0.25)*wt;});tw+=wt;}
+  });
+  document.getElementById('q-zones').textContent=active.length?active.join(', '):'No zones';
+  var ph='';if(tw>0){['E','B','P','S'].forEach(function(ch){var v=combined[ch]/tw;ph+=
+    '<div class="chbr"><span style="font-size:10px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
+    '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
+    '<span style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';});}
+  else ph='<span style="color:var(--dim)">No zone influence.</span>';
+  document.getElementById('q-pressure').innerHTML=ph;
+}
+function startPlace(t){
+  if(t==='zone'){document.getElementById('zone-form').style.display='block';placing='zone';}
+  else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';}
+  showHint('Click map to place');
+}
+function cancelPlace(){
+  placing=null;placingAgent=null;pendingPos=null;
+  document.getElementById('zone-form').style.display='none';
+  document.getElementById('wp-form').style.display='none';hideHint();
+}
+function confirmZone(){
+  if(!pendingPos){toast('Click map first',true);return;}
+  var id=document.getElementById('z-id').value.trim(),name=document.getElementById('z-name').value.trim();
+  var type=document.getElementById('z-type').value,radius=parseFloat(document.getElementById('z-radius').value);
+  var desc=document.getElementById('z-desc').value.trim(),noise=parseFloat(document.getElementById('z-noise').value);
+  var ambient=document.getElementById('z-ambient').value;
+  if(!id){toast('Zone ID required',true);return;}
+  var w={};['E','B','P','S'].forEach(function(ch){w[ch]=parseFloat(document.getElementById('zw-'+ch).value);});
+  zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
+    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'}};
+  apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
+    channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
+  placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';hideHint();renderAll();toast('Zone: '+(name||id));
+}
+function loadZonePreset(){
+  var t=document.getElementById('z-type').value,p=ZONE_PRESETS[t]||ZONE_PRESETS.neutral;
+  ['E','B','P','S'].forEach(function(ch){document.getElementById('zw-'+ch).value=p[ch];document.getElementById('zwv-'+ch).textContent=p[ch].toFixed(2);});
+  document.getElementById('z-noise').value=p.noise;document.getElementById('z-ambient').value=p.ambient;
+}
+function updW(ch){var v=parseFloat(document.getElementById('zw-'+ch).value);document.getElementById('zwv-'+ch).textContent=v.toFixed(2);}
+function startPlaceAgent(name){
+  if(placedAgents[name]){selectObj('agent',name);toast(name+' already placed.');return;}
+  placing='agent';placingAgent=name;showHint('Click map to place '+name);
+  if(mode!=='agents')setMode('agents');renderAgentRoster();
+}
+function placeAgentAt(name,wx,wz){
+  var a=agents[name];if(!a)return;
+  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||''};
+  placing=null;placingAgent=null;pendingPos=null;hideHint();renderAll();toast(name+' placed ('+wx.toFixed(1)+',0,'+wz.toFixed(1)+')');
+}
+function confirmWP(){
+  if(!pendingPos){toast('Click map first',true);return;}
+  var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
+  var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
+  if(!name){toast('Name required',true);return;}
+  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice()};
+  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice()}).catch(function(){});
+  placing=null;pendingPos=null;document.getElementById('wp-form').style.display='none';hideHint();renderAll();toast('Waypoint: '+name);
+}
+function populateWPZones(){
+  var sel=document.getElementById('wp-zone');
+  sel.innerHTML='<option value="">-- none --</option>'+Object.keys(zones).map(function(id){return '<option value="'+id+'">'+(zones[id].name||id)+'</option>';}).join('');
+}
+function populatePathUI(){
+  document.getElementById('p-agent').innerHTML=Object.keys(placedAgents).map(function(n){return '<option value="'+n+'">'+n+'</option>';}).join('');
+  renderWPPicker();
+}
+function renderWPPicker(){
+  document.getElementById('p-wp-pick').innerHTML=Object.keys(waypoints).map(function(n){
+    return '<div style="padding:2px 4px;cursor:pointer;font-size:10px;color:var(--cool)" onclick="addToPath(\''+n+'\')">'+n+'</div>';}).join('');
+  renderPathSeq();
+}
+function addToPath(n){pathSeq.push(n);renderPathSeq();}
+function clearPathSeq(){pathSeq=[];renderPathSeq();}
+function renderPathSeq(){
+  document.getElementById('p-seq').innerHTML=pathSeq.map(function(n,i){
+    return (i>0?'<span style="color:var(--dim);font-size:12px"> -&gt; </span>':'')+
+      '<span class="pwp" onclick="pathSeq.splice('+i+',1);renderPathSeq()">'+n+'</span>';}).join('');
+}
+function createPath(){
+  var name=document.getElementById('p-name').value.trim(),agent=document.getElementById('p-agent').value;
+  if(!name||!agent||pathSeq.length<2){toast('Name, agent, 2+ waypoints required',true);return;}
+  paths[name]={name:name,agent:agent,waypoints:pathSeq.slice()};
+  apiPost('/path',{name:name,agent_name:agent,waypoints:pathSeq.slice()}).catch(function(){});
+  clearPathSeq();renderAll();toast('Path: '+name);
+}
+function showHint(msg){var h=document.getElementById('place-hint');h.textContent=msg;h.style.display='block';}
+function hideHint(){document.getElementById('place-hint').style.display='none';}
+// X3D Export - pure ASCII, string concat only
+function xe(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function safeId(s){return String(s||'').replace(/[^a-zA-Z0-9_]/g,'_');}
+function hexToX3D(h){
+  h=h.replace('#','');if(h.length===3)h=h.split('').map(function(c){return c+c;}).join('');
+  return (parseInt(h.slice(0,2),16)/255).toFixed(3)+' '+(parseInt(h.slice(2,4),16)/255).toFixed(3)+' '+(parseInt(h.slice(4,6),16)/255).toFixed(3);
+}
+function xmlDecl(){return '<'+'?xml version="1.0" encoding="UTF-8"?'+'>\n';}
+function exportX3D(){
+  var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
+  var ts=new Date().toISOString().slice(0,19),cx=w/2,cz=d/2;
+  var iS=document.getElementById('exp-sounds').checked,iP=document.getElementById('exp-protos').checked;
+  var iI=document.getElementById('exp-interps').checked,iSc=document.getElementById('exp-script').checked;
+  var x=xmlDecl();
+  x+='<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">\n';
+  x+='<X3D profile="Immersive" version="4.0">\n';
+  x+='<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->\n';
+  x+='<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>\n<Scene>\n\n';
+  if(iP){x+=buildAP();x+=buildZP();}
+  x+='<NavigationInfo headlight="true" type=\'"EXAMINE" "WALK" "FLY" "ANY"\' visibilityLimit="300"/>\n';
+  x+='<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>\n\n';
+  x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>\n';
+  x+='<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>\n\n';
+  x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>\n';
+  x+='<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0"/>\n';
+  Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
+    x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>\n';});
+  x+='\n<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>\n';
+  x+=buildGrid(w,d)+'\n';
+  Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS);});
+  x+='\n';
+  Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a);});
+  x+='\n';
+  var an=Object.keys(placedAgents);
+  if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
+    var a=placedAgents[an[i]],b=placedAgents[an[j]];
+    x+='<Shape DEF="Ch_'+safeId(an[i])+'_'+safeId(an[j])+'"><Appearance><Material emissiveColor="0.4 0.45 0.65" transparency="0.65"/></Appearance>';
+    x+='<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>\n';}}x+='\n';}
+  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){x+=buildInterp(p);});x+='\n';}
+  if(iSc)x+=buildMS();
+  x+='</Scene>\n</X3D>\n';
+  dlFile(sn+'.x3d',x,'model/x3d+xml');
+  document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
+    '<div>Zones: '+Object.keys(zones).length+'  Agents: '+Object.keys(placedAgents).length+'</div>';
+  toast('X3D exported');
+}
+function buildAP(){
+  var s='<ProtoDeclare name="MCCFAgent"><ProtoInterface>\n';
+  s+='<field name="agentName" accessType="initializeOnly" type="MFString" value=\'"Agent"\'/>\n';
+  s+='<field name="position" accessType="inputOutput" type="SFVec3f" value="0 0 0"/>\n';
+  s+='<field name="coherenceLevel" accessType="inputOutput" type="SFFloat" value="0.5"/>\n';
+  s+='</ProtoInterface><ProtoBody><Transform>\n';
+  s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
+  s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
+  s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
+  s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
+  s+='<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
+}
+function buildZP(){
+  var s='<ProtoDeclare name="MCCFZone"><ProtoInterface>\n';
+  s+='<field name="zoneId" accessType="initializeOnly" type="SFString" value="zone"/>\n';
+  s+='<field name="active" accessType="inputOutput" type="SFBool" value="false"/>\n';
+  s+='</ProtoInterface><ProtoBody><Transform>\n';
+  s+='<Transform translation="0 0.15 0"><Shape><Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.2"/></Appearance><Sphere radius="0.18"/></Shape></Transform>\n';
+  s+='<Transform translation="0 1.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.7 0.7 0.8"/></Appearance>\n';
+  s+='<Text string="zone"><FontStyle size="0.24" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
+}
+function buildZX3D(z,iS){
+  var pos=z.location||z.position||[0,0,0],col=hexToX3D(ZONE_COLORS[z.zone_type]||'#888888');
+  var r=z.radius||4,bs=Math.max(0.8,r*0.4),sid=safeId(z.id),nm=xe(z.name||z.id);
+  var s='<!-- Zone: '+nm+' -->\n';
+  s+='<Transform DEF="Zone_'+sid+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
+  s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Box size="'+(bs*2)+' 0.5 '+(bs*2)+'"/></Shape>\n';
+  s+='<Transform translation="0 1.4 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
+  s+='<Text string="'+nm+'"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
+  if(iS)s+='<Sound location="0 0 0" maxBack="'+r+'" maxFront="'+r+'" spatialize="true" enabled="false"><AudioClip DEF="Sound_'+sid+'" url="" loop="true" stopTime="1"/></Sound>\n';
+  s+='</Transform>\n\n';return s;
+}
+function buildAX3D(a){
+  var pos=a.position||[0,0,0],col=hexToX3D(a.color||'#aab0be'),sn=safeId(a.name),qn=xe(a.name);
+  var s='<!-- Agent: '+qn+' -->\n';
+  s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
+  s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
+  s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
+  s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
+  s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
+  s+='<Text DEF="NameText_'+sn+'" string="'+qn+'"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='</Transform>\n\n';return s;
+}
+function buildInterp(path){
+  var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
+  if(wps.length<2)return '';
+  var n=wps.length,keys=wps.map(function(_,i){return (i/(n-1)).toFixed(4);}).join(' ');
+  var vals=wps.map(function(wp){var pos=wp.position||[0,0,0];return pos[0]+' 0 '+pos[2];}).join(' ');
+  var sn=safeId(path.name),sa=safeId(path.agent);
+  return '<PositionInterpolator DEF="Path_'+sn+'" key="'+keys+'" keyValue="'+vals+'"/>\n'+
+    '<TimeSensor DEF="Timer_'+sn+'" cycleInterval="30" loop="true" enabled="false"/>\n'+
+    '<ROUTE fromNode="Timer_'+sn+'" fromField="fraction_changed" toNode="Path_'+sn+'" toField="set_fraction"/>\n'+
+    '<ROUTE fromNode="Path_'+sn+'" fromField="value_changed" toNode="Avatar_'+sa+'" toField="translation"/>\n\n';
+}
+function buildMS(){
+  var af=Object.keys(placedAgents).map(function(n){var s=safeId(n);
+    return '<field accessType="inputOnly" type="SFVec3f" name="pos_'+s+'"/>\n<field accessType="outputOnly" type="SFFloat" name="arousal_'+s+'"/>\n';}).join('');
+  var zf=Object.keys(zones).map(function(id){return '<field accessType="inputOnly" type="SFBool" name="zoneActive_'+safeId(id)+'"/>\n';}).join('');
+  var s='<Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">\n';
+  s+='<field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>\n';
+  s+=af+zf;
+  s+='<![CDATA[ecmascript:\nfunction initialize(){Browser.println("MCCFMaster initialized.");}\n]]>\n';
+  s+='</'+'Script>\n\n';return s;
+}
+function buildGrid(w,d){
+  var pts=[],idx=[],i=0;
+  for(var x=0;x<=w;x+=10){pts.push(x+' 0.02 0',x+' 0.02 '+d);idx.push(i+' '+(i+1)+' -1');i+=2;}
+  for(var z=0;z<=d;z+=10){pts.push('0 0.02 '+z,w+' 0.02 '+z);idx.push(i+' '+(i+1)+' -1');i+=2;}
+  return '<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance>'+
+    '<IndexedLineSet coordIndex="'+idx.join(' ')+'"><Coordinate point="'+pts.join(' ')+'"/></IndexedLineSet></Shape>\n';
+}
+function exportZoneXML(){
+  var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
+  var x=xmlDecl()+'<!-- MCCF V3 Zone Definitions - '+sn+' - '+ts+' -->\n<ZoneSet id="'+xe(sn)+'" timestamp="'+ts+'">\n';
+  Object.values(zones).forEach(function(z){
+    var pos=z.location||z.position||[0,0,0],w=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25},at=z.ambient_theme||{scale:'major',tempo:'medium'};
+    x+='<Zone id="'+xe(z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
+    x+='<Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
+    x+='<Weights E="'+w.E+'" B="'+w.B+'" P="'+w.P+'" S="'+w.S+'"/>\n';
+    x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
+    x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n</Zone>\n';
+  });
+  x+='</ZoneSet>\n';dlFile(sn+'_zones.xml',x,'application/xml');toast('Zone XML exported');
+}
+function exportSceneXML(){
+  var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
+  var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
+  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
+  Object.values(placedAgents).forEach(function(a){
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice=""><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';});
+  x+='</Scene>\n';dlFile(sn+'_scene.xml',x,'application/xml');toast('Scene XML exported');
+}
+function dlFile(fn,content,mime){
+  var b=new Blob([content],{type:mime}),url=URL.createObjectURL(b),a=document.createElement('a');
+  a.href=url;a.download=fn.split('/').pop();document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+var toastTmr=null;
+function toast(msg,isErr){
+  var el=document.getElementById('toast');el.textContent=msg;
+  el.className='show'+(isErr?' err':'');clearTimeout(toastTmr);
+  toastTmr=setTimeout(function(){el.className='';},2800);
+}
+</script>
+</body>
+</html>
