@@ -306,3 +306,63 @@ push as a single cleanup commit.
 
 *V3 section added: May 2026*
 *Len Bullard / Claude Sonnet 4.6 (Tae)*
+
+---
+
+## V3 Session 2 — New Issues (May 2026)
+
+---
+
+## V3-11 — Playback: Avatar Does Not Translate Through Waypoints
+
+**Status:** Open. Waypoints in arc XML have `pos_x`, `pos_y`, `pos_z`
+attributes. Playback currently pushes channel state (E, B, P, S) to the
+field but does not push position to the avatar Transform. Avatar stays
+at its initial placement during playback.
+
+**Fix:** In `mccf_playback.py` `_push_to_field()`, extract pos_x/pos_y/pos_z
+from the ArcWaypoint and update the agent's position in the field so the
+Master Script routes it to the avatar's Transform translation.
+
+---
+
+## V3-12 — Playback: No Voice Activation
+
+**Status:** Open. Playback displays Q&A text but does not speak it.
+The original waypoint editor had TTS with voice selection and on/off toggle.
+Playback needs the same.
+
+**What is needed:**
+- Toggle in the playback panel: voice on/off
+- Voice selector dropdown (same voices as constitutional navigator)
+- On each waypoint advance, speak the response text via Web Speech API
+  if voice is enabled
+
+---
+
+## V3-13 — Playback Panel: Text Too Small to Read
+
+**Status:** Open. Question and response text in the playback panel
+is too small, especially response text which can be long.
+Panel needs larger font or scrollable/expandable text area for Q&A display.
+
+---
+
+## V3-14 — Waypoint Editor: No Question Field on Waypoints
+
+**Status:** Open. Questions currently only exist in arc export XML
+(recorded during a live arc run). Scene Composer waypoints have no
+question field — there is no way to author questions for waypoints
+in advance. Improvisation mode needs authored questions at each waypoint
+to prompt the LLM.
+
+**What is needed:**
+- Question text field in the waypoint form in Scene Composer
+- Question stored in waypoint XML on export
+- Question available to the arc runner when stepping through waypoints
+  in Improvisation mode
+
+---
+
+*V3 Session 2 additions: May 2026*
+*Len Bullard / Claude Sonnet 4.6 (Tae)*
