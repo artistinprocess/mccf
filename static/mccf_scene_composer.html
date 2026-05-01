@@ -256,6 +256,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml wrapper</div></div>
       <button class="btn cool" onclick="exportSceneXML()">Export</button>
     </div>
+    <div class="expopt" style="border-color:var(--accent)">
+      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher to view</div></div>
+      <button class="btn accent" id="send-btn" onclick="sendToLauncher()">&#9654; Send</button>
+    </div>
     <div class="sh" style="margin-top:14px">Options</div>
     <label><input type="checkbox" id="exp-sounds" checked style="width:auto;margin-right:6px">Sound node stubs</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-protos" checked style="width:auto;margin-right:6px">Inline PROTOs</label>
@@ -917,6 +921,79 @@ function buildGrid(w,d){
   for(var z=0;z<=d;z+=10){pts.push('0 0.02 '+z,w+' 0.02 '+z);idx.push(i+' '+(i+1)+' -1');i+=2;}
   return '<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance>'+
     '<IndexedLineSet coordIndex="'+idx.join(' ')+'"><Coordinate point="'+pts.join(' ')+'"/></IndexedLineSet></Shape>\n';
+}
+function sendToLauncher(){
+  var btn=document.getElementById('send-btn');
+  btn.textContent='Sending...';btn.disabled=true;
+  var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
+  var ts=new Date().toISOString().slice(0,19),cx=w/2,cz=d/2;
+  var iS=document.getElementById('exp-sounds').checked,iP=document.getElementById('exp-protos').checked;
+  var iI=document.getElementById('exp-interps').checked,iSc=document.getElementById('exp-script').checked;
+  var x=xmlDecl();
+  x+='<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
+';
+  x+='<X3D profile="Immersive" version="4.0">
+';
+  x+='<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->
+';
+  x+='<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>
+<Scene>
+
+';
+  if(iP){x+=buildAP();x+=buildZP();}
+  x+='<NavigationInfo headlight="true" type='"EXAMINE" "WALK" "FLY" "ANY"' visibilityLimit="300"/>
+';
+  x+='<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>
+
+';
+  x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>
+';
+  x+='<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>
+
+';
+  x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>
+';
+  x+='<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0"/>
+';
+  Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
+    x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>
+';});
+  x+='
+<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>
+';
+  x+=buildGrid(w,d)+'
+';
+  Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS);});
+  x+='
+';
+  Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a);});
+  x+='
+';
+  var an=Object.keys(placedAgents);
+  if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
+    var a=placedAgents[an[i]],b=placedAgents[an[j]];
+    x+='<Shape DEF="Ch_'+safeId(an[i])+'_'+safeId(an[j])+'"><Appearance><Material emissiveColor="0.4 0.45 0.65" transparency="0.65"/></Appearance>';
+    x+='<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>
+';}}x+='
+';}
+  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){x+=buildInterp(p);});x+='
+';}
+  if(iSc)x+=buildMS();
+  x+='</Scene>
+</X3D>
+';
+  fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.status==='ok'){
+        document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent to launcher: '+res.output+'</div><div>Reload the launcher to see it.</div>';
+        toast('Sent to launcher. Reload launcher.');
+      } else {
+        toast('Error: '+(res.error||'unknown'),true);
+      }
+    })
+    .catch(function(e){toast('Send failed: '+e.message,true);})
+    .finally(function(){btn.textContent='&#9654; Send';btn.disabled=false;});
 }
 function exportZoneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
