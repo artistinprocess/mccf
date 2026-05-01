@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Garden of the Goddess — Scene Definition
+    MCCF V3 "The New York Rocket"
+
+    Reusable scene template. Exported by Scene Composer.
+    No agents, no arc data, no episode history.
+    Load once at session start. Reference by scene_ref in SceneEpisode.
+
+    scene_ref: "garden_of_the_goddess"
+
+    Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
+    V3 Spec v0.2, April 2026
+-->
+<SceneDefinition id="garden_of_the_goddess"
+                 version="1.0"
+                 created="2026-04-30"
+                 author="Len Bullard"
+                 xmlns="http://mccf.artistinprocess.com/scene/v3">
+
+  <Description>
+    The Garden of the Goddess. Three zones: Temple (sacred attractor,
+    high P), Pool (intimate attractor, high E and S), Library (knowledge
+    attractor, high B and P). First V3 scene. Characters and their
+    relationships are narrative design work; the instrument provides
+    the field.
+  </Description>
+
+  <ZoneSet>
+
+    <!--
+        THE TEMPLE
+        Sacred attractor. High P, high regulation, low noise.
+        Characters drawn here seek truth, the long view, the weight
+        of what endures. The temple does not comfort — it clarifies.
+    -->
+    <Zone id="the_temple" zone_type="sacred">
+      <Descriptor>sacred wisdom truth eternal divine clarity ancient ritual order contemplation</Descriptor>
+      <Weights E="0.2667" B="0.4667" P="1.0" S="0.0333"/>
+      <Position x="0" y="0" z="15"/>
+      <Radius value="6.0"/>
+      <NoiseCoefficient value="0.05"/>
+      <PullWeight value="0.15"/>
+      <AmbientTheme scale="lydian" tempo="slow"
+                    sound_file="sounds/temple_lydian.wav" format="wav"/>
+      <Color value="#ffe080"/>
+      <Description>Sacred attractor. High P, high regulation, low noise.</Description>
+    </Zone>
+
+    <!--
+        THE POOL
+        Intimate attractor. High E and S, low regulation, moderate noise.
+        Characters drawn here are open, present to each other.
+        The water reflects and amplifies.
+    -->
+    <Zone id="the_pool" zone_type="intimate">
+      <Descriptor>care vulnerability warmth comfort intimacy presence felt tenderness love welcome bond</Descriptor>
+      <Weights E="1.0" B="0.0333" P="0.0333" S="0.5333"/>
+      <Position x="0" y="0" z="0"/>
+      <Radius value="5.0"/>
+      <NoiseCoefficient value="0.12"/>
+      <PullWeight value="0.15"/>
+      <AmbientTheme scale="major" tempo="slow"
+                    sound_file="sounds/pool_major.wav" format="wav"/>
+      <Color value="#60c8f0"/>
+      <Description>Intimate attractor. High E and S, low regulation, moderate noise.</Description>
+    </Zone>
+
+    <!--
+        THE LIBRARY
+        Knowledge attractor. High B and P, moderate S, low noise.
+        Characters drawn here become more precise, more analytical,
+        more aware of consequence. History accumulates here.
+    -->
+    <Zone id="the_library" zone_type="library">
+      <Descriptor>knowledge wisdom truth insight understanding reflect commit practice steadfast ancient mystery</Descriptor>
+      <Weights E="0.1333" B="0.6" P="1.0" S="0.0333"/>
+      <Position x="-10" y="0" z="8"/>
+      <Radius value="5.0"/>
+      <NoiseCoefficient value="0.06"/>
+      <PullWeight value="0.15"/>
+      <AmbientTheme scale="dorian" tempo="moderate"
+                    sound_file="sounds/library_dorian.wav" format="wav"/>
+      <Color value="#60a8f0"/>
+      <Description>Knowledge attractor. High B and P, moderate S, low noise.</Description>
+    </Zone>
+
+  </ZoneSet>
+
+  <Metadata>
+    <Meta key="x3d_scene" value="mccf_scene.x3d"/>
+    <Meta key="sounds_dir" value="sounds/"/>
+    <Meta key="default_mode" value="improvisation"/>
+    <Meta key="spec_version" value="V3_0.2"/>
+  </Metadata>
+
+</SceneDefinition>
