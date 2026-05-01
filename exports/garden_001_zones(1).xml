@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - garden_001 - 2026-04-30T18:46:45 -->
+<ZoneSet id="garden_001" timestamp="2026-04-30T18:46:45">
+<Zone id="Inana Temple" zone_type="authority">
+<Descriptor>Formal, regal, mmysterious</Descriptor>
+<Weights E="0.1" B="0.35" P="0.3" S="0.1"/>
+<Position x="38" y="0" z="44.5"/><Radius value="8"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+<Zone id="Ladies Pool" zone_type="intimate">
+<Descriptor>relaxed, friendly, sennsual</Descriptor>
+<Weights E="0.62" B="0.1" P="0.2" S="0.3"/>
+<Position x="64.3" y="0" z="64.8"/><Radius value="3"/>
+<AmbientTheme scale="lydian" tempo="medium"/>
+</Zone>
+<Zone id="Mountains" zone_type="sacred">
+<Descriptor>vista, high peak, windy</Descriptor>
+<Weights E="0.25" B="0.2" P="0.25" S="0.25"/>
+<Position x="5.2" y="0" z="19.8"/><Radius value="3"/>
+<AmbientTheme scale="dorian" tempo="medium"/>
+</Zone>
+<Zone id="Library" zone_type="library">
+<Descriptor>quiet, studious, concentration, spooky</Descriptor>
+<Weights E="0.1" B="0.15" P="0.4" S="0.15"/>
+<Position x="23.9" y="0" z="55.4"/><Radius value="4"/>
+<AmbientTheme scale="phrygian" tempo="medium"/>
+</Zone>
+<Zone id="Training Ground" zone_type="threat">
+<Descriptor>lound, tense, focus, strenuous</Descriptor>
+<Weights E="0.4" B="0.2" P="0.3" S="0.05"/>
+<Position x="65.2" y="0" z="40"/><Radius value="7"/>
+<AmbientTheme scale="locrian" tempo="medium"/>
+</Zone>
+<Zone id="Elves Castle" zone_type="neutral">
+<Descriptor>ancient, mystical, stone, cold</Descriptor>
+<Weights E="0.55" B="0.25" P="0.37" S="0.64"/>
+<Position x="56.6" y="0" z="16.3"/><Radius value="5"/>
+<AmbientTheme scale="whole_tone" tempo="medium"/>
+</Zone>
+</ZoneSet>

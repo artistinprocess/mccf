@@ -48,31 +48,12 @@ app = Flask(__name__)
 CORS(app)  # X3D pages need cross-origin access
 
 # ---------------------------------------------------------------------------
-# Explicit static file routes with correct MIME types
-#
-# Flask's static file handler can be overridden by Windows registry MIME
-# mappings or browser content sniffing. These explicit routes guarantee
-# the correct Content-Type header regardless of OS or browser behaviour.
-#
-# HTML route: serves all .html files from static/ as text/html with
-#   X-Content-Type-Options: nosniff to suppress browser MIME sniffing.
-# X3D route: serves mccf_scene.x3d as model/x3d+xml for X_ITE.
-#
-# v3.3 — consolidated April 2026
+# Explicit X3D MIME type route
+# Flask's static file handler ignores mimetypes.add_type() — this route
+# intercepts mccf_scene.x3d and serves it with the correct MIME type so
+# X_ITE receives model/x3d+xml instead of application/octet-stream.
+# v3.2 — added April 2026
 # ---------------------------------------------------------------------------
-
-@app.route('/static/<path:filename>.html')
-def serve_static_html(filename):
-    from flask import send_from_directory, make_response
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    resp = make_response(
-        send_from_directory(static_dir, filename + '.html')
-    )
-    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
-    resp.headers['X-Content-Type-Options'] = 'nosniff'
-    return resp
-
-
 @app.route('/static/mccf_scene.x3d')
 def serve_x3d_scene():
     from flask import send_from_directory
