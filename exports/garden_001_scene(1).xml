@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-04-30T18:46:47 -->
-<Scene id="garden_001" timestamp="2026-04-30T18:46:47" zone_set="garden_001" mode="improvisation" width="80" depth="90">
-<EmotionalArc cultivar="Cindy" actor="ollama" voice=""><StartPosition x="64.7" y="0" z="37.6"/></EmotionalArc>
-<EmotionalArc cultivar="The Steward" actor="ollama" voice=""><StartPosition x="36.794736842105245" y="0" z="47.56842105263159"/></EmotionalArc>
-<EmotionalArc cultivar="The Archivist" actor="ollama" voice=""><StartPosition x="22.9" y="0" z="55.5"/></EmotionalArc>
-<EmotionalArc cultivar="The Advocate" actor="ollama" voice=""><StartPosition x="38.2" y="0" z="40.9"/></EmotionalArc>
-</Scene>
