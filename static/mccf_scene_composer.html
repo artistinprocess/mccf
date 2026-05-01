@@ -15,23 +15,23 @@
   --mono: 'IBM Plex Mono', monospace; --display: 'Syne', sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px;
+body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 16px;
   height: 100vh; display: grid; grid-template-rows: 44px 1fr;
   grid-template-columns: 270px 1fr 310px;
   grid-template-areas: "hdr hdr hdr" "left map right"; overflow: hidden; }
 header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 16px; gap: 16px; }
-.logo { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--warm); }
+.logo { font-family: var(--display); font-weight: 800; font-size: 17px; color: var(--warm); }
 .logo span { color: var(--dim); font-weight: 400; }
-.vbadge { font-size: 9px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
+.vbadge { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
 .mode-tabs { display: flex; gap: 2px; }
-.mtab { font-family: var(--mono); font-size: 10px; padding: 3px 10px;
+.mtab { font-family: var(--mono); font-size: 12px; padding: 3px 10px;
   border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
 .mtab:hover { color: var(--text); border-color: var(--dim); }
 .mtab.active { color: var(--warm); border-color: var(--warm); background: #1a1508; }
-.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); }
+.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
 .api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
-  color: var(--text); font-family: var(--mono); font-size: 10px; padding: 3px 8px; width: 160px; outline: none; }
+  color: var(--text); font-family: var(--mono); font-size: 12px; padding: 3px 8px; width: 160px; outline: none; }
 .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
 .sdot.on { background: var(--accent); }
 .sdot.off { background: var(--danger); }
@@ -39,7 +39,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 #left-panel { grid-area: left; }
 #map-panel { grid-area: map; position: relative; overflow: hidden; padding: 0; }
 #right-panel { grid-area: right; border-right: none; }
-.sh { font-family: var(--display); font-size: 9px; font-weight: 600; letter-spacing: 0.14em;
+.sh { font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--dim); margin: 14px 0 8px;
   display: flex; align-items: center; gap: 6px; }
 .sh:first-child { margin-top: 0; }
@@ -50,32 +50,32 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 .obj-item:hover { border-color: var(--dim); }
 .obj-item.sel { border-color: var(--warm); }
 .obj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.obj-name { flex: 1; font-family: var(--display); font-size: 11px; font-weight: 600; }
-.obj-tag { font-size: 9px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
+.obj-name { flex: 1; font-family: var(--display); font-size: 13px; font-weight: 600; }
+.obj-tag { font-size: 11px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
 .agent-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; }
 .agent-item:hover { border-color: var(--cool); }
 .agent-item.placed { border-color: var(--accent); opacity: 0.6; }
 .agent-item.placing { border-color: var(--warm); background: #1a1508; }
 .aswatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-.aname { flex: 1; font-family: var(--display); font-size: 11px; font-weight: 600; }
-.arole { font-size: 9px; color: var(--dim); }
+.aname { flex: 1; font-family: var(--display); font-size: 13px; font-weight: 600; }
+.arole { font-size: 11px; color: var(--dim); }
 .wp-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
-  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 11px; }
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 13px; }
 .wp-item:hover { border-color: var(--dim); }
 .wp-item.sel { border-color: var(--cool); }
 .wp-num { width: 18px; height: 18px; border-radius: 50%; background: var(--s3);
-  display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--cool); flex-shrink: 0; }
-label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
+  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--cool); flex-shrink: 0; }
+label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
 label:first-child { margin-top: 0; }
 input[type=text], input[type=number], select, textarea {
   width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
-  color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 8px; outline: none; }
+  color: var(--text); font-family: var(--mono); font-size: 13px; padding: 5px 8px; outline: none; }
 input:focus, select:focus, textarea:focus { border-color: var(--warm); }
 textarea { resize: vertical; min-height: 48px; }
 .btn { display: inline-flex; align-items: center; gap: 5px; background: none;
   border: 1px solid var(--border); color: var(--text); font-family: var(--mono);
-  font-size: 10px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+  font-size: 12px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
 .btn:hover { border-color: var(--dim); color: var(--warm); }
 .btn.pri { background: var(--warm); border-color: var(--warm); color: #1a1000; font-weight: 600; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
@@ -84,20 +84,20 @@ textarea { resize: vertical; min-height: 48px; }
 .btn.full { width: 100%; justify-content: center; }
 .btn-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .bias-row { display: grid; grid-template-columns: 14px 1fr 38px; align-items: center; gap: 6px; margin-bottom: 6px; }
-.bch { font-size: 10px; font-weight: 600; font-family: var(--display); }
-.bval { font-size: 10px; text-align: right; }
+.bch { font-size: 12px; font-weight: 600; font-family: var(--display); }
+.bval { font-size: 12px; text-align: right; }
 input[type=range] { width: 100%; accent-color: var(--warm); }
 #scene-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
 .map-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px;
   background: rgba(8,10,14,0.88); border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; }
-.tool-btn { font-family: var(--mono); font-size: 10px; padding: 3px 9px;
+.tool-btn { font-family: var(--mono); font-size: 12px; padding: 3px 9px;
   background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; }
 .tool-btn.active { color: var(--warm); border-color: var(--warm); }
 .coord-disp { position: absolute; bottom: 10px; left: 10px; background: rgba(8,10,14,0.85);
-  border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 10px; color: var(--dim); pointer-events: none; }
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: var(--dim); pointer-events: none; }
 .place-hint { position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
   background: rgba(240,192,96,0.15); border: 1px solid var(--warm); border-radius: 4px;
-  padding: 4px 14px; font-size: 10px; color: var(--warm); pointer-events: none; display: none; }
+  padding: 4px 14px; font-size: 12px; color: var(--warm); pointer-events: none; display: none; }
 #arc-canvas { width: 100%; height: 140px; display: block; border: 1px solid var(--border); border-radius: 4px; background: var(--s2); }
 .dsect { background: var(--s2); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
 .chbr { display: grid; grid-template-columns: 14px 1fr 36px; align-items: center; gap: 5px; margin-bottom: 4px; }
@@ -105,15 +105,15 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .chfill { height: 100%; border-radius: 2px; }
 .expopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
-.explbl { flex: 1; font-size: 11px; }
-.expdsc { font-size: 9px; color: var(--dim); margin-top: 1px; }
+.explbl { flex: 1; font-size: 13px; }
+.expdsc { font-size: 11px; color: var(--dim); margin-top: 1px; }
 .path-seq { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
 .pwp { background: var(--s3); border: 1px solid var(--border); border-radius: 3px;
-  padding: 2px 7px; font-size: 10px; color: var(--cool); cursor: pointer; }
+  padding: 2px 7px; font-size: 12px; color: var(--cool); cursor: pointer; }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
-  padding: 6px 16px; font-size: 11px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  padding: 6px 16px; font-size: 13px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); cursor:pointer; }
 #toast.err { border-color: var(--danger); color: var(--danger); }
 </style>
 </head>
@@ -153,9 +153,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
     </div>
     <div class="sh">Scene Summary</div>
-    <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:10px">Apply grid to begin.</div></div>
+    <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size: 12px">Apply grid to begin.</div></div>
     <div class="sh">Zone Set</div>
-    <div id="sc-zones" style="font-size:10px;color:var(--dim)">No zones placed.</div>
+    <div id="sc-zones" style="font-size: 12px;color:var(--dim)">No zones placed.</div>
   </div>
   <div id="mode-zones" style="display:none">
     <div class="sh">Zones</div>
@@ -181,7 +181,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <option value="dorian">dorian</option><option value="major">major</option>
         <option value="pentatonic">pentatonic</option><option value="mixolydian">mixolydian</option>
         <option value="phrygian">phrygian</option><option value="lydian">lydian</option>
-        <option value="locrian">locrian</option><option value="whole_tone">whole tone</option>
+        <option value="aeolian">aeolian</option><option value="locrian">locrian</option><option value="whole_tone">whole tone</option>
       </select>
       <div class="sh">Channel Weights</div>
       <div class="bias-row"><span class="bch" style="color:var(--E)">E</span>
@@ -204,10 +204,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="mode-agents" style="display:none">
     <div class="sh">Agent Roster (from Character Editor)</div>
-    <div id="agent-roster"><div style="color:var(--dim);font-size:10px">Connect to API to load agents.</div></div>
+    <div id="agent-roster"><div style="color:var(--dim);font-size: 12px">Connect to API to load agents.</div></div>
     <div style="margin-top:8px"><button class="btn full" onclick="loadAgents()">Refresh from API</button></div>
     <div class="sh" style="margin-top:14px">Placed Agents</div>
-    <div id="placed-list"><div style="color:var(--dim);font-size:10px">No agents placed.</div></div>
+    <div id="placed-list"><div style="color:var(--dim);font-size: 12px">No agents placed.</div></div>
   </div>
   <div id="mode-waypoints" style="display:none">
     <div class="sh">Waypoints</div>
@@ -256,17 +256,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml wrapper</div></div>
       <button class="btn cool" onclick="exportSceneXML()">Export</button>
     </div>
-    <div class="expopt" style="border-color:var(--accent)">
-      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher to view</div></div>
-      <button class="btn accent" id="send-btn" onclick="sendToLauncher()">&#9654; Send</button>
-    </div>
     <div class="sh" style="margin-top:14px">Options</div>
     <label><input type="checkbox" id="exp-sounds" checked style="width:auto;margin-right:6px">Sound node stubs</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-protos" checked style="width:auto;margin-right:6px">Inline PROTOs</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-interps" checked style="width:auto;margin-right:6px">PositionInterpolators</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-script" checked style="width:auto;margin-right:6px">MCCFMaster Script stub</label>
     <div class="sh" style="margin-top:14px">Last Export</div>
-    <div id="exp-log" style="font-size:10px;color:var(--dim)">Nothing exported yet.</div>
+    <div id="exp-log" style="font-size: 12px;color:var(--dim)">Nothing exported yet.</div>
   </div>
 </div>
 <div id="map-panel">
@@ -282,40 +278,40 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <div class="panel" id="right-panel">
   <div id="detail-zone" style="display:none">
     <div class="sh" style="margin-top:0">Zone Properties</div>
-    <div id="zd-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
-    <div id="zd-type" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div id="zd-name" style="font-family:var(--display);font-size: 16px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
+    <div id="zd-type" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="zd-weights"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:10px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size: 12px;color:var(--accent)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
   </div>
   <div id="detail-agent" style="display:none">
     <div class="sh" style="margin-top:0">Agent</div>
-    <div id="ad-name" style="font-family:var(--display);font-size:14px;font-weight:700;margin-bottom:2px;"></div>
-    <div id="ad-disp" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
+    <div id="ad-name" style="font-family:var(--display);font-size: 16px;font-weight:700;margin-bottom:2px;"></div>
+    <div id="ad-disp" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:10px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size: 12px;color:var(--accent)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
   <div id="detail-wp" style="display:none">
     <div class="sh" style="margin-top:0">Waypoint</div>
-    <div id="wpd-name" style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:10px;color:var(--accent)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:10px;color:var(--dim)"></div></div>
+    <div id="wpd-name" style="font-family:var(--display);font-size: 16px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size: 12px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size: 12px;color:var(--dim)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button></div>
   </div>
   <div id="detail-arc">
     <div class="sh" style="margin-top:0">Affective Arc</div>
     <canvas id="arc-canvas"></canvas>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
-      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--E)"></div>E</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--B)"></div>B</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--P)"></div>P</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--S)"></div>S</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--E)"></div>E</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--B)"></div>B</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--P)"></div>P</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--S)"></div>S</div>
     </div>
     <div class="sh" style="margin-top:12px">Field State</div>
-    <div id="field-state" style="font-size:10px;color:var(--dim)">Connect to API.</div>
+    <div id="field-state" style="font-size: 12px;color:var(--dim)">Connect to API.</div>
     <div class="sh" style="margin-top:12px">Scene Stats</div>
-    <div style="font-size:10px;color:var(--dim)">
+    <div style="font-size: 12px;color:var(--dim)">
       <div>Zones: <span id="stat-z" style="color:var(--accent)">0</span></div>
       <div>Agents placed: <span id="stat-a" style="color:var(--accent)">0</span></div>
       <div>Waypoints: <span id="stat-w" style="color:var(--accent)">0</span></div>
@@ -324,12 +320,12 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="detail-query" style="display:none">
     <div class="sh" style="margin-top:0">Position Query</div>
-    <div id="q-pos" style="font-size:10px;color:var(--dim);margin-bottom:8px;"></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Active Zones</div><div id="q-zones" style="font-size:10px;color:var(--dim)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Combined Pressure</div><div id="q-pressure" style="font-size:10px;"></div></div>
+    <div id="q-pos" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Active Zones</div><div id="q-zones" style="font-size: 12px;color:var(--dim)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Combined Pressure</div><div id="q-pressure" style="font-size: 12px;"></div></div>
   </div>
 </div>
-<div id="toast"></div>
+<div id="toast" onclick="this.className=''"></div>
 <script>
 // MCCF Scene Composer V3 - Pure ASCII JavaScript
 var API = 'http://localhost:5000';
@@ -922,59 +918,6 @@ function buildGrid(w,d){
   return '<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance>'+
     '<IndexedLineSet coordIndex="'+idx.join(' ')+'"><Coordinate point="'+pts.join(' ')+'"/></IndexedLineSet></Shape>\n';
 }
-function sendToLauncher(){
-  var btn=document.getElementById('send-btn');
-  btn.textContent='Sending...';btn.disabled=true;
-  var x=buildX3DString();
-  fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
-    .then(function(r){return r.json();})
-    .then(function(res){
-      if(res.status==='ok'){
-        document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent to launcher: '+res.output+'</div><div>Reload the launcher to view.</div>';
-        toast('Sent to launcher. Reload launcher.');
-      } else {
-        toast('Error: '+(res.error||'unknown'),true);
-      }
-    })
-    .catch(function(e){toast('Send failed: '+e.message,true);})
-    .finally(function(){btn.textContent='&#9654; Send';btn.disabled=false;});
-}
-function buildX3DString(){
-  var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
-  var ts=new Date().toISOString().slice(0,19),cx=w/2,cz=d/2;
-  var iS=document.getElementById('exp-sounds').checked,iP=document.getElementById('exp-protos').checked;
-  var iI=document.getElementById('exp-interps').checked,iSc=document.getElementById('exp-script').checked;
-  var lines=[];
-  lines.push(xmlDecl().trim());
-  lines.push('<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">');
-  lines.push('<X3D profile="Immersive" version="4.0">');
-  lines.push('<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->');
-  lines.push('<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>');
-  lines.push('<Scene>');
-  if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
-  lines.push('<NavigationInfo headlight="true" type="EXAMINE ANY" visibilityLimit="300"/>');
-  lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>');
-  lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
-  lines.push('<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>');
-  lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>');
-  lines.push('<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0"/>');
-  Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
-    lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>');});
-  lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
-  lines.push(buildGrid(w,d).trim());
-  Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
-  Object.values(placedAgents).forEach(function(a){lines.push(buildAX3D(a).trim());});
-  var an=Object.keys(placedAgents);
-  if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
-    var a=placedAgents[an[i]],b=placedAgents[an[j]];
-    lines.push('<Shape DEF="Ch_'+safeId(an[i])+'_'+safeId(an[j])+'"><Appearance><Material emissiveColor="0.4 0.45 0.65" transparency="0.65"/></Appearance>'
-      +'<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>');}}}
-  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterp(p).trim());});}
-  if(iSc)lines.push(buildMS().trim());
-  lines.push('</Scene>');
-  lines.push('</X3D>');
-  return lines.join('\n');
-}
 function exportZoneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Zone Definitions - '+sn+' - '+ts+' -->\n<ZoneSet id="'+xe(sn)+'" timestamp="'+ts+'">\n';
@@ -1004,7 +947,7 @@ var toastTmr=null;
 function toast(msg,isErr){
   var el=document.getElementById('toast');el.textContent=msg;
   el.className='show'+(isErr?' err':'');clearTimeout(toastTmr);
-  toastTmr=setTimeout(function(){el.className='';},2800);
+  toastTmr=setTimeout(function(){el.className='';},isErr?0:6000);
 }
 </script>
 </body>

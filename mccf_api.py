@@ -163,6 +163,31 @@ _collapse_bp, _collapse_pipeline = _make_collapse_api(field)
 app.register_blueprint(_collapse_bp)
 
 # ---------------------------------------------------------------------------
+# V3 module registrations
+# ---------------------------------------------------------------------------
+from mccf_zone_attractor import register_attractor_api
+from mccf_scene_wrapper import register_scene_api
+from mccf_cultivar_lambda import register_cultivar_api
+from mccf_scene_generate_api import register_generate_api
+from mccf_drift import DriftManager
+
+_attractor_registry = register_attractor_api(app, scene, field)
+_scene_registry     = register_scene_api(app)
+_cultivar_registry  = register_cultivar_api(app)
+register_generate_api(app)
+drift_manager       = DriftManager()
+
+# Load Garden of the Goddess scene definition if present
+import os as _os_v3
+_gotg_path = _os_v3.path.join(
+    _os_v3.path.dirname(_os_v3.path.abspath(__file__)),
+    'scenes', 'garden_of_the_goddess_def.xml')
+if _os_v3.path.exists(_gotg_path):
+    with open(_gotg_path, encoding='utf-8') as _f:
+        _scene_registry.load_definition_xml(_f.read())
+    print('  V3: Garden of the Goddess scene definition loaded')
+
+# ---------------------------------------------------------------------------
 # Sensor → channel mapping functions
 # Transfer curves: raw sensor value → normalized 0-1 channel input
 # These are the configurable transfer functions the editor exposes.
