@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="cultivar_cindy_v1">
+  <title>MCCF Cultivar Definition — Cindy</title>
+  <Cultivar id="cindy_v1" agentname="Cindy" version="1.0">
+    <Timestamp date="2026-04-26" time="00:00:00"/>
+    <Disposition>Cherokee Lady</Disposition>
+    <Description>A young American Indian</Description>
+    <Weights E="0.3284" B="0.2388" P="0.2463" S="0.1866"/>
+    <Regulation value="0.7"/>
+    <Color hex="#aab0be"/>
+  </Cultivar>
+</EmotionalArc>

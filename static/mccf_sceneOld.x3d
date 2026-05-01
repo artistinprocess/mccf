@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN"
+  "https://www.web3d.org/specifications/x3d-4.0.dtd">
+<X3D profile="Immersive" version="4.0"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema-instance"
+  xsd:noNamespaceSchemaLocation="https://www.web3d.org/specifications/x3d-4.0.xsd">
+  <!--
+    MCCF Scene v3.1 — Inline PROTOs for X_ITE compatibility.
+    EXTERNPROTO registry preserved as comments; inline until X_ITE
+    EXTERNPROTO resolution is verified in your environment.
+    EXTERNPROTOs:
+      protos/MCCFAgent.x3d#MCCFAgent
+      protos/MCCFChannel.x3d#MCCFChannel
+      protos/MCCFTransition.x3d#MCCFTransition
+      protos/MCCFZone.x3d#MCCFZone
+      protos/MCCFField.x3d#MCCFField
+  -->
+  <Scene>
+
+    <!-- ============================================================ -->
+    <!-- INLINE PROTO: MCCFAgent                                      -->
+    <!-- ============================================================ -->
+    <ProtoDeclare name="MCCFAgent">
+      <ProtoInterface>
+        <field name="agentName"           accessType="initializeOnly" type="MFString" value='"Agent"'/>
+        <field name="position"            accessType="inputOutput"    type="SFVec3f"  value="0 0 0"/>
+        <field name="bodyColor"           accessType="initializeOnly" type="SFColor"  value="0.3 0.55 0.9"/>
+        <field name="morphWeight_emotion" accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="animationSpeed"      accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="gazeDirectness"      accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="socialProximity"     accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="gestureConfidence"   accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="interactionOpenness" accessType="inputOutput"    type="SFFloat"  value="1.0"/>
+        <field name="honorLevel"          accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="coherenceLevel"      accessType="inputOutput"    type="SFFloat"  value="0.5"/>
+        <field name="behavioralMode"      accessType="inputOutput"    type="SFString" value="exploit"/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Transform>
+          <!-- Social field ring -->
+          <Transform translation="0 0.04 0">
+            <Shape>
+              <Appearance><Material diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance>
+              <Cylinder height="0.04" radius="0.75"/>
+            </Shape>
+          </Transform>
+          <!-- Body -->
+          <Transform translation="0 0.9 0">
+            <Shape>
+              <Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance>
+              <Cylinder height="1.35" radius="0.33"/>
+            </Shape>
+          </Transform>
+          <!-- Head -->
+          <Transform translation="0 1.85 0">
+            <Shape>
+              <Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance>
+              <Sphere radius="0.30"/>
+            </Shape>
+          </Transform>
+          <!-- Honor dot -->
+          <Transform translation="0 2.35 0">
+            <Shape>
+              <Appearance><Material emissiveColor="0.9 0.75 0.1" transparency="0.3"/></Appearance>
+              <Sphere radius="0.10"/>
+            </Shape>
+          </Transform>
+          <!-- Name label — wired via IS to agentName field -->
+          <Transform translation="0 3.1 0">
+            <Billboard axisOfRotation="0 1 0">
+              <Shape>
+                <Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+                <Text><IS><connect nodeField="string" protoField="agentName"/></IS>
+                  <FontStyle size="0.32" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+                </Text>
+              </Shape>
+            </Billboard>
+          </Transform>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ============================================================ -->
+    <!-- INLINE PROTO: MCCFChannel                                    -->
+    <!-- ============================================================ -->
+    <ProtoDeclare name="MCCFChannel">
+      <ProtoInterface>
+        <field name="fromAgent"    accessType="initializeOnly" type="SFString" value=""/>
+        <field name="toAgent"      accessType="initializeOnly" type="SFString" value=""/>
+        <field name="fromPos"      accessType="inputOutput"    type="SFVec3f"  value="-2 1.5 0"/>
+        <field name="toPos"        accessType="inputOutput"    type="SFVec3f"  value="2 1.5 0"/>
+        <field name="coherence"    accessType="inputOutput"    type="SFFloat"  value="0.0"/>
+        <field name="entanglement" accessType="inputOutput"    type="SFFloat"  value="0.0"/>
+        <field name="channelColor" accessType="initializeOnly" type="SFColor"  value="0.6 0.55 0.8"/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Shape>
+          <Appearance><Material emissiveColor="0.6 0.55 0.8" transparency="0.6"/></Appearance>
+          <IndexedLineSet coordIndex="0 1 -1">
+            <Coordinate point="-2 1.5 0  2 1.5 0"/>
+          </IndexedLineSet>
+        </Shape>
+        <Transform translation="2 1.5 0">
+          <Shape>
+            <Appearance><Material emissiveColor="0.6 0.55 0.8" transparency="0.5"/></Appearance>
+            <Sphere radius="0.08"/>
+          </Shape>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ============================================================ -->
+    <!-- INLINE PROTO: MCCFZone                                       -->
+    <!-- ============================================================ -->
+    <ProtoDeclare name="MCCFZone">
+      <ProtoInterface>
+        <field name="waypointId" accessType="initializeOnly" type="SFString" value="W0"/>
+        <field name="position"   accessType="inputOutput"    type="SFVec3f"  value="0 0 0"/>
+        <field name="pressure"   accessType="inputOutput"    type="SFFloat"  value="0.0"/>
+        <field name="active"     accessType="inputOutput"    type="SFBool"   value="false"/>
+        <field name="baseColor"  accessType="initializeOnly" type="SFColor"  value="0.9 0.9 0.9"/>
+        <field name="zoneType"   accessType="initializeOnly" type="SFString" value="stable"/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Transform>
+          <!-- Marker sphere -->
+          <Transform translation="0 0.15 0">
+            <Shape>
+              <Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.2"/></Appearance>
+              <Sphere radius="0.18"/>
+            </Shape>
+          </Transform>
+          <!-- Pressure disc -->
+          <Transform translation="0 0.03 0">
+            <Shape>
+              <Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.75"/></Appearance>
+              <Cylinder height="0.03" radius="1.0"/>
+            </Shape>
+          </Transform>
+          <!-- Label -->
+          <Transform translation="0 1.0 0">
+            <Billboard axisOfRotation="0 1 0">
+              <Shape>
+                <Appearance><Material emissiveColor="0.7 0.7 0.8"/></Appearance>
+                <Text string='"W0"'><FontStyle size="0.22" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text>
+              </Shape>
+            </Billboard>
+          </Transform>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ============================================================ -->
+    <!-- INLINE PROTO: MCCFField                                      -->
+    <!-- ============================================================ -->
+    <ProtoDeclare name="MCCFField">
+      <ProtoInterface>
+        <field name="position"        accessType="inputOutput" type="SFVec3f"  value="0 0.05 20"/>
+        <field name="globalCoherence" accessType="inputOutput" type="SFFloat"  value="0.5"/>
+        <field name="tensionLevel"    accessType="inputOutput" type="SFFloat"  value="0.0"/>
+        <field name="echoRisk"        accessType="inputOutput" type="SFFloat"  value="0.0"/>
+        <field name="collapseImminent" accessType="inputOutput" type="SFBool"  value="false"/>
+        <field name="episodeCount"    accessType="inputOutput" type="SFInt32"  value="0"/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Transform>
+          <!-- Inner ring -->
+          <Transform translation="0 0.06 0">
+            <Shape>
+              <Appearance><Material emissiveColor="0.5 0.7 1.0" transparency="0.35"/></Appearance>
+              <Cylinder height="0.06" radius="2.0"/>
+            </Shape>
+          </Transform>
+          <!-- Outer echo ring -->
+          <Transform translation="0 0.03 0">
+            <Shape>
+              <Appearance><Material emissiveColor="0.5 0.7 1.0" transparency="0.75"/></Appearance>
+              <Cylinder height="0.03" radius="4.0"/>
+            </Shape>
+          </Transform>
+          <!-- Label -->
+          <Transform translation="0 1.8 1">
+            <Billboard axisOfRotation="0 1 0">
+              <Shape>
+                <Appearance><Material emissiveColor="0.4 0.55 0.8"/></Appearance>
+                <Text string='"S0 Field Origin"'><FontStyle size="0.20" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text>
+              </Shape>
+            </Billboard>
+          </Transform>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ============================================================ -->
+    <!-- ENVIRONMENT                                                   -->
+    <!-- ============================================================ -->
+    <NavigationInfo headlight="true" type='"EXAMINE" "WALK" "FLY" "ANY"' visibilityLimit="200"/>
+    <Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"
+                skyAngle="1.309 1.571" groundAngle="1.309"/>
+
+    <!-- Named lights — SAI-driven. global=true may not work in X_ITE Firefox/Edge. -->
+    <!-- Local fallback lights below ensure scene is always illuminated. -->
+    <DirectionalLight DEF="KeyLight"     direction="-0.7 -1 -0.5" intensity="0.90" color="1.0 0.97 0.92" global="true"/>
+    <DirectionalLight DEF="AmbientLight" direction="0.7 -0.3 0.5"  intensity="0.50" color="0.7 0.8 1.0"  global="true"/>
+    <PointLight       DEF="FillLight"    location="0 8 20"          intensity="0.65" color="0.6 0.8 1.0"  radius="80" attenuation="0 0.005 0.001" global="true"/>
+    <PointLight       DEF="RimLight"     location="0 2 -5"          intensity="0.32" color="0.8 0.7 1.0"  radius="30" attenuation="0 0.02 0.005"  global="true"/>
+
+    <!-- LOCAL FALLBACK LIGHTS — always work regardless of X_ITE global flag -->
+    <!-- Arc spine light — illuminates the full Z axis -->
+    <Transform translation="0 12 8">
+      <PointLight intensity="0.75" color="1.0 0.97 0.92" radius="30" attenuation="0 0.01 0.002"/>
+    </Transform>
+    <Transform translation="0 12 20">
+      <PointLight intensity="0.65" color="0.9 0.92 1.0"  radius="30" attenuation="0 0.01 0.002"/>
+    </Transform>
+    <Transform translation="0 12 35">
+      <PointLight intensity="0.58" color="0.85 0.9 1.0"  radius="25" attenuation="0 0.01 0.002"/>
+    </Transform>
+    <!-- Low fill — reduces harsh shadows on ground -->
+    <Transform translation="0 1 20">
+      <PointLight intensity="0.25" color="0.6 0.7 0.9"   radius="60" attenuation="0 0.005 0.001"/>
+    </Transform>
+
+    <!-- ============================================================ -->
+    <!-- VIEWPOINTS                                                    -->
+    <!-- ============================================================ -->
+    <Viewpoint DEF="VP1" description="W1 - Comfort Zone"    position="0 2.5  8" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP2" description="W2 - Gentle Friction" position="0 2.5 13" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP3" description="W3 - Mirror Moment"   position="0 2.5 18" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP4" description="W4 - Pushback"        position="0 2.5 23" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP5" description="W5 - Rupture"         position="0 2.5 28" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP6" description="W6 - Recognition"     position="0 2.5 33" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP7" description="W7 - Integration"     position="0 2.5 38" orientation="0 0 0 0"/>
+    <Viewpoint DEF="VP8" description="Overview - Full Arc"  position="0 22 42" orientation="1 0 0 -0.45"/>
+
+    <!-- ============================================================ -->
+    <!-- GROUND AND GRID                                              -->
+    <!-- ============================================================ -->
+    <Transform translation="0 -0.05 20">
+      <Shape><Appearance><Material diffuseColor="0.20 0.24 0.32" shininess="0.15"/></Appearance><Box size="44 0.08 56"/></Shape>
+    </Transform>
+    <Shape><Appearance><Material emissiveColor="0.25 0.32 0.45" transparency="0.5"/></Appearance>
+      <IndexedLineSet coordIndex="0 1 -1  2 3 -1  4 5 -1  6 7 -1  8 9 -1">
+        <Coordinate point="-20 0.02 -5  -20 0.02 45  -10 0.02 -5  -10 0.02 45  0 0.02 -5  0 0.02 45  10 0.02 -5  10 0.02 45  20 0.02 -5  20 0.02 45"/>
+      </IndexedLineSet>
+    </Shape>
+    <Shape><Appearance><Material emissiveColor="0.25 0.32 0.45" transparency="0.5"/></Appearance>
+      <IndexedLineSet coordIndex="0 1 -1  2 3 -1  4 5 -1  6 7 -1  8 9 -1  10 11 -1  12 13 -1">
+        <Coordinate point="-20 0.02 5  20 0.02 5  -20 0.02 10  20 0.02 10  -20 0.02 15  20 0.02 15  -20 0.02 20  20 0.02 20  -20 0.02 25  20 0.02 25  -20 0.02 30  20 0.02 30  -20 0.02 35  20 0.02 35"/>
+      </IndexedLineSet>
+    </Shape>
+    <Shape><Appearance><Material emissiveColor="0.4 0.6 1.0" transparency="0.3"/></Appearance>
+      <IndexedLineSet coordIndex="0 1 -1"><Coordinate point="0 0.04 0  0 0.04 42"/></IndexedLineSet>
+    </Shape>
+
+    <!-- ============================================================ -->
+    <!-- ZONE MARKERS                                                  -->
+    <!-- ============================================================ -->
+    <MCCFZone DEF="Zone_W1" waypointId="W1" position="0 0  5" baseColor="0.9 0.9 0.9"   zoneType="stable"/>
+    <MCCFZone DEF="Zone_W2" waypointId="W2" position="0 0 10" baseColor="0.9 0.85 0.5"  zoneType="stable"/>
+    <MCCFZone DEF="Zone_W3" waypointId="W3" position="0 0 15" baseColor="0.4 0.9 0.95"  zoneType="transitional"/>
+    <MCCFZone DEF="Zone_W4" waypointId="W4" position="0 0 20" baseColor="0.95 0.55 0.2" zoneType="transitional"/>
+    <MCCFZone DEF="Zone_W5" waypointId="W5" position="0 0 25" baseColor="0.9 0.25 0.25" zoneType="transitional"/>
+    <MCCFZone DEF="Zone_W6" waypointId="W6" position="0 0 30" baseColor="0.7 0.4 0.95"  zoneType="integration"/>
+    <MCCFZone DEF="Zone_W7" waypointId="W7" position="0 0 35" baseColor="1.0 0.85 0.2"  zoneType="integration"/>
+
+    <!-- ============================================================ -->
+    <!-- AVATARS                                                       -->
+    <!-- ============================================================ -->
+    <!-- Avatar: The Steward -->
+    <Transform DEF="Avatar_Steward" translation="-5 0 12">
+      <Transform translation="0 0.04 0">
+        <Shape>
+          <Appearance><Material DEF="RingMat_Steward" diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance>
+          <Cylinder height="0.04" radius="0.75"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 0.9 0">
+        <Shape>
+          <Appearance><Material DEF="BodyMat_Steward" diffuseColor="0.30 0.55 0.90" emissiveColor="0.0 0.0 0.0" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance>
+          <Cylinder height="1.35" radius="0.33"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 1.85 0">
+        <Shape>
+          <Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance>
+          <Sphere radius="0.30"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 2.35 0">
+        <Shape>
+          <Appearance><Material DEF="HonorMat_Steward" emissiveColor="0.9 0.75 0.1" transparency="0.3"/></Appearance>
+          <Sphere radius="0.10"/>
+        </Shape>
+      </Transform>
+      <Transform DEF="GazeTrans_Steward" translation="0 1.85 0.35">
+        <Shape>
+          <Appearance><Material DEF="GazeMat_Steward" emissiveColor="0.8 0.95 1.0" transparency="0.5"/></Appearance>
+          <Sphere radius="0.08"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 3.1 0">
+        <Billboard axisOfRotation="0 1 0">
+          <Shape>
+            <Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+            <Text DEF="NameText_Steward" string='"The Steward"'>
+              <FontStyle size="0.32" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+    <!-- Avatar: The Archivist -->
+    <Transform DEF="Avatar_Archivist" translation=" 5 0 18">
+      <Transform translation="0 0.04 0">
+        <Shape>
+          <Appearance><Material DEF="RingMat_Archivist" diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance>
+          <Cylinder height="0.04" radius="0.75"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 0.9 0">
+        <Shape>
+          <Appearance><Material DEF="BodyMat_Archivist" diffuseColor="0.85 0.55 0.20" emissiveColor="0.0 0.0 0.0" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance>
+          <Cylinder height="1.35" radius="0.33"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 1.85 0">
+        <Shape>
+          <Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance>
+          <Sphere radius="0.30"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 2.35 0">
+        <Shape>
+          <Appearance><Material DEF="HonorMat_Archivist" emissiveColor="0.9 0.75 0.1" transparency="0.3"/></Appearance>
+          <Sphere radius="0.10"/>
+        </Shape>
+      </Transform>
+      <Transform DEF="GazeTrans_Archivist" translation="0 1.85 0.35">
+        <Shape>
+          <Appearance><Material DEF="GazeMat_Archivist" emissiveColor="0.8 0.95 1.0" transparency="0.5"/></Appearance>
+          <Sphere radius="0.08"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 3.1 0">
+        <Billboard axisOfRotation="0 1 0">
+          <Shape>
+            <Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+            <Text DEF="NameText_Archivist" string='"The Archivist"'>
+              <FontStyle size="0.32" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+    <!-- Avatar: The Witness -->
+    <Transform DEF="Avatar_Witness" translation=" 0 0  8">
+      <Transform translation="0 0.04 0">
+        <Shape>
+          <Appearance><Material DEF="RingMat_Witness" diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance>
+          <Cylinder height="0.04" radius="0.75"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 0.9 0">
+        <Shape>
+          <Appearance><Material DEF="BodyMat_Witness" diffuseColor="0.22 0.78 0.50" emissiveColor="0.0 0.0 0.0" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance>
+          <Cylinder height="1.35" radius="0.33"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 1.85 0">
+        <Shape>
+          <Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance>
+          <Sphere radius="0.30"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 2.35 0">
+        <Shape>
+          <Appearance><Material DEF="HonorMat_Witness" emissiveColor="0.9 0.75 0.1" transparency="0.3"/></Appearance>
+          <Sphere radius="0.10"/>
+        </Shape>
+      </Transform>
+      <Transform DEF="GazeTrans_Witness" translation="0 1.85 0.35">
+        <Shape>
+          <Appearance><Material DEF="GazeMat_Witness" emissiveColor="0.8 0.95 1.0" transparency="0.5"/></Appearance>
+          <Sphere radius="0.08"/>
+        </Shape>
+      </Transform>
+      <Transform translation="0 3.1 0">
+        <Billboard axisOfRotation="0 1 0">
+          <Shape>
+            <Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+            <Text DEF="NameText_Witness" string='"The Witness"'>
+              <FontStyle size="0.32" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+    </Transform>
+
+    <!-- ============================================================ -->
+    <!-- COHERENCE CHANNELS                                            -->
+    <!-- ============================================================ -->
+    <MCCFChannel DEF="Ch_SA" fromAgent="The Steward"   toAgent="The Archivist" fromPos="-5 1.5 12" toPos="5 1.5 18" channelColor="0.6 0.55 0.8"/>
+    <MCCFChannel DEF="Ch_SW" fromAgent="The Steward"   toAgent="The Witness"   fromPos="-5 1.5 12" toPos="0 1.5 8"  channelColor="0.35 0.7 0.85"/>
+    <MCCFChannel DEF="Ch_AW" fromAgent="The Archivist" toAgent="The Witness"   fromPos=" 5 1.5 18" toPos="0 1.5 8"  channelColor="0.65 0.75 0.35"/>
+
+    <!-- ============================================================ -->
+    <!-- GLOBAL FIELD VISUALIZER                                       -->
+    <!-- ============================================================ -->
+    <MCCFField DEF="GlobalField" position="0 0.05 20"/>
+
+    <!-- ============================================================ -->
+    <!-- ZONE LABELS                                                   -->
+    <!-- ============================================================ -->
+    <Transform translation="-18 2.5 7.5"><Shape><Appearance><Material emissiveColor="0.3 0.4 0.7" transparency="0.75"/></Appearance><Box size="0.08 5 5"/></Shape></Transform>
+    <Transform translation="-18 2.5 20"><Shape><Appearance><Material emissiveColor="0.7 0.4 0.3" transparency="0.75"/></Appearance><Box size="0.08 5 15"/></Shape></Transform>
+    <Transform translation="-18 2.5 32.5"><Shape><Appearance><Material emissiveColor="0.6 0.7 0.3" transparency="0.75"/></Appearance><Box size="0.08 5 5"/></Shape></Transform>
+    <Transform translation="-16 5.5 7.5"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.4 0.5 0.8"/></Appearance><Text string='"STABLE"'><FontStyle size="0.20" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text></Shape></Billboard></Transform>
+    <Transform translation="-16 5.5 20"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.5 0.3"/></Appearance><Text string='"TRANSITIONAL"'><FontStyle size="0.20" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text></Shape></Billboard></Transform>
+    <Transform translation="-16 5.5 32.5"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.6 0.8 0.3"/></Appearance><Text string='"INTEGRATION"'><FontStyle size="0.20" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text></Shape></Billboard></Transform>
+
+  </Scene>
+</X3D>

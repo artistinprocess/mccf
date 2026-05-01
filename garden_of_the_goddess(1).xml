@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Garden of the Goddess — Zone Definitions
+    MCCF V3 "The New York Rocket"
+
+    Three starting zones for the first V3 scene.
+    Each zone has a Descriptor (semantic vocabulary that drives psi_zone
+    via decomposition) and explicit Weights (the result of that decomposition,
+    pre-computed so the backend can use them directly or verify the decomp).
+
+    Zone pull formula: F_zone = w_pull * R(i,j) * (psi_zone - psi_agent)
+    Spatial modulation: pull * max(0, 1 - distance/radius)
+
+    Sound files in sounds/ directory. Researchers provide their own audio.
+    Supported formats: wav, mp3, midi.
+
+    Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
+    Version: V3 spec v0.2, April 2026
+-->
+<ZoneSet xmlns="http://mccf.artistinprocess.com/zones/v3"
+         scene="garden_of_the_goddess"
+         version="1.0">
+
+    <!--
+        THE TEMPLE
+        High P, high regulation, low noise.
+        Sacred attractor. Characters drawn here seek truth, order,
+        the long view. The zone itself does not comfort — it clarifies.
+        Regulation effect: +0.10 (calming, structured)
+    -->
+    <Zone id="the_temple" zone_type="sacred">
+        <Descriptor>sacred wisdom truth eternal divine clarity ancient ritual order contemplation</Descriptor>
+        <Weights E="0.32" B="0.55" P="0.95" S="0.28"/>
+        <Position x="0" y="0" z="15"/>
+        <Radius value="6.0"/>
+        <NoiseCoefficient value="0.05"/>
+        <PullWeight value="0.15"/>
+        <AmbientTheme scale="lydian" tempo="slow"
+                      sound_file="sounds/temple_lydian.wav" format="wav"/>
+        <Color value="#ffe080"/>
+        <Description>Sacred attractor. High P, high regulation, low noise.
+        Characters drawn here seek truth, the long view, and the weight
+        of what endures. The temple does not comfort — it clarifies.
+        </Description>
+    </Zone>
+
+    <!--
+        THE POOL
+        High E and S, low regulation, moderate noise.
+        Intimate attractor. Characters drawn here are open, vulnerable,
+        present to each other. The water reflects and amplifies.
+        Regulation effect: -0.10 (lowers guard)
+    -->
+    <Zone id="the_pool" zone_type="intimate">
+        <Descriptor>care vulnerability warmth comfort intimacy presence felt tenderness love welcome bond</Descriptor>
+        <Weights E="0.95" B="0.12" P="0.22" S="0.80"/>
+        <Position x="0" y="0" z="0"/>
+        <Radius value="5.0"/>
+        <NoiseCoefficient value="0.12"/>
+        <PullWeight value="0.15"/>
+        <AmbientTheme scale="major" tempo="slow"
+                      sound_file="sounds/pool_major.wav" format="wav"/>
+        <Color value="#60c8f0"/>
+        <Description>Intimate attractor. High E and S, low regulation,
+        moderate noise. Characters drawn here are open, present to each other.
+        The water reflects and amplifies.
+        </Description>
+    </Zone>
+
+    <!--
+        THE LIBRARY
+        High B and P, moderate S, low noise.
+        Knowledge attractor. Characters drawn here become more precise,
+        more analytical, more aware of consequence. History accumulates here.
+        Regulation effect: +0.05 (mild steadying)
+    -->
+    <Zone id="the_library" zone_type="library">
+        <Descriptor>knowledge wisdom truth insight understanding reflect commit practice steadfast ancient mystery</Descriptor>
+        <Weights E="0.18" B="0.72" P="0.90" S="0.42"/>
+        <Position x="-10" y="0" z="8"/>
+        <Radius value="5.0"/>
+        <NoiseCoefficient value="0.06"/>
+        <PullWeight value="0.15"/>
+        <AmbientTheme scale="dorian" tempo="moderate"
+                      sound_file="sounds/library_dorian.wav" format="wav"/>
+        <Color value="#60a8f0"/>
+        <Description>Knowledge attractor. High B and P, moderate S, low noise.
+        Characters drawn here become more precise, more analytical, more aware
+        of consequence. History accumulates in this place.
+        </Description>
+    </Zone>
+
+</ZoneSet>
