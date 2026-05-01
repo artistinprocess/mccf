@@ -42,6 +42,40 @@ button.active { background: #4af0a8; color: #111; }
 .tension-mid { color: #4adfc0; }
 .tension-high { color: #df8a4a; }
 .tension-crit { color: #df4a4a; }
+#playback-panel {
+  position: fixed; top: 8px; left: 8px;
+  background: rgba(0,0,0,0.82);
+  border: 1px solid #2a3545;
+  padding: 10px 12px;
+  font-size: 12px; color: #a0b8c8;
+  border-radius: 4px; min-width: 220px;
+  max-width: 280px; z-index: 100;
+}
+#playback-panel .ph { color:#7ab8f5; font-size:11px; margin-bottom:6px; }
+#playback-panel select, #playback-panel input[type=number] {
+  width:100%; background:#0d1520; color:#c0d8e8;
+  border:1px solid #2a3545; border-radius:3px;
+  padding:3px 5px; font-family:monospace; font-size:11px;
+  margin-bottom:5px; box-sizing:border-box;
+}
+#playback-panel .pb-row { display:flex; gap:4px; margin-bottom:5px; }
+#playback-panel .pb-row button {
+  flex:1; font-size:11px; padding:3px 4px;
+}
+#pb-step-info {
+  margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
+  font-size:11px; color:#7a9090; min-height:40px;
+}
+#pb-qr {
+  margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
+  font-size:11px; display:none;
+}
+#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; }
+#pb-response  { color:#c0d8e8; line-height:1.4; }
+#pb-channels  { display:flex; gap:6px; margin-top:4px; }
+#pb-channels span { font-size:10px; }
+.pc-E { color:#f07060; } .pc-B { color:#60a8f0; }
+.pc-P { color:#f0c060; } .pc-S { color:#60f0a8; }
 </style>
 </head>
 <body>
@@ -62,6 +96,38 @@ button.active { background: #4af0a8; color: #111; }
   <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
     padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
     color:#f0c060;cursor:pointer;">▶ Test SAI</button>
+</div>
+
+<div id="playback-panel">
+  <div class="ph">⏵ PLAYBACK</div>
+  <select id="pb-file" onchange="pbFileChanged()">
+    <option value="">— select arc file —</option>
+  </select>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+    <label style="font-size:11px;color:#6a8090;white-space:nowrap;margin:0;">pace (s)</label>
+    <input type="number" id="pb-pace" value="3" min="0.5" max="30" step="0.5"
+           style="width:60px;"/>
+    <label style="font-size:11px;color:#6a8090;white-space:nowrap;margin:0;">
+      <input type="checkbox" id="pb-loop" style="width:auto;margin:0 3px 0 0;"/>loop
+    </label>
+  </div>
+  <div class="pb-row">
+    <button id="pb-play-btn"  onclick="pbPlay()"  style="border-color:#4af0a8;color:#4af0a8;">&#9654; Play</button>
+    <button id="pb-step-btn"  onclick="pbStep()"  style="border-color:#7ab8f5;color:#7ab8f5;">&#9654;&#9654; Step</button>
+    <button id="pb-stop-btn"  onclick="pbStop()"  style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646; Stop</button>
+    <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset</button>
+  </div>
+  <div id="pb-step-info">No arc loaded.</div>
+  <div id="pb-channels">
+    <span class="pc-E">E —</span>
+    <span class="pc-B">B —</span>
+    <span class="pc-P">P —</span>
+    <span class="pc-S">S —</span>
+  </div>
+  <div id="pb-qr">
+    <div id="pb-question"></div>
+    <div id="pb-response"></div>
+  </div>
 </div>
 
 <div id="controls">
@@ -457,6 +523,161 @@ function applyArcCV(data) {
     console.warn('applyArcCV error:', e.message);
   }
 }
+// ─────────────────────────────────────────────
+// Playback panel
+// ─────────────────────────────────────────────
+let pbPolling = false;
+let pbPollTimer = null;
+
+// Load file list on page load
+async function pbLoadFiles() {
+  try {
+    const r = await fetch(API + '/arc/playback');
+    const data = await r.json();
+    const sel = document.getElementById('pb-file');
+    (data.files || []).forEach(function(f) {
+      const opt = document.createElement('option');
+      opt.value = f.filename;
+      opt.textContent = f.filename.replace('arc_','').replace('.xml','')
+        + (f.cultivar ? ' ['+f.cultivar+']' : '')
+        + (f.steps_seen ? ' ('+f.steps_seen+'wp)' : '');
+      sel.appendChild(opt);
+    });
+  } catch(e) {
+    document.getElementById('pb-step-info').textContent = 'Could not load files.';
+  }
+}
+
+function pbFileChanged() {
+  const f = document.getElementById('pb-file').value;
+  document.getElementById('pb-step-info').textContent = f ? 'Ready. Press Play.' : 'No arc loaded.';
+  document.getElementById('pb-qr').style.display = 'none';
+  pbStopPolling();
+}
+
+async function pbPlay() {
+  const file = document.getElementById('pb-file').value;
+  if (!file) { alert('Select an arc file first.'); return; }
+  const pace = parseFloat(document.getElementById('pb-pace').value) || 3.0;
+  const loop = document.getElementById('pb-loop').checked;
+  try {
+    const r = await fetch(API + '/arc/playback/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({file: file, pace: pace, loop: loop, auto: true})
+    });
+    const data = await r.json();
+    if (data.error) {
+      document.getElementById('pb-step-info').textContent = 'Error: ' + data.error;
+      return;
+    }
+    pbUpdateDisplay(data.state || data);
+    pbStartPolling(pace);
+  } catch(e) {
+    document.getElementById('pb-step-info').textContent = 'Play failed: ' + e.message;
+  }
+}
+
+async function pbStep() {
+  try {
+    const r = await fetch(API + '/arc/playback/step', {method:'POST'});
+    const data = await r.json();
+    pbUpdateDisplay(data);
+  } catch(e) {}
+}
+
+async function pbStop() {
+  pbStopPolling();
+  try {
+    const r = await fetch(API + '/arc/playback/stop', {method:'POST'});
+    const data = await r.json();
+    pbUpdateDisplay(data);
+  } catch(e) {}
+}
+
+async function pbReset() {
+  pbStopPolling();
+  try {
+    const r = await fetch(API + '/arc/playback/reset', {method:'POST'});
+    const data = await r.json();
+    pbUpdateDisplay(data);
+    document.getElementById('pb-qr').style.display = 'none';
+  } catch(e) {}
+}
+
+function pbStartPolling(pace) {
+  pbStopPolling();
+  pbPolling = true;
+  // Poll at half the pace interval so we catch each step promptly
+  var interval = Math.max(500, Math.min(pace * 500, 2000));
+  pbPollTimer = setInterval(pbPollState, interval);
+}
+
+function pbStopPolling() {
+  pbPolling = false;
+  if (pbPollTimer) { clearInterval(pbPollTimer); pbPollTimer = null; }
+}
+
+async function pbPollState() {
+  try {
+    const r = await fetch(API + '/arc/playback/state');
+    const data = await r.json();
+    pbUpdateDisplay(data);
+    if (data.status === 'complete' || data.status === 'idle') {
+      pbStopPolling();
+    }
+  } catch(e) {}
+}
+
+function pbUpdateDisplay(state) {
+  if (!state || state.status === 'idle') {
+    document.getElementById('pb-step-info').textContent = 'Idle.';
+    document.getElementById('pb-qr').style.display = 'none';
+    return;
+  }
+  var wp = state.current_waypoint || {};
+  var step = wp.stepno || state.step || 0;
+  var total = state.total_steps || '?';
+  var cultivar = wp.cultivar || (state.cultivars||[]).join(', ') || '';
+  var status = state.status || '';
+
+  var statusSymbol = status === 'playing' ? '⏵' :
+                     status === 'paused'  ? '⏸' :
+                     status === 'complete'? '⏹' : '○';
+
+  document.getElementById('pb-step-info').innerHTML =
+    statusSymbol + ' <b>' + cultivar + '</b> &nbsp; step ' +
+    step + ' / ' + total +
+    (wp.id ? ' &nbsp;<span style="color:#4a6070">' + wp.id + '</span>' : '');
+
+  // Channel values
+  var ch = document.getElementById('pb-channels');
+  if (wp.E !== undefined) {
+    ch.innerHTML =
+      '<span class="pc-E">E ' + (wp.E||0).toFixed(2) + '</span>' +
+      '<span class="pc-B">B ' + (wp.B||0).toFixed(2) + '</span>' +
+      '<span class="pc-P">P ' + (wp.P||0).toFixed(2) + '</span>' +
+      '<span class="pc-S">S ' + (wp.S||0).toFixed(2) + '</span>';
+  }
+
+  // Q&A
+  var qr = document.getElementById('pb-qr');
+  if (wp.question || wp.response) {
+    qr.style.display = 'block';
+    document.getElementById('pb-question').textContent =
+      wp.question ? 'Q: ' + wp.question : '';
+    document.getElementById('pb-response').textContent =
+      wp.response ? wp.response : '';
+  } else {
+    qr.style.display = 'none';
+  }
+}
+
+// Load files when page is ready
+window.addEventListener('load', function() {
+  setTimeout(pbLoadFiles, 800);
+});
+
 </script>
 </body>
 </html>

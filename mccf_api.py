@@ -177,6 +177,9 @@ _cultivar_registry  = register_cultivar_api(app)
 register_generate_api(app)
 drift_manager       = DriftManager()
 
+from mccf_playback import register_playback_api
+playback_manager    = register_playback_api(app, field)
+
 # Load Garden of the Goddess scene definition if present
 import os as _os_v3
 _gotg_path = _os_v3.path.join(
