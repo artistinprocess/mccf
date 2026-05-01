@@ -22,3 +22,24 @@ Thumbs.db
 # Runtime state
 *.log
 mccf_state.json
+
+# Windows download duplicates — files like "name (1).ext", "name(1).ext"
+*\ (1).*
+*(1).*
+*\ (2).*
+*(2).*
+*\ (3).*
+*(3).*
+
+# Backup and scratch files — Old/Obsolete suffixes
+*Old.*
+*Obsolete.*
+*old.*
+*_backup.*
+_*.py
+
+# Python files that don't belong in static/
+static/*.py
+
+# Temp exports — comment out if you want exports tracked
+# exports/
