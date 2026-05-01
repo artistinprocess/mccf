@@ -15,23 +15,23 @@
   --mono: 'IBM Plex Mono', monospace; --display: 'Syne', sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 14px;
+body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 16px;
   height: 100vh; display: grid; grid-template-rows: 44px 1fr;
   grid-template-columns: 270px 1fr 310px;
   grid-template-areas: "hdr hdr hdr" "left map right"; overflow: hidden; }
 header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 16px; gap: 16px; }
-.logo { font-family: var(--display); font-weight: 800; font-size: 17px; color: var(--warm); }
+.logo { font-family: var(--display); font-weight: 800; font-size: 19px; color: var(--warm); }
 .logo span { color: var(--dim); font-weight: 400; }
-.vbadge { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
+.vbadge { font-size: 13px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
 .mode-tabs { display: flex; gap: 2px; }
-.mtab { font-family: var(--mono); font-size: 12px; padding: 3px 10px;
+.mtab { font-family: var(--mono); font-size: 14px; padding: 3px 10px;
   border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
 .mtab:hover { color: var(--text); border-color: var(--dim); }
 .mtab.active { color: var(--warm); border-color: var(--warm); background: #1a1508; }
-.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
+.api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dim); }
 .api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
-  color: var(--text); font-family: var(--mono); font-size: 12px; padding: 3px 8px; width: 160px; outline: none; }
+  color: var(--text); font-family: var(--mono); font-size: 14px; padding: 3px 8px; width: 160px; outline: none; }
 .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
 .sdot.on { background: var(--accent); }
 .sdot.off { background: var(--danger); }
@@ -39,7 +39,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 #left-panel { grid-area: left; }
 #map-panel { grid-area: map; position: relative; overflow: hidden; padding: 0; }
 #right-panel { grid-area: right; border-right: none; }
-.sh { font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: 0.14em;
+.sh { font-family: var(--display); font-size: 13px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--dim); margin: 14px 0 8px;
   display: flex; align-items: center; gap: 6px; }
 .sh:first-child { margin-top: 0; }
@@ -50,32 +50,32 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 .obj-item:hover { border-color: var(--dim); }
 .obj-item.sel { border-color: var(--warm); }
 .obj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.obj-name { flex: 1; font-family: var(--display); font-size: 13px; font-weight: 600; }
-.obj-tag { font-size: 11px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
+.obj-name { flex: 1; font-family: var(--display); font-size: 15px; font-weight: 600; }
+.obj-tag { font-size: 13px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
 .agent-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; }
 .agent-item:hover { border-color: var(--cool); }
 .agent-item.placed { border-color: var(--accent); opacity: 0.6; }
 .agent-item.placing { border-color: var(--warm); background: #1a1508; }
 .aswatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-.aname { flex: 1; font-family: var(--display); font-size: 13px; font-weight: 600; }
-.arole { font-size: 11px; color: var(--dim); }
+.aname { flex: 1; font-family: var(--display); font-size: 15px; font-weight: 600; }
+.arole { font-size: 13px; color: var(--dim); }
 .wp-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
-  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 13px; }
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 15px; }
 .wp-item:hover { border-color: var(--dim); }
 .wp-item.sel { border-color: var(--cool); }
 .wp-num { width: 18px; height: 18px; border-radius: 50%; background: var(--s3);
-  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--cool); flex-shrink: 0; }
-label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
+  display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--cool); flex-shrink: 0; }
+label { display: block; font-size: 14px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
 label:first-child { margin-top: 0; }
 input[type=text], input[type=number], select, textarea {
   width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
-  color: var(--text); font-family: var(--mono); font-size: 13px; padding: 5px 8px; outline: none; }
+  color: var(--text); font-family: var(--mono); font-size: 15px; padding: 5px 8px; outline: none; }
 input:focus, select:focus, textarea:focus { border-color: var(--warm); }
 textarea { resize: vertical; min-height: 48px; }
 .btn { display: inline-flex; align-items: center; gap: 5px; background: none;
   border: 1px solid var(--border); color: var(--text); font-family: var(--mono);
-  font-size: 12px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+  font-size: 14px; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
 .btn:hover { border-color: var(--dim); color: var(--warm); }
 .btn.pri { background: var(--warm); border-color: var(--warm); color: #1a1000; font-weight: 600; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
@@ -84,20 +84,20 @@ textarea { resize: vertical; min-height: 48px; }
 .btn.full { width: 100%; justify-content: center; }
 .btn-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .bias-row { display: grid; grid-template-columns: 14px 1fr 38px; align-items: center; gap: 6px; margin-bottom: 6px; }
-.bch { font-size: 12px; font-weight: 600; font-family: var(--display); }
-.bval { font-size: 12px; text-align: right; }
+.bch { font-size: 14px; font-weight: 600; font-family: var(--display); }
+.bval { font-size: 14px; text-align: right; }
 input[type=range] { width: 100%; accent-color: var(--warm); }
 #scene-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
 .map-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px;
   background: rgba(8,10,14,0.88); border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; }
-.tool-btn { font-family: var(--mono); font-size: 12px; padding: 3px 9px;
+.tool-btn { font-family: var(--mono); font-size: 14px; padding: 3px 9px;
   background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; }
 .tool-btn.active { color: var(--warm); border-color: var(--warm); }
 .coord-disp { position: absolute; bottom: 10px; left: 10px; background: rgba(8,10,14,0.85);
-  border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 12px; color: var(--dim); pointer-events: none; }
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; font-size: 14px; color: var(--dim); pointer-events: none; }
 .place-hint { position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
   background: rgba(240,192,96,0.15); border: 1px solid var(--warm); border-radius: 4px;
-  padding: 4px 14px; font-size: 12px; color: var(--warm); pointer-events: none; display: none; }
+  padding: 4px 14px; font-size: 14px; color: var(--warm); pointer-events: none; display: none; }
 #arc-canvas { width: 100%; height: 140px; display: block; border: 1px solid var(--border); border-radius: 4px; background: var(--s2); }
 .dsect { background: var(--s2); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
 .chbr { display: grid; grid-template-columns: 14px 1fr 36px; align-items: center; gap: 5px; margin-bottom: 4px; }
@@ -105,14 +105,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .chfill { height: 100%; border-radius: 2px; }
 .expopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
-.explbl { flex: 1; font-size: 13px; }
-.expdsc { font-size: 11px; color: var(--dim); margin-top: 1px; }
+.explbl { flex: 1; font-size: 15px; }
+.expdsc { font-size: 13px; color: var(--dim); margin-top: 1px; }
 .path-seq { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
 .pwp { background: var(--s3); border: 1px solid var(--border); border-radius: 3px;
-  padding: 2px 7px; font-size: 12px; color: var(--cool); cursor: pointer; }
+  padding: 2px 7px; font-size: 14px; color: var(--cool); cursor: pointer; }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
-  padding: 6px 16px; font-size: 13px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
+  padding: 6px 16px; font-size: 15px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); cursor:pointer; }
 #toast.err { border-color: var(--danger); color: var(--danger); }
 </style>
@@ -153,9 +153,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
     </div>
     <div class="sh">Scene Summary</div>
-    <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size: 12px">Apply grid to begin.</div></div>
+    <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:18px">Apply grid to begin.</div></div>
     <div class="sh">Zone Set</div>
-    <div id="sc-zones" style="font-size: 12px;color:var(--dim)">No zones placed.</div>
+    <div id="sc-zones" style="font-size:18px;color:var(--dim)">No zones placed.</div>
   </div>
   <div id="mode-zones" style="display:none">
     <div class="sh">Zones</div>
@@ -204,10 +204,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="mode-agents" style="display:none">
     <div class="sh">Agent Roster (from Character Editor)</div>
-    <div id="agent-roster"><div style="color:var(--dim);font-size: 12px">Connect to API to load agents.</div></div>
+    <div id="agent-roster"><div style="color:var(--dim);font-size:18px">Connect to API to load agents.</div></div>
     <div style="margin-top:8px"><button class="btn full" onclick="loadAgents()">Refresh from API</button></div>
     <div class="sh" style="margin-top:14px">Placed Agents</div>
-    <div id="placed-list"><div style="color:var(--dim);font-size: 12px">No agents placed.</div></div>
+    <div id="placed-list"><div style="color:var(--dim);font-size:18px">No agents placed.</div></div>
   </div>
   <div id="mode-waypoints" style="display:none">
     <div class="sh">Waypoints</div>
@@ -257,7 +257,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="btn cool" onclick="exportSceneXML()">Export</button>
     </div>
     <div class="expopt" style="border-color:var(--accent)">
-      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher to view</div></div>
+      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher</div></div>
       <button class="btn" id="send-btn" onclick="sendToLauncher()" style="border-color:var(--accent);color:var(--accent)">&#9654; Send</button>
     </div>
     <div class="sh" style="margin-top:14px">Options</div>
@@ -266,7 +266,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <label style="margin-top:6px"><input type="checkbox" id="exp-interps" checked style="width:auto;margin-right:6px">PositionInterpolators</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-script" checked style="width:auto;margin-right:6px">MCCFMaster Script stub</label>
     <div class="sh" style="margin-top:14px">Last Export</div>
-    <div id="exp-log" style="font-size: 12px;color:var(--dim)">Nothing exported yet.</div>
+    <div id="exp-log" style="font-size:18px;color:var(--dim)">Nothing exported yet.</div>
   </div>
 </div>
 <div id="map-panel">
@@ -282,40 +282,40 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <div class="panel" id="right-panel">
   <div id="detail-zone" style="display:none">
     <div class="sh" style="margin-top:0">Zone Properties</div>
-    <div id="zd-name" style="font-family:var(--display);font-size: 16px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
-    <div id="zd-type" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
+    <div id="zd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
+    <div id="zd-type" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="zd-weights"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size: 12px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
   </div>
   <div id="detail-agent" style="display:none">
     <div class="sh" style="margin-top:0">Agent</div>
-    <div id="ad-name" style="font-family:var(--display);font-size: 16px;font-weight:700;margin-bottom:2px;"></div>
-    <div id="ad-disp" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
+    <div id="ad-name" style="font-family:var(--display);font-size:22px;font-weight:700;margin-bottom:2px;"></div>
+    <div id="ad-disp" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size: 12px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
   <div id="detail-wp" style="display:none">
     <div class="sh" style="margin-top:0">Waypoint</div>
-    <div id="wpd-name" style="font-family:var(--display);font-size: 16px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size: 12px;color:var(--accent)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size: 12px;color:var(--dim)"></div></div>
+    <div id="wpd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:18px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:18px;color:var(--dim)"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button></div>
   </div>
   <div id="detail-arc">
     <div class="sh" style="margin-top:0">Affective Arc</div>
     <canvas id="arc-canvas"></canvas>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
-      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--E)"></div>E</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--B)"></div>B</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--P)"></div>P</div>
-      <div style="display:flex;align-items:center;gap:4px;font-size: 11px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--S)"></div>S</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:17px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--E)"></div>E</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:17px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--B)"></div>B</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:17px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--P)"></div>P</div>
+      <div style="display:flex;align-items:center;gap:4px;font-size:17px;color:var(--dim)"><div style="width:8px;height:3px;border-radius:2px;background:var(--S)"></div>S</div>
     </div>
     <div class="sh" style="margin-top:12px">Field State</div>
-    <div id="field-state" style="font-size: 12px;color:var(--dim)">Connect to API.</div>
+    <div id="field-state" style="font-size:18px;color:var(--dim)">Connect to API.</div>
     <div class="sh" style="margin-top:12px">Scene Stats</div>
-    <div style="font-size: 12px;color:var(--dim)">
+    <div style="font-size:18px;color:var(--dim)">
       <div>Zones: <span id="stat-z" style="color:var(--accent)">0</span></div>
       <div>Agents placed: <span id="stat-a" style="color:var(--accent)">0</span></div>
       <div>Waypoints: <span id="stat-w" style="color:var(--accent)">0</span></div>
@@ -324,9 +324,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="detail-query" style="display:none">
     <div class="sh" style="margin-top:0">Position Query</div>
-    <div id="q-pos" style="font-size: 12px;color:var(--dim);margin-bottom:8px;"></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Active Zones</div><div id="q-zones" style="font-size: 12px;color:var(--dim)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Combined Pressure</div><div id="q-pressure" style="font-size: 12px;"></div></div>
+    <div id="q-pos" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Active Zones</div><div id="q-zones" style="font-size:18px;color:var(--dim)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Combined Pressure</div><div id="q-pressure" style="font-size:18px;"></div></div>
   </div>
 </div>
 <div id="toast" onclick="this.className=''"></div>
@@ -437,13 +437,13 @@ function pollField(){
     var html='';
     names.forEach(function(n){
       var s=fd.agents[n],w=s.weights||{},col=agents[n]?agents[n].color:'#888';
-      html+='<div style="margin-bottom:6px"><span style="color:'+col+';font-family:var(--display);font-size:11px;font-weight:600">'+n+'</span>';
+      html+='<div style="margin-bottom:6px"><span style="color:'+col+';font-family:var(--display);font-size:15px;font-weight:600">'+n+'</span>';
       html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:2px">';
       ['E','B','P','S'].forEach(function(ch){
         var v=w[ch]||0;
-        html+='<div><div style="font-size:9px;color:var(--dim)">'+ch+'</div>';
+        html+='<div><div style="font-size:13px;color:var(--dim)">'+ch+'</div>';
         html+='<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>';
-        html+='<div style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</div></div>';
+        html+='<div style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</div></div>';
       });
       html+='</div></div>';
     });
@@ -477,7 +477,7 @@ function applyScene(){
 }
 function updateSummary(){
   document.getElementById('scene-summary').innerHTML=
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:14px">'+
     '<div style="color:var(--dim)">Name</div><div style="color:var(--warm)">'+sceneConfig.name+'</div>'+
     '<div style="color:var(--dim)">Width</div><div>'+sceneConfig.width+' m</div>'+
     '<div style="color:var(--dim)">Depth</div><div>'+sceneConfig.depth+' m</div>'+
@@ -487,7 +487,7 @@ function updateSummary(){
   if(!zn.length){zl.textContent='No zones placed.';return;}
   zl.innerHTML=zn.map(function(id){
     var z=zones[id],col=ZONE_COLORS[z.zone_type]||'#888';
-    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:10px">'+
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:14px">'+
       '<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'+
       '<span style="color:'+col+';font-family:var(--display);font-weight:600">'+(z.name||id)+'</span>'+
       '<span style="color:var(--dim)">'+z.zone_type+'</span></div>';
@@ -499,7 +499,7 @@ function renderAll(){
 }
 function renderZoneList(){
   var el=document.getElementById('zone-list'),list=Object.values(zones);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No zones placed.</div>';return;}
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No zones placed.</div>';return;}
   el.innerHTML=list.map(function(z){
     var col=ZONE_COLORS[z.zone_type]||'#888',sel=selectedType==='zone'&&selectedId===z.id;
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'zone\',\''+z.id+'\')">'+
@@ -510,17 +510,17 @@ function renderZoneList(){
 }
 function renderWPList(){
   var el=document.getElementById('wp-list'),list=Object.values(waypoints);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No waypoints.</div>';return;}
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No waypoints.</div>';return;}
   el.innerHTML=list.map(function(wp,i){
     var sel=selectedType==='waypoint'&&selectedId===wp.name;
     return '<div class="wp-item '+(sel?'sel':'')+'" onclick="selectObj(\'waypoint\',\''+wp.name+'\')">'+
       '<div class="wp-num">'+(i+1)+'</div><span style="flex:1">'+wp.name+'</span>'+
-      '<span style="color:var(--dim);font-size:9px">'+(wp.label||'')+'</span></div>';
+      '<span style="color:var(--dim);font-size:13px">'+(wp.label||'')+'</span></div>';
   }).join('');
 }
 function renderPathList(){
   var el=document.getElementById('path-list'),list=Object.values(paths);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No paths.</div>';return;}
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No paths.</div>';return;}
   el.innerHTML=list.map(function(p){
     return '<div class="obj-item"><span class="obj-name">'+p.name+'</span>'+
       '<span class="obj-tag">'+(p.agent||'?')+'</span></div>';
@@ -528,7 +528,7 @@ function renderPathList(){
 }
 function renderAgentRoster(){
   var el=document.getElementById('agent-roster'),list=Object.values(agents);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No agents. Use Character Editor.</div>';return;}
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No agents. Use Character Editor.</div>';return;}
   el.innerHTML=list.map(function(a){
     var ip=!!placedAgents[a.name],ipl=placing==='agent'&&placingAgent===a.name;
     return '<div class="agent-item '+(ip?'placed':'')+' '+(ipl?'placing':'')+'" onclick="startPlaceAgent(\''+a.name+'\')">'+
@@ -539,13 +539,13 @@ function renderAgentRoster(){
 }
 function renderPlaced(){
   var el=document.getElementById('placed-list'),list=Object.values(placedAgents);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:10px">No agents placed.</div>';return;}
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No agents placed.</div>';return;}
   el.innerHTML=list.map(function(a){
     var sel=selectedType==='agent'&&selectedId===a.name;
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'agent\',\''+a.name+'\')">'+
       '<div class="obj-dot" style="background:'+a.color+'"></div>'+
       '<span class="obj-name">'+a.name+'</span>'+
-      '<span style="font-size:9px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
+      '<span style="font-size:13px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
   }).join('');
 }
 function updateStats(){
@@ -562,11 +562,11 @@ function drawScene(){
   ctx.strokeStyle='#1a2035';ctx.lineWidth=1;
   for(var x=0;x<=sceneConfig.width;x+=5){
     var cx0=w2c(x,0).cx;ctx.beginPath();ctx.moveTo(cx0,OZ);ctx.lineTo(cx0,OZ+sceneConfig.depth*SCALE);ctx.stroke();
-    if(x%10===0&&x>0){ctx.fillStyle='#2a3450';ctx.font='9px IBM Plex Mono';ctx.textAlign='center';ctx.fillText(x,cx0,OZ-4);}
+    if(x%10===0&&x>0){ctx.fillStyle='#2a3450';ctx.font='13px IBM Plex Mono';ctx.textAlign='center';ctx.fillText(x,cx0,OZ-4);}
   }
   for(var z=0;z<=sceneConfig.depth;z+=5){
     var cy0=w2c(0,z).cy;ctx.beginPath();ctx.moveTo(OX,cy0);ctx.lineTo(OX+sceneConfig.width*SCALE,cy0);ctx.stroke();
-    if(z%10===0&&z>0){ctx.fillStyle='#2a3450';ctx.font='9px IBM Plex Mono';ctx.textAlign='right';ctx.fillText(z,OX-4,cy0+3);}
+    if(z%10===0&&z>0){ctx.fillStyle='#2a3450';ctx.font='13px IBM Plex Mono';ctx.textAlign='right';ctx.fillText(z,OX-4,cy0+3);}
   }
   Object.values(paths).forEach(drawPath);
   Object.values(zones).forEach(drawZone);
@@ -585,9 +585,9 @@ function drawZone(z){
   var br=Math.max(4,SCALE*0.3);
   ctx.fillStyle=col+'88';ctx.fillRect(p.cx-br,p.cy-br,br*2,br*2);
   ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(p.cx-br,p.cy-br,br*2,br*2);
-  ctx.fillStyle=col;ctx.font='bold 11px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillStyle=col;ctx.font='bold 15px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
   ctx.fillText(z.name||z.id,p.cx,p.cy+br+3);
-  ctx.font='9px IBM Plex Mono';ctx.fillStyle=col+'aa';ctx.fillText(z.zone_type,p.cx,p.cy+br+14);
+  ctx.font='13px IBM Plex Mono';ctx.fillStyle=col+'aa';ctx.fillText(z.zone_type,p.cx,p.cy+br+14);
 }
 function drawAgent(a){
   var pos=a.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
@@ -596,7 +596,7 @@ function drawAgent(a){
   ctx.strokeStyle=col+'55';ctx.lineWidth=1;ctx.stroke();
   ctx.beginPath();ctx.arc(p.cx,p.cy,7,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
   if(sel){ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke();}
-  ctx.fillStyle=col;ctx.font='bold 10px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillStyle=col;ctx.font='bold 14px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
   ctx.fillText(a.name,p.cx,p.cy+10);
   ['E','B','P','S'].forEach(function(ch,i){
     var ang=(i*Math.PI/2)-Math.PI/4,v=(a.weights&&a.weights[ch])||0.25,dr=10+v*6;
@@ -610,8 +610,8 @@ function drawWP(wp,idx){
   ctx.beginPath();ctx.moveTo(p.cx,p.cy-9);ctx.lineTo(p.cx+7,p.cy);ctx.lineTo(p.cx,p.cy+9);ctx.lineTo(p.cx-7,p.cy);ctx.closePath();
   ctx.fillStyle=sel?'#60a8f0':'#1c3050';ctx.fill();
   ctx.strokeStyle=sel?'#80c8ff':'#60a8f0';ctx.lineWidth=sel?2:1;ctx.stroke();
-  ctx.fillStyle='#c0d8f0';ctx.font='bold 8px Syne';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(idx+1,p.cx,p.cy);
-  ctx.fillStyle='#60a8f0';ctx.font='9px IBM Plex Mono';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(wp.name,p.cx+9,p.cy-7);
+  ctx.fillStyle='#c0d8f0';ctx.font='bold 12px Syne';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(idx+1,p.cx,p.cy);
+  ctx.fillStyle='#60a8f0';ctx.font='13px IBM Plex Mono';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(wp.name,p.cx+9,p.cy-7);
 }
 function drawPath(path){
   var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
@@ -674,9 +674,9 @@ function chBars(w){
   var h='';
   ['E','B','P','S'].forEach(function(ch){
     var v=(w&&w[ch])||0.25;
-    h+='<div class="chbr"><span style="font-size:10px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
+    h+='<div class="chbr"><span style="font-size:14px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
       '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
-      '<span style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';
+      '<span style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';
   });return h;
 }
 function showZD(id){
@@ -718,9 +718,9 @@ function showQuery(wx,wz){
   });
   document.getElementById('q-zones').textContent=active.length?active.join(', '):'No zones';
   var ph='';if(tw>0){['E','B','P','S'].forEach(function(ch){var v=combined[ch]/tw;ph+=
-    '<div class="chbr"><span style="font-size:10px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
+    '<div class="chbr"><span style="font-size:14px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
     '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
-    '<span style="font-size:9px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';});}
+    '<span style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';});}
   else ph='<span style="color:var(--dim)">No zone influence.</span>';
   document.getElementById('q-pressure').innerHTML=ph;
 }
@@ -783,14 +783,14 @@ function populatePathUI(){
 }
 function renderWPPicker(){
   document.getElementById('p-wp-pick').innerHTML=Object.keys(waypoints).map(function(n){
-    return '<div style="padding:2px 4px;cursor:pointer;font-size:10px;color:var(--cool)" onclick="addToPath(\''+n+'\')">'+n+'</div>';}).join('');
+    return '<div style="padding:2px 4px;cursor:pointer;font-size:14px;color:var(--cool)" onclick="addToPath(\''+n+'\')">'+n+'</div>';}).join('');
   renderPathSeq();
 }
 function addToPath(n){pathSeq.push(n);renderPathSeq();}
 function clearPathSeq(){pathSeq=[];renderPathSeq();}
 function renderPathSeq(){
   document.getElementById('p-seq').innerHTML=pathSeq.map(function(n,i){
-    return (i>0?'<span style="color:var(--dim);font-size:12px"> -&gt; </span>':'')+
+    return (i>0?'<span style="color:var(--dim);font-size:16px"> -&gt; </span>':'')+
       '<span class="pwp" onclick="pathSeq.splice('+i+',1);renderPathSeq()">'+n+'</span>';}).join('');
 }
 function createPath(){
@@ -891,7 +891,7 @@ function buildAX3D(a){
   s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
   s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
-  s+='<Text DEF="NameText_'+sn+'" string="'+qn+'"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<Text DEF="NameText_'+sn+'" string="&quot;'+qn+'&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterp(path){
@@ -932,9 +932,7 @@ function sendToLauncher(){
       if(res.status==='ok'){
         document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Reload launcher to view.</div>';
         toast('Sent to launcher. Reload launcher.');
-      } else {
-        toast('Error: '+(res.error||'unknown'),true);
-      }
+      } else { toast('Error: '+(res.error||'unknown'),true); }
     })
     .catch(function(e){toast('Send failed: '+e.message,true);})
     .finally(function(){btn.textContent='&#9654; Send';btn.disabled=false;});
@@ -948,27 +946,19 @@ function buildX3DString(){
   lines.push(xmlDecl().trim());
   lines.push('<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">');
   lines.push('<X3D profile="Immersive" version="4.0">');
-  lines.push('<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->');
-  lines.push('<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>');
+  lines.push('<head><meta name="title" content="'+xe(sn)+'"/></head>');
   lines.push('<Scene>');
   if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
   lines.push('<NavigationInfo headlight="true" type="EXAMINE ANY" visibilityLimit="300"/>');
-  lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>');
+  lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>');
   lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
-  lines.push('<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>');
   lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>');
-  lines.push('<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0"/>');
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
     lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>');});
   lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
   lines.push(buildGrid(w,d).trim());
   Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
   Object.values(placedAgents).forEach(function(a){lines.push(buildAX3D(a).trim());});
-  var an=Object.keys(placedAgents);
-  if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
-    var a=placedAgents[an[i]],b=placedAgents[an[j]];
-    lines.push('<Shape DEF="Ch_'+safeId(an[i])+'_'+safeId(an[j])+'"><Appearance><Material emissiveColor="0.4 0.45 0.65" transparency="0.65"/></Appearance>'
-      +'<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>');}}}
   if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterp(p).trim());});}
   if(iSc)lines.push(buildMS().trim());
   lines.push('</Scene>');
