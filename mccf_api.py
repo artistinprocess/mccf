@@ -140,6 +140,40 @@ def save_scene_xml():
         f.write(content)
     return jsonify({'status': 'ok', 'path': f'scenes/{filename}'})
 
+
+@app.route('/scenes', methods=['GET'])
+def list_scenes():
+    """
+    List scene XML files in scenes/ directory.
+    Returns filename, cultivars found, waypoint count.
+    """
+    import re as _re
+    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    if not os.path.isdir(scenes_dir):
+        return jsonify({'files': [], 'scenes_dir': scenes_dir})
+    files = []
+    for fname in sorted(os.listdir(scenes_dir)):
+        if not fname.endswith('.xml'):
+            continue
+        fpath = os.path.join(scenes_dir, fname)
+        size  = os.path.getsize(fpath)
+        cultivars = []
+        waypoint_count = 0
+        try:
+            with open(fpath, encoding='utf-8') as f:
+                raw = f.read(4000)
+            cultivars = _re.findall(r'cultivar="([^"]+)"', raw)
+            waypoint_count = len(_re.findall(r'<Waypoint ', raw))
+        except Exception:
+            pass
+        files.append({
+            'filename':       fname,
+            'size':           size,
+            'cultivars':      list(dict.fromkeys(cultivars)),
+            'waypoint_count': waypoint_count,
+        })
+    return jsonify({'files': files, 'count': len(files)})
+
 # ---------------------------------------------------------------------------
 # Global engine state
 # ---------------------------------------------------------------------------

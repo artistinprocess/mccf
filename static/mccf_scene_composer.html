@@ -127,6 +127,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('agents')">Agents</button>
     <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
     <button class="mtab" onclick="setMode('paths')">Paths</button>
+    <button class="mtab" onclick="setMode('run')">Run</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
   </div>
   <div class="api-row">
@@ -220,6 +221,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <label>Zone (optional)</label>
       <select id="wp-zone"><option value="">-- none --</option></select>
       <label>Dwell (s)</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5">
+      <label>Question (optional — sent to LLM at this waypoint)</label>
+      <textarea id="wp-question" rows="3" placeholder="What do you notice as you enter this space?"></textarea>
       <div class="btn-row">
         <button class="btn pri" onclick="confirmWP()">Place on Map</button>
         <button class="btn" onclick="cancelPlace()">Cancel</button>
@@ -241,6 +244,54 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <button class="btn" onclick="clearPathSeq()">Clear</button>
       </div>
     </div>
+  </div>
+  <div id="mode-run" style="display:none">
+    <div class="sh">Run Scene Arc</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
+      <label>Path</label>
+      <select id="run-path"></select>
+      <label>LLM Adapter</label>
+      <select id="run-adapter">
+        <option value="ollama">ollama (local)</option>
+        <option value="stub">stub (no LLM)</option>
+        <option value="anthropic">anthropic</option>
+        <option value="openai">openai</option>
+      </select>
+      <label>API Key (if needed)</label>
+      <input id="run-apikey" type="text" placeholder="sk-... or leave blank for ollama">
+      <label>Pace (s per waypoint)</label>
+      <input id="run-pace" type="number" value="4" min="1" max="30" step="0.5">
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Run</button>
+        <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
+        <button class="btn" onclick="resetSceneArc()">&#8635; Reset</button>
+      </div>
+    </div>
+    <div class="sh">Progress</div>
+    <div id="run-progress" style="font-size:14px;color:var(--dim);margin-bottom:6px">Not running.</div>
+    <div id="run-step-detail" style="display:none">
+      <div class="dsect">
+        <div class="sh" style="margin:0 0 4px">Current Waypoint</div>
+        <div id="run-wp-name" style="color:var(--cool);font-family:var(--display);font-size:16px;font-weight:700"></div>
+        <div id="run-wp-pos" style="color:var(--accent);font-size:13px;margin-top:2px"></div>
+      </div>
+      <div class="dsect">
+        <div class="sh" style="margin:0 0 4px">Question</div>
+        <div id="run-question" style="color:var(--warm);font-size:13px;font-style:italic"></div>
+      </div>
+      <div class="dsect">
+        <div class="sh" style="margin:0 0 4px">Response</div>
+        <div id="run-response" style="color:var(--text);font-size:13px;line-height:1.5;max-height:100px;overflow-y:auto"></div>
+      </div>
+      <div id="run-channels" style="display:flex;gap:8px;margin-top:6px;font-size:13px">
+        <span style="color:var(--E)">E —</span>
+        <span style="color:var(--B)">B —</span>
+        <span style="color:var(--P)">P —</span>
+        <span style="color:var(--S)">S —</span>
+      </div>
+    </div>
+    <div class="sh" style="margin-top:10px">Arc Export</div>
+    <div id="run-log" style="font-size:13px;color:var(--dim)">Run a scene to generate arc.</div>
   </div>
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
@@ -301,6 +352,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="wpd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:18px;color:var(--dim)"></div></div>
+    <div class="dsect" id="wpd-q-sect" style="display:none"><div class="sh" style="margin:0 0 4px">Question</div><div id="wpd-question" style="font-size:13px;color:var(--warm);font-style:italic"></div></div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button></div>
   </div>
   <div id="detail-arc">
@@ -452,12 +504,13 @@ function pollField(){
 }
 function setMode(m){
   mode=m;
-  var ms=['scene','zones','agents','waypoints','paths','export'];
+  var ms=['scene','zones','agents','waypoints','paths','run','export'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
   if(m==='paths')populatePathUI();
   if(m==='waypoints')populateWPZones();
   if(m==='agents'){renderAgentRoster();renderPlaced();}
+  if(m==='run')populateRunUI();
   drawScene();
 }
 function setTool(t){
@@ -706,6 +759,10 @@ function showWD(name){
   document.getElementById('wpd-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   var ov=[];Object.keys(zones).forEach(function(id){var zp=zones[id].location||zones[id].position||[0,0,0];if(Math.hypot(pos[0]-zp[0],pos[2]-zp[2])<=(zones[id].radius||4))ov.push(zones[id].name||id);});
   document.getElementById('wpd-zones').textContent=ov.length?ov.join(', '):'No zones here';
+  var qSect=document.getElementById('wpd-q-sect');
+  var qEl=document.getElementById('wpd-question');
+  if(wp.question){qSect.style.display='block';qEl.textContent=wp.question;}
+  else{qSect.style.display='none';}
 }
 function showQuery(wx,wz){
   document.getElementById('detail-arc').style.display='none';document.getElementById('detail-query').style.display='block';
@@ -768,10 +825,14 @@ function confirmWP(){
   if(!pendingPos){toast('Click map first',true);return;}
   var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
   var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
+  var question=document.getElementById('wp-question').value.trim();
   if(!name){toast('Name required',true);return;}
-  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice()};
-  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice()}).catch(function(){});
-  placing=null;pendingPos=null;document.getElementById('wp-form').style.display='none';hideHint();renderAll();toast('Waypoint: '+name);
+  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice(),question:question};
+  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:question}).catch(function(){});
+  placing=null;pendingPos=null;
+  document.getElementById('wp-form').style.display='none';
+  document.getElementById('wp-question').value='';
+  hideHint();renderAll();toast('Waypoint: '+name);
 }
 function populateWPZones(){
   var sel=document.getElementById('wp-zone');
@@ -844,19 +905,9 @@ function exportX3D(){
   if(iSc)x+=buildMS();
   x+='</Scene>\n</X3D>\n';
   dlFile(sn+'.x3d',x,'model/x3d+xml');
-  // Also push to server static/ so loader can serve it
-  fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
-    .then(function(r){return r.json();})
-    .then(function(res){
-      document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
-        '<div>Saved to static/ — reload loader to view.</div>'+
-        '<div>Zones: '+Object.keys(zones).length+'  Agents: '+Object.keys(placedAgents).length+'</div>';
-    })
-    .catch(function(){
-      document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Downloaded: '+sn+'.x3d</div>'+
-        '<div style="color:var(--danger)">Server save failed — copy file to static/ manually.</div>';
-    });
-  toast('X3D exported + sent to server');
+  document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
+    '<div>Zones: '+Object.keys(zones).length+'  Agents: '+Object.keys(placedAgents).length+'</div>';
+  toast('X3D exported');
 }
 function buildAP(){
   var s='<ProtoDeclare name="MCCFAgent"><ProtoInterface>\n';
@@ -986,33 +1037,23 @@ function exportZoneXML(){
     x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
     x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n</Zone>\n';
   });
-  x+='</ZoneSet>\n';
-  var filename=sn+'_zones.xml';
-  fetch(API+'/scene/save/zones',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({filename:filename,content:x})})
-    .then(function(r){return r.json();})
-    .then(function(res){
-      document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Zone XML: zones/'+filename+'</div>';
-      toast('Zone XML saved to zones/');
-    })
-    .catch(function(){
-      // Server endpoint not yet deployed — fall back to download
-      dlFile(filename,x,'application/xml');
-      toast('Zone XML downloaded (deploy /scene/save/zones for server save)');
-    });
+  x+='</ZoneSet>\n';dlFile(sn+'_zones.xml',x,'application/xml');toast('Zone XML exported');
 }
 function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
   Object.values(placedAgents).forEach(function(a){
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice=""><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';});
-  // Embed waypoints with scene positions so arc playback can reference them
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice=""><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
+  });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
     Object.values(waypoints).forEach(function(wp){
       var pos=wp.position||[0,0,0];
-      x+='<Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+'" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+'"/>\n';
+      x+='  <Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+
+        '" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+'"';
+      if(wp.question)x+='>\n    <Question>'+xe(wp.question)+'</Question>\n  </Waypoint>\n';
+      else x+='/>\n';
     });
     x+='</Waypoints>\n';
   }
@@ -1027,9 +1068,187 @@ function exportSceneXML(){
     })
     .catch(function(){
       dlFile(filename,x,'application/xml');
-      toast('Scene XML downloaded (deploy /scene/save/scene for server save)');
+      toast('Scene XML downloaded (server save failed)');
     });
 }
+
+// ─────────────────────────────────────────────
+// Run Scene Arc
+// ─────────────────────────────────────────────
+var _sceneArcRunning=false, _sceneArcStep=0, _sceneArcRows=[], _sceneArcPath=null, _sceneArcTimer=null;
+
+function populateRunUI(){
+  var sel=document.getElementById('run-path');
+  sel.innerHTML=Object.keys(paths).length
+    ? Object.keys(paths).map(function(n){return '<option value="'+n+'">'+n+' ('+paths[n].agent+')</option>';}).join('')
+    : '<option value="">-- no paths defined --</option>';
+}
+
+function runSceneArc(){
+  var pname=document.getElementById('run-path').value;
+  if(!pname||!paths[pname]){toast('Select a path first',true);return;}
+  if(_sceneArcRunning){toast('Already running',true);return;}
+  _sceneArcPath=paths[pname];
+  _sceneArcRunning=true;_sceneArcStep=0;_sceneArcRows=[];
+  document.getElementById('run-btn').disabled=true;
+  document.getElementById('run-step-detail').style.display='block';
+  document.getElementById('run-log').textContent='Running...';
+  _sceneArcAdvance();
+}
+
+function stopSceneArc(){
+  _sceneArcRunning=false;
+  if(_sceneArcTimer){clearTimeout(_sceneArcTimer);_sceneArcTimer=null;}
+  document.getElementById('run-btn').disabled=false;
+  document.getElementById('run-progress').textContent='Stopped at step '+_sceneArcStep+'.';
+  if(_sceneArcRows.length>0)_saveSceneArc();
+}
+
+function resetSceneArc(){
+  stopSceneArc();
+  _sceneArcStep=0;_sceneArcRows=[];_sceneArcPath=null;
+  document.getElementById('run-progress').textContent='Not running.';
+  document.getElementById('run-step-detail').style.display='none';
+  document.getElementById('run-log').textContent='Run a scene to generate arc.';
+}
+
+async function _sceneArcAdvance(){
+  if(!_sceneArcRunning)return;
+  var wps=(_sceneArcPath.waypoints||[]);
+  if(_sceneArcStep>=wps.length){
+    _sceneArcRunning=false;
+    document.getElementById('run-btn').disabled=false;
+    document.getElementById('run-progress').textContent='Complete — '+_sceneArcRows.length+' waypoints recorded.';
+    _saveSceneArc();
+    return;
+  }
+  var wpName=wps[_sceneArcStep],wp=waypoints[wpName];
+  if(!wp){_sceneArcStep++;_sceneArcAdvance();return;}
+  var pos=wp.position||[0,0,0];
+  var cultivar=_sceneArcPath.agent;
+  var pace=parseFloat(document.getElementById('run-pace').value)||4;
+  var total=wps.length;
+
+  document.getElementById('run-progress').textContent=
+    'Step '+(_sceneArcStep+1)+' / '+total+' — '+wpName;
+  document.getElementById('run-wp-name').textContent=wpName+(wp.label?' — '+wp.label:'');
+  document.getElementById('run-wp-pos').textContent=
+    'X='+pos[0].toFixed(1)+' Z='+pos[2].toFixed(1)+(wp.zone?' ['+wp.zone+']':'');
+  document.getElementById('run-question').textContent=wp.question||'(no question)';
+  document.getElementById('run-response').textContent='…';
+
+  // Push avatar position via BroadcastChannel so loader moves avatar NOW
+  try{
+    var bc=new BroadcastChannel('mccf_arc');
+    bc.postMessage({type:'mccf_arc_cv',data:{
+      cultivar:cultivar,step:_sceneArcStep+1,
+      cv:{E:0.35,B:0.25,P:0.25,S:0.15},coherence:0.5
+    }});
+    bc.close();
+  }catch(e){}
+
+  var response='',E=0.35,B=0.25,P=0.25,S=0.25,coherence=0.5;
+
+  if(wp.question){
+    try{
+      var adapter=document.getElementById('run-adapter').value;
+      var apikey=document.getElementById('run-apikey').value.trim();
+      // Configure voice/LLM adapter
+      await apiPost('/voice/configure',{
+        adapter_id:adapter, api_key:apikey||'',
+        persona:{name:cultivar,role:'agent',description:''},
+        params:{max_tokens:300,temperature:0.72},
+        clear_history:(_sceneArcStep===0)
+      });
+      // Get LLM response via voice/speak (SSE stream — same as constitutional navigator)
+      var speakResp = await fetch(API+'/voice/speak',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          text:wp.question, agent_name:cultivar,
+          position:[pos[0],0,pos[2]], record_to_field:true
+        })
+      });
+      var reader=speakResp.body.getReader(), dec=new TextDecoder(), buf='', channels=null;
+      while(true){
+        var _r=await reader.read(); if(_r.done)break;
+        buf+=dec.decode(_r.value,{stream:true});
+        var lines=buf.split('\n'); buf=lines.pop();
+        for(var li=0;li<lines.length;li++){
+          var line=lines[li]; if(!line.startsWith('data: '))continue;
+          try{
+            var evt=JSON.parse(line.slice(6));
+            if(evt.type==='token'){
+              response+=evt.content;
+              document.getElementById('run-response').textContent=response;
+            } else if(evt.type==='affect'){
+              channels=evt.params;
+            } else if(evt.type==='done'){
+              document.getElementById('run-response').textContent=response;
+            }
+          }catch(pe){}
+        }
+      }
+      // Record arc step with full response to persist
+      var recResp2=await apiPost('/arc/record',{
+        cultivar:cultivar, step:_sceneArcStep+1,
+        waypoint:wpName, response:response
+      });
+      // Prefer affect channels from stream; fall back to arc/record cv
+      var cv=channels||( recResp2.cv ? recResp2.cv : null);
+      E=cv?( cv.E||0.35):0.35;
+      B=cv?(cv.B||0.25):0.25;
+      P=cv?(cv.P||0.25):0.25;
+      S=cv?(cv.S||0.25):0.25;
+      coherence=recResp2.coherence||0.5;
+    }catch(e){response='[LLM error: '+e.message+']';}
+  }
+
+  document.getElementById('run-response').textContent=response||'(no question — movement only)';
+  document.getElementById('run-channels').innerHTML=
+    '<span style="color:var(--E)">E '+E.toFixed(2)+'</span>'+
+    '<span style="color:var(--B)">B '+B.toFixed(2)+'</span>'+
+    '<span style="color:var(--P)">P '+P.toFixed(2)+'</span>'+
+    '<span style="color:var(--S)">S '+S.toFixed(2)+'</span>';
+
+  // Broadcast updated channel values with actual position for loader
+  try{
+    var bc2=new BroadcastChannel('mccf_arc');
+    bc2.postMessage({type:'mccf_arc_cv',data:{
+      cultivar:cultivar,step:_sceneArcStep+1,
+      cv:{E:E,B:B,P:P,S:S},coherence:coherence,
+      pos_x:pos[0],pos_y:0,pos_z:pos[2]
+    }});
+    bc2.close();
+  }catch(e){}
+
+  _sceneArcRows.push({
+    step:_sceneArcStep+1,waypoint:wp.label||wpName,
+    E:E.toFixed(4),B:B.toFixed(4),P:P.toFixed(4),S:S.toFixed(4),
+    mode:'scene',coherence:coherence.toFixed(4),
+    uncertainty:'0.5',valence:'0.0',reward:'0.0',
+    pos_x:pos[0].toFixed(2),pos_y:'0.00',pos_z:pos[2].toFixed(2),
+    question:wp.question||'',response:response
+  });
+
+  _sceneArcStep++;
+  _sceneArcTimer=setTimeout(_sceneArcAdvance, pace*1000);
+}
+
+function _saveSceneArc(){
+  if(!_sceneArcRows.length||!_sceneArcPath)return;
+  var cultivar=_sceneArcPath.agent;
+  var ts=new Date().toISOString().slice(0,19);
+  apiPost('/arc/export',{cultivar:cultivar,timestamp:ts,rows:_sceneArcRows})
+    .then(function(res){
+      document.getElementById('run-log').innerHTML=
+        '<div style="color:var(--accent)">Saved: '+res.filename+'</div>'+
+        '<div style="color:var(--dim)">'+_sceneArcRows.length+' waypoints — open in loader Playback.</div>';
+      toast('Scene arc saved: '+res.filename);
+    })
+    .catch(function(){toast('Arc save failed',true);});
+}
+
+
 function dlFile(fn,content,mime){
   var b=new Blob([content],{type:mime}),url=URL.createObjectURL(b),a=document.createElement('a');
   a.href=url;a.download=fn.split('/').pop();document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
