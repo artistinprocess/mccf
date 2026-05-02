@@ -844,9 +844,19 @@ function exportX3D(){
   if(iSc)x+=buildMS();
   x+='</Scene>\n</X3D>\n';
   dlFile(sn+'.x3d',x,'model/x3d+xml');
-  document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
-    '<div>Zones: '+Object.keys(zones).length+'  Agents: '+Object.keys(placedAgents).length+'</div>';
-  toast('X3D exported');
+  // Also push to server static/ so loader can serve it
+  fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
+        '<div>Saved to static/ — reload loader to view.</div>'+
+        '<div>Zones: '+Object.keys(zones).length+'  Agents: '+Object.keys(placedAgents).length+'</div>';
+    })
+    .catch(function(){
+      document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Downloaded: '+sn+'.x3d</div>'+
+        '<div style="color:var(--danger)">Server save failed — copy file to static/ manually.</div>';
+    });
+  toast('X3D exported + sent to server');
 }
 function buildAP(){
   var s='<ProtoDeclare name="MCCFAgent"><ProtoInterface>\n';
@@ -976,7 +986,20 @@ function exportZoneXML(){
     x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
     x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n</Zone>\n';
   });
-  x+='</ZoneSet>\n';dlFile(sn+'_zones.xml',x,'application/xml');toast('Zone XML exported');
+  x+='</ZoneSet>\n';
+  var filename=sn+'_zones.xml';
+  fetch(API+'/scene/save/zones',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filename:filename,content:x})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Zone XML: zones/'+filename+'</div>';
+      toast('Zone XML saved to zones/');
+    })
+    .catch(function(){
+      // Server endpoint not yet deployed — fall back to download
+      dlFile(filename,x,'application/xml');
+      toast('Zone XML downloaded (deploy /scene/save/zones for server save)');
+    });
 }
 function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
@@ -984,7 +1007,28 @@ function exportSceneXML(){
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
   Object.values(placedAgents).forEach(function(a){
     x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice=""><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';});
-  x+='</Scene>\n';dlFile(sn+'_scene.xml',x,'application/xml');toast('Scene XML exported');
+  // Embed waypoints with scene positions so arc playback can reference them
+  if(Object.keys(waypoints).length>0){
+    x+='<Waypoints>\n';
+    Object.values(waypoints).forEach(function(wp){
+      var pos=wp.position||[0,0,0];
+      x+='<Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+'" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+'"/>\n';
+    });
+    x+='</Waypoints>\n';
+  }
+  x+='</Scene>\n';
+  var filename=sn+'_scene.xml';
+  fetch(API+'/scene/save/scene',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filename:filename,content:x})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Scene XML: scenes/'+filename+'</div>';
+      toast('Scene XML saved to scenes/');
+    })
+    .catch(function(){
+      dlFile(filename,x,'application/xml');
+      toast('Scene XML downloaded (deploy /scene/save/scene for server save)');
+    });
 }
 function dlFile(fn,content,mime){
   var b=new Blob([content],{type:mime}),url=URL.createObjectURL(b),a=document.createElement('a');

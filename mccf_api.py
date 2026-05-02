@@ -80,6 +80,66 @@ def serve_x3d_scene():
     return send_from_directory(static_dir, 'mccf_scene.x3d',
                                mimetype='model/x3d+xml')
 
+
+@app.route('/scene/x3d/upload', methods=['POST'])
+def upload_x3d_scene():
+    """
+    Accept X3D content from Scene Composer and write to static/mccf_scene.x3d.
+    Called by exportX3D() in mccf_scene_composer.html.
+    """
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    os.makedirs(static_dir, exist_ok=True)
+    filepath = os.path.join(static_dir, 'mccf_scene.x3d')
+    content = request.get_data(as_text=True)
+    if not content:
+        return jsonify({'status': 'error', 'error': 'no content'}), 400
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'ok', 'output': 'static/mccf_scene.x3d'})
+
+
+@app.route('/scene/save/zones', methods=['POST'])
+def save_zone_xml():
+    """
+    Write zone XML from Scene Composer to zones/<filename>.
+    Called by exportZoneXML() in mccf_scene_composer.html.
+    Body: { filename: "garden_001_zones.xml", content: "<ZoneSet>...</ZoneSet>" }
+    """
+    data = request.get_json() or {}
+    filename = data.get('filename', '').strip()
+    content  = data.get('content', '').strip()
+    if not filename or not content:
+        return jsonify({'status': 'error', 'error': 'filename and content required'}), 400
+    # Sanitise — filename only, no path traversal
+    filename = os.path.basename(filename)
+    zones_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zones')
+    os.makedirs(zones_dir, exist_ok=True)
+    filepath = os.path.join(zones_dir, filename)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'ok', 'path': f'zones/{filename}'})
+
+
+@app.route('/scene/save/scene', methods=['POST'])
+def save_scene_xml():
+    """
+    Write scene XML from Scene Composer to scenes/<filename>.
+    Called by exportSceneXML() in mccf_scene_composer.html.
+    Body: { filename: "garden_001_scene.xml", content: "<Scene>...</Scene>" }
+    """
+    data = request.get_json() or {}
+    filename = data.get('filename', '').strip()
+    content  = data.get('content', '').strip()
+    if not filename or not content:
+        return jsonify({'status': 'error', 'error': 'filename and content required'}), 400
+    filename = os.path.basename(filename)
+    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    os.makedirs(scenes_dir, exist_ok=True)
+    filepath = os.path.join(scenes_dir, filename)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'ok', 'path': f'scenes/{filename}'})
+
 # ---------------------------------------------------------------------------
 # Global engine state
 # ---------------------------------------------------------------------------
