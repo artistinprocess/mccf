@@ -64,14 +64,14 @@ button.active { background: #4af0a8; color: #111; }
 }
 #pb-step-info {
   margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
-  font-size:11px; color:#7a9090; min-height:40px;
+  font-size:13px; color:#7a9090; min-height:40px;
 }
 #pb-qr {
   margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
-  font-size:11px; display:none;
+  font-size:13px; display:none;
 }
-#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; }
-#pb-response  { color:#c0d8e8; line-height:1.4; }
+#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; }
+#pb-response  { color:#c0d8e8; line-height:1.5; font-size:13px; max-height:120px; overflow-y:auto; }
 #pb-channels  { display:flex; gap:6px; margin-top:4px; }
 #pb-channels span { font-size:10px; }
 .pc-E { color:#f07060; } .pc-B { color:#60a8f0; }
@@ -110,6 +110,14 @@ button.active { background: #4af0a8; color: #111; }
     <label style="font-size:11px;color:#6a8090;white-space:nowrap;margin:0;">
       <input type="checkbox" id="pb-loop" style="width:auto;margin:0 3px 0 0;"/>loop
     </label>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+    <label style="font-size:11px;color:#6a8090;white-space:nowrap;margin:0;">
+      <input type="checkbox" id="pb-voice" style="width:auto;margin:0 3px 0 0;" onchange="pbVoiceChanged()"/>voice
+    </label>
+    <select id="pb-voice-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:2px 4px;font-size:11px;display:none;">
+      <option value="">— loading voices —</option>
+    </select>
   </div>
   <div class="pb-row">
     <button id="pb-play-btn"  onclick="pbPlay()"  style="border-color:#4af0a8;color:#4af0a8;">&#9654; Play</button>
@@ -629,6 +637,75 @@ async function pbPollState() {
   } catch(e) {}
 }
 
+// ── Voice ──
+var _pbVoices = [];
+var _pbLastSpoken = '';
+
+function pbVoiceChanged() {
+  var on = document.getElementById('pb-voice').checked;
+  document.getElementById('pb-voice-select').style.display = on ? 'block' : 'none';
+  if (on) pbLoadVoices();
+}
+
+function pbLoadVoices() {
+  if (!window.speechSynthesis) return;
+  var sel = document.getElementById('pb-voice-select');
+  function populate() {
+    _pbVoices = speechSynthesis.getVoices().filter(function(v){
+      return v.lang.startsWith('en');
+    });
+    sel.innerHTML = _pbVoices.map(function(v,i){
+      return '<option value="'+i+'">'+v.name+'</option>';
+    }).join('');
+  }
+  populate();
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = populate;
+  }
+}
+
+function pbSpeak(text) {
+  if (!document.getElementById('pb-voice').checked) return;
+  if (!text || text === _pbLastSpoken) return;
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  var utt = new SpeechSynthesisUtterance(text);
+  var idx = parseInt(document.getElementById('pb-voice-select').value) || 0;
+  if (_pbVoices[idx]) utt.voice = _pbVoices[idx];
+  utt.rate = 0.95;
+  speechSynthesis.speak(utt);
+  _pbLastSpoken = text;
+}
+
+// ── V3-11: Position push ──
+function pbPushPosition(wp) {
+  if (!wp || wp.pos_x === undefined) return;
+  var x = parseFloat(wp.pos_x) || 0;
+  var y = parseFloat(wp.pos_y) || 0;
+  var z = parseFloat(wp.pos_z) || 0;
+  if (x === 0 && y === 0 && z === 0) return;
+  // Update agent position via API so field reflects it
+  var cultivar = wp.cultivar;
+  if (!cultivar) return;
+  fetch(API + '/agent', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name: cultivar, position: [x, y, z]})
+  }).catch(function(){});
+  // Also attempt direct SAI update if X3D scene is loaded
+  try {
+    var X3D = document.querySelector('x3d-canvas') ||
+              document.querySelector('X3D');
+    if (!X3D) return;
+    var safeName = cultivar.replace(/[^A-Za-z0-9]/g,'');
+    var avatarNode = X3D.runtime && X3D.runtime.getNode &&
+                     X3D.runtime.getNode('Avatar_' + safeName);
+    if (avatarNode) {
+      avatarNode.position = new X3D.SFVec3f(x, y, z);
+    }
+  } catch(e) {}
+}
+
 function pbUpdateDisplay(state) {
   if (!state || state.status === 'idle') {
     document.getElementById('pb-step-info').textContent = 'Idle.';
@@ -660,7 +737,7 @@ function pbUpdateDisplay(state) {
       '<span class="pc-S">S ' + (wp.S||0).toFixed(2) + '</span>';
   }
 
-  // Q&A
+  // Q&A display
   var qr = document.getElementById('pb-qr');
   if (wp.question || wp.response) {
     qr.style.display = 'block';
@@ -668,9 +745,14 @@ function pbUpdateDisplay(state) {
       wp.question ? 'Q: ' + wp.question : '';
     document.getElementById('pb-response').textContent =
       wp.response ? wp.response : '';
+    // Speak response if voice enabled
+    if (wp.response) pbSpeak(wp.response);
   } else {
     qr.style.display = 'none';
   }
+
+  // V3-11: Push position to avatar
+  pbPushPosition(wp);
 }
 
 // Load files when page is ready

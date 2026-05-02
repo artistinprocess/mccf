@@ -111,6 +111,9 @@ class ArcWaypoint:
     coherence: float = 0.0
     drift:    str = ""
     lambda_val: str = ""
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    pos_z: float = 0.0
 
     def channel_dict(self) -> dict:
         return {"E": self.E, "B": self.B, "P": self.P, "S": self.S}
@@ -130,6 +133,9 @@ class ArcWaypoint:
             "coherence": self.coherence,
             "drift":     self.drift,
             "lambda":    self.lambda_val,
+            "pos_x":     self.pos_x,
+            "pos_y":     self.pos_y,
+            "pos_z":     self.pos_z,
         }
 
 
@@ -208,6 +214,9 @@ def parse_arc_file(filepath: str) -> dict:
             r_el = wp_el.find("Response")
             wp.question = q_el.text.strip() if (q_el is not None and q_el.text) else ""
             wp.response = r_el.text.strip() if (r_el is not None and r_el.text) else ""
+            wp.pos_x = float(wp_el.get("pos_x", 0.0))
+            wp.pos_y = float(wp_el.get("pos_y", 0.0))
+            wp.pos_z = float(wp_el.get("pos_z", 0.0))
 
             waypoints.append(wp)
             all_waypoints.append(wp)
