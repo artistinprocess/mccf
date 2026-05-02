@@ -485,8 +485,17 @@ function applyArcCV(data) {
     // v3.4: late-bound suffix — matches composer safeId exactly
     const suffix = cultivar.replace(/[^A-Za-z0-9_]/g, '_');
 
-    // Translation removed from applyArcCV (v3.4).
-    // Position is driven exclusively by pbPushPosition via arc XML pos_x/pos_z.
+    // v3.5: if broadcast includes scene-space position, drive avatar directly.
+    // This is the Run Scene path — positions come from composer waypoints.
+    if (data.pos_x !== undefined && data.pos_z !== undefined) {
+      const avatarNode = scene.getNamedNode('Avatar_' + suffix);
+      if (avatarNode) {
+        const x = parseFloat(data.pos_x) || 0;
+        const z = parseFloat(data.pos_z) || 0;
+        avatarNode.translation = new X3D.SFVec3f(x, 0, z);
+      }
+    }
+
     // Set holdoff so hothouse polling does not overwrite transparency.
     window._arcCVTimestamp = Date.now();
 
