@@ -127,7 +127,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('agents')">Agents</button>
     <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
     <button class="mtab" onclick="setMode('paths')">Paths</button>
-    <button class="mtab" onclick="setMode('run')">Run</button>
+    <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
   </div>
   <div class="api-row">
@@ -207,6 +207,11 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="sh">Agent Roster (from Character Editor)</div>
     <div id="agent-roster"><div style="color:var(--dim);font-size:18px">Connect to API to load agents.</div></div>
     <div style="margin-top:8px"><button class="btn full" onclick="loadAgents()">Refresh from API</button></div>
+    <div class="sh" style="margin-top:14px">Agent Voice (for arc playback)</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Assigned when agent is placed. Stored in scene XML.</div>
+    <select id="agent-voice-select" style="width:100%;margin-bottom:6px">
+      <option value="">(default voice)</option>
+    </select>
     <div class="sh" style="margin-top:14px">Placed Agents</div>
     <div id="placed-list"><div style="color:var(--dim);font-size:18px">No agents placed.</div></div>
   </div>
@@ -221,9 +226,19 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <label>Zone (optional)</label>
       <select id="wp-zone"><option value="">-- none --</option></select>
       <label>Dwell (s)</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5">
-      <label>Question (optional — sent to LLM at this waypoint)</label>
-      <textarea id="wp-question" rows="3" placeholder="What do you notice as you enter this space?"></textarea>
-      <div class="btn-row">
+      <div class="sh" style="margin-top:10px">Dialogue Lines</div>
+      <div style="display:flex;gap:4px;margin-bottom:3px;font-size:11px;color:var(--dim)">
+        <div style="width:84px;min-width:84px">Type</div>
+        <div style="width:110px;min-width:110px">Speaker (agent name)</div>
+        <div style="flex:1">Question / Response text</div>
+        <div style="width:24px"></div>
+      </div>
+      <div id="wp-qa-container"></div>
+      <div style="display:flex;gap:6px;margin-top:5px">
+        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Question')">+ Question</button>
+        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Response')">+ Response</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
         <button class="btn pri" onclick="confirmWP()">Place on Map</button>
         <button class="btn" onclick="cancelPlace()">Cancel</button>
       </div>
@@ -246,7 +261,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
   </div>
   <div id="mode-run" style="display:none">
-    <div class="sh">Run Scene Arc</div>
+    <div class="sh">Record Scene Arc</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <label>Path</label>
       <select id="run-path"></select>
@@ -262,7 +277,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <label>Pace (s per waypoint)</label>
       <input id="run-pace" type="number" value="4" min="1" max="30" step="0.5">
       <div class="btn-row" style="margin-top:8px">
-        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Run</button>
+        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Scene Arc</button>
         <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
         <button class="btn" onclick="resetSceneArc()">&#8635; Reset</button>
       </div>
@@ -411,6 +426,91 @@ var ZONE_PRESETS = {
 var AGENT_COLORS = ['#60a8f0','#4af0a8','#f06060','#f0c060','#a060f0','#60d0f0','#f080a0','#80f0a0'];
 var colorIdx = 0, colorMap = {};
 function agentColor(n){if(!colorMap[n])colorMap[n]=AGENT_COLORS[colorIdx++%AGENT_COLORS.length];return colorMap[n];}
+
+// ─────────────────────────────────────────────
+// Voice select — Web Speech API population
+// ─────────────────────────────────────────────
+function populateVoiceSelect() {
+  if (!window.speechSynthesis) return;
+  var sel = document.getElementById('agent-voice-select');
+  if (!sel) return;
+  var prev = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  speechSynthesis.getVoices().filter(function(v){ return v.lang.startsWith('en'); }).forEach(function(v) {
+    var opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name + ' (' + v.lang + ')';
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.onvoiceschanged = populateVoiceSelect;
+  setTimeout(populateVoiceSelect, 500);
+}
+
+// ─────────────────────────────────────────────
+// Multi-line Q/A for waypoints (Items 5 & 6)
+// ─────────────────────────────────────────────
+var _wpQALines = [];  // [{type:'Question'|'Response', speaker:'', text:''}]
+
+function addWPQALine(type) {
+  syncWPQALines();  // preserve any typed text before re-render
+  _wpQALines.push({type:type, speaker:'', text:''});
+  renderWPQALines();
+}
+
+function removeWPQALine(i) {
+  syncWPQALines();  // preserve typed text before splice
+  _wpQALines.splice(i, 1);
+  renderWPQALines();
+}
+
+function renderWPQALines() {
+  var c = document.getElementById('wp-qa-container');
+  if (!c) return;
+  c.innerHTML = '';
+  _wpQALines.forEach(function(line, i) {
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:flex-start;overflow:hidden';
+    // Build elements individually so textarea.value is set as property, not innerHTML
+    var sel = document.createElement('select');
+    sel.dataset.i = i; sel.dataset.f = 'type';
+    sel.style.cssText = 'width:84px;min-width:84px;max-width:84px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-family:var(--mono);font-size:12px';
+    ['Question','Response'].forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.textContent = t;
+      if (line.type === t) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    var inp = document.createElement('input');
+    inp.type = 'text'; inp.dataset.i = i; inp.dataset.f = 'speaker';
+    inp.placeholder = 'Speaker'; inp.value = line.speaker;
+    inp.style.cssText = 'width:110px;min-width:110px;max-width:110px;padding:3px 5px;font-size:12px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono)';
+    var ta = document.createElement('textarea');
+    ta.dataset.i = i; ta.dataset.f = 'text';
+    ta.placeholder = 'Text…';
+    // width:auto overrides global textarea{width:100%} rule; min-width:0 allows flex shrink
+    ta.style.cssText = 'flex:1;width:auto;min-width:0;min-height:42px;font-size:12px;padding:3px 5px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);resize:vertical';
+    ta.value = line.text;  // .value not innerHTML — no escaping
+    var btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.style.cssText = 'padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--dim);cursor:pointer;font-size:13px';
+    btn.onclick = (function(idx){ return function(){ removeWPQALine(idx); }; })(i);
+    div.appendChild(sel); div.appendChild(inp); div.appendChild(ta); div.appendChild(btn);
+    c.appendChild(div);
+  });
+}
+
+function syncWPQALines() {
+  var c = document.getElementById('wp-qa-container');
+  if (!c) return;
+  c.querySelectorAll('[data-i]').forEach(function(el) {
+    var i = parseInt(el.dataset.i), f = el.dataset.f;
+    if (!_wpQALines[i]) return;
+    _wpQALines[i][f] = el.tagName === 'SELECT' ? el.value : el.value.trim();
+  });
+}
 
 window.addEventListener('load',function(){
   canvas=document.getElementById('scene-canvas');ctx=canvas.getContext('2d');
@@ -746,7 +846,7 @@ function showAD(name){
   document.getElementById('detail-agent').style.display='block';
   document.getElementById('ad-name').textContent=name;
   document.getElementById('ad-name').style.color=a.color||'#aab0be';
-  document.getElementById('ad-disp').textContent=a.disposition||'';
+  document.getElementById('ad-disp').textContent=(a.disposition||'')+(a.voice?' · voice: '+a.voice:'');
   var pos=a.position||[0,0,0];
   document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
@@ -761,8 +861,15 @@ function showWD(name){
   document.getElementById('wpd-zones').textContent=ov.length?ov.join(', '):'No zones here';
   var qSect=document.getElementById('wpd-q-sect');
   var qEl=document.getElementById('wpd-question');
-  if(wp.question){qSect.style.display='block';qEl.textContent=wp.question;}
-  else{qSect.style.display='none';}
+  var lines=wp.qaLines||(wp.question?[{type:'Question',speaker:'',text:wp.question}]:[]);
+  if(lines.length){
+    qSect.style.display='block';
+    qEl.innerHTML=lines.map(function(l){
+      return '<div style="margin-bottom:3px"><span style="color:var(--'+(l.type==='Question'?'warm':'cool')+');font-size:11px">'+(l.type)+
+        (l.speaker?' <b>'+xe(l.speaker)+'</b>':'')+': </span>'+
+        '<span style="font-size:12px">'+xe(l.text)+'</span></div>';
+    }).join('');
+  } else { qSect.style.display='none'; }
 }
 function showQuery(wx,wz){
   document.getElementById('detail-arc').style.display='none';document.getElementById('detail-query').style.display='block';
@@ -789,7 +896,9 @@ function startPlace(t){
 function cancelPlace(){
   placing=null;placingAgent=null;pendingPos=null;
   document.getElementById('zone-form').style.display='none';
-  document.getElementById('wp-form').style.display='none';hideHint();
+  document.getElementById('wp-form').style.display='none';
+  _wpQALines=[];renderWPQALines();
+  hideHint();
 }
 function confirmZone(){
   if(!pendingPos){toast('Click map first',true);return;}
@@ -818,20 +927,26 @@ function startPlaceAgent(name){
 }
 function placeAgentAt(name,wx,wz){
   var a=agents[name];if(!a)return;
-  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||''};
+  var voiceSel=document.getElementById('agent-voice-select');
+  var voice=voiceSel?voiceSel.value:'';
+  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice};
   placing=null;placingAgent=null;pendingPos=null;hideHint();renderAll();toast(name+' placed ('+wx.toFixed(1)+',0,'+wz.toFixed(1)+')');
 }
 function confirmWP(){
   if(!pendingPos){toast('Click map first',true);return;}
   var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
   var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
-  var question=document.getElementById('wp-question').value.trim();
   if(!name){toast('Name required',true);return;}
-  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice(),question:question};
-  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:question}).catch(function(){});
+  syncWPQALines();
+  // Build legacy single-question field from first Question line (for LLM arc runner compat)
+  var firstQ='';
+  _wpQALines.forEach(function(l){if(!firstQ&&l.type==='Question'&&l.text)firstQ=l.text;});
+  var qaLines=_wpQALines.filter(function(l){return l.text.trim();}).map(function(l){return{type:l.type,speaker:l.speaker,text:l.text};});
+  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ,qaLines:qaLines};
+  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ}).catch(function(){});
   placing=null;pendingPos=null;
   document.getElementById('wp-form').style.display='none';
-  document.getElementById('wp-question').value='';
+  _wpQALines=[];renderWPQALines();
   hideHint();renderAll();toast('Waypoint: '+name);
 }
 function populateWPZones(){
@@ -1044,7 +1159,7 @@ function exportSceneXML(){
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
   Object.values(placedAgents).forEach(function(a){
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice=""><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice="'+xe(a.voice||'')+'"><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
   });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
@@ -1052,8 +1167,16 @@ function exportSceneXML(){
       var pos=wp.position||[0,0,0];
       x+='  <Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+
         '" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+'"';
-      if(wp.question)x+='>\n    <Question>'+xe(wp.question)+'</Question>\n  </Waypoint>\n';
-      else x+='/>\n';
+      var lines=wp.qaLines||(wp.question?[{type:'Question',speaker:'',text:wp.question}]:[]);
+      if(lines.length){
+        x+='>\n';
+        lines.forEach(function(l){
+          if(!l.text)return;
+          var spAttr=l.speaker?' speaker="'+xe(l.speaker)+'"':'';
+          x+='    <'+l.type+spAttr+'>'+xe(l.text)+'</'+l.type+'>\n';
+        });
+        x+='  </Waypoint>\n';
+      } else { x+='/>\n'; }
     });
     x+='</Waypoints>\n';
   }
@@ -1133,7 +1256,8 @@ async function _sceneArcAdvance(){
     'Step '+(_sceneArcStep+1)+' / '+total+' — '+wpName;
   document.getElementById('run-wp-name').textContent=wpName+(wp.label?' — '+wp.label:'');
   document.getElementById('run-wp-pos').textContent=
-    'X='+pos[0].toFixed(1)+' Z='+pos[2].toFixed(1)+(wp.zone?' ['+wp.zone+']':'');
+    'X='+pos[0].toFixed(2)+' Z='+pos[2].toFixed(2)+(wp.zone?' ['+wp.zone+']':'')
+    +' (scene '+sceneConfig.width+'x'+sceneConfig.depth+'m)';
   document.getElementById('run-question').textContent=wp.question||'(no question)';
   document.getElementById('run-response').textContent='…';
 
@@ -1237,8 +1361,9 @@ async function _sceneArcAdvance(){
 function _saveSceneArc(){
   if(!_sceneArcRows.length||!_sceneArcPath)return;
   var cultivar=_sceneArcPath.agent;
+  var pathName=_sceneArcPath.name||cultivar;
   var ts=new Date().toISOString().slice(0,19);
-  apiPost('/arc/export',{cultivar:cultivar,timestamp:ts,rows:_sceneArcRows})
+  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,rows:_sceneArcRows})
     .then(function(res){
       document.getElementById('run-log').innerHTML=
         '<div style="color:var(--accent)">Saved: '+res.filename+'</div>'+
