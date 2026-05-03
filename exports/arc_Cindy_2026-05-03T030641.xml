@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Cindy_2026-05-03T030641">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Cindy_2026-05-03T030641" agentname="Cindy">
+    <Timestamp date="2026-05-03" time="03:06:41"/>
+    <Waypoint id="DORM" stepno="1" name="Dorm" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="69.60" pos_y="0.00" pos_z="15.10">
+    </Waypoint>
+    <Waypoint id="TRAINING" stepno="2" name="Training" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="17.20" pos_y="0.00" pos_z="43.10">
+    </Waypoint>
+    <Waypoint id="POOL" stepno="3" name="Pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="55.40" pos_y="0.00" pos_z="45.90">
+    </Waypoint>
+    <Waypoint id="TEMPLE" stepno="4" name="Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="40.50" pos_y="0.00" pos_z="19.70">
+    </Waypoint>
+    <Waypoint id="DORM" stepno="5" name="Dorm" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="69.60" pos_y="0.00" pos_z="15.10">
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

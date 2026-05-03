@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-03T03:07:21 -->
+<Scene id="garden_001" timestamp="2026-05-03T03:07:21" zone_set="garden_001" mode="improvisation" width="80" depth="60">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="70.1" y="0" z="10.8"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="Dorm" label="Dorm" zone="Dormitory" pos_x="69.60" pos_y="0.00" pos_z="15.10"/>
+  <Waypoint name="Training" label="Training" zone="Dormitory" pos_x="17.20" pos_y="0.00" pos_z="43.10"/>
+  <Waypoint name="Pool" label="Pool" zone="Pool" pos_x="55.40" pos_y="0.00" pos_z="45.90"/>
+  <Waypoint name="Temple" label="Temple" zone="Temple" pos_x="40.50" pos_y="0.00" pos_z="19.70"/>
+</Waypoints>
+</Scene>
