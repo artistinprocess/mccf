@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Cindy_2026-05-02T195506">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Cindy_2026-05-02T195506" agentname="Cindy">
+    <Timestamp date="2026-05-02" time="19:55:06"/>
+    <Waypoint id="DORMITORY" stepno="1" name="Dormitory" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0457" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="26.30" pos_y="0.00" pos_z="9.80">
+      <Question>I&apos;m heading down to the training field.</Question>
+      <Response>I&apos;m going with you to the training field. I want to make sure we&apos;re on the same page before we head out. Can you tell me what&apos;s expected of us today? What kind of training will we be doing, and are there any specific goals or objectives we need to focus on?</Response>
+    </Waypoint>
+    <Waypoint id="TRAINING" stepno="2" name="Training" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0445" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="40.90" pos_y="0.00" pos_z="28.00">
+      <Question>HOOAH!  A tough day, indeed,</Question>
+      <Response>It sounds like you&apos;re feeling a bit apprehensive about the training today. Can you tell me what&apos;s got you feeling that way? Is it something specific that&apos;s on your mind, or is it just general nerves about getting started?</Response>
+    </Waypoint>
+    <Waypoint id="POOL" stepno="3" name="Pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0435" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="43.40" pos_y="0.00" pos_z="9.30">
+      <Question>I am sweating like an old pig.</Question>
+      <Response>It seems like the physical sensations of anxiety are really starting to kick in for you right now. Your heart rate and breathing might be increasing, which is causing that sweating. Are you feeling like you&apos;re getting your bearings before we head out into the training field? Am I doing okay so far as a point of contact for you today?</Response>
+    </Waypoint>
+    <Waypoint id="TEMPLE" stepno="4" name="Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0454" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="12.00" pos_y="0.00" pos_z="19.70">
+      <Question>Inanna, grant me strength, patience, simplicity and love.</Question>
+      <Response>It sounds like you&apos;re reaching out for some inner support and guidance. I&apos;ll keep that in mind as we move forward together. *pauses* Before we head into the training field, can you tell me a bit more about what&apos;s been going on that&apos;s making you feel this way? Is there something specific that&apos;s causing you stress or discomfort?</Response>
+    </Waypoint>
+    <Waypoint id="BACKTODORM" stepno="5" name="BackToDorm" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0526" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.90" pos_y="0.00" pos_z="7.90">
+      <Question>A wonderful day!  Time to relax.</Question>
+      <Response>It seems like your demeanor has shifted, and you&apos;re feeling more at ease now. Take a deep breath in, and let&apos;s focus on the present moment. Before we head out into the training field, I want to make sure we&apos;re on the same page. What&apos;s your plan of action for today, and how can I best support you?</Response>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>
