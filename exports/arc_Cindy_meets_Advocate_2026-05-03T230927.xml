@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Cindy_meets_Advocate_2026-05-03T230927">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Cindy_meets_Advocate_2026-05-03T230927" agentname="Cindy" path_name="Cindy_meets_Advocate">
+    <Timestamp date="2026-05-03" time="23:09:27"/>
+    <Waypoint id="POOL" stepno="1" name="Pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1354" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="9.70" pos_y="0.00" pos_z="14.00">
+      <Question speaker="Cindy">I love this pool.</Question>
+      <Response speaker="The Advocate">Yes.  It is nive.</Response>
+    </Waypoint>
+    <Waypoint id="TEMPLE" stepno="2" name="Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1334" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="15.70" pos_y="0.00" pos_z="15.80">
+      <Question speaker="The Advocate">Why have you come?</Question>
+      <Response speaker="Cindy">To pray.</Response>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

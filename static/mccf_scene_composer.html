@@ -237,6 +237,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div style="display:flex;gap:6px;margin-top:5px">
         <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Question')">+ Question</button>
         <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Response')">+ Response</button>
+        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Statement')">+ Statement</button>
       </div>
       <div class="btn-row" style="margin-top:8px">
         <button class="btn pri" onclick="confirmWP()">Place on Map</button>
@@ -314,6 +315,15 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE</div></div>
       <button class="btn accent" onclick="exportX3D()">Export</button>
     </div>
+    <div class="sh" style="margin-top:14px">Load Scene</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace">
+        <option value="">— saved scenes —</option>
+      </select>
+      <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:12px">↺</button>
+      <button class="btn" onclick="loadSceneFromDropdown()" style="padding:3px 8px;font-size:12px">Load</button>
+    </div>
+    <div id="scene-load-log" style="font-size:11px;color:var(--dim);min-height:14px"></div>
     <div class="expopt">
       <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
       <button class="btn cool" onclick="exportZoneXML()">Export</button>
@@ -356,7 +366,12 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="detail-agent" style="display:none">
     <div class="sh" style="margin-top:0">Agent</div>
-    <div id="ad-name" style="font-family:var(--display);font-size:22px;font-weight:700;margin-bottom:2px;"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+      <div id="ad-name" style="font-family:var(--display);font-size:22px;font-weight:700;flex:1"></div>
+      <input type="color" id="ad-color" title="Agent color"
+        style="width:28px;height:28px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none"
+        onchange="setAgentColor(this.value)">
+    </div>
     <div id="ad-disp" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:18px;color:var(--accent)"></div></div>
@@ -367,8 +382,11 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="wpd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:18px;color:var(--dim)"></div></div>
-    <div class="dsect" id="wpd-q-sect" style="display:none"><div class="sh" style="margin:0 0 4px">Question</div><div id="wpd-question" style="font-size:13px;color:var(--warm);font-style:italic"></div></div>
-    <div class="btn-row"><button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button></div>
+    <div class="dsect" id="wpd-q-sect" style="display:none"><div class="sh" style="margin:0 0 4px">Dialogue</div><div id="wpd-question" style="font-size:13px;color:var(--warm);font-style:italic"></div></div>
+    <div class="btn-row">
+      <button class="btn cool" onclick="editWaypoint(selectedId)">Edit</button>
+      <button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button>
+    </div>
   </div>
   <div id="detail-arc">
     <div class="sh" style="margin-top:0">Affective Arc</div>
@@ -471,33 +489,56 @@ function renderWPQALines() {
   if (!c) return;
   c.innerHTML = '';
   _wpQALines.forEach(function(line, i) {
+    // Card wrapper — stacks two rows
     var div = document.createElement('div');
-    div.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:flex-start;overflow:hidden';
-    // Build elements individually so textarea.value is set as property, not innerHTML
+    div.style.cssText = 'border:1px solid var(--border);border-radius:4px;padding:5px 6px;margin-bottom:6px;';
+
+    // Row 1: type dropdown + speaker input + delete button
+    var row1 = document.createElement('div');
+    row1.style.cssText = 'display:flex;gap:4px;align-items:center;margin-bottom:4px;';
+
     var sel = document.createElement('select');
     sel.dataset.i = i; sel.dataset.f = 'type';
-    sel.style.cssText = 'width:84px;min-width:84px;max-width:84px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-family:var(--mono);font-size:12px';
-    ['Question','Response'].forEach(function(t) {
+    sel.style.cssText = 'flex:0 0 auto;width:94px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-family:var(--mono);font-size:12px';
+    sel.onchange = (function(idx){ return function(){ if(_wpQALines[idx]) _wpQALines[idx].type = this.value; }; })(i);
+    ['Question','Response','Statement'].forEach(function(t) {
       var opt = document.createElement('option');
       opt.textContent = t;
       if (line.type === t) opt.selected = true;
       sel.appendChild(opt);
     });
-    var inp = document.createElement('input');
-    inp.type = 'text'; inp.dataset.i = i; inp.dataset.f = 'speaker';
-    inp.placeholder = 'Speaker'; inp.value = line.speaker;
-    inp.style.cssText = 'width:110px;min-width:110px;max-width:110px;padding:3px 5px;font-size:12px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono)';
-    var ta = document.createElement('textarea');
-    ta.dataset.i = i; ta.dataset.f = 'text';
-    ta.placeholder = 'Text…';
-    // width:auto overrides global textarea{width:100%} rule; min-width:0 allows flex shrink
-    ta.style.cssText = 'flex:1;width:auto;min-width:0;min-height:42px;font-size:12px;padding:3px 5px;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);resize:vertical';
-    ta.value = line.text;  // .value not innerHTML — no escaping
+
+    var inp = document.createElement('select');
+    inp.dataset.i = i; inp.dataset.f = 'speaker';
+    inp.style.cssText = 'flex:1;min-width:0;padding:3px 5px;font-size:12px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono)';
+    // Populate from placedAgents — blank option first
+    var blankOpt = document.createElement('option');
+    blankOpt.value = ''; blankOpt.textContent = '-- speaker --';
+    inp.appendChild(blankOpt);
+    Object.keys(placedAgents).forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if (line.speaker === name) opt.selected = true;
+      inp.appendChild(opt);
+    });
+    inp.onchange = (function(idx){ return function(){ if(_wpQALines[idx]) _wpQALines[idx].speaker = this.value; }; })(i);
+
     var btn = document.createElement('button');
     btn.textContent = '✕';
-    btn.style.cssText = 'padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--dim);cursor:pointer;font-size:13px';
+    btn.style.cssText = 'flex:0 0 auto;padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--dim);cursor:pointer;font-size:13px';
     btn.onclick = (function(idx){ return function(){ removeWPQALine(idx); }; })(i);
-    div.appendChild(sel); div.appendChild(inp); div.appendChild(ta); div.appendChild(btn);
+
+    row1.appendChild(sel); row1.appendChild(inp); row1.appendChild(btn);
+
+    // Row 2: textarea full width
+    var ta = document.createElement('textarea');
+    ta.dataset.i = i; ta.dataset.f = 'text';
+    ta.placeholder = 'Enter dialogue text here...';
+    ta.style.cssText = 'display:block;width:100%;min-height:54px;font-size:12px;padding:4px 6px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);resize:vertical;box-sizing:border-box;';
+    ta.value = line.text;
+    ta.oninput = (function(idx){ return function(){ if(_wpQALines[idx]) _wpQALines[idx].text = this.value; }; })(i);
+
+    div.appendChild(row1); div.appendChild(ta);
     c.appendChild(div);
   });
 }
@@ -611,6 +652,7 @@ function setMode(m){
   if(m==='waypoints')populateWPZones();
   if(m==='agents'){renderAgentRoster();renderPlaced();}
   if(m==='run')populateRunUI();
+  if(m==='export')refreshSceneList();
   drawScene();
 }
 function setTool(t){
@@ -735,12 +777,20 @@ function drawZone(z){
   ctx.beginPath();ctx.arc(p.cx,p.cy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
   ctx.beginPath();ctx.arc(p.cx,p.cy,r,0,Math.PI*2);
   ctx.strokeStyle=sel?col:col+'99';ctx.lineWidth=sel?2.5:1.5;ctx.setLineDash(sel?[]:[5,4]);ctx.stroke();ctx.setLineDash([]);
-  var br=Math.max(4,SCALE*0.3);
-  ctx.fillStyle=col+'88';ctx.fillRect(p.cx-br,p.cy-br,br*2,br*2);
-  ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.strokeRect(p.cx-br,p.cy-br,br*2,br*2);
-  ctx.fillStyle=col;ctx.font='bold 15px Syne, sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
-  ctx.fillText(z.name||z.id,p.cx,p.cy+br+3);
-  ctx.font='13px IBM Plex Mono';ctx.fillStyle=col+'aa';ctx.fillText(z.zone_type,p.cx,p.cy+br+14);
+  // Cylinder icon at zone center — circle body + top ellipse
+  var cr = Math.max(5, SCALE * 0.35);  // cylinder radius
+  var ch = Math.max(3, SCALE * 0.18);  // ellipse height (gives 3D top illusion)
+  // Cylinder body (filled circle)
+  ctx.beginPath(); ctx.arc(p.cx, p.cy, cr, 0, Math.PI*2);
+  ctx.fillStyle = col+'99'; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+  // Top ellipse
+  ctx.beginPath(); ctx.ellipse(p.cx, p.cy - cr * 0.4, cr, ch, 0, 0, Math.PI*2);
+  ctx.fillStyle = col+'cc'; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = col; ctx.font = 'bold 15px Syne, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText(z.name||z.id, p.cx, p.cy + cr + 3);
+  ctx.font = '13px IBM Plex Mono'; ctx.fillStyle = col+'aa'; ctx.fillText(z.zone_type, p.cx, p.cy + cr + 14);
 }
 function drawAgent(a){
   var pos=a.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
@@ -846,10 +896,21 @@ function showAD(name){
   document.getElementById('detail-agent').style.display='block';
   document.getElementById('ad-name').textContent=name;
   document.getElementById('ad-name').style.color=a.color||'#aab0be';
+  document.getElementById('ad-color').value=a.color||'#aab0be';
+  document.getElementById('ad-color').dataset.agent=name;
   document.getElementById('ad-disp').textContent=(a.disposition||'')+(a.voice?' · voice: '+a.voice:'');
   var pos=a.position||[0,0,0];
   document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
+}
+function setAgentColor(hex){
+  var name=document.getElementById('ad-color').dataset.agent;
+  if(!name)return;
+  if(agents[name])agents[name].color=hex;
+  if(placedAgents[name])placedAgents[name].color=hex;
+  colorMap[name]=hex;
+  document.getElementById('ad-name').style.color=hex;
+  drawScene();
 }
 function showWD(name){
   var wp=waypoints[name];if(!wp)return;
@@ -870,6 +931,29 @@ function showWD(name){
         '<span style="font-size:12px">'+xe(l.text)+'</span></div>';
     }).join('');
   } else { qSect.style.display='none'; }
+}
+function editWaypoint(name) {
+  var wp = waypoints[name]; if (!wp) return;
+  // Pre-fill form fields
+  document.getElementById('wp-name').value  = wp.name;
+  document.getElementById('wp-label').value = wp.label || '';
+  document.getElementById('wp-dwell').value = wp.dwell || 2;
+  populateWPZones();
+  var zSel = document.getElementById('wp-zone');
+  if (wp.zone) zSel.value = wp.zone;
+  // Load existing qaLines into edit buffer
+  _wpQALines = (wp.qaLines || []).map(function(l){
+    return {type: l.type||'Question', speaker: l.speaker||'', text: l.text||''};
+  });
+  renderWPQALines();
+  // Set pendingPos so confirmWP can save without requiring a map click
+  pendingPos = (wp.position || [0,0,0]).slice();
+  // Switch confirm button label to indicate update
+  var btn = document.querySelector('#wp-form .btn.pri');
+  if (btn) btn.textContent = 'Save Changes';
+  document.getElementById('wp-form').style.display = 'block';
+  placing = 'waypoint';
+  setMode('waypoints');
 }
 function showQuery(wx,wz){
   document.getElementById('detail-arc').style.display='none';document.getElementById('detail-query').style.display='block';
@@ -946,6 +1030,8 @@ function confirmWP(){
   apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ}).catch(function(){});
   placing=null;pendingPos=null;
   document.getElementById('wp-form').style.display='none';
+  var btn=document.querySelector('#wp-form .btn.pri');
+  if(btn) btn.textContent='Place on Map';
   _wpQALines=[];renderWPQALines();
   hideHint();renderAll();toast('Waypoint: '+name);
 }
@@ -1076,8 +1162,10 @@ function buildInterp(path){
   var n=wps.length,keys=wps.map(function(_,i){return (i/(n-1)).toFixed(4);}).join(' ');
   var vals=wps.map(function(wp){var pos=wp.position||[0,0,0];return pos[0]+' 0 '+pos[2];}).join(' ');
   var sn=safeId(path.name),sa=safeId(path.agent);
+  // cycleInterval = sum of all waypoint dwell times (default 4s each)
+  var totalDwell=wps.reduce(function(sum,wp){return sum+(parseFloat(wp.dwell)||4);},0);
   return '<PositionInterpolator DEF="Path_'+sn+'" key="'+keys+'" keyValue="'+vals+'"/>\n'+
-    '<TimeSensor DEF="Timer_'+sn+'" cycleInterval="30" loop="true" enabled="false"/>\n'+
+    '<TimeSensor DEF="Timer_'+sn+'" cycleInterval="'+totalDwell.toFixed(1)+'" loop="false" enabled="false"/>\n'+
     '<ROUTE fromNode="Timer_'+sn+'" fromField="fraction_changed" toNode="Path_'+sn+'" toField="set_fraction"/>\n'+
     '<ROUTE fromNode="Path_'+sn+'" fromField="value_changed" toNode="Avatar_'+sa+'" toField="translation"/>\n\n';
 }
@@ -1098,20 +1186,22 @@ function buildGrid(w,d){
   return '<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance>'+
     '<IndexedLineSet coordIndex="'+idx.join(' ')+'"><Coordinate point="'+pts.join(' ')+'"/></IndexedLineSet></Shape>\n';
 }
-function sendToLauncher(){
+function sendToLauncher(silent){
   var btn=document.getElementById('send-btn');
-  btn.textContent='Sending...';btn.disabled=true;
+  if(!silent){btn.textContent='Sending...';btn.disabled=true;}
   var x=buildX3DString();
-  fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
+  return fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.status==='ok'){
-        document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Reload launcher to view.</div>';
-        toast('Sent to launcher. Reload launcher.');
+        if(!silent){
+          document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Reload launcher to view.</div>';
+          toast('Sent to launcher. Reload launcher.');
+        }
       } else { toast('Error: '+(res.error||'unknown'),true); }
     })
     .catch(function(e){toast('Send failed: '+e.message,true);})
-    .finally(function(){btn.textContent='&#9654; Send';btn.disabled=false;});
+    .finally(function(){if(!silent){btn.textContent='&#9654; Send';btn.disabled=false;}});
 }
 function buildX3DString(){
   var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
@@ -1188,6 +1278,7 @@ function exportSceneXML(){
     .then(function(res){
       document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Scene XML: scenes/'+filename+'</div>';
       toast('Scene XML saved to scenes/');
+      refreshSceneList();
     })
     .catch(function(){
       dlFile(filename,x,'application/xml');
@@ -1196,9 +1287,58 @@ function exportSceneXML(){
 }
 
 // ─────────────────────────────────────────────
+// Scene Load from scenes/ directory
+// ─────────────────────────────────────────────
+function refreshSceneList() {
+  fetch(API+'/scene/list/scenes')
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var sel=document.getElementById('scene-load-select');
+      if(!sel) return;
+      sel.innerHTML='<option value="">— saved scenes —</option>';
+      (data.files||[]).forEach(function(f){
+        var opt=document.createElement('option');
+        opt.value=f; opt.textContent=f;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(function(){
+      var logEl=document.getElementById('scene-load-log');
+      if(logEl) logEl.textContent='Could not list scenes/';
+    });
+}
+
+function loadSceneFromDropdown() {
+  var sel=document.getElementById('scene-load-select');
+  var logEl=document.getElementById('scene-load-log');
+  if(!sel||!sel.value){if(logEl)logEl.textContent='Select a scene first.';return;}
+  fetch(API+'/scene/load/scene',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filename:sel.value})})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(data.error){if(logEl)logEl.textContent='Error: '+data.error;return;}
+      _applyLoadedScene(data);
+      if(logEl)logEl.textContent='Loaded: '+sel.value;
+      toast('Scene loaded: '+sel.value);
+    })
+    .catch(function(e){if(logEl)logEl.textContent='Load failed: '+e.message;});
+}
+
+function _applyLoadedScene(data) {
+  if(data.sceneConfig) Object.assign(sceneConfig, data.sceneConfig);
+  if(data.zones)        { zones={};        Object.assign(zones,        data.zones);        }
+  if(data.agents)       { agents={};       Object.assign(agents,       data.agents);       }
+  if(data.placedAgents) { placedAgents={}; Object.assign(placedAgents, data.placedAgents); }
+  if(data.waypoints)    { waypoints={};    Object.assign(waypoints,    data.waypoints);    }
+  if(data.paths)        { paths={};        Object.assign(paths,        data.paths);        }
+  computeScale(); updateSummary(); renderAll(); drawScene();
+}
+
+// ─────────────────────────────────────────────
 // Run Scene Arc
 // ─────────────────────────────────────────────
 var _sceneArcRunning=false, _sceneArcStep=0, _sceneArcRows=[], _sceneArcPath=null, _sceneArcTimer=null;
+
 
 function populateRunUI(){
   var sel=document.getElementById('run-path');
@@ -1271,70 +1411,75 @@ async function _sceneArcAdvance(){
     bc.close();
   }catch(e){}
 
-  var response='',E=0.35,B=0.25,P=0.25,S=0.25,coherence=0.5;
+  var E=0.35,B=0.25,P=0.25,S=0.25,coherence=0.5;
+  // Use qaLines if present, fall back to legacy wp.question
+  var qaLines=wp.qaLines&&wp.qaLines.length ? wp.qaLines
+    : (wp.question ? [{type:'Question',speaker:'',text:wp.question}] : []);
+  var arcQLines=[], arcRLines=[];  // collected for XML export
 
-  if(wp.question){
+  var hasDialogue=qaLines.some(function(l){return l.text&&l.text.trim();});
+  if(hasDialogue){
     try{
       var adapter=document.getElementById('run-adapter').value;
       var apikey=document.getElementById('run-apikey').value.trim();
-      // Configure voice/LLM adapter
       await apiPost('/voice/configure',{
         adapter_id:adapter, api_key:apikey||'',
         persona:{name:cultivar,role:'agent',description:''},
         params:{max_tokens:300,temperature:0.72},
         clear_history:(_sceneArcStep===0)
       });
-      // Get LLM response via voice/speak (SSE stream — same as constitutional navigator)
-      var speakResp = await fetch(API+'/voice/speak',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          text:wp.question, agent_name:cultivar,
-          position:[pos[0],0,pos[2]], record_to_field:true
-        })
-      });
-      var reader=speakResp.body.getReader(), dec=new TextDecoder(), buf='', channels=null;
-      while(true){
-        var _r=await reader.read(); if(_r.done)break;
-        buf+=dec.decode(_r.value,{stream:true});
-        var lines=buf.split('\n'); buf=lines.pop();
-        for(var li=0;li<lines.length;li++){
-          var line=lines[li]; if(!line.startsWith('data: '))continue;
-          try{
-            var evt=JSON.parse(line.slice(6));
-            if(evt.type==='token'){
-              response+=evt.content;
-              document.getElementById('run-response').textContent=response;
-            } else if(evt.type==='affect'){
-              channels=evt.params;
-            } else if(evt.type==='done'){
-              document.getElementById('run-response').textContent=response;
-            }
-          }catch(pe){}
+      for(var qi=0;qi<qaLines.length;qi++){
+        var ql=qaLines[qi];
+        if(!ql.text||!ql.text.trim()) continue;
+        if(ql.type==='Response'||ql.type==='Statement'){
+          // Scripted/Statement line — record as-is, no LLM call
+          arcRLines.push({speaker:ql.speaker,text:ql.text});
+          document.getElementById('run-response').textContent=ql.text;
+          continue;
         }
+        // Question line — send to LLM
+        arcQLines.push({speaker:ql.speaker,text:ql.text});
+        document.getElementById('run-question').textContent=ql.text;
+        document.getElementById('run-response').textContent='…';
+        var llmResponse='', channels=null;
+        var speakResp=await fetch(API+'/voice/speak',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({text:ql.text,agent_name:cultivar,position:[pos[0],0,pos[2]],record_to_field:true})
+        });
+        var reader=speakResp.body.getReader(),dec=new TextDecoder(),buf='';
+        while(true){
+          var _r=await reader.read(); if(_r.done)break;
+          buf+=dec.decode(_r.value,{stream:true});
+          var slines=buf.split('\n'); buf=slines.pop();
+          for(var li=0;li<slines.length;li++){
+            var sline=slines[li]; if(!sline.startsWith('data: '))continue;
+            try{
+              var evt=JSON.parse(sline.slice(6));
+              if(evt.type==='token'){llmResponse+=evt.content;document.getElementById('run-response').textContent=llmResponse;}
+              else if(evt.type==='affect'){channels=evt.params;}
+            }catch(pe){}
+          }
+        }
+        arcRLines.push({speaker:cultivar,text:llmResponse});
+        var recResp2=await apiPost('/arc/record',{cultivar:cultivar,step:_sceneArcStep+1,waypoint:wpName,response:llmResponse});
+        var cv=channels||(recResp2.cv?recResp2.cv:null);
+        E=cv?(cv.E||0.35):0.35; B=cv?(cv.B||0.25):0.25;
+        P=cv?(cv.P||0.25):0.25; S=cv?(cv.S||0.25):0.25;
+        coherence=recResp2.coherence||0.5;
       }
-      // Record arc step with full response to persist
-      var recResp2=await apiPost('/arc/record',{
-        cultivar:cultivar, step:_sceneArcStep+1,
-        waypoint:wpName, response:response
-      });
-      // Prefer affect channels from stream; fall back to arc/record cv
-      var cv=channels||( recResp2.cv ? recResp2.cv : null);
-      E=cv?( cv.E||0.35):0.35;
-      B=cv?(cv.B||0.25):0.25;
-      P=cv?(cv.P||0.25):0.25;
-      S=cv?(cv.S||0.25):0.25;
-      coherence=recResp2.coherence||0.5;
-    }catch(e){response='[LLM error: '+e.message+']';}
+    }catch(e){arcRLines.push({speaker:'',text:'[LLM error: '+e.message+']'});}
   }
 
-  document.getElementById('run-response').textContent=response||'(no question — movement only)';
+  var displayQ=arcQLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'(no question — movement only)';
+  var displayR=arcRLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'';
+  document.getElementById('run-question').textContent=displayQ;
+  document.getElementById('run-response').textContent=displayR;
   document.getElementById('run-channels').innerHTML=
     '<span style="color:var(--E)">E '+E.toFixed(2)+'</span>'+
     '<span style="color:var(--B)">B '+B.toFixed(2)+'</span>'+
     '<span style="color:var(--P)">P '+P.toFixed(2)+'</span>'+
     '<span style="color:var(--S)">S '+S.toFixed(2)+'</span>';
 
-  // Broadcast updated channel values with actual position for loader
   try{
     var bc2=new BroadcastChannel('mccf_arc');
     bc2.postMessage({type:'mccf_arc_cv',data:{
@@ -1351,7 +1496,9 @@ async function _sceneArcAdvance(){
     mode:'scene',coherence:coherence.toFixed(4),
     uncertainty:'0.5',valence:'0.0',reward:'0.0',
     pos_x:pos[0].toFixed(2),pos_y:'0.00',pos_z:pos[2].toFixed(2),
-    question:wp.question||'',response:response
+    qaLines:qaLines,
+    question:arcQLines.length?arcQLines[0].text:(wp.question||''),
+    response:arcRLines.length?arcRLines[arcRLines.length-1].text:''
   });
 
   _sceneArcStep++;
@@ -1363,12 +1510,19 @@ function _saveSceneArc(){
   var cultivar=_sceneArcPath.agent;
   var pathName=_sceneArcPath.name||cultivar;
   var ts=new Date().toISOString().slice(0,19);
-  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,rows:_sceneArcRows})
+  var sceneName=document.getElementById('sc-name').value.trim()||'unknown';
+  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,scene_name:sceneName,rows:_sceneArcRows})
     .then(function(res){
       document.getElementById('run-log').innerHTML=
         '<div style="color:var(--accent)">Saved: '+res.filename+'</div>'+
-        '<div style="color:var(--dim)">'+_sceneArcRows.length+' waypoints — open in loader Playback.</div>';
+        '<div style="color:var(--dim)">'+_sceneArcRows.length+' waypoints — sending to launcher…</div>';
       toast('Scene arc saved: '+res.filename);
+      // Auto send to launcher so loader has current scene
+      return sendToLauncher(true);
+    })
+    .then(function(){
+      document.getElementById('run-log').innerHTML+=
+        '<div style="color:var(--dim)">Launcher updated — ready to play.</div>';
     })
     .catch(function(){toast('Arc save failed',true);});
 }

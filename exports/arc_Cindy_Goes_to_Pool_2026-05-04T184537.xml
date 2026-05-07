@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Cindy_Goes_to_Pool_2026-05-04T184537">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Cindy_Goes_to_Pool_2026-05-04T184537" agentname="Cindy" path_name="Cindy_Goes_to_Pool">
+    <Timestamp date="2026-05-04" time="18:45:37"/>
+    <Waypoint id="TRAINING" stepno="1" name="Training" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="32.00" pos_y="0.00" pos_z="31.70">
+      <Statement speaker="Cindy">This is divfficult.</Statement>
+      <Statement speaker="Cindy">But I am getting the hang of it.</Statement>
+    </Waypoint>
+    <Waypoint id="TEMPLE" stepno="2" name="Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1202" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="21.10" pos_y="0.00" pos_z="19.60">
+      <Question speaker="The Advocate">Have you come to pray?</Question>
+      <Response speaker="Cindy">Yes,</Response>
+    </Waypoint>
+    <Waypoint id="THE_POOL" stepno="3" name="The Pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1165" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="8.50" pos_y="0.00" pos_z="9.20">
+      <Question speaker="Cindy">Is the water warm or cold?</Question>
+      <Response speaker="The Witness">Very comfortable, actually.</Response>
+      <Statement speaker="Cindy">Good. I need a long soaking.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

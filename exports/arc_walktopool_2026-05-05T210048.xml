@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="walktopool_2026-05-05T210048">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="walktopool_2026-05-05T210048" agentname="Cindy" path_name="walktopool">
+    <Timestamp date="2026-05-05" time="21:00:48"/>
+    <Waypoint id="POOL" stepno="1" name="pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="8.70" pos_y="0.00" pos_z="10.50">
+      <Statement speaker="Cindy">THis is so relaxing.</Statement>
+      <Statement>I guess I should go pray.</Statement>
+    </Waypoint>
+    <Waypoint id="TEMPLE" stepno="2" name="temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0829" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="19.20" pos_y="0.00" pos_z="21.70">
+      <Statement speaker="Cindy">I see the Advocate.</Statement>
+      <Question speaker="The Advocate">Hello Little Squirrel!  Have you come to pray?</Question>
+      <Response speaker="Cindy">Yes.  I have come to pray.</Response>
+      <Statement speaker="The Advocate">The Mother Goddess will be pleased to see you. It&apos;s been awhile.</Statement>
+      <Statement speaker="Cindy">I know.  I have missed being here.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

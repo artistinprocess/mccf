@@ -174,6 +174,166 @@ def list_scenes():
         })
     return jsonify({'files': files, 'count': len(files)})
 
+
+@app.route('/scene/list/scenes', methods=['GET'])
+def list_scenes_for_composer():
+    """
+    List scene XML files in scenes/ directory.
+    Used by the composer scene dropdown (GET /scene/list/scenes).
+    Returns { files: ["garden_001_scene.xml", ...] } sorted newest-first.
+    """
+    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    if not os.path.isdir(scenes_dir):
+        return jsonify({'files': [], 'scenes_dir': scenes_dir})
+    files = sorted(
+        [f for f in os.listdir(scenes_dir) if f.endswith('.xml')],
+        reverse=True
+    )
+    return jsonify({'files': files, 'scenes_dir': scenes_dir})
+
+
+@app.route('/scene/load/scene', methods=['POST'])
+def load_scene_xml():
+    """
+    Parse a saved scene XML and return full composer state.
+    Called by loadSceneFromDropdown() in mccf_scene_composer.html.
+    Body: { "filename": "garden_001_scene.xml" }
+
+    Returns:
+    {
+        sceneConfig:   { name, width, depth, description },
+        zones:         { id: { id, name, zone_type, location:[x,0,z], radius, color } },
+        agents:        { name: { name, position, voice, color, weights, ... } },
+        placedAgents:  { name: { name, position:[x,0,z], voice, color, ... } },
+        waypoints:     { name: { name, label, zone, position:[x,0,z], qaLines:[...] } },
+        paths:         {}   -- not stored in scene XML; user recreates
+    }
+    """
+    import xml.etree.ElementTree as ET
+    import re as _re
+
+    data     = request.get_json() or {}
+    filename = os.path.basename(data.get('filename', '').strip())
+    if not filename:
+        return jsonify({'error': 'filename required'}), 400
+
+    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    filepath   = os.path.join(scenes_dir, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': f'File not found: {filename}'}), 404
+
+    try:
+        with open(filepath, encoding='utf-8') as f:
+            raw = f.read()
+    except Exception as e:
+        return jsonify({'error': f'Could not read file: {e}'}), 500
+
+    try:
+        # Strip namespace prefixes that confuse ElementTree
+        clean = _re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', raw)
+        clean = _re.sub(r'<(\w+):(\w+)', r'<\2', clean)
+        clean = _re.sub(r'</(\w+):(\w+)', r'</\2', clean)
+        root  = ET.fromstring(clean)
+    except Exception as e:
+        return jsonify({'error': f'XML parse error: {e}'}), 500
+
+    # ── sceneConfig ───────────────────────────────────────────────────────
+    scene_id = root.get('id', filename.replace('_scene.xml', ''))
+    width    = float(root.get('width', 40))
+    depth    = float(root.get('depth', 40))
+    scene_config = {
+        'name':        scene_id,
+        'width':       int(width),
+        'depth':       int(depth),
+        'description': ''
+    }
+
+    # ── placedAgents from <EmotionalArc cultivar="..." voice="..."> ───────
+    AGENT_COLORS  = ['#60a8f0','#4af0a8','#f0c060','#f06060','#c080f0','#f09040']
+    placed_agents = {}
+    for idx, ea in enumerate(root.findall('EmotionalArc')):
+        name  = ea.get('cultivar', '').strip()
+        voice = ea.get('voice', '')
+        if not name:
+            continue
+        sp = ea.find('StartPosition')
+        x  = float(sp.get('x', width  / 2)) if sp is not None else width  / 2
+        z  = float(sp.get('z', depth  / 2)) if sp is not None else depth  / 2
+        col = AGENT_COLORS[idx % len(AGENT_COLORS)]
+        placed_agents[name] = {
+            'name':        name,
+            'position':    [round(x, 2), 0, round(z, 2)],
+            'voice':       voice,
+            'color':       col,
+            'weights':     {'E': 0.35, 'B': 0.25, 'P': 0.25, 'S': 0.25},
+            'regulation':  0.5,
+            'disposition': ''
+        }
+
+    # agents roster mirrors placedAgents
+    agents = {n: dict(a) for n, a in placed_agents.items()}
+
+    # ── waypoints + inferred zones from <Waypoints><Waypoint> ────────────
+    ZONE_COLORS = {
+        'temple':   '#c080f0',
+        'pool':     '#60a8f0',
+        'training': '#4af0a8',
+        'dorm':     '#f0c060',
+        'garden':   '#4af0a8',
+        'library':  '#f09040',
+    }
+    waypoints      = {}
+    zones_inferred = {}
+
+    wp_container = root.find('Waypoints')
+    for wp_el in (wp_container.findall('Waypoint') if wp_container is not None else []):
+        wp_name  = wp_el.get('name',  '').strip()
+        wp_label = wp_el.get('label', wp_name)
+        zone_id  = wp_el.get('zone',  '').strip()
+        pos_x    = float(wp_el.get('pos_x', width  / 2))
+        pos_z    = float(wp_el.get('pos_z', depth  / 2))
+
+        qa_lines = []
+        for child in wp_el:
+            if child.tag in ('Question', 'Response', 'Statement'):
+                txt = (child.text or '').strip()
+                if txt:
+                    qa_lines.append({
+                        'type':    child.tag,
+                        'speaker': child.get('speaker', ''),
+                        'text':    txt
+                    })
+
+        waypoints[wp_name] = {
+            'name':     wp_name,
+            'label':    wp_label,
+            'zone':     zone_id,
+            'position': [round(pos_x, 2), 0, round(pos_z, 2)],
+            'qaLines':  qa_lines
+        }
+
+        # Infer zone from waypoint if not already seen
+        if zone_id and zone_id not in zones_inferred:
+            col = ZONE_COLORS.get(zone_id.lower(), '#888888')
+            zones_inferred[zone_id] = {
+                'id':        zone_id,
+                'name':      wp_label,
+                'zone_type': zone_id,
+                'location':  [round(pos_x, 2), 0, round(pos_z, 2)],
+                'radius':    4,
+                'color':     col
+            }
+
+    return jsonify({
+        'sceneConfig':  scene_config,
+        'zones':        zones_inferred,
+        'agents':       agents,
+        'placedAgents': placed_agents,
+        'waypoints':    waypoints,
+        'paths':        {}
+    })
+
+
 # ---------------------------------------------------------------------------
 # Global engine state
 # ---------------------------------------------------------------------------
@@ -839,7 +999,9 @@ def arc_export_save():
     import os
     data      = request.json or {}
     cultivar  = data.get("cultivar", "unknown")
+    path_name = data.get("path_name", "").strip()
     timestamp = data.get("timestamp", "")
+    scene_name= data.get("scene_name", "").strip()
     rows      = data.get("rows", [])
     genre     = data.get("genre", "")
     seed      = data.get("seed", None)
@@ -851,8 +1013,9 @@ def arc_export_save():
     os.makedirs(exports_dir, exist_ok=True)
 
     cultivar_slug = cultivar.replace(" ", "_")
+    path_slug     = path_name.replace(" ", "_") if path_name else cultivar_slug
     ts_slug       = timestamp.replace(" ", "").replace(":", "")
-    arc_id        = f"{cultivar_slug}_{ts_slug}"
+    arc_id        = f"{path_slug}_{ts_slug}"
     date_part     = timestamp[:10] if len(timestamp) >= 10 else timestamp
     time_part     = timestamp[11:] if len(timestamp) >= 19 else ""
 
@@ -863,9 +1026,10 @@ def arc_export_save():
             .replace("'","&apos;"))
 
     xml  = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml += f'<EmotionalArc id="{arc_id}">\n'
+    scene_attr = f' scene="{xml_esc(scene_name)}"' if scene_name else ''
+    xml += f'<EmotionalArc id="{arc_id}"{scene_attr}>\n'
     xml += f'  <title>MCCF Constitutional Arc Export</title>\n'
-    xml += f'  <Cultivar id="{arc_id}" agentname="{xml_esc(cultivar)}">\n'
+    xml += f'  <Cultivar id="{arc_id}" agentname="{xml_esc(cultivar)}" path_name="{xml_esc(path_slug)}">\n'
     xml += f'    <Timestamp date="{date_part}" time="{time_part}"/>\n'
     if genre:
         xml += f'    <Genre narrative="{xml_esc(genre)}"/>\n'
@@ -882,12 +1046,23 @@ def arc_export_save():
         xml += f' Uncertainty="{row.get("uncertainty","")}"'
         xml += f' Valence="{row.get("valence","")}" Reward="{row.get("reward","")}"'
         xml += f' pos_x="{row.get("pos_x","0.00")}" pos_y="{row.get("pos_y","0.00")}" pos_z="{row.get("pos_z","0.00")}">\n'
-        q = row.get("question","")
-        r = row.get("response","")
-        if q:
-            xml += f'      <Question>{xml_esc(q)}</Question>\n'
-        if r:
-            xml += f'      <Response>{xml_esc(r)}</Response>\n'
+        qa_lines = row.get("qaLines", [])
+        if qa_lines:
+            # Write full multi-line dialogue sequence
+            for ql in qa_lines:
+                tag  = ql.get("type","Question") if ql.get("type") in ("Question","Response","Statement") else "Question"
+                spkr = f' speaker="{xml_esc(ql.get("speaker",""))}"' if ql.get("speaker") else ""
+                txt  = ql.get("text","").strip()
+                if txt:
+                    xml += f'      <{tag}{spkr}>{xml_esc(txt)}</{tag}>\n'
+        else:
+            # Legacy fallback — single question/response fields
+            q = row.get("question","")
+            r = row.get("response","")
+            if q:
+                xml += f'      <Question>{xml_esc(q)}</Question>\n'
+            if r:
+                xml += f'      <Response>{xml_esc(r)}</Response>\n'
         xml += f'    </Waypoint>\n'
 
     xml += f'  </Cultivar>\n'

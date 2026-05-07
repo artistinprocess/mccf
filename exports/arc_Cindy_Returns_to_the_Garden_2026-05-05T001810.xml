@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Cindy_Returns_to_the_Garden_2026-05-05T001810">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Cindy_Returns_to_the_Garden_2026-05-05T001810" agentname="Cindy" path_name="Cindy_Returns_to_the_Garden">
+    <Timestamp date="2026-05-05" time="00:18:10"/>
+    <Waypoint id="TEMPLE" stepno="1" name="Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="25.50" pos_y="0.00" pos_z="9.30">
+      <Statement>Is the training field stocked with bows?</Statement>
+      <Response speaker="The Steward">Yes,  Osiris replenished the supply.</Response>
+      <Statement speaker="Cindy">Goog.  I will go practice my archery.</Statement>
+      <Statement speaker="The Steward">Excellent!</Statement>
+    </Waypoint>
+    <Waypoint id="TRAINING_FIELD" stepno="2" name="Training Field" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1060" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="13.10" pos_y="0.00" pos_z="27.20">
+      <Question speaker="Cindy">Where are the new bows?</Question>
+      <Response speaker="The Advocate">They are in the storage closet.</Response>
+      <Statement speaker="Cindy">Excellent!!</Statement>
+    </Waypoint>
+    <Waypoint id="POOL" stepno="3" name="Pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="9.10" pos_y="0.00" pos_z="10.20">
+      <Statement speaker="Cindy">I need a bath.  I have missed this pool.  It purifies the body and refeshes the sould.</Statement>
+      <Statement speaker="The Witness">I agree.  It has been a long time since I have had the pleasure of you company, Salida.</Statement>
+      <Statement speaker="Cindy">Much too long, Sir.  It is good to be in the garden,.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

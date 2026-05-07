@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Go_to_pray_2026-05-05T212130">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Go_to_pray_2026-05-05T212130" agentname="Cindy" path_name="Go_to_pray">
+    <Timestamp date="2026-05-05" time="21:21:30"/>
+    <Waypoint id="COMFORT" stepno="1" name="Comfort" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="6.69" pos_y="0.00" pos_z="8.55">
+    </Waypoint>
+    <Waypoint id="PRAYER" stepno="2" name="Prayer" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1243" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="17.00" pos_y="0.00" pos_z="20.60">
+      <Question speaker="The Steward">Have you come to pray?</Question>
+      <Response speaker="Cindy">Yes. I have come to pray.</Response>
+      <Statement speaker="The Steward">The Goddess awaits.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

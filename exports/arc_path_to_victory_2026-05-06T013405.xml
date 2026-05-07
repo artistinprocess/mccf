@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_to_victory_2026-05-06T013405" scene="garden_001">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_to_victory_2026-05-06T013405" agentname="Cindy" path_name="path_to_victory">
+    <Timestamp date="2026-05-06" time="01:34:05"/>
+    <Waypoint id="WP_COMFORT" stepno="1" name="Wp Comfort" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="8.50" pos_y="0.00" pos_z="10.30">
+      <Statement speaker="Cindy">This is wonderful.</Statement>
+    </Waypoint>
+    <Waypoint id="WP_SPORTS" stepno="2" name="Wp Sports" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0966" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.80" pos_y="0.00" pos_z="9.40">
+      <Question speaker="Cindy">Arw these good sears?</Question>
+      <Response speaker="The Witness">You betcher swwet bippie, Hippie!!</Response>
+    </Waypoint>
+    <Waypoint id="WP_TEMPLE" stepno="3" name="Wp Temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1133" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="18.60" pos_y="0.00" pos_z="24.50">
+      <Question speaker="Cindy">Ia Ma here?</Question>
+      <Response speaker="The Steward">Yeah.  She&apos;s out back whippin up a new potion,</Response>
+      <Statement speaker="Cindy">Good.  I need some relief after that game.</Statement>
+      <Statement speaker="The Witness">Me too.  Roll Tide!!</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

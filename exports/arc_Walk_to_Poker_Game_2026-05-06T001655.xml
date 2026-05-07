@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Walk_to_Poker_Game_2026-05-06T001655" scene="garden_001">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Walk_to_Poker_Game_2026-05-06T001655" agentname="Cindy" path_name="Walk_to_Poker_Game">
+    <Timestamp date="2026-05-06" time="00:16:55"/>
+    <Waypoint id="COMFORT" stepno="1" name="comfort" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1499" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="10.80" pos_y="0.00" pos_z="16.30">
+      <Question speaker="Cindy">How high&apos;s the water Mama?</Question>
+      <Response speaker="Cindy">Ten feet high and rising.</Response>
+    </Waypoint>
+    <Waypoint id="PRAYER" stepno="2" name="prayer" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1323" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="18.40" pos_y="0.00" pos_z="25.30">
+      <Question speaker="The Steward">Have you come to play poker?</Question>
+      <Response speaker="Cindy">You shuffle.</Response>
+      <Statement speaker="The Steward">You cut.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>
