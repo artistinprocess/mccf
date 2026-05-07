@@ -68,7 +68,7 @@ button.active { background: #4af0a8; color: #111; }
   margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
   display:none;
 }
-#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; }
+#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; white-space:pre-wrap; max-height:160px; overflow-y:auto; }
 #pb-response  { color:#c0d8e8; line-height:1.5; font-size:13px;
                 max-height:120px; overflow-y:auto; }
 #pb-channels  { display:flex; gap:6px; margin-top:4px; }
@@ -102,6 +102,10 @@ button.active { background: #4af0a8; color: #111; }
   <select id="pb-file" onchange="pbFileChanged()">
     <option value="">— select arc file —</option>
   </select>
+  <div style="display:flex;gap:4px;margin-bottom:5px;">
+    <button onclick="pbLoadFiles()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#7ab8f5;cursor:pointer;">&#8635; Refresh</button>
+    <button onclick="pbClearSelect()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#f06060;cursor:pointer;">&#10005; Clear</button>
+  </div>
   <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
     <label style="font-size:12px;color:#6a8090;white-space:nowrap;margin:0;">pace (s)</label>
     <input type="number" id="pb-pace" value="3" min="0.5" max="30" step="0.5" style="width:60px;"/>
@@ -433,27 +437,25 @@ function runSAITest() {
     const scene = canvas.browser.currentScene;
     if (!scene) { out.textContent = 'SAI test: no scene'; return; }
 
-    const key = scene.getNamedNode('KeyLight');
-    if (!key) { out.textContent = 'SAI test: KeyLight not found'; return; }
+    // Use first registered avatar node for SAI test — KeyLight may not exist in all scenes
+    var testNodeName = (window._avatarNodeNames && window._avatarNodeNames[0]) || 'Avatar_Cindy';
+    const key = scene.getNamedNode(testNodeName);
+    if (!key) { out.textContent = 'SAI test ERROR: Named node \'' + testNodeName + '\' not found'; return; }
 
-    const startVal = key.intensity;
-    const results  = [];
+    const startTrans = key.translation;
+    const startX = startTrans ? (startTrans.x || 0) : 0;
+    const results = [];
 
-    try { key.intensity = 0.1; results.push(`plain=>${key.intensity}`); } catch(e) { results.push(`plain=>err`); }
     try {
-      if (typeof X3D !== 'undefined' && X3D.SFFloat) {
-        key.intensity = new X3D.SFFloat(0.95);
-        results.push(`X3D.SFFloat=>${key.intensity}`);
-      } else { results.push('X3D.SFFloat=unavailable'); }
-    } catch(e) { results.push('X3D.SFFloat=>err:'+e.message.slice(0,20)); }
-    try { key.set_intensity = 0.5; results.push(`set_intensity=>${key.intensity}`); } catch(e) { results.push('set_intensity=>err'); }
-    try { key.intensity = startVal; } catch(e) {}
+      key.translation = new X3D.SFVec3f(startX, 0, 0);
+      var t = key.translation;
+      results.push('SFVec3f=>' + (t ? t.x.toFixed(2) : 'null'));
+    } catch(e) { results.push('SFVec3f=>err:'+e.message.slice(0,20)); }
+    // Restore
+    try { if (startTrans) key.translation = startTrans; } catch(e) {}
 
     const report     = results.join(' | ');
-    const anyChanged = results.some(r => {
-      const val = parseFloat(r.split('=>')[1]);
-      return !isNaN(val) && Math.abs(val - startVal) > 0.01;
-    });
+    const anyChanged = results.some(r => r.indexOf('=>err') === -1 && r.indexOf('=>null') === -1);
 
     if (anyChanged) {
       out.style.color = '#4af0a8';
@@ -543,6 +545,7 @@ let pbPolling = false;
 let pbPollTimer = null;
 var _pbVoices = [];
 var _pbLastSpoken = '';
+var _pbLastStepKey = '';  // step identity — prevents re-firing TTS/display on same step poll
 
 async function pbLoadFiles() {
   try {
@@ -550,10 +553,13 @@ async function pbLoadFiles() {
     const data = await r.json();
     const sel = document.getElementById('pb-file');
     if (!sel) return;
+    // Clear all options except the placeholder, then rebuild
+    while (sel.options.length > 1) sel.remove(1);
     (data.files || []).forEach(function(f) {
       const opt = document.createElement('option');
       opt.value = f.filename;
-      // Prefer server-supplied label fields (path_name or label) over filename parsing
+      opt.dataset.sceneName = f.scene_name || '';
+      // Prefer server-supplied path_name over cultivar name
       var label;
       if (f.path_name && f.path_name !== f.cultivar) {
         label = f.path_name.replace(/_/g,' ');
@@ -561,23 +567,39 @@ async function pbLoadFiles() {
         label = f.label;
       } else {
         // Parse from filename: arc_{anything}_{timestamp}.xml
-        // Strip arc_ prefix and .xml, then remove trailing _timestamp
         var base = (f.filename||'').replace(/^arc_/,'').replace(/\.xml$/,'');
         var tsMatch = base.match(/^(.*?)_([0-9]{8,}|[0-9]{4}-[0-9]{2}-[0-9]{2}.*)$/);
         label = tsMatch ? tsMatch[1].replace(/_/g,' ') : base.replace(/_/g,' ');
       }
-      // Only append cultivar in brackets if it differs meaningfully from the label
+      // Append cultivar in brackets if it differs from path label
       var cultivarSuffix = (f.cultivar && f.cultivar.replace(/_/g,' ').toLowerCase() !== label.toLowerCase())
         ? ' ['+f.cultivar+']' : '';
       opt.textContent = label + cultivarSuffix
         + (f.steps_seen ? ' ('+f.steps_seen+'wp)' : '');
       sel.appendChild(opt);
     });
+    // Auto-select the newest arc (first in list, server returns newest-first)
+    if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+      pbFileChanged();
+    }
     cacheSceneContext(data.files || []);
+    // Cache first waypoint of first arc for reset fallback
+    if (data.files && data.files[0] && data.files[0].first_waypoint) {
+      window._pbFirstWaypoint = data.files[0].first_waypoint;
+    }
   } catch(e) {
     var el = document.getElementById('pb-step-info');
     if (el) el.textContent = 'Could not load files.';
   }
+}
+
+function pbClearSelect() {
+  var sel = document.getElementById('pb-file');
+  if (!sel) return;
+  while (sel.options.length > 1) sel.remove(1);
+  sel.selectedIndex = 0;
+  pbFileChanged();
 }
 
 function pbFileChanged() {
@@ -586,7 +608,40 @@ function pbFileChanged() {
   if (el) el.textContent = (f && f.value) ? 'Ready. Press Play.' : 'No arc loaded.';
   const qr = document.getElementById('pb-qr');
   if (qr) qr.style.display = 'none';
+  _pbLastStepKey = '';
+  _lerpDest = {};
+  _pbSceneVoiceMap = null;
   pbStopPolling();
+  // Fetch scene definition XML for voice map and start positions
+  var sceneName = (f && f.selectedOptions[0]) ? f.selectedOptions[0].dataset.sceneName : '';
+  if (sceneName) {
+    fetch(API + '/scene/load/scene', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename: sceneName + '_scene.xml'})
+    })
+    .then(function(r){ return r.ok ? r.text() : Promise.reject('not found'); })
+    .then(function(txt){
+      // Store the raw response — we need the scene XML not the parsed JSON
+      // Re-fetch as raw XML from scenes/ dir via a direct file fetch isn't available
+      // Instead: rebuild EmotionalArc XML fragment from JSON response for voice/position use
+      try {
+        var data = JSON.parse(txt);
+        // Reconstruct minimal scene def XML from placedAgents for voice map + start positions
+        var frag = '<Scene>';
+        Object.values(data.placedAgents || {}).forEach(function(a) {
+          var pos = a.position || [0,0,0];
+          frag += '<EmotionalArc cultivar="'+_xe(a.name)+'" voice="'+_xe(a.voice||'')+'">'
+                + '<StartPosition x="'+pos[0]+'" y="'+pos[1]+'" z="'+pos[2]+'"/>'
+                + '</EmotionalArc>';
+        });
+        frag += '</Scene>';
+        window._loadedSceneDefXml = frag;
+        _pbSceneVoiceMap = null;
+      } catch(e) { console.warn('pbFileChanged: scene parse error', e); }
+    })
+    .catch(function(e){ console.warn('pbFileChanged: could not load scene def', e); });
+  }
 }
 
 function pbVoiceChanged() {
@@ -601,17 +656,30 @@ function pbLoadVoices() {
   var sel = document.getElementById('pb-voice-select');
   if (!sel) return;
   function populate() {
-    _pbVoices = speechSynthesis.getVoices().filter(function(v){
+    var voices = speechSynthesis.getVoices().filter(function(v){
       return v.lang.startsWith('en');
     });
+    if (!voices.length) return;  // not ready yet — onvoiceschanged will fire
+    _pbVoices = voices;
     sel.innerHTML = _pbVoices.map(function(v,i){
       return '<option value="'+i+'">'+v.name+'</option>';
     }).join('');
   }
-  populate();
+  // Hook change event first, then try immediately
   if (speechSynthesis.onvoiceschanged !== undefined)
     speechSynthesis.onvoiceschanged = populate;
+  populate();
 }
+
+// Pre-load voices on page ready so they are available when checkbox is first checked
+window.addEventListener('load', function() {
+  if (window.speechSynthesis) {
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = function() { pbLoadVoices(); };
+    }
+    setTimeout(pbLoadVoices, 200);
+  }
+});
 
 function pbSpeak(text) {
   var voiceEl = document.getElementById('pb-voice');
@@ -628,16 +696,146 @@ function pbSpeak(text) {
   _pbLastSpoken = text;
 }
 
-// ─────────────────────────────────────────────
-// Avatar position lerp — smooth movement over pace interval
-// ─────────────────────────────────────────────
-var _lerpActive = {};   // suffix → { timer, startX, startZ, endX, endZ, steps, step }
+// Speak all qa_lines in sequence, assigning voice by speaker name
+// Voice lookup priority: (1) scene XML voice= attribute, (2) rotation fallback
+var _pbSpeakerVoiceMap = {};  // speaker name -> SpeechSynthesisVoice object (resolved once)
+
+function _xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function _buildSceneVoiceMap() {
+  // Parse window._loadedSceneDefXml for <EmotionalArc cultivar="X" voice="Y"> entries
+  // Returns { speakerName: SpeechSynthesisVoice } using exact or prefix match on voice name
+  var map = {};
+  var src = window._loadedSceneDefXml || window._loadedSceneXml;
+  if (!src || !_pbVoices.length) return map;
+  try {
+    var doc = new DOMParser().parseFromString(src, 'text/xml');
+    doc.querySelectorAll('EmotionalArc').forEach(function(el) {
+      var name = el.getAttribute('cultivar');
+      var voiceName = el.getAttribute('voice');
+      if (!name || !voiceName) return;
+      // Normalize: strip qualifiers like " - English (United States)", " Desktop", " (lang)"
+      // so "Microsoft Zira - English (United States)" and "Microsoft Zira Desktop" both → "Microsoft Zira"
+      function baseVoiceName(s) {
+        return s.replace(/\s*-\s*[A-Z].*$/, '').replace(/\s+Desktop\b.*$/, '').replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
+      }
+      var voiceBase = baseVoiceName(voiceName);
+      // Exact match, then prefix match (both directions), then normalized base match
+      var v = _pbVoices.find(function(v){ return v.name === voiceName; })
+           || _pbVoices.find(function(v){ return v.name.indexOf(voiceName) === 0; })
+           || _pbVoices.find(function(v){ return voiceName.indexOf(v.name) === 0; })
+           || _pbVoices.find(function(v){ return baseVoiceName(v.name) === voiceBase; });
+      if (v) map[name] = v;
+    });
+  } catch(e) { console.warn('_buildSceneVoiceMap error:', e); }
+  return map;
+}
+
+var _pbSceneVoiceMap = null;  // built once per scene load
+
+function pbSpeakQALines(qaLines) {
+  var voiceEl = document.getElementById('pb-voice');
+  if (!voiceEl || !voiceEl.checked) return;
+  if (!window.speechSynthesis || !qaLines || !qaLines.length) return;
+  var key = qaLines.map(function(l){return l.text;}).join('|');
+  if (key === _pbLastSpoken) return;
+  _pbLastSpoken = key;
+  speechSynthesis.cancel();
+
+  // Build (or rebuild) scene voice map. Rebuild if empty — handles the race where
+  // canvas 'load' fires after the first poll and _loadedSceneXml was null on first call.
+  if (!_pbSceneVoiceMap || Object.keys(_pbSceneVoiceMap).length === 0) {
+    _pbSceneVoiceMap = _buildSceneVoiceMap();
+  }
+
+  var queue = qaLines.filter(function(l){return l.text && l.text.trim();});
+  // Rotation fallback counter for speakers not in scene XML
+  var rotationCount = 0;
+  function speakNext(i) {
+    if (i >= queue.length) return;
+    var line = queue[i];
+    var utt = new SpeechSynthesisUtterance(line.text);
+    utt.rate = 0.95;
+    var speaker = line.speaker || (line.type === 'Question' ? '__Q__' : '__R__');
+    // (1) Scene XML voice assignment
+    var sceneVoice = _pbSceneVoiceMap && _pbSceneVoiceMap[speaker];
+    if (sceneVoice) {
+      utt.voice = sceneVoice;
+    } else {
+      // (2) Rotation fallback — consistent per speaker across the session
+      if (_pbSpeakerVoiceMap[speaker] === undefined) {
+        _pbSpeakerVoiceMap[speaker] = rotationCount % Math.max(1, _pbVoices.length);
+        rotationCount++;
+      }
+      if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
+    }
+    utt.onend = function() { speakNext(i+1); };
+    speechSynthesis.speak(utt);
+  }
+  speakNext(0);
+}
+
+// Track which avatar safenames are being driven by X3D TimeSensor (not JS lerp)
+var _x3dTimerActive = {};
+
+function pbActivateX3DTimers(arcFileEntry) {
+  // Called after arc is selected and scene XML is loaded.
+  // For each path in the scene, if Timer_{pathName} exists, start it via SAI.
+  // This hands position control to X3D natively.
+  if (!canvas || !canvas.browser) return;
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    _x3dTimerActive = {};
+    // Find all TimeSensor nodes named Timer_*
+    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    allNames.forEach(function(nodeName) {
+      if (!nodeName.startsWith('Timer_')) return;
+      var timerNode = scene.getNamedNode(nodeName);
+      if (!timerNode) return;
+      // Find which avatar this timer drives via the ROUTE (Path_ → Avatar_)
+      // By convention: Timer_X drives Avatar_{path.agent} via Path_X
+      // We find the corresponding Path_ node and trace the avatar from keyValue
+      // Simpler: trust naming convention — mark all avatars as X3D-driven
+      // when any timer is active
+      try {
+        timerNode.startTime = canvas.browser.currentTime;
+        timerNode.enabled = true;
+        // Mark all Avatar_ nodes as X3D-driven
+        allNames.forEach(function(n){
+          if (n.startsWith('Avatar_')) _x3dTimerActive[n] = true;
+        });
+        console.log('pbActivateX3DTimers: started', nodeName);
+      } catch(e) { console.warn('pbActivateX3DTimers: could not start', nodeName, e); }
+    });
+  } catch(e) { console.warn('pbActivateX3DTimers error:', e); }
+}
+
+function pbStopX3DTimers() {
+  if (!canvas || !canvas.browser) return;
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    allNames.forEach(function(nodeName) {
+      if (!nodeName.startsWith('Timer_')) return;
+      var timerNode = scene.getNamedNode(nodeName);
+      if (timerNode) { try { timerNode.enabled = false; } catch(e) {} }
+    });
+  } catch(e) {}
+  _x3dTimerActive = {};
+}
+var _lerpActive = {};      // suffix → { timer, stepNum }
+var _lerpDest   = {};      // suffix → { x, z } — intended destination, set once per step change
 
 function pbPushPosition(wp) {
   if (!wp) return;
   var x = parseFloat(wp.pos_x)||0, y = parseFloat(wp.pos_y)||0, z = parseFloat(wp.pos_z)||0;
-  // Removed: origin guard — a waypoint at 0,0,0 is valid
   if (!wp.cultivar) { console.warn('pbPushPosition: no cultivar in wp', wp); return; }
+  // If X3D TimeSensor is driving this avatar, skip JS lerp entirely
+  var safeName = wp.cultivar.replace(/[^A-Za-z0-9_]/g,'_');
+  var nodeName = 'Avatar_' + safeName;
+  if (_x3dTimerActive[nodeName]) return;
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
@@ -649,15 +847,28 @@ function pbPushPosition(wp) {
       return;
     }
 
-    // Cancel any in-progress lerp for this avatar
+    // If already lerping toward this exact destination, do not restart — let it finish.
+    var dest = _lerpDest[safeName];
+    if (dest && Math.abs(dest.x - x) < 0.01 && Math.abs(dest.z - z) < 0.01) return;
+
+    // New destination — cancel any in-progress lerp and start fresh.
     if (_lerpActive[safeName]) {
       clearInterval(_lerpActive[safeName].timer);
       delete _lerpActive[safeName];
     }
+    _lerpDest[safeName] = { x: x, z: z };
 
-    var cur = avatarNode.translation;
-    var startX = cur ? (cur.x || 0) : 0;
-    var startZ = cur ? (cur.z || 0) : 0;
+    // Read start position from stored destination of previous lerp (not from SAI read-back,
+    // which may lag). Fall back to SAI read only when no prior destination is known.
+    var startX, startZ;
+    if (dest) {
+      startX = dest.x;
+      startZ = dest.z;
+    } else {
+      var cur = avatarNode.translation;
+      startX = cur ? (cur.x || 0) : 0;
+      startZ = cur ? (cur.z || 0) : 0;
+    }
 
     var pace = parseFloat((document.getElementById('pb-pace')||{}).value) || 3.0;
     var LERP_FPS = 30;
@@ -702,6 +913,8 @@ async function pbPlay() {
     if (data.error) { document.getElementById('pb-step-info').textContent='Error: '+data.error; return; }
     pbUpdateDisplay(data.state||data);
     pbStartPolling(pace);
+    // Activate X3D native interpolation — hands position to TimeSensor/PositionInterpolator
+    pbActivateX3DTimers();
   } catch(e) { document.getElementById('pb-step-info').textContent='Play failed: '+e.message; }
 }
 
@@ -710,10 +923,14 @@ async function pbStep() {
 }
 async function pbStop() {
   pbStopPolling();
+  pbStopX3DTimers();
   try { const r=await fetch(API+'/arc/playback/stop',{method:'POST'}); pbUpdateDisplay(await r.json()); } catch(e) {}
 }
 async function pbReset() {
   pbStopPolling();
+  pbStopX3DTimers();
+  _lerpDest = {};
+  _pbLastStepKey = '';
   try {
     const r=await fetch(API+'/arc/playback/reset',{method:'POST'});
     pbUpdateDisplay(await r.json());
@@ -725,7 +942,8 @@ async function pbReset() {
 function pbStartPolling(pace) {
   pbStopPolling();
   pbPolling=true;
-  var interval=Math.max(500,Math.min(pace*500,2000));
+  // Poll at 1/3 of pace so we never miss a step on display
+  var interval=Math.max(400, Math.round((pace/3)*1000));
   pbPollTimer=setInterval(pbPollState,interval);
 }
 function pbStopPolling() {
@@ -748,6 +966,10 @@ function pbUpdateDisplay(state) {
     return;
   }
   var wp=state.current_waypoint||{};
+  // Inject cultivar into wp if server didn't include it (arc XML waypoints carry no cultivar attr)
+  if (!wp.cultivar && state.cultivars && state.cultivars.length) {
+    wp.cultivar = state.cultivars[0];
+  }
   var step=wp.stepno||state.step||0;
   var total=state.total_steps||'?';
   var cultivar=wp.cultivar||(state.cultivars||[]).join(', ')||'';
@@ -764,14 +986,43 @@ function pbUpdateDisplay(state) {
     '<span class="pc-P">P '+(wp.P||0).toFixed(2)+'</span>'+
     '<span class="pc-S">S '+(wp.S||0).toFixed(2)+'</span>';
   var qr=document.getElementById('pb-qr');
-  if(wp.question||wp.response){
+  var qaLines=wp.qa_lines||[];
+  if(qaLines.length||wp.question||wp.response){
     if(qr) qr.style.display='block';
     var qEl=document.getElementById('pb-question');
     var rEl=document.getElementById('pb-response');
-    if(qEl) qEl.textContent=wp.question?'Q: '+wp.question:'';
-    if(rEl) rEl.textContent=wp.response?wp.response:'';
-    if(wp.response) pbSpeak(wp.response);
+    if(qaLines.length){
+      // Display all lines in sequence order — prefix Q/R/— with speaker in brackets
+      var allText=qaLines.filter(function(l){return l.text&&l.text.trim();})
+        .map(function(l){
+          var p=l.type==='Question'?'Q':l.type==='Response'?'R':'—';
+          return p+(l.speaker?' ['+l.speaker+']':'')+': '+l.text;
+        }).join('\n');
+      if(qEl) qEl.textContent=allText;
+      if(rEl) rEl.textContent='';
+      // TTS fired after lerp delay below
+    } else {
+      if(qEl) qEl.textContent=wp.question?'Q: '+wp.question:'';
+      if(rEl) rEl.textContent=wp.response?wp.response:'';
+      // TTS fired after lerp delay below
+    }
   } else { if(qr) qr.style.display='none'; }
+  var pace2 = parseFloat((document.getElementById('pb-pace')||{}).value) || 3.0;
+  // Build a key that identifies this step uniquely — used to prevent re-firing TTS on repeated polls
+  var stepKey = (wp.id||'') + '|' + (wp.stepno||'') + '|' + (wp.pos_x||'') + '|' + (wp.pos_z||'');
+  var isNewStep = (stepKey !== _pbLastStepKey);
+  if (isNewStep) _pbLastStepKey = stepKey;
+  // Delay TTS until avatar lerp is complete — but only schedule once per step, not per poll
+  if (isNewStep && (qaLines.length || wp.question || wp.response)) {
+    clearTimeout(window._pbSpeakTimer);
+    window._pbSpeakTimer = setTimeout(function() {
+      if (qaLines.length) {
+        pbSpeakQALines(qaLines);
+      } else if (wp.response) {
+        pbSpeak(wp.response);
+      }
+    }, Math.round(pace2 * 1000));
+  }
   pbPushPosition(wp);
 }
 
@@ -784,34 +1035,98 @@ canvas.addEventListener('load', function() {
   var src = canvas.getAttribute('src') || 'mccf_scene.x3d';
   fetch(src)
     .then(function(r){ if(r.ok) return r.text(); throw new Error('fetch failed'); })
-    .then(function(txt){ window._loadedSceneXml = txt; })
+    .then(function(txt){ window._loadedSceneXml = txt; _pbSceneVoiceMap = null; })
     .catch(function(e){ console.warn('Could not cache scene XML:', e); });
 });
 
 function resetToStartPosition() {
-  var xmlText = window._loadedSceneXml;
+  _refreshAvatarNodeNames();
+  // Prefer scene definition XML (has EmotionalArc+StartPosition)
+  // Fall back to cached X3D scene XML
+  var xmlText = window._loadedSceneDefXml || window._loadedSceneXml;
   if (xmlText) {
     _applyStartPosition(xmlText);
     return;
   }
-  // Fallback: no XML cached — snap all known avatars to origin
-  _snapAvatarsToOrigin();
+  // Try fetching scene XML now if not cached
+  var src = (canvas && canvas.getAttribute('src')) || '/static/mccf_scene.x3d';
+  fetch(src)
+    .then(function(r){ return r.ok ? r.text() : Promise.reject('fetch failed'); })
+    .then(function(txt){
+      window._loadedSceneXml = txt;
+      _applyStartPosition(txt);
+    })
+    .catch(function(){
+      console.warn('resetToStartPosition: could not fetch scene XML — snapping to first arc waypoint or origin');
+      _snapToFirstArcWaypoint();
+    });
+}
+
+function _snapToFirstArcWaypoint() {
+  // If an arc is loaded, use its first waypoint position as a better fallback than 0,0,0
+  var firstWp = window._pbFirstWaypoint;
+  if (firstWp && firstWp.pos_x !== undefined) {
+    _moveAvatars(parseFloat(firstWp.pos_x)||0, 0, parseFloat(firstWp.pos_z)||0);
+  } else {
+    _snapAvatarsToOrigin();
+  }
+}
+
+function _refreshAvatarNodeNames() {
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var names = window._avatarNodeNames || [];
+    // Also scan for any Avatar_ nodes not yet registered
+    var extras = [];
+    try {
+      // Try iterating scene named nodes (X_ITE specific)
+      var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+      allNames.forEach(function(n){
+        if (n.startsWith('Avatar_') && names.indexOf(n) === -1) extras.push(n);
+      });
+    } catch(e) {}
+    if (extras.length) window._avatarNodeNames = names.concat(extras);
+  } catch(e) {}
 }
 
 function _applyStartPosition(xmlText) {
   var parser = new DOMParser();
   var doc = parser.parseFromString(xmlText, 'text/xml');
-  var sp = doc.querySelector('StartPosition');
-  if (!sp) {
-    console.warn('resetToStartPosition: no <StartPosition> in scene XML — snapping to origin');
-    _snapAvatarsToOrigin();
+  // Each <EmotionalArc cultivar="X"> has its own <StartPosition x y z>
+  // Move each avatar to its own start, not all to the same point.
+  var arcs = doc.querySelectorAll('EmotionalArc[cultivar]');
+  if (!arcs.length) {
+    // Fallback: single <StartPosition> moves all avatars
+    var sp = doc.querySelector('StartPosition');
+    if (!sp) {
+      console.warn('resetToStartPosition: no StartPosition in scene XML — snapping to origin');
+      _snapAvatarsToOrigin();
+      return;
+    }
+    _moveAvatars(parseFloat(sp.getAttribute('x')||0), parseFloat(sp.getAttribute('y')||0), parseFloat(sp.getAttribute('z')||0));
     return;
   }
-  var x = parseFloat(sp.getAttribute('x') || 0);
-  var y = parseFloat(sp.getAttribute('y') || 0);
-  var z = parseFloat(sp.getAttribute('z') || 0);
-  _moveAvatars(x, y, z);
-  console.log('resetToStartPosition: snapped to (' + x + ',' + y + ',' + z + ')');
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    arcs.forEach(function(arc) {
+      var cultivar = arc.getAttribute('cultivar');
+      var sp = arc.querySelector('StartPosition');
+      if (!cultivar || !sp) return;
+      var x = parseFloat(sp.getAttribute('x')||0);
+      var y = parseFloat(sp.getAttribute('y')||0);
+      var z = parseFloat(sp.getAttribute('z')||0);
+      var suffix = cultivar.replace(/[^A-Za-z0-9_]/g,'_');
+      var node = scene.getNamedNode('Avatar_' + suffix);
+      if (node) {
+        node.translation = new X3D.SFVec3f(x, y, z);
+        console.log('resetToStartPosition:', 'Avatar_'+suffix, '->', x, y, z);
+      } else {
+        console.warn('resetToStartPosition: node not found for cultivar:', cultivar);
+      }
+    });
+  } catch(e) { console.warn('_applyStartPosition error:', e); }
 }
 
 function _snapAvatarsToOrigin() {

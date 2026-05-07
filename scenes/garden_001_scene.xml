@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-03T03:07:21 -->
-<Scene id="garden_001" timestamp="2026-05-03T03:07:21" zone_set="garden_001" mode="improvisation" width="80" depth="60">
-<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="70.1" y="0" z="10.8"/></EmotionalArc>
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-06T01:34:32 -->
+<Scene id="garden_001" timestamp="2026-05-06T01:34:32" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="7.9" y="0" z="9.1"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="17.3" y="0" z="24"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="25.7" y="0" z="9.3"/></EmotionalArc>
 <Waypoints>
-  <Waypoint name="Dorm" label="Dorm" zone="Dormitory" pos_x="69.60" pos_y="0.00" pos_z="15.10"/>
-  <Waypoint name="Training" label="Training" zone="Dormitory" pos_x="17.20" pos_y="0.00" pos_z="43.10"/>
-  <Waypoint name="Pool" label="Pool" zone="Pool" pos_x="55.40" pos_y="0.00" pos_z="45.90"/>
-  <Waypoint name="Temple" label="Temple" zone="Temple" pos_x="40.50" pos_y="0.00" pos_z="19.70"/>
+  <Waypoint name="WP Comfort" label="Wp Comfort" zone="pool" pos_x="8.50" pos_y="0.00" pos_z="10.30">
+    <Statement speaker="Cindy">This is wonderful.</Statement>
+  </Waypoint>
+  <Waypoint name="WP Sports" label="Wp Sports" zone="sports arena" pos_x="23.80" pos_y="0.00" pos_z="9.40">
+    <Question speaker="Cindy">Arw these good sears?</Question>
+    <Response speaker="The Witness">You betcher swwet bippie, Hippie!!</Response>
+  </Waypoint>
+  <Waypoint name="WP Temple" label="Wp Temple" zone="temple" pos_x="18.60" pos_y="0.00" pos_z="24.50">
+    <Question speaker="Cindy">Ia Ma here?</Question>
+    <Response speaker="The Steward">Yeah.  She's out back whippin up a new potion,</Response>
+    <Statement speaker="Cindy">Good.  I need some relief after that game.</Statement>
+    <Statement speaker="The Witness">Me too.  Roll Tide!!</Statement>
+  </Waypoint>
 </Waypoints>
 </Scene>

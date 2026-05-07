@@ -107,6 +107,7 @@ class ArcWaypoint:
     S: float = 0.5
     question: str = ""
     response: str = ""
+    qa_lines: list = None   # [{type, speaker, text}, ...] — full sequence
     mode:     str = ""
     coherence: float = 0.0
     drift:    str = ""
@@ -129,6 +130,7 @@ class ArcWaypoint:
             "S":         self.S,
             "question":  self.question,
             "response":  self.response,
+            "qa_lines":  self.qa_lines or [],
             "mode":      self.mode,
             "coherence": self.coherence,
             "drift":     self.drift,
@@ -210,10 +212,22 @@ def parse_arc_file(filepath: str) -> dict:
                 lambda_val= wp_el.get("lambda", ""),
             )
 
-            q_el = wp_el.find("Question")
-            r_el = wp_el.find("Response")
-            wp.question = q_el.text.strip() if (q_el is not None and q_el.text) else ""
-            wp.response = r_el.text.strip() if (r_el is not None and r_el.text) else ""
+            qa_lines = []
+            for child in wp_el:
+                if child.tag in ("Question", "Response", "Statement"):
+                    txt = (child.text or "").strip()
+                    if txt:
+                        qa_lines.append({
+                            "type":    child.tag,
+                            "speaker": child.get("speaker", ""),
+                            "text":    txt,
+                        })
+            wp.qa_lines = qa_lines
+            # Legacy single fields — first Question / last Response
+            q_items = [l for l in qa_lines if l["type"] == "Question"]
+            r_items = [l for l in qa_lines if l["type"] == "Response"]
+            wp.question = q_items[0]["text"]  if q_items else ""
+            wp.response = r_items[-1]["text"] if r_items else ""
             wp.pos_x = float(wp_el.get("pos_x", 0.0))
             wp.pos_y = float(wp_el.get("pos_y", 0.0))
             wp.pos_z = float(wp_el.get("pos_z", 0.0))
@@ -447,11 +461,42 @@ class PlaybackManager:
                 steps = len(re.findall(r'<Waypoint ', raw))
             except Exception:
                 pass
+            # Extract path_name: prefer XML attribute, fall back to filename parse
+            path_name = ""
+            scene_name = ""
+            try:
+                pn_match = re.search(r'path_name="([^"]+)"', raw)
+                if pn_match:
+                    path_name = pn_match.group(1)
+                sn_match = re.search(r'<EmotionalArc[^>]+scene="([^"]+)"', raw)
+                if sn_match:
+                    scene_name = sn_match.group(1)
+            except Exception:
+                pass
+            if not path_name:
+                # Filename parse: arc_{pathName}_{YYYY...}.xml
+                base = fname[4:] if fname.startswith("arc_") else fname
+                base = base[:-4] if base.endswith(".xml") else base
+                ts_match = re.search(r'^(.*?)_(\d{4}[\-:T]\d{2}.*)$', base)
+                path_name = ts_match.group(1) if ts_match else base
+
+            # Extract first waypoint position for reset fallback
+            first_wp = None
+            try:
+                m_wp = re.search(r'<Waypoint[^>]*pos_x="([^"]+)"[^>]*pos_y="([^"]+)"[^>]*pos_z="([^"]+)"', raw)
+                if m_wp:
+                    first_wp = {"pos_x": m_wp.group(1), "pos_y": m_wp.group(2), "pos_z": m_wp.group(3)}
+            except Exception:
+                pass
+
             files.append({
-                "filename": fname,
-                "size":     size,
-                "cultivar": cultivar,
-                "steps_seen": steps,  # may be partial if file > 2KB
+                "filename":      fname,
+                "size":          size,
+                "cultivar":      cultivar,
+                "path_name":     path_name,
+                "scene_name":    scene_name,
+                "steps_seen":    steps,
+                "first_waypoint": first_wp,
             })
         return files
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_002 - 2026-05-06T00:37:01 -->
+<Scene id="garden_002" timestamp="2026-05-06T00:37:01" zone_set="garden_002" mode="improvisation" width="80" depth="80">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="13.3" y="0" z="17.3"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="32.8" y="0" z="49.5"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="52.7" y="0" z="23.6"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="wsPool" label="Pool" zone="pool" pos_x="15.00" pos_y="0.00" pos_z="19.70">
+    <Statement speaker="Cindy">I love it here. BUT i gotta go see Ma.</Statement>
+  </Waypoint>
+  <Waypoint name="wsTemple" label="temple" zone="temple" pos_x="34.30" pos_y="0.00" pos_z="45.00">
+    <Question speaker="Cindy">I Ma around?</Question>
+    <Response speaker="The Steward">Haven't seen her in a coon's age.</Response>
+    <Statement speaker="Cindy">Well damm.  I guess I'll mosey over and shoot some arrows</Statement>
+    <Statement speaker="The Steward">Y'all come back now.</Statement>
+    <Statement speaker="Cindy">Sho' thang,</Statement>
+  </Waypoint>
+  <Waypoint name="wsTraining" label="Training" zone="training" pos_x="45.30" pos_y="0.00" pos_z="20.50">
+    <Statement speaker="Cindy">YEEEEEEHAH!</Statement>
+    <Statement speaker="The Witness">Telk talk.</Statement>
+  </Waypoint>
+</Waypoints>
+</Scene>
