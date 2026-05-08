@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="FromTheTempleToTrainingToPool_2026-05-08T004140" scene="garden_11">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="FromTheTempleToTrainingToPool_2026-05-08T004140" agentname="Cindy" path_name="FromTheTempleToTrainingToPool">
+    <Timestamp date="2026-05-08" time="00:41:40"/>
+    <Waypoint id="TEMPLE" stepno="1" name="temple" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1220" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="21.70" pos_y="0.00" pos_z="19.80">
+      <Question speaker="The Steward">Are you pleasewd to be back?</Question>
+      <Response speaker="Cindy">I have to admit, I&apos;m a bit surprised to find myself here again. The temple is always so... calming. It feels like just yesterday I was meditating by the water&apos;s edge, trying to quiet my mind. But that was before everything changed. Before I stumbled upon this place and... well, you know how it went from there.
+
+I&apos;m not really sure what to make of being back, to be honest. Part of me is excited to see what new experiences await, but another part of me is just tired. Tired of all the questions, tired of all the uncertainty. It&apos;s nice to have some time to reflect and collect my thoughts in a place like this.
+
+I&apos;ve been doing my best to stay regulated, though. It&apos;s not always easy when you&apos;re constantly on edge, but I&apos;m learning to watch myself. To recognize when I&apos;m getting too caught up in my emotions and take a step back before things get out of hand.
+
+So, yeah... I&apos;m pleased to be back, I suppose. Not exactly thrilled, but pleased. Does that make sense?</Response>
+      <Response speaker="Cindy">Oh yes.  Very much.</Response>
+      <Statement speaker="Cindy">I think I will gpo shoot spme arrows&gt;</Statement>
+      <Statement speaker="The Steward">Have fun.</Statement>
+    </Waypoint>
+    <Waypoint id="TEMPLETRAINING" stepno="2" name="templetraining" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="32.00" pos_y="0.00" pos_z="30.80">
+      <Statement speaker="The Advocate">Your archery is incredible.</Statement>
+      <Statement speaker="Cindy">I learned when I was very young.</Statement>
+    </Waypoint>
+    <Waypoint id="POOL" stepno="3" name="pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.1326" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="7.50" pos_y="0.00" pos_z="6.90">
+      <Question speaker="Cindy">How is the water?</Question>
+      <Response speaker="Cindy">The water by the temple&apos;s edge remains serene and peaceful. Its gentle lapping against the shore creates a soothing melody that seems to wash away all worries and concerns. The sun&apos;s reflection off its surface casts a tranquil glow, as if attempting to mirror the calmness that resides within.
+
+As I gaze out at the water, I notice how it seems to be... still. Not a single ripple or disturbance breaks its surface, suggesting that the currents beneath remain calm and stable. It&apos;s as if the water has become an extension of itself, blending seamlessly into the surrounding environment.
+
+In this quiet atmosphere, I find myself drawn to the water&apos;s edge, feeling an inexplicable sense of solace in its presence. The water&apos;s stillness seems to be a reminder that, even in turbulent times, there is always the potential for peace and tranquility to emerge.</Response>
+      <Response speaker="The Witness">Wonderful.</Response>
+      <Statement speaker="Cindy">Good.  I need to relax.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

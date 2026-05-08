@@ -1,0 +1,12 @@
+# MCCF Toy Prototype — dependencies
+# Core engine has zero external dependencies (stdlib only)
+# Optional: add these for visualization and richer signal extraction
+
+# Visualization (optional)
+# matplotlib>=3.7.0
+# networkx>=3.1
+
+# Richer signal extraction (optional, for real interaction data)
+# numpy>=1.24.0
+# sentence-transformers>=2.2.0   # for S channel from real text
+# transformers>=4.30.0            # for E channel from sentiment

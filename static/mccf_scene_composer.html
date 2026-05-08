@@ -127,8 +127,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('agents')">Agents</button>
     <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
     <button class="mtab" onclick="setMode('paths')">Paths</button>
-    <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
+    <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
   </div>
   <div class="api-row">
     <div class="sdot" id="sdot"></div>
@@ -225,7 +225,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <label>Label</label><input id="wp-label" type="text" placeholder="Comfort Zone">
       <label>Zone (optional)</label>
       <select id="wp-zone"><option value="">-- none --</option></select>
-      <label>Dwell (s)</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div><label>Dwell (s) — time at waypoint</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5"></div>
+        <div><label>Pace (m/s) — travel speed here</label><input id="wp-pace" type="number" value="1.4" min="0.1" max="10" step="0.1"></div>
+      </div>
       <div class="sh" style="margin-top:10px">Dialogue Lines</div>
       <div style="display:flex;gap:4px;margin-bottom:3px;font-size:11px;color:var(--dim)">
         <div style="width:84px;min-width:84px">Type</div>
@@ -938,6 +941,7 @@ function editWaypoint(name) {
   document.getElementById('wp-name').value  = wp.name;
   document.getElementById('wp-label').value = wp.label || '';
   document.getElementById('wp-dwell').value = wp.dwell || 2;
+  document.getElementById('wp-pace').value  = wp.pace  || 1.4;
   populateWPZones();
   var zSel = document.getElementById('wp-zone');
   if (wp.zone) zSel.value = wp.zone;
@@ -1020,13 +1024,14 @@ function confirmWP(){
   if(!pendingPos){toast('Click map first',true);return;}
   var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
   var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
+  var pace=parseFloat(document.getElementById('wp-pace').value)||1.4;
   if(!name){toast('Name required',true);return;}
   syncWPQALines();
   // Build legacy single-question field from first Question line (for LLM arc runner compat)
   var firstQ='';
   _wpQALines.forEach(function(l){if(!firstQ&&l.type==='Question'&&l.text)firstQ=l.text;});
   var qaLines=_wpQALines.filter(function(l){return l.text.trim();}).map(function(l){return{type:l.type,speaker:l.speaker,text:l.text};});
-  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ,qaLines:qaLines};
+  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,pace:pace,position:pendingPos.slice(),question:firstQ,qaLines:qaLines};
   apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ}).catch(function(){});
   placing=null;pendingPos=null;
   document.getElementById('wp-form').style.display='none';
@@ -1138,8 +1143,8 @@ function buildZX3D(z,iS){
   var r=z.radius||4,bs=Math.max(0.8,r*0.4),sid=safeId(z.id),nm=xe(z.name||z.id);
   var s='<!-- Zone: '+nm+' -->\n';
   s+='<Transform DEF="Zone_'+sid+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
-  s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Box size="'+(bs*2)+' 0.5 '+(bs*2)+'"/></Shape>\n';
-  s+='<Transform translation="0 1.4 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
+  s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Cylinder height="0.5" radius="'+r+'"/></Shape>\n';
+  s+='<Transform translation="0 '+(r*0.5+1.2)+' 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
   s+='<Text string="'+nm+'"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
   s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
   if(iS)s+='<Sound location="0 0 0" maxBack="'+r+'" maxFront="'+r+'" spatialize="true" enabled="false"><AudioClip DEF="Sound_'+sid+'" url="" loop="true" stopTime="1"/></Sound>\n';
@@ -1154,20 +1159,116 @@ function buildAX3D(a){
   s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
   s+='<Text DEF="NameText_'+sn+'" string="&quot;'+qn+'&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  // Avatar viewpoints — parented inside Transform so they ride with the figure
+  // VP_Eye: eye level, looking forward (-Z direction in X3D)
+  s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>\n';
+  // VP_Side: offset right, looking left at avatar (from audience right)
+  s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterp(path){
   var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
   if(wps.length<2)return '';
-  var n=wps.length,keys=wps.map(function(_,i){return (i/(n-1)).toFixed(4);}).join(' ');
-  var vals=wps.map(function(wp){var pos=wp.position||[0,0,0];return pos[0]+' 0 '+pos[2];}).join(' ');
-  var sn=safeId(path.name),sa=safeId(path.agent);
-  // cycleInterval = sum of all waypoint dwell times (default 4s each)
-  var totalDwell=wps.reduce(function(sum,wp){return sum+(parseFloat(wp.dwell)||4);},0);
-  return '<PositionInterpolator DEF="Path_'+sn+'" key="'+keys+'" keyValue="'+vals+'"/>\n'+
-    '<TimeSensor DEF="Timer_'+sn+'" cycleInterval="'+totalDwell.toFixed(1)+'" loop="false" enabled="false"/>\n'+
-    '<ROUTE fromNode="Timer_'+sn+'" fromField="fraction_changed" toNode="Path_'+sn+'" toField="set_fraction"/>\n'+
-    '<ROUTE fromNode="Path_'+sn+'" fromField="value_changed" toNode="Avatar_'+sa+'" toField="translation"/>\n\n';
+  var sa=safeId(path.agent);
+  var numSegs=wps.length-1;
+  var out='<!-- Animation: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' -->\n';
+
+  // Per-segment movement nodes
+  for(var i=0;i<numSegs;i++){
+    var p1=wps[i].position||[0,0,0];
+    var p2=wps[i+1].position||[0,0,0];
+    var seg=i+1;
+    var dx=p2[0]-p1[0], dz=p2[2]-p1[2];
+    var dist=Math.sqrt(dx*dx+dz*dz);
+    var pace=parseFloat(wps[i+1].pace)||1.4;
+    var travelTime=Math.max(0.5,(dist/pace)).toFixed(2);
+    var dwellTime=(parseFloat(wps[i+1].dwell)||2).toFixed(1);
+
+    out+='\n<!-- Segment '+seg+': '+wps[i].name+' -> '+wps[i+1].name
+        +' dist='+dist.toFixed(1)+'m pace='+pace+'m/s travel='+travelTime+'s dwell='+dwellTime+'s -->\n';
+    out+='<PositionInterpolator DEF="Interp_'+sa+'_'+seg+'" key="0 1"'
+        +' keyValue="'+p1[0]+' '+p1[1]+' '+p1[2]+' '+p2[0]+' '+p2[1]+' '+p2[2]+'"/>\n';
+    out+='<TimeSensor DEF="Timer_'+sa+'_'+seg+'" cycleInterval="'+travelTime+'" loop="false" enabled="false"/>\n';
+    out+='<TimeSensor DEF="Dwell_'+sa+'_'+seg+'" cycleInterval="'+dwellTime+'" loop="false" enabled="false"/>\n';
+    // Travel timer drives interpolator
+    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="fraction_changed"'
+        +' toNode="Interp_'+sa+'_'+seg+'" toField="set_fraction"/>\n';
+    // Interpolator drives avatar position
+    out+='<ROUTE fromNode="Interp_'+sa+'_'+seg+'" fromField="value_changed"'
+        +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
+    // Travel timer arrival -> Arrival_ script (NOT directly to Dwell_)
+    // Arrival_ holds dwell until loader calls releaseDwell after TTS completes
+    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="cycleTime"'
+        +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
+    // Dwell completion fires next travel timer (not on last segment)
+    if(i<numSegs-1){
+      out+='<ROUTE fromNode="Dwell_'+sa+'_'+seg+'" fromField="cycleTime"'
+          +' toNode="Timer_'+sa+'_'+(seg+1)+'" toField="startTime"/>\n';
+    }
+  }
+
+  // Arrival_ Script — one per agent
+  // arrived (SFTime inputOnly)      — receives cycleTime from each travel timer
+  // releaseDwell (SFBool inputOnly) — loader sets true after TTS completes
+  // segmentArrived (SFInt32 outputOnly) — loader reads to know which segment
+  var dwellDefs=[];
+  for(var d=1;d<=numSegs;d++) dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
+  out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
+  out+='  <field name="arrived" type="SFTime" accessType="inputOnly"/>\n';
+  out+='  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>\n';
+  out+='  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>\n';
+  out+='  <![CDATA[ecmascript:\n';
+  out+='  var _seg=0;\n';
+  out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
+  out+='  function arrived(t,time){\n';
+  out+='    _seg++;\n';
+  out+='    segmentArrived=_seg;\n';
+  out+='    Browser.println("Arrival_'+sa+': arrived seg "+_seg);\n';
+  out+='  }\n';
+  out+='  function releaseDwell(val,time){\n';
+  out+='    if(!val||_seg<1)return;\n';
+  out+='    var dwId=_dwellIds[_seg-1];\n';
+  out+='    try{\n';
+  out+='      var dw=Browser.currentScene.getNamedNode(dwId);\n';
+  out+='      dw.enabled=true;\n';
+  out+='      dw.startTime=Browser.currentTime;\n';
+  out+='      Browser.println("Arrival_'+sa+': released dwell "+dwId);\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+' releaseDwell error: "+e);}\n';
+  out+='  }\n';
+  out+='  ]]>\n';
+  out+='</'+'Script>\n\n';
+
+  // Kill_ Script — disables all timers + snaps avatar to WP1
+  var timerIds=[];
+  for(var j=1;j<wps.length;j++){
+    timerIds.push("'Timer_"+sa+'_'+j+"'");
+    timerIds.push("'Dwell_"+sa+'_'+j+"'");
+  }
+  var wp1pos=wps[0].position||[0,0,0];
+  out+='<Script DEF="Kill_'+sa+'" directOutput="true" mustEvaluate="true">\n';
+  out+='  <field name="killAll" type="SFBool" accessType="inputOnly"/>\n';
+  out+='  <field name="resetPos" type="SFBool" accessType="inputOnly"/>\n';
+  out+='  <![CDATA[ecmascript:\n';
+  out+='  var timerIds=['+timerIds.join(',')+'];\n';
+  out+='  var startX='+wp1pos[0]+', startY='+wp1pos[1]+', startZ='+wp1pos[2]+';\n';
+  out+='  function killAll(val,time){\n';
+  out+='    if(!val)return;\n';
+  out+='    for(var i=0;i<timerIds.length;i++){\n';
+  out+='      try{Browser.currentScene.getNamedNode(timerIds[i]).enabled=false;}catch(e){}\n';
+  out+='    }\n';
+  out+='  }\n';
+  out+='  function resetPos(val,time){\n';
+  out+='    if(!val)return;\n';
+  out+='    killAll(true,time);\n';
+  out+='    try{\n';
+  out+='      var av=Browser.currentScene.getNamedNode("Avatar_'+sa+'");\n';
+  out+='      av.translation=new SFVec3f(startX,startY,startZ);\n';
+  out+='    }catch(e){Browser.println("Kill_'+sa+' resetPos error: "+e);}\n';
+  out+='  }\n';
+  out+='  ]]>\n';
+  out+='</'+'Script>\n\n';
+
+  return out;
 }
 function buildMS(){
   var af=Object.keys(placedAgents).map(function(n){var s=safeId(n);
@@ -1242,7 +1343,19 @@ function exportZoneXML(){
     x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
     x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n</Zone>\n';
   });
-  x+='</ZoneSet>\n';dlFile(sn+'_zones.xml',x,'application/xml');toast('Zone XML exported');
+  x+='</ZoneSet>\n';
+  var zfilename=sn+'_zones.xml';
+  fetch(API+'/scene/save/zones',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filename:zfilename,content:x})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      document.getElementById('exp-log').innerHTML+='<div style="color:var(--cool)">Zone XML: zones/'+zfilename+'</div>';
+      toast('Zone XML saved to zones/');
+    })
+    .catch(function(){
+      dlFile(zfilename,x,'application/xml');
+      toast('Zone XML downloaded (server save failed)');
+    });
 }
 function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
@@ -1256,7 +1369,8 @@ function exportSceneXML(){
     Object.values(waypoints).forEach(function(wp){
       var pos=wp.position||[0,0,0];
       x+='  <Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+
-        '" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+'"';
+        '" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+
+        '" dwell="'+(wp.dwell||2)+'" pace="'+(wp.pace||1.4)+'"';
       var lines=wp.qaLines||(wp.question?[{type:'Question',speaker:'',text:wp.question}]:[]);
       if(lines.length){
         x+='>\n';
@@ -1432,8 +1546,8 @@ async function _sceneArcAdvance(){
         var ql=qaLines[qi];
         if(!ql.text||!ql.text.trim()) continue;
         if(ql.type==='Response'||ql.type==='Statement'){
-          // Scripted/Statement line — record as-is, no LLM call
-          arcRLines.push({speaker:ql.speaker,text:ql.text});
+          // Scripted/Statement line — record as-is, no LLM call. Carry type for arc XML.
+          arcRLines.push({_type:ql.type, speaker:ql.speaker, text:ql.text});
           document.getElementById('run-response').textContent=ql.text;
           continue;
         }
@@ -1490,13 +1604,43 @@ async function _sceneArcAdvance(){
     bc2.close();
   }catch(e){}
 
+  // Build merged qaLines for the arc XML:
+  // - arcQLines: authored Question lines (as sent to LLM)
+  // - arcRLines: Response/Statement lines (authored scripted + Ollama replies)
+  // Interleave: for each Question, append its Response immediately after.
+  // Statements collected in arcRLines are appended at end if no matching Q.
+  var mergedQALines = [];
+  if(arcQLines.length || arcRLines.length) {
+    // Pair Questions with their Responses in order
+    var rIdx = 0;
+    for(var qi2=0; qi2<arcQLines.length; qi2++) {
+      mergedQALines.push({type:'Question', speaker:arcQLines[qi2].speaker, text:arcQLines[qi2].text});
+      // Append the next Response (Ollama reply) for this Question
+      if(rIdx < arcRLines.length) {
+        var rl = arcRLines[rIdx];
+        // Only add as Response if it came from LLM (speaker = cultivar)
+        // Statements (no speaker or scripted) keep their type
+        var rType = (rl.speaker === cultivar) ? 'Response' : (rl._type || 'Response');
+        mergedQALines.push({type:rType, speaker:rl.speaker, text:rl.text});
+        rIdx++;
+      }
+    }
+    // Append remaining arcRLines (Statements, scripted Responses not paired with a Q)
+    for(; rIdx < arcRLines.length; rIdx++) {
+      var rl2 = arcRLines[rIdx];
+      mergedQALines.push({type:rl2._type||'Response', speaker:rl2.speaker, text:rl2.text});
+    }
+  } else {
+    // No dialogue at this waypoint — carry authored qaLines as-is (movement only)
+    mergedQALines = qaLines.slice();
+  }
   _sceneArcRows.push({
     step:_sceneArcStep+1,waypoint:wp.label||wpName,
     E:E.toFixed(4),B:B.toFixed(4),P:P.toFixed(4),S:S.toFixed(4),
     mode:'scene',coherence:coherence.toFixed(4),
     uncertainty:'0.5',valence:'0.0',reward:'0.0',
     pos_x:pos[0].toFixed(2),pos_y:'0.00',pos_z:pos[2].toFixed(2),
-    qaLines:qaLines,
+    qaLines:mergedQALines,
     question:arcQLines.length?arcQLines[0].text:(wp.question||''),
     response:arcRLines.length?arcRLines[arcRLines.length-1].text:''
   });

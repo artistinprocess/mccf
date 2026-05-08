@@ -145,14 +145,9 @@ button.active { background: #4af0a8; color: #111; }
 
 <div id="controls">
   <span style="color:#6a7890;font-size:11px;">Viewpoints:</span>
-  <button onclick="gotoVP('VP1')" id="btn-VP1">W1</button>
-  <button onclick="gotoVP('VP2')" id="btn-VP2">W2</button>
-  <button onclick="gotoVP('VP3')" id="btn-VP3">W3</button>
-  <button onclick="gotoVP('VP4')" id="btn-VP4">W4</button>
-  <button onclick="gotoVP('VP5')" id="btn-VP5">W5</button>
-  <button onclick="gotoVP('VP6')" id="btn-VP6">W6</button>
-  <button onclick="gotoVP('VP7')" id="btn-VP7">W7</button>
-  <button onclick="gotoVP('VP8')" id="btn-VP8">Overview</button>
+  <button onclick="gotoVP('VP_Overview')" id="btn-VP_Overview">Overview</button>
+  <button onclick="gotoVP('VP_Origin')" id="btn-VP_Origin">Origin</button>
+  <span id="vp-zone-btns"></span>
   <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
   <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
   <span id="status"><span id="poll-indicator"></span>Loading…</span>
@@ -196,9 +191,31 @@ function setStatus(msg) {
   document.getElementById('status').innerHTML = '<span id="poll-indicator"></span>' + msg;
 }
 
+function buildVPButtons() {
+  // Build viewpoint buttons dynamically from VP_ nodes in the loaded scene
+  var span = document.getElementById('vp-zone-btns');
+  if (!span) return;
+  span.innerHTML = '';
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    allNames.filter(function(n){ return n.startsWith('VP_') && n !== 'VP_Overview' && n !== 'VP_Origin'; })
+      .forEach(function(vpId) {
+        var label = vpId.replace('VP_','').replace(/_/g,' ');
+        var btn = document.createElement('button');
+        btn.id = 'btn-' + vpId;
+        btn.textContent = label;
+        btn.onclick = function(){ gotoVP(vpId); };
+        span.appendChild(btn);
+      });
+  } catch(e) { console.warn('buildVPButtons:', e); }
+}
+
 canvas.addEventListener('load', () => {
   setStatus('Scene loaded');
-  setTimeout(() => gotoVP('VP1'), 400);
+  buildVPButtons();
+  setTimeout(() => gotoVP('VP_Overview'), 400);
   startPolling();
   try {
     const arcChannel = new BroadcastChannel('mccf_arc');
@@ -733,79 +750,127 @@ function _buildSceneVoiceMap() {
 
 var _pbSceneVoiceMap = null;  // built once per scene load
 
-function pbSpeakQALines(qaLines) {
+function pbSpeakQALines(qaLines, onComplete) {
+  // onComplete — optional callback fired when all TTS lines finish.
+  // Used by Option B: after TTS completes, loader calls releaseDwell on Arrival_ script.
   var voiceEl = document.getElementById('pb-voice');
-  if (!voiceEl || !voiceEl.checked) return;
-  if (!window.speechSynthesis || !qaLines || !qaLines.length) return;
+  if (!voiceEl || !voiceEl.checked) {
+    if (onComplete) onComplete();
+    return;
+  }
+  if (!window.speechSynthesis || !qaLines || !qaLines.length) {
+    if (onComplete) onComplete();
+    return;
+  }
   var key = qaLines.map(function(l){return l.text;}).join('|');
-  if (key === _pbLastSpoken) return;
+  if (key === _pbLastSpoken) {
+    if (onComplete) onComplete();
+    return;
+  }
   _pbLastSpoken = key;
   speechSynthesis.cancel();
 
-  // Build (or rebuild) scene voice map. Rebuild if empty — handles the race where
-  // canvas 'load' fires after the first poll and _loadedSceneXml was null on first call.
-  if (!_pbSceneVoiceMap || Object.keys(_pbSceneVoiceMap).length === 0) {
-    _pbSceneVoiceMap = _buildSceneVoiceMap();
+  function _ensureVoiceMapThenSpeak(retriesLeft) {
+    if (!_pbVoices.length) {
+      if (window.speechSynthesis) {
+        var v = speechSynthesis.getVoices().filter(function(v){ return v.lang.startsWith('en'); });
+        if (v.length) _pbVoices = v;
+      }
+    }
+    if ((!_pbSceneVoiceMap || Object.keys(_pbSceneVoiceMap).length === 0) && _pbVoices.length) {
+      _pbSceneVoiceMap = _buildSceneVoiceMap();
+    }
+    if (!_pbVoices.length && retriesLeft > 0) {
+      setTimeout(function(){ _ensureVoiceMapThenSpeak(retriesLeft - 1); }, 300);
+      return;
+    }
+    _doSpeak();
   }
 
-  var queue = qaLines.filter(function(l){return l.text && l.text.trim();});
-  // Rotation fallback counter for speakers not in scene XML
-  var rotationCount = 0;
-  function speakNext(i) {
-    if (i >= queue.length) return;
-    var line = queue[i];
-    var utt = new SpeechSynthesisUtterance(line.text);
-    utt.rate = 0.95;
-    var speaker = line.speaker || (line.type === 'Question' ? '__Q__' : '__R__');
-    // (1) Scene XML voice assignment
-    var sceneVoice = _pbSceneVoiceMap && _pbSceneVoiceMap[speaker];
-    if (sceneVoice) {
-      utt.voice = sceneVoice;
-    } else {
-      // (2) Rotation fallback — consistent per speaker across the session
-      if (_pbSpeakerVoiceMap[speaker] === undefined) {
-        _pbSpeakerVoiceMap[speaker] = rotationCount % Math.max(1, _pbVoices.length);
-        rotationCount++;
+  function _doSpeak() {
+    var queue = qaLines.filter(function(l){return l.text && l.text.trim();});
+    var rotationCount = 0;
+    function speakNext(i) {
+      if (i >= queue.length) {
+        // All lines spoken — fire completion callback
+        if (onComplete) onComplete();
+        return;
       }
-      if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
+      var line = queue[i];
+      var utt = new SpeechSynthesisUtterance(line.text);
+      utt.rate = 0.95;
+      var speaker = line.speaker || (line.type === 'Question' ? '__Q__' : '__R__');
+      var sceneVoice = _pbSceneVoiceMap && _pbSceneVoiceMap[speaker];
+      if (sceneVoice) {
+        utt.voice = sceneVoice;
+      } else {
+        if (_pbSpeakerVoiceMap[speaker] === undefined) {
+          _pbSpeakerVoiceMap[speaker] = rotationCount % Math.max(1, _pbVoices.length);
+          rotationCount++;
+        }
+        if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
+      }
+      utt.onend = function() { speakNext(i+1); };
+      utt.onerror = function() { speakNext(i+1); }; // don't hang on TTS error
+      speechSynthesis.speak(utt);
     }
-    utt.onend = function() { speakNext(i+1); };
-    speechSynthesis.speak(utt);
+    speakNext(0);
   }
-  speakNext(0);
+
+  _ensureVoiceMapThenSpeak(3);
+}
+
+function pbReleaseDwell(agentSafeName) {
+  // Called after TTS completes for an X3D-driven agent.
+  // Sets releaseDwell=true on Arrival_{agentSafeName} Script node via SAI.
+  // The Arrival_ script then starts the correct Dwell_ timer, which chains to next Timer_.
+  if (!canvas || !canvas.browser) return;
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var arrivalNode = scene.getNamedNode('Arrival_' + agentSafeName);
+    if (!arrivalNode) {
+      console.warn('pbReleaseDwell: Arrival_' + agentSafeName + ' not found — old scene?');
+      return;
+    }
+    arrivalNode.releaseDwell = true;
+    console.log('pbReleaseDwell: released dwell for', agentSafeName);
+  } catch(e) {
+    console.warn('pbReleaseDwell error:', e);
+  }
 }
 
 // Track which avatar safenames are being driven by X3D TimeSensor (not JS lerp)
 var _x3dTimerActive = {};
 
 function pbActivateX3DTimers(arcFileEntry) {
-  // Called after arc is selected and scene XML is loaded.
-  // For each path in the scene, if Timer_{pathName} exists, start it via SAI.
-  // This hands position control to X3D natively.
+  // New architecture: only start Timer_{safeName}_1 for each agent.
+  // The ROUTE chain handles all subsequent segments automatically.
+  // Never start Dwell_ or Timer_*_2+ directly — those fire via ROUTEs.
   if (!canvas || !canvas.browser) return;
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
     _x3dTimerActive = {};
-    // Find all TimeSensor nodes named Timer_*
     var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    // Find only Timer_{anything}_1 nodes — first segment starters
     allNames.forEach(function(nodeName) {
-      if (!nodeName.startsWith('Timer_')) return;
+      if (!/^Timer_.+_1$/.test(nodeName)) return;
       var timerNode = scene.getNamedNode(nodeName);
       if (!timerNode) return;
-      // Find which avatar this timer drives via the ROUTE (Path_ → Avatar_)
-      // By convention: Timer_X drives Avatar_{path.agent} via Path_X
-      // We find the corresponding Path_ node and trace the avatar from keyValue
-      // Simpler: trust naming convention — mark all avatars as X3D-driven
-      // when any timer is active
       try {
-        timerNode.startTime = canvas.browser.currentTime;
         timerNode.enabled = true;
-        // Mark all Avatar_ nodes as X3D-driven
-        allNames.forEach(function(n){
-          if (n.startsWith('Avatar_')) _x3dTimerActive[n] = true;
-        });
-        console.log('pbActivateX3DTimers: started', nodeName);
+        timerNode.startTime = canvas.browser.currentTime;
+        // Derive avatar name from timer name: Timer_Cindy_1 -> Avatar_Cindy
+        var agentSuffix = nodeName.replace(/^Timer_/, '').replace(/_1$/, '');
+        var avatarName = 'Avatar_' + agentSuffix;
+        _x3dTimerActive[avatarName] = true;
+        console.log('pbActivateX3DTimers: started', nodeName, '-> driving', avatarName);
+        // Set server pace to a large value so it does not advance steps
+        // before X3D travel+dwell completes. TTS fires on step change at zero delay.
+        // User can override in the pace field — 999 = effectively manual only.
+        var paceEl = document.getElementById('pb-pace');
+        if (paceEl) { paceEl.value = 999; paceEl.title = 'X3D timer active — pace auto-set to 999s'; }
       } catch(e) { console.warn('pbActivateX3DTimers: could not start', nodeName, e); }
     });
   } catch(e) { console.warn('pbActivateX3DTimers error:', e); }
@@ -928,15 +993,40 @@ async function pbStop() {
 }
 async function pbReset() {
   pbStopPolling();
-  pbStopX3DTimers();
+  _pbResetViaKillScript();
   _lerpDest = {};
+  _x3dTimerActive = {};
   _pbLastStepKey = '';
+  _pbLastSpoken = '';
   try {
     const r=await fetch(API+'/arc/playback/reset',{method:'POST'});
     pbUpdateDisplay(await r.json());
     var qr=document.getElementById('pb-qr'); if(qr) qr.style.display='none';
-    _pbLastSpoken='';
   } catch(e) {}
+}
+
+function _pbResetViaKillScript() {
+  if (!canvas || !canvas.browser) { resetToStartPosition(); return; }
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) { resetToStartPosition(); return; }
+    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    var found = false;
+    allNames.forEach(function(nodeName) {
+      if (!nodeName.startsWith('Kill_')) return;
+      var killNode = scene.getNamedNode(nodeName);
+      if (!killNode) return;
+      try {
+        killNode.resetPos = true;
+        found = true;
+        console.log('pbReset: fired resetPos on', nodeName);
+      } catch(e) { console.warn('pbReset: Kill_ resetPos failed on', nodeName, e); }
+    });
+    if (!found) {
+      console.warn('pbReset: no Kill_ scripts found — falling back to JS resetToStartPosition');
+      resetToStartPosition();
+    }
+  } catch(e) { console.warn('_pbResetViaKillScript error:', e); resetToStartPosition(); }
 }
 
 function pbStartPolling(pace) {
@@ -1012,16 +1102,33 @@ function pbUpdateDisplay(state) {
   var stepKey = (wp.id||'') + '|' + (wp.stepno||'') + '|' + (wp.pos_x||'') + '|' + (wp.pos_z||'');
   var isNewStep = (stepKey !== _pbLastStepKey);
   if (isNewStep) _pbLastStepKey = stepKey;
-  // Delay TTS until avatar lerp is complete — but only schedule once per step, not per poll
+  // TTS fires on new step regardless of whether position is X3D-driven or JS-lerped.
+  // Decoupled from _x3dTimerActive — dialogue is MCCF domain, not X3D domain.
   if (isNewStep && (qaLines.length || wp.question || wp.response)) {
     clearTimeout(window._pbSpeakTimer);
+    var safeName2 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
+    var isX3DDriven = !!_x3dTimerActive['Avatar_' + safeName2];
+    // X3D-driven: fire immediately — avatar has arrived, Arrival_ script is holding the dwell.
+    // After TTS completes, call pbReleaseDwell so X3D starts the dwell timer.
+    // JS-lerp: delay by pace so avatar arrives before speaking. No releaseDwell needed.
+    var ttsDelay = isX3DDriven ? 0 : Math.round(pace2 * 1000);
     window._pbSpeakTimer = setTimeout(function() {
       if (qaLines.length) {
-        pbSpeakQALines(qaLines);
+        if (isX3DDriven) {
+          pbSpeakQALines(qaLines, function() { pbReleaseDwell(safeName2); });
+        } else {
+          pbSpeakQALines(qaLines);
+        }
       } else if (wp.response) {
         pbSpeak(wp.response);
+        if (isX3DDriven) setTimeout(function(){ pbReleaseDwell(safeName2); }, 500);
       }
-    }, Math.round(pace2 * 1000));
+    }, ttsDelay);
+  } else if (isNewStep && isX3DDriven) {
+    // No dialogue at this waypoint — release dwell immediately so avatar keeps moving
+    var safeName3 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
+    var isX3DDriven2 = !!_x3dTimerActive['Avatar_' + safeName3];
+    if (isX3DDriven2) setTimeout(function(){ pbReleaseDwell(safeName3); }, 100);
   }
   pbPushPosition(wp);
 }

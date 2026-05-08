@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
 <X3D profile="Immersive" version="4.0">
-<head><meta name="title" content="garden_001"/></head>
+<head><meta name="title" content="garden_11"/></head>
 <Scene>
 <ProtoDeclare name="MCCFAgent"><ProtoInterface>
 <field name="agentName" accessType="initializeOnly" type="MFString" value='"Agent"'/>
@@ -26,37 +26,37 @@
 <Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>
 <Transform translation="20 15 20"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="48"/></Transform>
 <Viewpoint DEF="VP_Overview" description="Overview" position="20 28 20" orientation="1 0 0 -0.8"/>
-<Viewpoint DEF="VP_pool" description="pool" position="7.6 3 0" orientation="0 0 0 0"/>
-<Viewpoint DEF="VP_temple" description="temple" position="17.8 3 17.2" orientation="0 0 0 0"/>
-<Viewpoint DEF="VP_sports_arena" description="sports arena" position="24.6 3 1.4000000000000004" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_temple" description="temple" position="19.5 3 11.8" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_pool" description="pool" position="7.7 3 0" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_training" description="training" position="30.7 3 23.4" orientation="0 0 0 0"/>
 <Transform translation="20 -0.05 20"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="40 0.08 40"/></Shape></Transform>
 <Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance><IndexedLineSet coordIndex="0 1 -1 2 3 -1 4 5 -1 6 7 -1 8 9 -1 10 11 -1 12 13 -1 14 15 -1 16 17 -1 18 19 -1"><Coordinate point="0 0.02 0 0 0.02 40 10 0.02 0 10 0.02 40 20 0.02 0 20 0.02 40 30 0.02 0 30 0.02 40 40 0.02 0 40 0.02 40 0 0.02 0 40 0.02 0 0 0.02 10 40 0.02 10 0 0.02 20 40 0.02 20 0 0.02 30 40 0.02 30 0 0.02 40 40 0.02 40"/></IndexedLineSet></Shape>
-<!-- Zone: pool -->
-<Transform DEF="Zone_pool" translation="7.6 0 8">
-<Shape><Appearance><Material diffuseColor="0.941 0.376 0.376" transparency="0.55" emissiveColor="0.941 0.376 0.376"/></Appearance><Box size="3.2 0.5 3.2"/></Shape>
-<Transform translation="0 1.4 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.941 0.376 0.376"/></Appearance>
-<Text string="pool"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
-<ProximitySensor DEF="Prox_pool" size="8 4 8" enabled="true"/>
-<Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_pool" url="" loop="true" stopTime="1"/></Sound>
-</Transform>
 <!-- Zone: temple -->
-<Transform DEF="Zone_temple" translation="17.8 0 25.2">
-<Shape><Appearance><Material diffuseColor="0.627 0.376 0.941" transparency="0.55" emissiveColor="0.627 0.376 0.941"/></Appearance><Box size="4.4 0.5 4.4"/></Shape>
-<Transform translation="0 1.4 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.627 0.376 0.941"/></Appearance>
+<Transform DEF="Zone_temple" translation="19.5 0 19.8">
+<Shape><Appearance><Material diffuseColor="0.627 0.376 0.941" transparency="0.55" emissiveColor="0.627 0.376 0.941"/></Appearance><Cylinder height="0.5" radius="4"/></Shape>
+<Transform translation="0 3.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.627 0.376 0.941"/></Appearance>
 <Text string="temple"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
-<ProximitySensor DEF="Prox_temple" size="11 4 11" enabled="true"/>
-<Sound location="0 0 0" maxBack="5.5" maxFront="5.5" spatialize="true" enabled="false"><AudioClip DEF="Sound_temple" url="" loop="true" stopTime="1"/></Sound>
+<ProximitySensor DEF="Prox_temple" size="8 4 8" enabled="true"/>
+<Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_temple" url="" loop="true" stopTime="1"/></Sound>
 </Transform>
-<!-- Zone: sports arena -->
-<Transform DEF="Zone_sports_arena" translation="24.6 0 9.4">
-<Shape><Appearance><Material diffuseColor="0.941 0.251 0.251" transparency="0.55" emissiveColor="0.941 0.251 0.251"/></Appearance><Box size="6 0.5 6"/></Shape>
-<Transform translation="0 1.4 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.941 0.251 0.251"/></Appearance>
-<Text string="sports arena"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
-<ProximitySensor DEF="Prox_sports_arena" size="15 4 15" enabled="true"/>
-<Sound location="0 0 0" maxBack="7.5" maxFront="7.5" spatialize="true" enabled="false"><AudioClip DEF="Sound_sports_arena" url="" loop="true" stopTime="1"/></Sound>
+<!-- Zone: pool -->
+<Transform DEF="Zone_pool" translation="7.7 0 7.5">
+<Shape><Appearance><Material diffuseColor="0.941 0.376 0.376" transparency="0.55" emissiveColor="0.941 0.376 0.376"/></Appearance><Cylinder height="0.5" radius="2"/></Shape>
+<Transform translation="0 2.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.941 0.376 0.376"/></Appearance>
+<Text string="pool"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
+<ProximitySensor DEF="Prox_pool" size="4 4 4" enabled="true"/>
+<Sound location="0 0 0" maxBack="2" maxFront="2" spatialize="true" enabled="false"><AudioClip DEF="Sound_pool" url="" loop="true" stopTime="1"/></Sound>
+</Transform>
+<!-- Zone: training -->
+<Transform DEF="Zone_training" translation="30.7 0 31.4">
+<Shape><Appearance><Material diffuseColor="0.941 0.251 0.251" transparency="0.55" emissiveColor="0.941 0.251 0.251"/></Appearance><Cylinder height="0.5" radius="2"/></Shape>
+<Transform translation="0 2.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.941 0.251 0.251"/></Appearance>
+<Text string="training"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
+<ProximitySensor DEF="Prox_training" size="4 4 4" enabled="true"/>
+<Sound location="0 0 0" maxBack="2" maxFront="2" spatialize="true" enabled="false"><AudioClip DEF="Sound_training" url="" loop="true" stopTime="1"/></Sound>
 </Transform>
 <!-- Agent: Cindy -->
-<Transform DEF="Avatar_Cindy" translation="7.9 0 9.1">
+<Transform DEF="Avatar_Cindy" translation="19.5 0 19.9">
 <Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.376 0.659 0.941" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
 <Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_Cindy" diffuseColor="0.376 0.659 0.941" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
 <Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
@@ -64,36 +64,108 @@
 <Text DEF="NameText_Cindy" string="&quot;Cindy&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
 </Transform>
 <!-- Agent: The Steward -->
-<Transform DEF="Avatar_The_Steward" translation="17.3 0 24">
+<Transform DEF="Avatar_The_Steward" translation="21 0 18.2">
 <Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.941 0.753 0.376" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
 <Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Steward" diffuseColor="0.941 0.753 0.376" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
 <Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
 <Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
 <Text DEF="NameText_The_Steward" string="&quot;The Steward&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
 </Transform>
+<!-- Agent: The Advocate -->
+<Transform DEF="Avatar_The_Advocate" translation="30.4 0 31.1">
+<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.290 0.941 0.659" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
+<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Advocate" diffuseColor="0.290 0.941 0.659" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
+<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
+<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+<Text DEF="NameText_The_Advocate" string="&quot;The Advocate&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
+</Transform>
 <!-- Agent: The Witness -->
-<Transform DEF="Avatar_The_Witness" translation="25.7 0 9.3">
+<Transform DEF="Avatar_The_Witness" translation="7.7 0 7.6">
 <Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.627 0.376 0.941" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
 <Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Witness" diffuseColor="0.627 0.376 0.941" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
 <Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
 <Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
 <Text DEF="NameText_The_Witness" string="&quot;The Witness&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>
 </Transform>
-<PositionInterpolator DEF="Path_path_to_victory" key="0.0000 0.5000 1.0000" keyValue="8.5 0 10.3 23.8 0 9.4 18.6 0 24.5"/>
-<TimeSensor DEF="Timer_path_to_victory" cycleInterval="6.0" loop="false" enabled="false"/>
-<ROUTE fromNode="Timer_path_to_victory" fromField="fraction_changed" toNode="Path_path_to_victory" toField="set_fraction"/>
-<ROUTE fromNode="Path_path_to_victory" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<!-- Animation: FromTheTempleToTrainingToPool agent=Cindy segments=2 -->
+
+<!-- Segment 1: temple -> training dist=15.1m pace=2m/s travel=7.53s dwell=10.0s -->
+<PositionInterpolator DEF="Interp_Cindy_1" key="0 1" keyValue="21.7 0 19.8 32 0 30.8"/>
+<TimeSensor DEF="Timer_Cindy_1" cycleInterval="7.53" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_Cindy_1" cycleInterval="10.0" loop="false" enabled="false"/>
+<ROUTE fromNode="Timer_Cindy_1" fromField="fraction_changed" toNode="Interp_Cindy_1" toField="set_fraction"/>
+<ROUTE fromNode="Interp_Cindy_1" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<ROUTE fromNode="Timer_Cindy_1" fromField="cycleTime" toNode="Arrival_Cindy" toField="arrived"/>
+<ROUTE fromNode="Dwell_Cindy_1" fromField="cycleTime" toNode="Timer_Cindy_2" toField="startTime"/>
+
+<!-- Segment 2: training -> pool dist=34.2m pace=1m/s travel=34.23s dwell=10.0s -->
+<PositionInterpolator DEF="Interp_Cindy_2" key="0 1" keyValue="32 0 30.8 7.5 0 6.9"/>
+<TimeSensor DEF="Timer_Cindy_2" cycleInterval="34.23" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_Cindy_2" cycleInterval="10.0" loop="false" enabled="false"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="fraction_changed" toNode="Interp_Cindy_2" toField="set_fraction"/>
+<ROUTE fromNode="Interp_Cindy_2" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="cycleTime" toNode="Arrival_Cindy" toField="arrived"/>
+
+<Script DEF="Arrival_Cindy" directOutput="true" mustEvaluate="true">
+  <field name="arrived" type="SFTime" accessType="inputOnly"/>
+  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>
+  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>
+  <![CDATA[ecmascript:
+  var _seg=0;
+  var _dwellIds=['Dwell_Cindy_1','Dwell_Cindy_2'];
+  function arrived(t,time){
+    _seg++;
+    segmentArrived=_seg;
+    Browser.println("Arrival_Cindy: arrived seg "+_seg);
+  }
+  function releaseDwell(val,time){
+    if(!val||_seg<1)return;
+    var dwId=_dwellIds[_seg-1];
+    try{
+      var dw=Browser.currentScene.getNamedNode(dwId);
+      dw.enabled=true;
+      dw.startTime=Browser.currentTime;
+      Browser.println("Arrival_Cindy: released dwell "+dwId);
+    }catch(e){Browser.println("Arrival_Cindy releaseDwell error: "+e);}
+  }
+  ]]>
+</Script>
+
+<Script DEF="Kill_Cindy" directOutput="true" mustEvaluate="true">
+  <field name="killAll" type="SFBool" accessType="inputOnly"/>
+  <field name="resetPos" type="SFBool" accessType="inputOnly"/>
+  <![CDATA[ecmascript:
+  var timerIds=['Timer_Cindy_1','Dwell_Cindy_1','Timer_Cindy_2','Dwell_Cindy_2'];
+  var startX=21.7, startY=0, startZ=19.8;
+  function killAll(val,time){
+    if(!val)return;
+    for(var i=0;i<timerIds.length;i++){
+      try{Browser.currentScene.getNamedNode(timerIds[i]).enabled=false;}catch(e){}
+    }
+  }
+  function resetPos(val,time){
+    if(!val)return;
+    killAll(true,time);
+    try{
+      var av=Browser.currentScene.getNamedNode("Avatar_Cindy");
+      av.translation=new SFVec3f(startX,startY,startZ);
+    }catch(e){Browser.println("Kill_Cindy resetPos error: "+e);}
+  }
+  ]]>
+</Script>
 <Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">
 <field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>
 <field accessType="inputOnly" type="SFVec3f" name="pos_Cindy"/>
 <field accessType="outputOnly" type="SFFloat" name="arousal_Cindy"/>
 <field accessType="inputOnly" type="SFVec3f" name="pos_The_Steward"/>
 <field accessType="outputOnly" type="SFFloat" name="arousal_The_Steward"/>
+<field accessType="inputOnly" type="SFVec3f" name="pos_The_Advocate"/>
+<field accessType="outputOnly" type="SFFloat" name="arousal_The_Advocate"/>
 <field accessType="inputOnly" type="SFVec3f" name="pos_The_Witness"/>
 <field accessType="outputOnly" type="SFFloat" name="arousal_The_Witness"/>
-<field accessType="inputOnly" type="SFBool" name="zoneActive_pool"/>
 <field accessType="inputOnly" type="SFBool" name="zoneActive_temple"/>
-<field accessType="inputOnly" type="SFBool" name="zoneActive_sports_arena"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_pool"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_training"/>
 <![CDATA[ecmascript:
 function initialize(){Browser.println("MCCFMaster initialized.");}
 ]]>

@@ -1,23 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_002 - 2026-05-06T00:37:01 -->
-<Scene id="garden_002" timestamp="2026-05-06T00:37:01" zone_set="garden_002" mode="improvisation" width="80" depth="80">
-<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="13.3" y="0" z="17.3"/></EmotionalArc>
-<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="32.8" y="0" z="49.5"/></EmotionalArc>
-<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="52.7" y="0" z="23.6"/></EmotionalArc>
+<!-- MCCF V3 Scene Wrapper - garden_002 - 2026-05-07T19:47:36 -->
+<Scene id="garden_002" timestamp="2026-05-07T19:47:36" zone_set="garden_002" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="8.1" y="0" z="9.2"/></EmotionalArc>
+<EmotionalArc cultivar="The Advocate" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="25.2" y="0" z="10.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="12.2" y="0" z="25.3"/></EmotionalArc>
 <Waypoints>
-  <Waypoint name="wsPool" label="Pool" zone="pool" pos_x="15.00" pos_y="0.00" pos_z="19.70">
-    <Statement speaker="Cindy">I love it here. BUT i gotta go see Ma.</Statement>
+  <Waypoint name="pool" label="pool" zone="pool" pos_x="9.20" pos_y="0.00" pos_z="9.30" dwell="4" pace="1.4">
+    <Statement speaker="Cindy">I wish I could stay here.</Statement>
   </Waypoint>
-  <Waypoint name="wsTemple" label="temple" zone="temple" pos_x="34.30" pos_y="0.00" pos_z="45.00">
-    <Question speaker="Cindy">I Ma around?</Question>
-    <Response speaker="The Steward">Haven't seen her in a coon's age.</Response>
-    <Statement speaker="Cindy">Well damm.  I guess I'll mosey over and shoot some arrows</Statement>
-    <Statement speaker="The Steward">Y'all come back now.</Statement>
-    <Statement speaker="Cindy">Sho' thang,</Statement>
+  <Waypoint name="plaze" label="plaze" zone="pool" pos_x="23.29" pos_y="0.00" pos_z="9.44" dwell="4" pace="1.4">
+    <Question speaker="The Advocate">Are you ready to train?</Question>
+    <Question speaker="Cindy">Ywa. I am ready.</Question>
   </Waypoint>
-  <Waypoint name="wsTraining" label="Training" zone="training" pos_x="45.30" pos_y="0.00" pos_z="20.50">
-    <Statement speaker="Cindy">YEEEEEEHAH!</Statement>
-    <Statement speaker="The Witness">Telk talk.</Statement>
+  <Waypoint name="BackToPool" label="BacktoPool" zone="pool" pos_x="6.70" pos_y="0.00" pos_z="11.60" dwell="10" pace="0.2">
+    <Statement speaker="Cindy">I must wasah my self.</Statement>
+  </Waypoint>
+  <Waypoint name="MountainTop" label="Memorial" zone="Hilltop" pos_x="26.70" pos_y="0.00" pos_z="28.00" dwell="10" pace="0.4">
+    <Question speaker="Cindy">Do You hear me Mother Goddess?</Question>
+  </Waypoint>
+  <Waypoint name="Training" label="Training" zone="training" pos_x="15.20" pos_y="0.00" pos_z="25.10" dwell="10" pace="0.4">
+    <Question speaker="The Steward">Are you hot?</Question>
+    <Response speaker="Cindy">I am very hot.</Response>
+    <Statement>Then go to the pool and relax.</Statement>
   </Waypoint>
 </Waypoints>
 </Scene>
