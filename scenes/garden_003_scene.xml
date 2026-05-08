@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_003 - 2026-05-07T23:02:44 -->
+<Scene id="garden_003" timestamp="2026-05-07T23:02:44" zone_set="garden_003" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="25.8" y="0" z="29.2"/></EmotionalArc>
+<EmotionalArc cultivar="The Advocate" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="25.1" y="0" z="10.5"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="8.8" y="0" z="19.4"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="Woods" label="Woods" zone="Woods" pos_x="24.00" pos_y="0.00" pos_z="27.30" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">It is very spooky here</Statement>
+  </Waypoint>
+  <Waypoint name="Temple" label="Temple" zone="Temple" pos_x="25.47" pos_y="0.00" pos_z="13.30" dwell="10" pace="2.4">
+    <Question speaker="The Advocate">Have you come to seek enlightenment and the comfort of the Mother Goddess?</Question>
+    <Response speaker="Cindy">Yes.  I pray for the protection of the Mother Goddss.</Response>
+  </Waypoint>
+  <Waypoint name="Pool" label="Pool" zone="Temple" pos_x="8.70" pos_y="0.00" pos_z="21.60" dwell="10" pace="3.4">
+    <Question speaker="Cindy">Is the water warm or cool?</Question>
+    <Response speaker="The Witness">The water is icy,</Response>
+    <Statement speaker="Cindy">BRRRRR!!!</Statement>
+  </Waypoint>
+</Waypoints>
+</Scene>

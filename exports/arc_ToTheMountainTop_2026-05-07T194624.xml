@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="ToTheMountainTop_2026-05-07T194624" scene="garden_002">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="ToTheMountainTop_2026-05-07T194624" agentname="Cindy" path_name="ToTheMountainTop">
+    <Timestamp date="2026-05-07" time="19:46:24"/>
+    <Waypoint id="POOL" stepno="1" name="pool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="9.20" pos_y="0.00" pos_z="9.30">
+      <Statement speaker="Cindy">I wish I could stay here.</Statement>
+    </Waypoint>
+    <Waypoint id="PLAZE" stepno="2" name="plaze" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0645" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.29" pos_y="0.00" pos_z="9.44">
+      <Question speaker="The Advocate">Are you ready to train?</Question>
+      <Question speaker="Cindy">Ywa. I am ready.</Question>
+    </Waypoint>
+    <Waypoint id="PLAZE" stepno="3" name="plaze" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0631" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.29" pos_y="0.00" pos_z="9.44">
+      <Question speaker="The Advocate">Are you ready to train?</Question>
+      <Question speaker="Cindy">Ywa. I am ready.</Question>
+    </Waypoint>
+    <Waypoint id="TRAINING" stepno="4" name="Training" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0621" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="15.20" pos_y="0.00" pos_z="25.10">
+      <Question speaker="The Steward">Are you hot?</Question>
+      <Response speaker="Cindy">I am very hot.</Response>
+      <Statement>Then go to the pool and relax.</Statement>
+    </Waypoint>
+    <Waypoint id="BACKTOPOOL" stepno="5" name="BacktoPool" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.5000" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="6.70" pos_y="0.00" pos_z="11.60">
+      <Statement speaker="Cindy">I must wasah my self.</Statement>
+    </Waypoint>
+    <Waypoint id="MEMORIAL" stepno="6" name="Memorial" E="0.3500" B="0.2500" P="0.2500" S="0.2500" Mode="scene" Coherence="0.0629" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="26.70" pos_y="0.00" pos_z="28.00">
+      <Question speaker="Cindy">Do You hear me Mother Goddess?</Question>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>
