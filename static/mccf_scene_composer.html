@@ -278,8 +278,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </select>
       <label>API Key (if needed)</label>
       <input id="run-apikey" type="text" placeholder="sk-... or leave blank for ollama">
-      <label>Pace (s per waypoint)</label>
-      <input id="run-pace" type="number" value="4" min="1" max="30" step="0.5">
       <div class="btn-row" style="margin-top:8px">
         <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Scene Arc</button>
         <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
@@ -632,7 +630,7 @@ function pollField(){
     if(!names.length){panel.textContent='No agents in field.';return;}
     var html='';
     names.forEach(function(n){
-      var s=fd.agents[n],w=s.weights||{},col=agents[n]?agents[n].color:'#888';
+      var s=fd.agents[n],w=s.weights||{},col=agents[n]?agents[n].color:'#888888';
       html+='<div style="margin-bottom:6px"><span style="color:'+col+';font-family:var(--display);font-size:15px;font-weight:600">'+n+'</span>';
       html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:2px">';
       ['E','B','P','S'].forEach(function(ch){
@@ -684,7 +682,7 @@ function updateSummary(){
   var zl=document.getElementById('sc-zones'),zn=Object.keys(zones);
   if(!zn.length){zl.textContent='No zones placed.';return;}
   zl.innerHTML=zn.map(function(id){
-    var z=zones[id],col=ZONE_COLORS[z.zone_type]||'#888';
+    var z=zones[id],col=ZONE_COLORS[z.zone_type]||'#888888';
     return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:14px">'+
       '<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'+
       '<span style="color:'+col+';font-family:var(--display);font-weight:600">'+(z.name||id)+'</span>'+
@@ -699,7 +697,7 @@ function renderZoneList(){
   var el=document.getElementById('zone-list'),list=Object.values(zones);
   if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No zones placed.</div>';return;}
   el.innerHTML=list.map(function(z){
-    var col=ZONE_COLORS[z.zone_type]||'#888',sel=selectedType==='zone'&&selectedId===z.id;
+    var col=ZONE_COLORS[z.zone_type]||'#888888',sel=selectedType==='zone'&&selectedId===z.id;
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'zone\',\''+z.id+'\')">'+
       '<div class="obj-dot" style="background:'+col+'"></div>'+
       '<span class="obj-name">'+(z.name||z.id)+'</span>'+
@@ -773,7 +771,10 @@ function drawScene(){
 }
 function drawZone(z){
   var pos=z.location||z.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
-  var p=w2c(pos[0],pos[2]),r=(z.radius||4)*SCALE,col=ZONE_COLORS[z.zone_type]||'#888';
+  var p=w2c(pos[0],pos[2]),r=(z.radius||4)*SCALE;
+  // Expand 3-digit hex to 6-digit so canvas gradient alpha appending is always valid
+  var rawCol=ZONE_COLORS[z.zone_type]||'#888888';
+  var col=rawCol.replace(/^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/,'#$1$1$2$2$3$3');
   var sel=selectedType==='zone'&&selectedId===z.id;
   var g=ctx.createRadialGradient(p.cx,p.cy,0,p.cx,p.cy,r);
   g.addColorStop(0,col+'55');g.addColorStop(0.7,col+'22');g.addColorStop(1,col+'00');
@@ -1107,7 +1108,12 @@ function exportX3D(){
     var a=placedAgents[an[i]],b=placedAgents[an[j]];
     x+='<Shape DEF="Ch_'+safeId(an[i])+'_'+safeId(an[j])+'"><Appearance><Material emissiveColor="0.4 0.45 0.65" transparency="0.65"/></Appearance>';
     x+='<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>\n';}}x+='\n';}
-  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){x+=buildInterp(p);});x+='\n';}
+  if(iI&&Object.keys(paths).length>0){
+    Object.values(paths).forEach(function(p){x+=buildInterpNodes(p);});
+    x+='\n<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->\n';
+    Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
+    x+='\n';
+  }
   if(iSc)x+=buildMS();
   x+='</Scene>\n</X3D>\n';
   dlFile(sn+'.x3d',x,'model/x3d+xml');
@@ -1125,7 +1131,8 @@ function buildAP(){
   s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
   s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
-  s+='<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
 }
 function buildZP(){
@@ -1135,7 +1142,8 @@ function buildZP(){
   s+='</ProtoInterface><ProtoBody><Transform>\n';
   s+='<Transform translation="0 0.15 0"><Shape><Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.2"/></Appearance><Sphere radius="0.18"/></Shape></Transform>\n';
   s+='<Transform translation="0 1.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.7 0.7 0.8"/></Appearance>\n';
-  s+='<Text string="zone"><FontStyle size="0.24" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<Text string=\'"zone"\'><FontStyle size="0.24" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
 }
 function buildZX3D(z,iS){
@@ -1145,7 +1153,8 @@ function buildZX3D(z,iS){
   s+='<Transform DEF="Zone_'+sid+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
   s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Cylinder height="0.5" radius="'+r+'"/></Shape>\n';
   s+='<Transform translation="0 '+(r*0.5+1.2)+' 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
-  s+='<Text string="'+nm+'"><FontStyle size="0.28" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<Text string=\'"'+nm+'"\' ><FontStyle size="0.28" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
   if(iS)s+='<Sound location="0 0 0" maxBack="'+r+'" maxFront="'+r+'" spatialize="true" enabled="false"><AudioClip DEF="Sound_'+sid+'" url="" loop="true" stopTime="1"/></Sound>\n';
   s+='</Transform>\n\n';return s;
@@ -1158,7 +1167,8 @@ function buildAX3D(a){
   s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
   s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
-  s+='<Text DEF="NameText_'+sn+'" string="&quot;'+qn+'&quot;"><FontStyle size="0.32" family="SANS" justify="MIDDLE"/></Text></Shape></Billboard></Transform>\n';
+  s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   // Avatar viewpoints — parented inside Transform so they ride with the figure
   // VP_Eye: eye level, looking forward (-Z direction in X3D)
   s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>\n';
@@ -1166,14 +1176,15 @@ function buildAX3D(a){
   s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>\n';
   s+='</Transform>\n\n';return s;
 }
-function buildInterp(path){
+function buildInterpNodes(path){
+  // Emits all DEF nodes: Interpolators, TimeSensors, Arrival_ Script, Kill_ Script.
+  // ROUTEs emitted separately by buildInterpRoutes — always the last items in the X3D scene.
   var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
   if(wps.length<2)return '';
   var sa=safeId(path.agent);
   var numSegs=wps.length-1;
-  var out='<!-- Animation: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' -->\n';
+  var out='<!-- Animation nodes: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' -->\n';
 
-  // Per-segment movement nodes
   for(var i=0;i<numSegs;i++){
     var p1=wps[i].position||[0,0,0];
     var p2=wps[i+1].position||[0,0,0];
@@ -1183,34 +1194,15 @@ function buildInterp(path){
     var pace=parseFloat(wps[i+1].pace)||1.4;
     var travelTime=Math.max(0.5,(dist/pace)).toFixed(2);
     var dwellTime=(parseFloat(wps[i+1].dwell)||2).toFixed(1);
-
     out+='\n<!-- Segment '+seg+': '+wps[i].name+' -> '+wps[i+1].name
         +' dist='+dist.toFixed(1)+'m pace='+pace+'m/s travel='+travelTime+'s dwell='+dwellTime+'s -->\n';
     out+='<PositionInterpolator DEF="Interp_'+sa+'_'+seg+'" key="0 1"'
         +' keyValue="'+p1[0]+' '+p1[1]+' '+p1[2]+' '+p2[0]+' '+p2[1]+' '+p2[2]+'"/>\n';
     out+='<TimeSensor DEF="Timer_'+sa+'_'+seg+'" cycleInterval="'+travelTime+'" loop="false" enabled="false"/>\n';
     out+='<TimeSensor DEF="Dwell_'+sa+'_'+seg+'" cycleInterval="'+dwellTime+'" loop="false" enabled="false"/>\n';
-    // Travel timer drives interpolator
-    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="fraction_changed"'
-        +' toNode="Interp_'+sa+'_'+seg+'" toField="set_fraction"/>\n';
-    // Interpolator drives avatar position
-    out+='<ROUTE fromNode="Interp_'+sa+'_'+seg+'" fromField="value_changed"'
-        +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
-    // Travel timer arrival -> Arrival_ script (NOT directly to Dwell_)
-    // Arrival_ holds dwell until loader calls releaseDwell after TTS completes
-    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="cycleTime"'
-        +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
-    // Dwell completion fires next travel timer (not on last segment)
-    if(i<numSegs-1){
-      out+='<ROUTE fromNode="Dwell_'+sa+'_'+seg+'" fromField="cycleTime"'
-          +' toNode="Timer_'+sa+'_'+(seg+1)+'" toField="startTime"/>\n';
-    }
   }
 
-  // Arrival_ Script — one per agent
-  // arrived (SFTime inputOnly)      — receives cycleTime from each travel timer
-  // releaseDwell (SFBool inputOnly) — loader sets true after TTS completes
-  // segmentArrived (SFInt32 outputOnly) — loader reads to know which segment
+  // Arrival_ Script
   var dwellDefs=[];
   for(var d=1;d<=numSegs;d++) dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
   out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
@@ -1238,7 +1230,7 @@ function buildInterp(path){
   out+='  ]]>\n';
   out+='</'+'Script>\n\n';
 
-  // Kill_ Script — disables all timers + snaps avatar to WP1
+  // Kill_ Script
   var timerIds=[];
   for(var j=1;j<wps.length;j++){
     timerIds.push("'Timer_"+sa+'_'+j+"'");
@@ -1267,7 +1259,31 @@ function buildInterp(path){
   out+='  }\n';
   out+='  ]]>\n';
   out+='</'+'Script>\n\n';
+  return out;
+}
 
+function buildInterpRoutes(path){
+  // Emits ONLY ROUTEs for one agent path.
+  // Must be called after ALL scene nodes for ALL agents have been emitted.
+  var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
+  if(wps.length<2)return '';
+  var sa=safeId(path.agent);
+  var numSegs=wps.length-1;
+  var out='<!-- ROUTEs: '+xe(path.agent)+' -->\n';
+  for(var i=0;i<numSegs;i++){
+    var seg=i+1;
+    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="fraction_changed"'
+        +' toNode="Interp_'+sa+'_'+seg+'" toField="set_fraction"/>\n';
+    out+='<ROUTE fromNode="Interp_'+sa+'_'+seg+'" fromField="value_changed"'
+        +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
+    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="cycleTime"'
+        +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
+    if(i<numSegs-1){
+      out+='<ROUTE fromNode="Dwell_'+sa+'_'+seg+'" fromField="cycleTime"'
+          +' toNode="Timer_'+sa+'_'+(seg+1)+'" toField="startTime"/>\n';
+    }
+  }
+  out+='\n';
   return out;
 }
 function buildMS(){
@@ -1291,13 +1307,14 @@ function sendToLauncher(silent){
   var btn=document.getElementById('send-btn');
   if(!silent){btn.textContent='Sending...';btn.disabled=true;}
   var x=buildX3DString();
-  return fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml'},body:x})
+  var sceneName=sceneConfig.name||'mccf_scene';
+  return fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml','X-Scene-Name':sceneName},body:x})
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.status==='ok'){
         if(!silent){
-          document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Reload launcher to view.</div>';
-          toast('Sent to launcher. Reload launcher.');
+          document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Select <b>'+res.filename+'</b> in loader, then reload.</div>';
+          toast('Sent: '+res.filename+'. Select in loader.');
         }
       } else { toast('Error: '+(res.error||'unknown'),true); }
     })
@@ -1316,7 +1333,7 @@ function buildX3DString(){
   lines.push('<head><meta name="title" content="'+xe(sn)+'"/></head>');
   lines.push('<Scene>');
   if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
-  lines.push('<NavigationInfo headlight="true" type="EXAMINE ANY" visibilityLimit="300"/>');
+  lines.push('<NavigationInfo headlight="true" type=\'"EXAMINE" "ANY"\' visibilityLimit="300"/>');
   lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>');
   lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
   lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>');
@@ -1326,8 +1343,13 @@ function buildX3DString(){
   lines.push(buildGrid(w,d).trim());
   Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
   Object.values(placedAgents).forEach(function(a){lines.push(buildAX3D(a).trim());});
-  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterp(p).trim());});}
+  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterpNodes(p).trim());});}
   if(iSc)lines.push(buildMS().trim());
+  // ROUTEs absolutely last — VRML/X3D requirement since VRML2.0
+  if(iI&&Object.keys(paths).length>0){
+    lines.push('<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->');
+    Object.values(paths).forEach(function(p){lines.push(buildInterpRoutes(p).trim());});
+  }
   lines.push('</Scene>');
   lines.push('</X3D>');
   return lines.join('\n');
@@ -1361,8 +1383,9 @@ function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
+  var exportActor=(document.getElementById('run-adapter')||{}).value||'ollama';
   Object.values(placedAgents).forEach(function(a){
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="ollama" voice="'+xe(a.voice||'')+'"><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
   });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
@@ -1503,7 +1526,7 @@ async function _sceneArcAdvance(){
   if(!wp){_sceneArcStep++;_sceneArcAdvance();return;}
   var pos=wp.position||[0,0,0];
   var cultivar=_sceneArcPath.agent;
-  var pace=parseFloat(document.getElementById('run-pace').value)||4;
+  var pace = 2;  // recording step interval (s) — X3D timers drive actual movement timing
   var total=wps.length;
 
   document.getElementById('run-progress').textContent=
@@ -1551,9 +1574,19 @@ async function _sceneArcAdvance(){
           document.getElementById('run-response').textContent=ql.text;
           continue;
         }
-        // Question line — send to LLM
+        // Question line — check if next line is an authored Response
+        var nextLine = qaLines[qi+1];
+        var hasAuthoredResponse = nextLine && nextLine.type==='Response' && nextLine.text && nextLine.text.trim();
         arcQLines.push({speaker:ql.speaker,text:ql.text});
         document.getElementById('run-question').textContent=ql.text;
+        if(hasAuthoredResponse){
+          // Authored response present — skip Ollama, record as-is
+          document.getElementById('run-response').textContent=nextLine.text;
+          arcRLines.push({_type:'Response', speaker:nextLine.speaker, text:nextLine.text});
+          qi++;  // consume the Response line so the loop doesn't re-process it
+          continue;
+        }
+        // No authored response — call Ollama
         document.getElementById('run-response').textContent='…';
         var llmResponse='', channels=null;
         var speakResp=await fetch(API+'/voice/speak',{

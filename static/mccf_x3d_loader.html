@@ -79,7 +79,7 @@ button.active { background: #4af0a8; color: #111; }
 </head>
 <body>
 
-<x3d-canvas id="x3d" src="mccf_scene.x3d" update="auto" contentScale="auto"></x3d-canvas>
+<x3d-canvas id="x3d" update="auto" contentScale="auto"></x3d-canvas>
 
 <div id="field-overlay">
   <div style="color:#7ab8f5;margin-bottom:4px;font-size:11px;">⬡ MCCF FIELD</div>
@@ -99,6 +99,14 @@ button.active { background: #4af0a8; color: #111; }
 
 <div id="playback-panel">
   <div class="ph">⏵ PLAYBACK</div>
+  <div style="font-size:10px;color:#6a8090;margin-bottom:2px;">X3D Scene</div>
+  <select id="x3d-file" onchange="x3dFileChanged()">
+    <option value="">— select scene —</option>
+  </select>
+  <div style="display:flex;gap:4px;margin-bottom:5px;">
+    <button onclick="x3dLoadFiles()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#7ab8f5;cursor:pointer;">&#8635; Refresh</button>
+  </div>
+  <div style="font-size:10px;color:#6a8090;margin-bottom:2px;">Arc</div>
   <select id="pb-file" onchange="pbFileChanged()">
     <option value="">— select arc file —</option>
   </select>
@@ -117,9 +125,6 @@ button.active { background: #4af0a8; color: #111; }
     <label style="font-size:12px;color:#6a8090;white-space:nowrap;margin:0;">
       <input type="checkbox" id="pb-voice" style="width:auto;margin:0 3px 0 0;" onchange="pbVoiceChanged()"/>voice
     </label>
-    <select id="pb-voice-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:2px 4px;font-size:11px;display:none;">
-      <option value="">— loading voices —</option>
-    </select>
   </div>
   <div class="pb-row">
     <button id="pb-play-btn" onclick="pbPlay()" style="border-color:#4af0a8;color:#4af0a8;">&#9654; Play Scene Arc</button>
@@ -373,11 +378,13 @@ function applyHotHouseData(data) {
   if (window._arcCVTimestamp && (Date.now() - window._arcCVTimestamp) < 5000) return;
   if (!data || !Object.keys(data).length) return;
 
-  const agentMap = {
-    'The Steward':   'Steward',
-    'The Archivist': 'Archivist',
-    'The Witness':   'Witness'
-  };
+  // Map agent cultivar names to their safeId suffix — matches composer safeId exactly
+  // safeId = name.replace(/[^A-Za-z0-9_]/g,'_')
+  // Build dynamically from any agents present in the data rather than hardcoding
+  const agentMap = {};
+  Object.keys(data).forEach(function(name) {
+    agentMap[name] = name.replace(/[^A-Za-z0-9_]/g, '_');
+  });
 
   let tracked = 0;
   let applied = 0;
@@ -663,26 +670,20 @@ function pbFileChanged() {
 
 function pbVoiceChanged() {
   var on = document.getElementById('pb-voice');
-  var sel = document.getElementById('pb-voice-select');
-  if (sel) sel.style.display = (on && on.checked) ? 'block' : 'none';
   if (on && on.checked) pbLoadVoices();
 }
 
 function pbLoadVoices() {
   if (!window.speechSynthesis) return;
-  var sel = document.getElementById('pb-voice-select');
-  if (!sel) return;
   function populate() {
     var voices = speechSynthesis.getVoices().filter(function(v){
       return v.lang.startsWith('en');
     });
-    if (!voices.length) return;  // not ready yet — onvoiceschanged will fire
+    if (!voices.length) return;
     _pbVoices = voices;
-    sel.innerHTML = _pbVoices.map(function(v,i){
-      return '<option value="'+i+'">'+v.name+'</option>';
-    }).join('');
+    // Rebuild scene voice map with newly loaded voices
+    _pbSceneVoiceMap = null;
   }
-  // Hook change event first, then try immediately
   if (speechSynthesis.onvoiceschanged !== undefined)
     speechSynthesis.onvoiceschanged = populate;
   populate();
@@ -705,9 +706,8 @@ function pbSpeak(text) {
   if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
   var utt = new SpeechSynthesisUtterance(text);
-  var selEl = document.getElementById('pb-voice-select');
-  var idx = selEl ? (parseInt(selEl.value) || 0) : 0;
-  if (_pbVoices[idx]) utt.voice = _pbVoices[idx];
+  // Use scene voice map default (first voice) — no manual dropdown
+  if (_pbVoices.length) utt.voice = _pbVoices[0];
   utt.rate = 0.95;
   speechSynthesis.speak(utt);
   _pbLastSpoken = text;
@@ -844,7 +844,7 @@ function pbReleaseDwell(agentSafeName) {
 var _x3dTimerActive = {};
 
 function pbActivateX3DTimers(arcFileEntry) {
-  // New architecture: only start Timer_{safeName}_1 for each agent.
+  // Start Timer_{safeName}_1 for each agent and wire Arrival_.segmentArrived -> pbStep.
   // The ROUTE chain handles all subsequent segments automatically.
   // Never start Dwell_ or Timer_*_2+ directly — those fire via ROUTEs.
   if (!canvas || !canvas.browser) return;
@@ -853,7 +853,47 @@ function pbActivateX3DTimers(arcFileEntry) {
     if (!scene) return;
     _x3dTimerActive = {};
     var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
-    // Find only Timer_{anything}_1 nodes — first segment starters
+
+    // Wire Arrival_{agent}.segmentArrived -> pbStep for each agent
+    // Uses getField().addFieldCallback per X_ITE SAI spec.
+    // Falls back to polling _lastSegmentArrived if addFieldCallback not supported.
+    allNames.forEach(function(nodeName) {
+      if (!/^Arrival_.+$/.test(nodeName)) return;
+      try {
+        var arrNode = scene.getNamedNode(nodeName);
+        if (!arrNode) return;
+        var field = arrNode.getField('segmentArrived');
+        if (field && field.addFieldCallback) {
+          field.addFieldCallback(nodeName + '_cb', function(value) {
+            console.log('segmentArrived callback: ' + nodeName + ' seg=' + value);
+            pbStep();
+          });
+          console.log('pbActivateX3DTimers: wired segmentArrived callback on', nodeName);
+        } else {
+          // addFieldCallback not available — fall back to polling segmentArrived value
+          console.warn('pbActivateX3DTimers: addFieldCallback unavailable for', nodeName, '— using poll fallback');
+          (function(node, name) {
+            var lastSeg = 0;
+            var pollId = setInterval(function() {
+              if (!_x3dTimerActive || Object.keys(_x3dTimerActive).length === 0) {
+                clearInterval(pollId); return;
+              }
+              try {
+                var f = node.getField('segmentArrived');
+                var v = f ? f.getValue() : 0;
+                if (v > lastSeg) {
+                  lastSeg = v;
+                  console.log('segmentArrived poll: ' + name + ' seg=' + v);
+                  pbStep();
+                }
+              } catch(e) {}
+            }, 200);
+          })(arrNode, nodeName);
+        }
+      } catch(e) { console.warn('pbActivateX3DTimers: could not wire', nodeName, e); }
+    });
+
+    // Start Timer_{agent}_1 for each agent
     allNames.forEach(function(nodeName) {
       if (!/^Timer_.+_1$/.test(nodeName)) return;
       var timerNode = scene.getNamedNode(nodeName);
@@ -861,16 +901,10 @@ function pbActivateX3DTimers(arcFileEntry) {
       try {
         timerNode.enabled = true;
         timerNode.startTime = canvas.browser.currentTime;
-        // Derive avatar name from timer name: Timer_Cindy_1 -> Avatar_Cindy
         var agentSuffix = nodeName.replace(/^Timer_/, '').replace(/_1$/, '');
         var avatarName = 'Avatar_' + agentSuffix;
         _x3dTimerActive[avatarName] = true;
         console.log('pbActivateX3DTimers: started', nodeName, '-> driving', avatarName);
-        // Set server pace to a large value so it does not advance steps
-        // before X3D travel+dwell completes. TTS fires on step change at zero delay.
-        // User can override in the pace field — 999 = effectively manual only.
-        var paceEl = document.getElementById('pb-pace');
-        if (paceEl) { paceEl.value = 999; paceEl.title = 'X3D timer active — pace auto-set to 999s'; }
       } catch(e) { console.warn('pbActivateX3DTimers: could not start', nodeName, e); }
     });
   } catch(e) { console.warn('pbActivateX3DTimers error:', e); }
@@ -1076,7 +1110,7 @@ function pbUpdateDisplay(state) {
     '<span class="pc-P">P '+(wp.P||0).toFixed(2)+'</span>'+
     '<span class="pc-S">S '+(wp.S||0).toFixed(2)+'</span>';
   var qr=document.getElementById('pb-qr');
-  var qaLines=wp.qa_lines||[];
+  var qaLines=wp.qaLines||wp.qa_lines||[];  // server serializes as qaLines; qa_lines fallback for legacy arcs
   if(qaLines.length||wp.question||wp.response){
     if(qr) qr.style.display='block';
     var qEl=document.getElementById('pb-question');
@@ -1287,7 +1321,52 @@ function cacheSceneContext(files) {
   } catch(e) {}
 }
 
-window.addEventListener('load', function() { setTimeout(pbLoadFiles, 800); });
+// ─────────────────────────────────────────────
+// X3D scene file selector
+// ─────────────────────────────────────────────
+async function x3dLoadFiles() {
+  try {
+    const r = await fetch(API + '/scene/x3d/list');
+    const data = await r.json();
+    const sel = document.getElementById('x3d-file');
+    if (!sel) return;
+    var current = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    (data.files || []).forEach(function(fname) {
+      var opt = document.createElement('option');
+      opt.value = fname;
+      opt.textContent = fname;
+      sel.appendChild(opt);
+    });
+    // Restore previous selection or auto-select first file
+    if (current && [...sel.options].some(o => o.value === current)) {
+      sel.value = current;
+    } else if (sel.options.length > 1) {
+      sel.selectedIndex = 1;
+      x3dFileChanged();
+    }
+  } catch(e) {
+    console.warn('x3dLoadFiles: could not reach /scene/x3d/list', e);
+  }
+}
+
+function x3dFileChanged() {
+  var sel = document.getElementById('x3d-file');
+  if (!sel) return;
+  var fname = sel.value;
+  if (!fname) return;
+  var canvas = document.getElementById('x3d');
+  if (!canvas) return;
+  canvas.src = API + '/static/x3d/' + fname;
+  console.log('x3dFileChanged: loaded', fname);
+}
+
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    x3dLoadFiles();
+    pbLoadFiles();
+  }, 800);
+});
 
 </script>
 </body>
