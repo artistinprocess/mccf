@@ -73,29 +73,56 @@ def serve_static_html(filename):
     return resp
 
 
-@app.route('/static/mccf_scene.x3d')
-def serve_x3d_scene():
+@app.route('/static/x3d/<path:filename>')
+def serve_x3d_scene(filename):
+    """Serve named X3D files from static/x3d/ directory."""
     from flask import send_from_directory
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    return send_from_directory(static_dir, 'mccf_scene.x3d',
-                               mimetype='model/x3d+xml')
+    x3d_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d')
+    return send_from_directory(x3d_dir, filename, mimetype='model/x3d+xml')
 
 
 @app.route('/scene/x3d/upload', methods=['POST'])
 def upload_x3d_scene():
     """
-    Accept X3D content from Scene Composer and write to static/mccf_scene.x3d.
-    Called by exportX3D() in mccf_scene_composer.html.
+    Accept X3D content from Scene Composer and write to static/x3d/{scene_name}.x3d.
+    Scene name passed as X-Scene-Name request header.
+    Falls back to mccf_scene.x3d if header absent.
+    Called by sendToLauncher() in mccf_scene_composer.html.
     """
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    os.makedirs(static_dir, exist_ok=True)
-    filepath = os.path.join(static_dir, 'mccf_scene.x3d')
+    x3d_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d')
+    os.makedirs(x3d_dir, exist_ok=True)
+    scene_name = request.headers.get('X-Scene-Name', '').strip()
+    if not scene_name:
+        scene_name = 'mccf_scene'
+    # Sanitise: keep alphanumeric, underscore, hyphen only
+    import re as _re
+    safe_name = _re.sub(r'[^A-Za-z0-9_\-]', '_', scene_name)
+    filename = safe_name + '.x3d'
+    filepath = os.path.join(x3d_dir, filename)
     content = request.get_data(as_text=True)
     if not content:
         return jsonify({'status': 'error', 'error': 'no content'}), 400
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
-    return jsonify({'status': 'ok', 'output': 'static/mccf_scene.x3d'})
+    return jsonify({'status': 'ok', 'output': f'static/x3d/{filename}', 'filename': filename})
+
+
+@app.route('/scene/x3d/list', methods=['GET'])
+def list_x3d_scenes():
+    """
+    List available X3D files in static/x3d/.
+    Returns newest-first, same pattern as /arc/playback.
+    """
+    x3d_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d')
+    os.makedirs(x3d_dir, exist_ok=True)
+    files = []
+    for fname in os.listdir(x3d_dir):
+        if fname.endswith('.x3d'):
+            fpath = os.path.join(x3d_dir, fname)
+            mtime = os.path.getmtime(fpath)
+            files.append({'filename': fname, 'mtime': mtime})
+    files.sort(key=lambda f: f['mtime'], reverse=True)
+    return jsonify({'files': [f['filename'] for f in files]})
 
 
 @app.route('/scene/save/zones', methods=['POST'])
