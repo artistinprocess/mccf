@@ -233,7 +233,7 @@ def load_scene_xml():
         agents:        { name: { name, position, voice, color, weights, ... } },
         placedAgents:  { name: { name, position:[x,0,z], voice, color, ... } },
         waypoints:     { name: { name, label, zone, position:[x,0,z], qaLines:[...] } },
-        paths:         {}   -- not stored in scene XML; user recreates
+        paths:         { name: { name, agent, waypoints:[wpName,...] } }
     }
     """
     import xml.etree.ElementTree as ET
@@ -351,13 +351,31 @@ def load_scene_xml():
                 'color':     col
             }
 
+    # ── paths from <Paths><Path name agent><PathWaypoint ref> ───────────
+    paths = {}
+    paths_el = root.find('Paths')
+    if paths_el is not None:
+        for path_el in paths_el.findall('Path'):
+            p_name  = path_el.get('name', '').strip()
+            p_agent = path_el.get('agent', '').strip()
+            if not p_name:
+                continue
+            wp_refs = [pw.get('ref', '').strip()
+                       for pw in path_el.findall('PathWaypoint')
+                       if pw.get('ref', '').strip()]
+            paths[p_name] = {
+                'name':      p_name,
+                'agent':     p_agent,
+                'waypoints': wp_refs
+            }
+
     return jsonify({
         'sceneConfig':  scene_config,
         'zones':        zones_inferred,
         'agents':       agents,
         'placedAgents': placed_agents,
         'waypoints':    waypoints,
-        'paths':        {}
+        'paths':        paths
     })
 
 

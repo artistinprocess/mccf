@@ -1208,9 +1208,11 @@ function buildInterpNodes(path){
   out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
   out+='  <field name="arrived" type="SFTime" accessType="inputOnly"/>\n';
   out+='  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>\n';
+  out+='  <field name="resetSeg" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>\n';
   out+='  <![CDATA[ecmascript:\n';
   out+='  var _seg=0;\n';
+  out+='  function resetSeg(val,time){ if(val) _seg=0; }\n';
   out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
   out+='  function arrived(t,time){\n';
   out+='    _seg++;\n';
@@ -1219,6 +1221,7 @@ function buildInterpNodes(path){
   out+='  }\n';
   out+='  function releaseDwell(val,time){\n';
   out+='    if(!val||_seg<1)return;\n';
+  out+='    if(_seg>_dwellIds.length)return;\n';
   out+='    var dwId=_dwellIds[_seg-1];\n';
   out+='    try{\n';
   out+='      var dw=Browser.currentScene.getNamedNode(dwId);\n';
@@ -1256,6 +1259,9 @@ function buildInterpNodes(path){
   out+='      var av=Browser.currentScene.getNamedNode("Avatar_'+sa+'");\n';
   out+='      av.translation=new SFVec3f(startX,startY,startZ);\n';
   out+='    }catch(e){Browser.println("Kill_'+sa+' resetPos error: "+e);}\n';
+  out+='    try{\n';
+  out+='      Browser.currentScene.getNamedNode("Arrival_'+sa+'").resetSeg=true;\n';
+  out+='    }catch(e){}\n';
   out+='  }\n';
   out+='  ]]>\n';
   out+='</'+'Script>\n\n';
@@ -1278,10 +1284,7 @@ function buildInterpRoutes(path){
         +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
     out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="cycleTime"'
         +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
-    if(i<numSegs-1){
-      out+='<ROUTE fromNode="Dwell_'+sa+'_'+seg+'" fromField="cycleTime"'
-          +' toNode="Timer_'+sa+'_'+(seg+1)+'" toField="startTime"/>\n';
-    }
+    // Dwell→Timer chaining handled by MCCFMaster.startNextTimer after TTS completes
   }
   out+='\n';
   return out;
@@ -1292,8 +1295,35 @@ function buildMS(){
   var zf=Object.keys(zones).map(function(id){return '<field accessType="inputOnly" type="SFBool" name="zoneActive_'+safeId(id)+'"/>\n';}).join('');
   var s='<Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">\n';
   s+='<field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>\n';
+  s+='<field accessType="inputOnly" type="SFString" name="startAgent"/>\n';
+  s+='<field accessType="inputOnly" type="SFString" name="releaseDwellAgent"/>\n';
+  s+='<field accessType="inputOnly" type="SFString" name="startNextTimer"/>\n';
   s+=af+zf;
-  s+='<![CDATA[ecmascript:\nfunction initialize(){Browser.println("MCCFMaster initialized.");}\n]]>\n';
+  s+='<![CDATA[ecmascript:\n';
+  s+='var _sceneNow=0;\n';
+  s+='function _getSceneNow(agent,seg){var t=Browser.currentScene.getNamedNode("Timer_"+agent+"_"+seg);if(t&&t.time!==undefined&&t.time>0)return t.time;if(t&&t.startTime!==undefined&&t.cycleTime!==undefined&&(t.startTime+t.cycleTime)>0)return t.startTime+t.cycleTime;return _sceneNow;}\n';
+  s+='function initialize(){Browser.println("MCCFMaster initialized.");}\n';
+  s+='function startNextTimer(agentColonSeg,time){\n';
+  s+='  try{\n';
+  s+='  var parts=agentColonSeg.split(":");\n';
+  s+='  var nextSeg=parseInt(parts[1])+1;\n';
+  s+='  var t=Browser.currentScene.getNamedNode("Timer_"+parts[0]+"_"+nextSeg);\n';
+  s+='  if(t){t.startTime=0;t.enabled=true;Browser.println("MCCFMaster: started Timer_"+parts[0]+"_"+nextSeg+" (next)");}\n';
+  s+='  else{Browser.println("MCCFMaster: no Timer_"+parts[0]+"_"+nextSeg+" — arc complete");}\n';
+  s+='}catch(e){Browser.println("MCCFMaster: startNextTimer end of arc — "+e.message);}\n';
+  s+='}\n';
+  s+='function startAgent(agentSafeName,time){\n';
+  s+='  var t=Browser.currentScene.getNamedNode("Timer_"+agentSafeName+"_1");\n';
+  s+='  if(t){t.startTime=0;t.enabled=true;_sceneNow=0;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at 0 (scene-relative)");}\n';
+  s+='  else{Browser.println("MCCFMaster: Timer_"+agentSafeName+"_1 NOT FOUND");}\n';
+  s+='}\n';
+  s+='function releaseDwellAgent(agentColonSeg,time){\n';
+  s+='  var parts=agentColonSeg.split(":");\n';
+  s+='  var dw=Browser.currentScene.getNamedNode("Dwell_"+parts[0]+"_"+parts[1]);\n';
+  s+='  if(dw){var tNow=_getSceneNow(parts[0],parseInt(parts[1]));dw.startTime=tNow;dw.enabled=true;Browser.println("MCCFMaster: started Dwell_"+parts[0]+"_"+parts[1]+" at "+tNow);}\n';
+  s+='  else{Browser.println("MCCFMaster: Dwell_"+parts[0]+"_"+parts[1]+" NOT FOUND");}\n';
+  s+='}\n';
+  s+=']]>\n';
   s+='</'+'Script>\n\n';return s;
 }
 function buildGrid(w,d){
@@ -1406,6 +1436,17 @@ function exportSceneXML(){
       } else { x+='/>\n'; }
     });
     x+='</Waypoints>\n';
+  }
+  if(Object.keys(paths).length>0){
+    x+='<Paths>\n';
+    Object.values(paths).forEach(function(p){
+      x+='  <Path name="'+xe(p.name)+'" agent="'+xe(p.agent)+'">'+'\n';
+      (p.waypoints||[]).forEach(function(wpName){
+        x+='    <PathWaypoint ref="'+xe(wpName)+'"/>'+'\n';
+      });
+      x+='  </Path>'+'\n';
+    });
+    x+='</Paths>'+'\n';
   }
   x+='</Scene>\n';
   var filename=sn+'_scene.xml';

@@ -295,9 +295,18 @@ async function pollLighting() {
     if (r.ok) {
       const scalars = await r.json();
       applyLighting(scalars);
+      setTimeout(pollLighting, LIGHTING_MS);
+    } else if (r.status === 404) {
+      // Endpoint not implemented — stop polling silently
+      const lDiag = document.getElementById('light-diag');
+      if (lDiag) lDiag.textContent = 'lighting: endpoint not available';
+      return;
+    } else {
+      setTimeout(pollLighting, LIGHTING_MS);
     }
-  } catch(e) {}
-  setTimeout(pollLighting, LIGHTING_MS);
+  } catch(e) {
+    setTimeout(pollLighting, LIGHTING_MS);
+  }
 }
 
 function applyFieldChannelsToAgents() {
@@ -340,8 +349,10 @@ function applyFieldData(d) {
     tel.textContent = tension.toFixed(3);
     tel.className = 'val '+(tension<0.3?'tension-low':tension<0.6?'tension-mid':tension<0.8?'tension-high':'tension-crit');
 
-    const fn = scene.getNamedNode('GlobalField');
-    if (fn) { fn.globalCoherence=coh; fn.echoRisk=echo; fn.tensionLevel=tension; fn.episodeCount=epCount; }
+    try {
+      const fn = scene.getNamedNode('GlobalField');
+      if (fn) { fn.globalCoherence=coh; fn.echoRisk=echo; fn.tensionLevel=tension; fn.episodeCount=epCount; }
+    } catch(e) { /* GlobalField not present in this scene — optional node */ }
 
     updateFieldMaterials(scene, coh, echo, tension);
 
@@ -433,7 +444,7 @@ function applyHotHouseData(data) {
       }
     }
   } catch(e) {
-    console.warn('applyHotHouseData error:', e.message);
+    // Optional nodes (GazeMat_, BodyMat_, etc.) may not exist in all scenes — skip silently
   }
 
   const diagEl = document.getElementById('x3d-diag');
@@ -764,7 +775,10 @@ function pbSpeakQALines(qaLines, onComplete) {
   }
   var key = qaLines.map(function(l){return l.text;}).join('|');
   if (key === _pbLastSpoken) {
-    if (onComplete) onComplete();
+    // Already speaking these lines — don't call onComplete here.
+    // The in-progress TTS utterance will fire onComplete when it finishes.
+    // Calling it here causes double pbReleaseDwell.
+    console.log('pbSpeakQALines: duplicate suppressed for key', key.slice(0,40));
     return;
   }
   _pbLastSpoken = key;
@@ -820,21 +834,60 @@ function pbSpeakQALines(qaLines, onComplete) {
   _ensureVoiceMapThenSpeak(3);
 }
 
+// Track last arrived segment per agent — set by segmentArrived callback
+var _x3dLastArrivedSeg = {};
+
 function pbReleaseDwell(agentSafeName) {
   // Called after TTS completes for an X3D-driven agent.
-  // Sets releaseDwell=true on Arrival_{agentSafeName} Script node via SAI.
-  // The Arrival_ script then starts the correct Dwell_ timer, which chains to next Timer_.
+  // Starts Dwell_{agentSafeName}_{seg} directly via SAI using canvas.browser.currentTime.
+  // Does NOT rely on Arrival_ Script releaseDwell input — Browser.currentTime inside an
+  // externally-triggered Script input field is unreliable in X_ITE (may return 0 or stale value),
+  // causing the TimeSensor to not fire correctly and breaking the ROUTE chain.
   if (!canvas || !canvas.browser) return;
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
-    var arrivalNode = scene.getNamedNode('Arrival_' + agentSafeName);
-    if (!arrivalNode) {
-      console.warn('pbReleaseDwell: Arrival_' + agentSafeName + ' not found — old scene?');
+    var seg = _x3dLastArrivedSeg[agentSafeName] || 1;
+    var dwellNodeName = 'Dwell_' + agentSafeName + '_' + seg;
+    var dwellNode = scene.getNamedNode(dwellNodeName);
+    if (!dwellNode) {
+      console.warn('pbReleaseDwell: ' + dwellNodeName + ' not found');
       return;
     }
-    arrivalNode.releaseDwell = true;
-    console.log('pbReleaseDwell: released dwell for', agentSafeName);
+    // Start Dwell for linger, then after dwell interval start next Timer via MCCFMaster
+    var masterNodeR = scene.getNamedNode('MCCFMaster');
+    if (masterNodeR) {
+      masterNodeR.releaseDwellAgent = agentSafeName + ':' + seg;
+      console.log('pbReleaseDwell: started Dwell ' + agentSafeName + ':' + seg);
+      // After dwell interval, start next timer
+      var dwellInterval = dwellNode ? (dwellNode.cycleInterval || 2.0) : 2.0;
+      var _agentForTimer = agentSafeName;
+      var _segForTimer = seg;
+      setTimeout(function() {
+        try {
+          var scene2 = canvas.browser.currentScene;
+          var nextTimerName = 'Timer_' + _agentForTimer + '_' + (_segForTimer + 1);
+          var nextTimer = null;
+          try { nextTimer = scene2 && scene2.getNamedNode(nextTimerName); } catch(e) {}
+          if (nextTimer) {
+            var mn = scene2 && scene2.getNamedNode('MCCFMaster');
+            if (mn) {
+              mn.startNextTimer = _agentForTimer + ':' + _segForTimer;
+              console.log('pbReleaseDwell: fired startNextTimer for', _agentForTimer, 'after seg', _segForTimer);
+            }
+          } else {
+            // No next timer — arc movement complete. Do final pbStep() to display last waypoint.
+            console.log('pbReleaseDwell: end of arc — fetching final waypoint display');
+            fetch(API + '/arc/playback/step', {method:'POST'})
+              .then(function(r){ return r.json(); })
+              .then(function(d){ pbUpdateDisplay(d); })
+              .catch(function(){});
+          }
+        } catch(e) { console.warn('startNextTimer error:', e); }
+      }, Math.round(dwellInterval * 1000));
+    } else {
+      console.warn('pbReleaseDwell: MCCFMaster not found — cannot start', dwellNodeName);
+    }
   } catch(e) {
     console.warn('pbReleaseDwell error:', e);
   }
@@ -843,44 +896,125 @@ function pbReleaseDwell(agentSafeName) {
 // Track which avatar safenames are being driven by X3D TimeSensor (not JS lerp)
 var _x3dTimerActive = {};
 
-function pbActivateX3DTimers(arcFileEntry) {
+function _x3dNow() {
+  // Returns X_ITE internal scene time, or null if unavailable.
+  // Diagnostic: log what's on canvas.browser so we know what SAI exposes.
+  try {
+    var t = canvas && canvas.browser && canvas.browser.currentTime;
+    if (t !== undefined && t !== null) return t;
+    if (canvas && canvas.browser && typeof canvas.browser.getWorldTime === 'function') {
+      var wt = canvas.browser.getWorldTime();
+      if (wt !== undefined && wt !== null) return wt;
+    }
+    // Fallback: read .time from any active TimeSensor in the scene
+    if (canvas && canvas.browser && canvas.browser.currentScene) {
+      var scene = canvas.browser.currentScene;
+      var activeKeys = Object.keys(_x3dTimerActive);
+      for (var i = 0; i < activeKeys.length; i++) {
+        var suffix = activeKeys[i].replace(/^Avatar_/, '');
+        try {
+          var tn = scene.getNamedNode('Timer_' + suffix + '_1');
+          if (tn && tn.time !== undefined && tn.time > 0) return tn.time;
+        } catch(e2) {}
+      }
+    }
+    // Log what browser exposes so we can find the right property
+    if (canvas && canvas.browser) {
+      var keys = [];
+      for (var k in canvas.browser) { if (k.toLowerCase().includes('time')) keys.push(k); }
+      console.log('_x3dNow: browser time-related properties:', keys.join(', ') || '(none)');
+    }
+  } catch(e) {}
+  return null;
+}
+
+function pbActivateX3DTimers(cultivars) {
   // Start Timer_{safeName}_1 for each agent and wire Arrival_.segmentArrived -> pbStep.
-  // The ROUTE chain handles all subsequent segments automatically.
-  // Never start Dwell_ or Timer_*_2+ directly — those fire via ROUTEs.
-  if (!canvas || !canvas.browser) return;
+  // Uses cultivar names from arc playback state — does NOT enumerate scene.namedNodes
+  // because X_ITE SAI does not expose Script DEF nodes via namedNodes enumeration.
+  // getNamedNode('Arrival_Cindy') works; Object.keys(scene.namedNodes) misses Script nodes.
+  console.log('pbActivateX3DTimers: entered, cultivars =', cultivars);
+  if (!canvas || !canvas.browser) { console.warn('pbActivateX3DTimers: no browser'); return; }
   try {
     var scene = canvas.browser.currentScene;
-    if (!scene) return;
+    if (!scene) { console.warn('pbActivateX3DTimers: no currentScene'); return; }
     _x3dTimerActive = {};
-    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    // Kill any polls from a previous play before wiring new ones
+    if (window._pbPollingSegment) {
+      Object.keys(window._pbPollingSegment).forEach(function(k) {
+        window._pbPollingSegment[k] = false;
+      });
+    }
+    window._pbPollingSegment = {};
 
-    // Wire Arrival_{agent}.segmentArrived -> pbStep for each agent
-    // Uses getField().addFieldCallback per X_ITE SAI spec.
-    // Falls back to polling _lastSegmentArrived if addFieldCallback not supported.
-    allNames.forEach(function(nodeName) {
-      if (!/^Arrival_.+$/.test(nodeName)) return;
+    if (!cultivars || cultivars.length === 0) {
+      console.warn('pbActivateX3DTimers: no cultivars passed — cannot wire Arrival_ or start Timers');
+      return;
+    }
+
+    cultivars.forEach(function(cultivarName) {
+      var safeName = cultivarName.replace(/[^A-Za-z0-9_]/g, '_');
+      var arrNodeName = 'Arrival_' + safeName;
+      var timerNodeName = 'Timer_' + safeName + '_1';
+      var avatarName = 'Avatar_' + safeName;
+
+      // Wire Arrival_ segmentArrived -> pbStep
+      // addFieldCallback on outputOnly Script fields not reliably supported — always poll.
       try {
-        var arrNode = scene.getNamedNode(nodeName);
-        if (!arrNode) return;
-        var field = arrNode.getField('segmentArrived');
-        if (field && field.addFieldCallback) {
-          field.addFieldCallback(nodeName + '_cb', function(value) {
-            console.log('segmentArrived callback: ' + nodeName + ' seg=' + value);
-            pbStep();
-          });
-          console.log('pbActivateX3DTimers: wired segmentArrived callback on', nodeName);
+        var arrNode = scene.getNamedNode(arrNodeName);
+        if (!arrNode) {
+          console.warn('pbActivateX3DTimers: ' + arrNodeName + ' not found in scene');
         } else {
-          // addFieldCallback not available — fall back to polling segmentArrived value
-          console.warn('pbActivateX3DTimers: addFieldCallback unavailable for', nodeName, '— using poll fallback');
+          // Attempt addFieldCallback first. If it succeeds, skip poll to avoid double-firing.
+          // Both callback AND poll firing = pbStep called twice = premature dwell release = skipped waypoint.
+          var cbWired = false;
+          try {
+            var field = arrNode.getField('segmentArrived');
+            if (field && typeof field.addFieldCallback === 'function') {
+              var _lastCbSeg = -1;
+              field.addFieldCallback(arrNodeName + '_cb', function(value) {
+                var seg = parseInt(value) || 0;
+                if (seg <= _lastCbSeg) {
+                  console.log('segmentArrived callback DUPLICATE suppressed: ' + arrNodeName + ' seg=' + seg);
+                  return;
+                }
+                _lastCbSeg = seg;
+                console.log('segmentArrived callback: ' + arrNodeName + ' seg=' + seg);
+                _x3dLastArrivedSeg[safeName] = seg;
+                if (seg === 1) {
+                  // WP1: server is already at step 1 — display it now so audio fires,
+                  // then pbStep() advances to WP2 after TTS completes (via pbReleaseDwell chain).
+                  // Do NOT call pbStep() here — that would skip WP1 display entirely.
+                  fetch(API + '/arc/playback/state').then(function(r){ return r.json(); }).then(function(d){ pbUpdateDisplay(d); }).catch(function(){});
+                } else {
+                  pbStep();
+                }
+              });
+              cbWired = true;
+              console.log('pbActivateX3DTimers: wired segmentArrived callback on', arrNodeName, '— skipping poll');
+            }
+          } catch(cbErr) {}
+          if (!cbWired) {
+            console.log('pbActivateX3DTimers: addFieldCallback unavailable for', arrNodeName, '— using poll');
+          }
+          // Only install poll if callback not wired
+          window._pbPollingSegment[arrNodeName] = !cbWired;
           (function(node, name) {
-            var lastSeg = 0;
+            var lastSeg = -1;
+            var _pollWasActive = window._pbPollingSegment[name];
             var pollId = setInterval(function() {
-              if (!_x3dTimerActive || Object.keys(_x3dTimerActive).length === 0) {
-                clearInterval(pollId); return;
+              if (!window._pbPollingSegment || !window._pbPollingSegment[name]) {
+                clearInterval(pollId);
+                if (_pollWasActive) console.log('pbActivateX3DTimers: poll stopped for', name);
+                return;
               }
               try {
-                var f = node.getField('segmentArrived');
-                var v = f ? f.getValue() : 0;
+                var v = node.segmentArrived;
+                if (v === undefined || v === null) {
+                  var f = node.getField ? node.getField('segmentArrived') : null;
+                  v = f ? f.getValue() : 0;
+                }
+                v = parseInt(v) || 0;
                 if (v > lastSeg) {
                   lastSeg = v;
                   console.log('segmentArrived poll: ' + name + ' seg=' + v);
@@ -888,41 +1022,66 @@ function pbActivateX3DTimers(arcFileEntry) {
                 }
               } catch(e) {}
             }, 200);
-          })(arrNode, nodeName);
+          })(arrNode, arrNodeName);
         }
-      } catch(e) { console.warn('pbActivateX3DTimers: could not wire', nodeName, e); }
-    });
+      } catch(e) { console.warn('pbActivateX3DTimers: could not wire', arrNodeName, e); }
 
-    // Start Timer_{agent}_1 for each agent
-    allNames.forEach(function(nodeName) {
-      if (!/^Timer_.+_1$/.test(nodeName)) return;
-      var timerNode = scene.getNamedNode(nodeName);
-      if (!timerNode) return;
+      // Start Timer_{agent}_1
       try {
-        timerNode.enabled = true;
-        timerNode.startTime = canvas.browser.currentTime;
-        var agentSuffix = nodeName.replace(/^Timer_/, '').replace(/_1$/, '');
-        var avatarName = 'Avatar_' + agentSuffix;
-        _x3dTimerActive[avatarName] = true;
-        console.log('pbActivateX3DTimers: started', nodeName, '-> driving', avatarName);
-      } catch(e) { console.warn('pbActivateX3DTimers: could not start', nodeName, e); }
+        var timerNode = scene.getNamedNode(timerNodeName);
+        if (!timerNode) {
+          console.warn('pbActivateX3DTimers: ' + timerNodeName + ' not found in scene');
+        } else {
+          // Route timer start through MCCFMaster Script which has reliable Browser.currentTime.
+          // Direct SAI startTime/enabled is unreliable — canvas.browser.currentTime is undefined
+          // in external SAI context in X_ITE.
+          try {
+            var masterNode = scene.getNamedNode('MCCFMaster');
+            if (masterNode) {
+              masterNode.startAgent = safeName;
+              _x3dTimerActive[avatarName] = true;
+              console.log('pbActivateX3DTimers: sent startAgent=' + safeName + ' to MCCFMaster -> driving', avatarName);
+            } else {
+              console.warn('pbActivateX3DTimers: MCCFMaster not found — cannot start', timerNodeName);
+            }
+          } catch(masterErr) {
+            console.warn('pbActivateX3DTimers: MCCFMaster.startAgent failed:', masterErr);
+          }
+        }
+      } catch(e) { console.warn('pbActivateX3DTimers: could not start', timerNodeName, e); }
     });
   } catch(e) { console.warn('pbActivateX3DTimers error:', e); }
 }
 
 function pbStopX3DTimers() {
-  if (!canvas || !canvas.browser) return;
-  try {
-    var scene = canvas.browser.currentScene;
-    if (!scene) return;
-    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
-    allNames.forEach(function(nodeName) {
-      if (!nodeName.startsWith('Timer_')) return;
-      var timerNode = scene.getNamedNode(nodeName);
-      if (timerNode) { try { timerNode.enabled = false; } catch(e) {} }
-    });
-  } catch(e) {}
+  // Disable timers by deriving names from _x3dTimerActive keys (Avatar_X -> Timer_X_1, Timer_X_2, etc.)
+  // Does NOT use scene.namedNodes enumeration — Script nodes not reliably enumerated by X_ITE SAI.
+  if (canvas && canvas.browser) {
+    try {
+      var scene = canvas.browser.currentScene;
+      if (scene) {
+        Object.keys(_x3dTimerActive).forEach(function(avatarName) {
+          var suffix = avatarName.replace(/^Avatar_/, '');
+          // Disable up to 8 segments worth of timers and dwells
+          for (var i = 1; i <= 8; i++) {
+            ['Timer_'+suffix+'_'+i, 'Dwell_'+suffix+'_'+i].forEach(function(nodeName) {
+              try {
+                var n = scene.getNamedNode(nodeName);
+                if (n) n.enabled = false;
+              } catch(e) {}
+            });
+          }
+        });
+      }
+    } catch(e) {}
+  }
   _x3dTimerActive = {};
+  // Stop all segmentArrived polls
+  if (window._pbPollingSegment) {
+    Object.keys(window._pbPollingSegment).forEach(function(k) {
+      window._pbPollingSegment[k] = false;
+    });
+  }
 }
 var _lerpActive = {};      // suffix → { timer, stepNum }
 var _lerpDest   = {};      // suffix → { x, z } — intended destination, set once per step change
@@ -1001,24 +1160,48 @@ function pbPushPosition(wp) {
 async function pbPlay() {
   const file = document.getElementById('pb-file');
   if (!file || !file.value) { alert('Select an arc file first.'); return; }
+  // Kill any stale polls from previous play before starting
+  if (window._pbPollingSegment) {
+    Object.keys(window._pbPollingSegment).forEach(function(k){ window._pbPollingSegment[k] = false; });
+  }
+  window._pbPollingSegment = {};
+  _pbStepInFlight = false;
   const pace = parseFloat(document.getElementById('pb-pace').value) || 3.0;
   const loop = document.getElementById('pb-loop').checked;
   try {
     const r = await fetch(API+'/arc/playback/start', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({file:file.value, pace:pace, loop:loop, auto:true})
+      // auto:false — X3D segmentArrived callback drives step advancement; server auto-timer would race
+      body: JSON.stringify({file:file.value, pace:pace, loop:loop, auto:false})
     });
     const data = await r.json();
     if (data.error) { document.getElementById('pb-step-info').textContent='Error: '+data.error; return; }
-    pbUpdateDisplay(data.state||data);
-    pbStartPolling(pace);
-    // Activate X3D native interpolation — hands position to TimeSensor/PositionInterpolator
-    pbActivateX3DTimers();
+    var cultivars = (data.state||data).cultivars || [];
+    if (cultivars.length > 0) {
+      // X3D-driven mode: segmentArrived callback drives all step advancement and TTS.
+      // Do NOT call pbUpdateDisplay here — server is at step index 0 (waypoint 1) but avatar
+      // hasn't arrived yet. Calling pbUpdateDisplay now fires TTS for waypoint 1 immediately,
+      // consuming it before arrival. First segmentArrived -> pbStep() will display waypoint 1.
+      pbStopPolling();
+      var stateData = data.state||data;
+      var el = document.getElementById('pb-step-info');
+      if (el) el.textContent = 'Playing — ' + (stateData.total_steps||'?') + ' waypoints';
+      console.log('pbPlay: X3D-driven mode — polling suppressed, segmentArrived drives steps');
+    } else {
+      // JS-lerp mode: poll drives display
+      pbUpdateDisplay(data.state||data);
+      pbStartPolling(pace);
+    }
+    pbActivateX3DTimers(cultivars);
   } catch(e) { document.getElementById('pb-step-info').textContent='Play failed: '+e.message; }
 }
 
+var _pbStepInFlight = false;
 async function pbStep() {
+  if (_pbStepInFlight) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
+  _pbStepInFlight = true;
   try { const r=await fetch(API+'/arc/playback/step',{method:'POST'}); pbUpdateDisplay(await r.json()); } catch(e) {}
+  finally { _pbStepInFlight = false; }
 }
 async function pbStop() {
   pbStopPolling();
@@ -1044,13 +1227,22 @@ function _pbResetViaKillScript() {
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) { resetToStartPosition(); return; }
-    var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
+    // Derive Kill_ node names from _x3dTimerActive (Avatar_X -> Kill_X)
+    // Does NOT use scene.namedNodes — Script nodes not reliably enumerated by X_ITE SAI.
+    var agentSuffixes = Object.keys(_x3dTimerActive).map(function(n){ return n.replace(/^Avatar_/,''); });
+    // Also check polling segment names as fallback
+    if (agentSuffixes.length === 0 && window._pbPollingSegment) {
+      Object.keys(window._pbPollingSegment).forEach(function(n){
+        var m = n.match(/^Arrival_(.+)$/);
+        if (m) agentSuffixes.push(m[1]);
+      });
+    }
     var found = false;
-    allNames.forEach(function(nodeName) {
-      if (!nodeName.startsWith('Kill_')) return;
-      var killNode = scene.getNamedNode(nodeName);
-      if (!killNode) return;
+    agentSuffixes.forEach(function(suffix) {
+      var nodeName = 'Kill_' + suffix;
       try {
+        var killNode = scene.getNamedNode(nodeName);
+        if (!killNode) return;
         killNode.resetPos = true;
         found = true;
         console.log('pbReset: fired resetPos on', nodeName);
@@ -1133,7 +1325,9 @@ function pbUpdateDisplay(state) {
   } else { if(qr) qr.style.display='none'; }
   var pace2 = parseFloat((document.getElementById('pb-pace')||{}).value) || 3.0;
   // Build a key that identifies this step uniquely — used to prevent re-firing TTS on repeated polls
-  var stepKey = (wp.id||'') + '|' + (wp.stepno||'') + '|' + (wp.pos_x||'') + '|' + (wp.pos_z||'');
+  // Step key: use stepno (server step counter) as single stable integer.
+  // pos_x/pos_z and wp.id may differ between pbStep() and pbPollState() responses — don't use them.
+  var stepKey = String(wp.stepno || state.step || wp.id || '');
   var isNewStep = (stepKey !== _pbLastStepKey);
   if (isNewStep) _pbLastStepKey = stepKey;
   // TTS fires on new step regardless of whether position is X3D-driven or JS-lerped.
@@ -1149,6 +1343,7 @@ function pbUpdateDisplay(state) {
     window._pbSpeakTimer = setTimeout(function() {
       if (qaLines.length) {
         if (isX3DDriven) {
+          console.log('pbUpdateDisplay: firing TTS for', safeName2, qaLines.length, 'lines, isX3DDriven=', isX3DDriven);
           pbSpeakQALines(qaLines, function() { pbReleaseDwell(safeName2); });
         } else {
           pbSpeakQALines(qaLines);
