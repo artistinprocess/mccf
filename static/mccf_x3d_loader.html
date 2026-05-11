@@ -537,12 +537,19 @@ function applyArcCV(data) {
 
     // v3.5: if broadcast includes scene-space position, drive avatar directly.
     // This is the Run Scene path — positions come from composer waypoints.
+    // GUARD: skip during active X3D TimeSensor playback — the X3D interpolator owns
+    // avatar.translation then. Writing it here causes jumps and interpolation fights.
     if (data.pos_x !== undefined && data.pos_z !== undefined) {
-      const avatarNode = scene.getNamedNode('Avatar_' + suffix);
-      if (avatarNode) {
-        const x = parseFloat(data.pos_x) || 0;
-        const z = parseFloat(data.pos_z) || 0;
-        avatarNode.translation = new X3D.SFVec3f(x, 0, z);
+      var avatarNodeName = 'Avatar_' + suffix;
+      if (!_x3dTimerActive || !_x3dTimerActive[avatarNodeName]) {
+        const avatarNode = scene.getNamedNode('Avatar_' + suffix);
+        if (avatarNode) {
+          const x = parseFloat(data.pos_x) || 0;
+          const z = parseFloat(data.pos_z) || 0;
+          avatarNode.translation = new X3D.SFVec3f(x, 0, z);
+        }
+      } else {
+        console.log('applyArcCV: position write suppressed — X3D driving', avatarNodeName);
       }
     }
 
@@ -761,9 +768,18 @@ function _buildSceneVoiceMap() {
 
 var _pbSceneVoiceMap = null;  // built once per scene load
 
+// Pending onComplete callback for in-progress TTS — keyed by TTS content key.
+// When pbSpeakQALines is called with the same lines (duplicate key), the new onComplete
+// replaces the old one so the correct callback fires when speech finishes.
+var _pbPendingOnComplete = {};
+
+// Cancellation token — incremented each time speechSynthesis.cancel() is called.
+// Each speak session captures the token at start; if it differs on onend, the
+// utterance was cancelled and onComplete must NOT fire.
+var _pbSpeakToken = 0;
+
 function pbSpeakQALines(qaLines, onComplete) {
-  // onComplete — optional callback fired when all TTS lines finish.
-  // Used by Option B: after TTS completes, loader calls releaseDwell on Arrival_ script.
+  // onComplete — optional callback fired when all TTS lines finish (not cancelled).
   var voiceEl = document.getElementById('pb-voice');
   if (!voiceEl || !voiceEl.checked) {
     if (onComplete) onComplete();
@@ -775,14 +791,22 @@ function pbSpeakQALines(qaLines, onComplete) {
   }
   var key = qaLines.map(function(l){return l.text;}).join('|');
   if (key === _pbLastSpoken) {
-    // Already speaking these lines — don't call onComplete here.
-    // The in-progress TTS utterance will fire onComplete when it finishes.
-    // Calling it here causes double pbReleaseDwell.
-    console.log('pbSpeakQALines: duplicate suppressed for key', key.slice(0,40));
+    // Same lines already queued or speaking — replace pending onComplete, don't restart.
+    if (onComplete) {
+      _pbPendingOnComplete[key] = onComplete;
+      console.log('pbSpeakQALines: duplicate — replaced pending onComplete for key', key.slice(0,40));
+    }
     return;
   }
   _pbLastSpoken = key;
-  speechSynthesis.cancel();
+  if (onComplete) _pbPendingOnComplete[key] = onComplete;
+
+  // Increment token to invalidate any stale onend callbacks from a previous session
+  // that may still be in flight. Do NOT call speechSynthesis.cancel() — cancel fires
+  // onend synchronously on the current utterance, which with the new token would
+  // immediately trigger onComplete for this session before any speech has occurred.
+  _pbSpeakToken++;
+  var myToken = _pbSpeakToken;
 
   function _ensureVoiceMapThenSpeak(retriesLeft) {
     if (!_pbVoices.length) {
@@ -798,16 +822,34 @@ function pbSpeakQALines(qaLines, onComplete) {
       setTimeout(function(){ _ensureVoiceMapThenSpeak(retriesLeft - 1); }, 300);
       return;
     }
+    // Wait for any in-progress speech from a previous session to finish naturally.
+    // Do not cancel — cancel fires onend synchronously which would trigger onComplete
+    // for this session before any speech has occurred.
+    if (window.speechSynthesis.speaking) {
+      setTimeout(function(){
+        if (_pbSpeakToken !== myToken) return; // superseded by a newer session
+        _ensureVoiceMapThenSpeak(0);
+      }, 100);
+      return;
+    }
     _doSpeak();
   }
 
   function _doSpeak() {
     var queue = qaLines.filter(function(l){return l.text && l.text.trim();});
+    var capturedKey = key;
+    var capturedToken = myToken;
     var rotationCount = 0;
     function speakNext(i) {
+      // If token has changed, this session was cancelled — do not fire onComplete.
+      if (_pbSpeakToken !== capturedToken) {
+        console.log('pbSpeakQALines: session cancelled (token mismatch) — suppressing onComplete for', capturedKey.slice(0,40));
+        return;
+      }
       if (i >= queue.length) {
-        // All lines spoken — fire completion callback
-        if (onComplete) onComplete();
+        var cb = _pbPendingOnComplete[capturedKey];
+        delete _pbPendingOnComplete[capturedKey];
+        if (cb) cb();
         return;
       }
       var line = queue[i];
@@ -825,7 +867,7 @@ function pbSpeakQALines(qaLines, onComplete) {
         if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
       }
       utt.onend = function() { speakNext(i+1); };
-      utt.onerror = function() { speakNext(i+1); }; // don't hang on TTS error
+      utt.onerror = function() { speakNext(i+1); };
       speechSynthesis.speak(utt);
     }
     speakNext(0);
@@ -837,17 +879,52 @@ function pbSpeakQALines(qaLines, onComplete) {
 // Track last arrived segment per agent — set by segmentArrived callback
 var _x3dLastArrivedSeg = {};
 
+// Guard: set true when the final waypoint TTS has been handed off, preventing
+// a second pbReleaseDwell call (from the onComplete chain) from re-entering.
+var _pbArcComplete = false;
+
 function pbReleaseDwell(agentSafeName) {
   // Called after TTS completes for an X3D-driven agent.
   // Starts Dwell_{agentSafeName}_{seg} directly via SAI using canvas.browser.currentTime.
   // Does NOT rely on Arrival_ Script releaseDwell input — Browser.currentTime inside an
   // externally-triggered Script input field is unreliable in X_ITE (may return 0 or stale value),
   // causing the TimeSensor to not fire correctly and breaking the ROUTE chain.
+
+  // Guard: if arc is already complete, this is a spurious re-entry from the final
+  // waypoint TTS onComplete callback — ignore it.
+  if (_pbArcComplete) {
+    console.log('pbReleaseDwell: arc already complete — ignoring spurious call for', agentSafeName);
+    return;
+  }
+
   if (!canvas || !canvas.browser) return;
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
-    var seg = _x3dLastArrivedSeg[agentSafeName] || 1;
+    var seg = _x3dLastArrivedSeg[agentSafeName] || 0;
+
+    // seg=0 means WP1 TTS just completed — no segment has arrived yet.
+    // Wait dwell interval then fire startAgent to begin Timer_1 (first movement).
+    // Use Dwell_1's cycleInterval as the wait duration but don't start the X3D Dwell node —
+    // Dwell_1 is reserved for after WP2 arrival (seg=1).
+    if (seg === 0) {
+      var dwell0Name = 'Dwell_' + agentSafeName + '_1';
+      var dwell0Node = null;
+      try { dwell0Node = scene.getNamedNode(dwell0Name); } catch(e) {}
+      var dwell0Interval = dwell0Node ? (dwell0Node.cycleInterval || 2.0) : 2.0;
+      var _agentForStart = agentSafeName;
+      console.log('pbReleaseDwell: WP1 complete — waiting', dwell0Interval, 's then starting Timer_1 for', agentSafeName);
+      setTimeout(function() {
+        try {
+          var mn = canvas.browser.currentScene.getNamedNode('MCCFMaster');
+          if (mn) {
+            mn.startAgent = _agentForStart;
+            console.log('pbReleaseDwell: WP1 dwell expired — sent startAgent for', _agentForStart);
+          }
+        } catch(e) { console.warn('pbReleaseDwell startAgent error:', e); }
+      }, Math.round(dwell0Interval * 1000));
+      return;
+    }
     var dwellNodeName = 'Dwell_' + agentSafeName + '_' + seg;
     var dwellNode = scene.getNamedNode(dwellNodeName);
     if (!dwellNode) {
@@ -876,12 +953,17 @@ function pbReleaseDwell(agentSafeName) {
               console.log('pbReleaseDwell: fired startNextTimer for', _agentForTimer, 'after seg', _segForTimer);
             }
           } else {
-            // No next timer — arc movement complete. Do final pbStep() to display last waypoint.
-            console.log('pbReleaseDwell: end of arc — fetching final waypoint display');
+            // No next timer — last segment dwell expired.
+            // Fetch and display the final waypoint (N waypoints, N-1 segments means the
+            // last waypoint is never reached by segmentArrived). Use pbStep() to advance
+            // the server to the final waypoint, then display it with a special flag that
+            // prevents pbReleaseDwell from being called after its TTS completes.
+            console.log('pbReleaseDwell: fetching final waypoint for', _agentForTimer);
+            _pbArcComplete = true;  // set now so any re-entrant pbReleaseDwell calls are blocked
             fetch(API + '/arc/playback/step', {method:'POST'})
               .then(function(r){ return r.json(); })
-              .then(function(d){ pbUpdateDisplay(d); })
-              .catch(function(){});
+              .then(function(d){ pbUpdateDisplayFinal(d); })
+              .catch(function(e){ console.warn('final waypoint fetch failed:', e); });
           }
         } catch(e) { console.warn('startNextTimer error:', e); }
       }, Math.round(dwellInterval * 1000));
@@ -981,14 +1063,10 @@ function pbActivateX3DTimers(cultivars) {
                 _lastCbSeg = seg;
                 console.log('segmentArrived callback: ' + arrNodeName + ' seg=' + seg);
                 _x3dLastArrivedSeg[safeName] = seg;
-                if (seg === 1) {
-                  // WP1: server is already at step 1 — display it now so audio fires,
-                  // then pbStep() advances to WP2 after TTS completes (via pbReleaseDwell chain).
-                  // Do NOT call pbStep() here — that would skip WP1 display entirely.
-                  fetch(API + '/arc/playback/state').then(function(r){ return r.json(); }).then(function(d){ pbUpdateDisplay(d); }).catch(function(){});
-                } else {
-                  pbStep();
-                }
+                // All segments call pbStep() — server advances to next waypoint.
+                // WP1 is displayed at play start (pbPlay calls pbUpdateDisplay immediately).
+                // seg=1 arrival means avatar has completed segment 1 and is now at WP2.
+                pbStep();
               });
               cbWired = true;
               console.log('pbActivateX3DTimers: wired segmentArrived callback on', arrNodeName, '— skipping poll');
@@ -999,7 +1077,7 @@ function pbActivateX3DTimers(cultivars) {
           }
           // Only install poll if callback not wired
           window._pbPollingSegment[arrNodeName] = !cbWired;
-          (function(node, name) {
+          if (!cbWired) (function(node, name) {
             var lastSeg = -1;
             var _pollWasActive = window._pbPollingSegment[name];
             var pollId = setInterval(function() {
@@ -1032,21 +1110,11 @@ function pbActivateX3DTimers(cultivars) {
         if (!timerNode) {
           console.warn('pbActivateX3DTimers: ' + timerNodeName + ' not found in scene');
         } else {
-          // Route timer start through MCCFMaster Script which has reliable Browser.currentTime.
-          // Direct SAI startTime/enabled is unreliable — canvas.browser.currentTime is undefined
-          // in external SAI context in X_ITE.
-          try {
-            var masterNode = scene.getNamedNode('MCCFMaster');
-            if (masterNode) {
-              masterNode.startAgent = safeName;
-              _x3dTimerActive[avatarName] = true;
-              console.log('pbActivateX3DTimers: sent startAgent=' + safeName + ' to MCCFMaster -> driving', avatarName);
-            } else {
-              console.warn('pbActivateX3DTimers: MCCFMaster not found — cannot start', timerNodeName);
-            }
-          } catch(masterErr) {
-            console.warn('pbActivateX3DTimers: MCCFMaster.startAgent failed:', masterErr);
-          }
+          // Mark avatar as X3D-driven so pbPushPosition and applyArcCV skip it.
+          // Timer_1 is started by pbReleaseDwell after WP1 TTS+dwell completes,
+          // via startAgent — same path as all subsequent timers use startNextTimer.
+          _x3dTimerActive[avatarName] = true;
+          console.log('pbActivateX3DTimers: armed X3D driving for', avatarName, '— Timer_1 starts after WP1 dwell');
         }
       } catch(e) { console.warn('pbActivateX3DTimers: could not start', timerNodeName, e); }
     });
@@ -1166,6 +1234,11 @@ async function pbPlay() {
   }
   window._pbPollingSegment = {};
   _pbStepInFlight = false;
+  _pbArcComplete = false;
+  _pbPendingOnComplete = {};
+  _pbSpeakToken = 0;
+  _pbLastSpoken = '';
+  _pbLastStepKey = '';
   const pace = parseFloat(document.getElementById('pb-pace').value) || 3.0;
   const loop = document.getElementById('pb-loop').checked;
   try {
@@ -1178,21 +1251,24 @@ async function pbPlay() {
     if (data.error) { document.getElementById('pb-step-info').textContent='Error: '+data.error; return; }
     var cultivars = (data.state||data).cultivars || [];
     if (cultivars.length > 0) {
-      // X3D-driven mode: segmentArrived callback drives all step advancement and TTS.
-      // Do NOT call pbUpdateDisplay here — server is at step index 0 (waypoint 1) but avatar
-      // hasn't arrived yet. Calling pbUpdateDisplay now fires TTS for waypoint 1 immediately,
-      // consuming it before arrival. First segmentArrived -> pbStep() will display waypoint 1.
+      // X3D-driven mode: display WP1 immediately — avatar starts at WP1 position,
+      // so WP1 speech should fire before any movement begins. All segmentArrived
+      // callbacks call pbStep() to advance to the next waypoint.
       pbStopPolling();
       var stateData = data.state||data;
       var el = document.getElementById('pb-step-info');
       if (el) el.textContent = 'Playing — ' + (stateData.total_steps||'?') + ' waypoints';
       console.log('pbPlay: X3D-driven mode — polling suppressed, segmentArrived drives steps');
+      // Display WP1 now — avatar is already there. TTS onComplete → pbReleaseDwell → dwell → Timer_1.
+      pbActivateX3DTimers(cultivars);
+      pbUpdateDisplay(stateData);
     } else {
       // JS-lerp mode: poll drives display
       pbUpdateDisplay(data.state||data);
       pbStartPolling(pace);
+      pbActivateX3DTimers(cultivars);
     }
-    pbActivateX3DTimers(cultivars);
+    // pbActivateX3DTimers already called above for X3D mode
   } catch(e) { document.getElementById('pb-step-info').textContent='Play failed: '+e.message; }
 }
 
@@ -1215,6 +1291,9 @@ async function pbReset() {
   _x3dTimerActive = {};
   _pbLastStepKey = '';
   _pbLastSpoken = '';
+  _pbArcComplete = false;
+  _pbPendingOnComplete = {};
+  _pbSpeakToken = 0;
   try {
     const r=await fetch(API+'/arc/playback/reset',{method:'POST'});
     pbUpdateDisplay(await r.json());
@@ -1336,10 +1415,13 @@ function pbUpdateDisplay(state) {
     clearTimeout(window._pbSpeakTimer);
     var safeName2 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
     var isX3DDriven = !!_x3dTimerActive['Avatar_' + safeName2];
-    // X3D-driven: fire immediately — avatar has arrived, Arrival_ script is holding the dwell.
-    // After TTS completes, call pbReleaseDwell so X3D starts the dwell timer.
+    // X3D-driven: cycleTime fires in the same event cascade as the final fraction_changed=1.0.
+    // X_ITE may deliver cycleTime to the Script before rendering the interpolator's last frame,
+    // so the avatar appears to still be moving when TTS starts. A short settle delay lets the
+    // renderer catch up before speech begins. 150ms = ~9 frames at 60fps — enough without
+    // being perceptible as a pause.
     // JS-lerp: delay by pace so avatar arrives before speaking. No releaseDwell needed.
-    var ttsDelay = isX3DDriven ? 0 : Math.round(pace2 * 1000);
+    var ttsDelay = isX3DDriven ? 1000 : Math.round(pace2 * 1000);
     window._pbSpeakTimer = setTimeout(function() {
       if (qaLines.length) {
         if (isX3DDriven) {
@@ -1362,9 +1444,43 @@ function pbUpdateDisplay(state) {
   pbPushPosition(wp);
 }
 
-// ─────────────────────────────────────────────
-// Reset Position — snap avatars to <StartPosition> from scene XML
-// ─────────────────────────────────────────────
+// pbUpdateDisplayFinal — displays and speaks the last waypoint only.
+// Called from pbReleaseDwell when the last dwell expires and no next timer exists.
+// Does NOT call pbReleaseDwell after TTS — arc is already complete.
+function pbUpdateDisplayFinal(state) {
+  if (!state || state.status === 'idle') return;
+  var wp = state.current_waypoint || {};
+  if (!wp.cultivar && state.cultivars && state.cultivars.length) {
+    wp.cultivar = state.cultivars[0];
+  }
+  // Update the display panel
+  var si = document.getElementById('pb-step-info');
+  if (si) {
+    var step = wp.stepno || state.step || 0;
+    var total = state.total_steps || '?';
+    si.innerHTML = '⏹ <b>' + (wp.cultivar||'') + '</b> &nbsp; step ' + step + ' / ' + total
+      + (wp.id ? ' &nbsp;<span style="color:#4a6070">' + wp.id + '</span>' : '');
+  }
+  var qaLines = wp.qaLines || wp.qa_lines || [];
+  var qr = document.getElementById('pb-qr');
+  if (qaLines.length) {
+    if (qr) qr.style.display = 'block';
+    var qEl = document.getElementById('pb-question');
+    if (qEl) qEl.textContent = qaLines.filter(function(l){return l.text&&l.text.trim();})
+      .map(function(l){
+        var p = l.type==='Question'?'Q':l.type==='Response'?'R':'—';
+        return p + (l.speaker?' ['+l.speaker+']':'') + ': ' + l.text;
+      }).join('\n');
+    var rEl = document.getElementById('pb-response');
+    if (rEl) rEl.textContent = '';
+    // Speak final waypoint lines — no onComplete callback, arc is done.
+    console.log('pbUpdateDisplayFinal: speaking final waypoint', wp.id, qaLines.length, 'lines');
+    pbSpeakQALines(qaLines);
+  } else if (qr) {
+    qr.style.display = 'none';
+  }
+  pbPushPosition(wp);
+}
 
 // Fetch and cache the scene XML when the X3D scene loads
 canvas.addEventListener('load', function() {

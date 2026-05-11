@@ -1206,15 +1206,19 @@ function buildInterpNodes(path){
   var dwellDefs=[];
   for(var d=1;d<=numSegs;d++) dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
   out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
-  out+='  <field name="arrived" type="SFTime" accessType="inputOnly"/>\n';
+  out+='  <field name="arrived" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <field name="resetSeg" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>\n';
   out+='  <![CDATA[ecmascript:\n';
   out+='  var _seg=0;\n';
-  out+='  function resetSeg(val,time){ if(val) _seg=0; }\n';
+  out+='  function resetSeg(val,time){ if(val) _seg=0; _wasActive=false; }\n';
   out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
-  out+='  function arrived(t,time){\n';
+  out+='  var _wasActive=false;\n';
+  out+='  function arrived(val,time){\n';
+  out+='    if(val){ _wasActive=true; return; }\n';
+  out+='    if(!_wasActive) return;\n';
+  out+='    _wasActive=false;\n';
   out+='    _seg++;\n';
   out+='    segmentArrived=_seg;\n';
   out+='    Browser.println("Arrival_'+sa+': arrived seg "+_seg);\n';
@@ -1282,7 +1286,7 @@ function buildInterpRoutes(path){
         +' toNode="Interp_'+sa+'_'+seg+'" toField="set_fraction"/>\n';
     out+='<ROUTE fromNode="Interp_'+sa+'_'+seg+'" fromField="value_changed"'
         +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
-    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="cycleTime"'
+    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="isActive"'
         +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
     // Dwell→Timer chaining handled by MCCFMaster.startNextTimer after TTS completes
   }
@@ -1308,13 +1312,13 @@ function buildMS(){
   s+='  var parts=agentColonSeg.split(":");\n';
   s+='  var nextSeg=parseInt(parts[1])+1;\n';
   s+='  var t=Browser.currentScene.getNamedNode("Timer_"+parts[0]+"_"+nextSeg);\n';
-  s+='  if(t){t.startTime=0;t.enabled=true;Browser.println("MCCFMaster: started Timer_"+parts[0]+"_"+nextSeg+" (next)");}\n';
+  s+='  if(t){t.startTime=time;t.enabled=true;Browser.println("MCCFMaster: started Timer_"+parts[0]+"_"+nextSeg+" (next) at "+time);}\n';
   s+='  else{Browser.println("MCCFMaster: no Timer_"+parts[0]+"_"+nextSeg+" — arc complete");}\n';
   s+='}catch(e){Browser.println("MCCFMaster: startNextTimer end of arc — "+e.message);}\n';
   s+='}\n';
   s+='function startAgent(agentSafeName,time){\n';
   s+='  var t=Browser.currentScene.getNamedNode("Timer_"+agentSafeName+"_1");\n';
-  s+='  if(t){t.startTime=0;t.enabled=true;_sceneNow=0;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at 0 (scene-relative)");}\n';
+  s+='  if(t){t.startTime=time;t.enabled=true;_sceneNow=time;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at "+time);}\n';
   s+='  else{Browser.println("MCCFMaster: Timer_"+agentSafeName+"_1 NOT FOUND");}\n';
   s+='}\n';
   s+='function releaseDwellAgent(agentColonSeg,time){\n';

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
+<X3D profile="Immersive" version="4.0">
+<head><meta name="title" content="garden_001"/></head>
+<Scene>
+<ProtoDeclare name="MCCFAgent"><ProtoInterface>
+<field name="agentName" accessType="initializeOnly" type="MFString" value='"Agent"'/>
+<field name="position" accessType="inputOutput" type="SFVec3f" value="0 0 0"/>
+<field name="coherenceLevel" accessType="inputOutput" type="SFFloat" value="0.5"/>
+</ProtoInterface><ProtoBody><Transform>
+<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
+<Transform translation="0 0.9 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
+<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
+<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+</Transform></ProtoBody></ProtoDeclare>
+<ProtoDeclare name="MCCFZone"><ProtoInterface>
+<field name="zoneId" accessType="initializeOnly" type="SFString" value="zone"/>
+<field name="active" accessType="inputOutput" type="SFBool" value="false"/>
+</ProtoInterface><ProtoBody><Transform>
+<Transform translation="0 0.15 0"><Shape><Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.2"/></Appearance><Sphere radius="0.18"/></Shape></Transform>
+<Transform translation="0 1.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.7 0.7 0.8"/></Appearance>
+<Text string='"zone"'><FontStyle size="0.24" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+</Transform></ProtoBody></ProtoDeclare>
+<NavigationInfo headlight="true" type='"EXAMINE" "ANY"' visibilityLimit="300"/>
+<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>
+<Transform translation="20 15 20"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="48"/></Transform>
+<Viewpoint DEF="VP_Overview" description="Overview" position="20 28 20" orientation="1 0 0 -0.8"/>
+<Transform translation="20 -0.05 20"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="40 0.08 40"/></Shape></Transform>
+<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance><IndexedLineSet coordIndex="0 1 -1 2 3 -1 4 5 -1 6 7 -1 8 9 -1 10 11 -1 12 13 -1 14 15 -1 16 17 -1 18 19 -1"><Coordinate point="0 0.02 0 0 0.02 40 10 0.02 0 10 0.02 40 20 0.02 0 20 0.02 40 30 0.02 0 30 0.02 40 40 0.02 0 40 0.02 40 0 0.02 0 40 0.02 0 0 0.02 10 40 0.02 10 0 0.02 20 40 0.02 20 0 0.02 30 40 0.02 30 0 0.02 40 40 0.02 40"/></IndexedLineSet></Shape>
+<Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">
+<field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>
+<field accessType="inputOnly" type="SFString" name="startAgent"/>
+<field accessType="inputOnly" type="SFString" name="releaseDwellAgent"/>
+<![CDATA[ecmascript:
+var _sceneNow=0;
+function _getSceneNow(agent,seg){var prev=seg-1;if(prev>=1){var pt=Browser.currentScene.getNamedNode("Timer_"+agent+"_"+prev);if(pt&&pt.startTime!==undefined&&pt.cycleTime!==undefined)return pt.startTime+pt.cycleTime;}return _sceneNow;}
+function initialize(){Browser.println("MCCFMaster initialized.");}
+function startAgent(agentSafeName,time){
+  var t=Browser.currentScene.getNamedNode("Timer_"+agentSafeName+"_1");
+  if(t){t.startTime=0;t.enabled=true;_sceneNow=0;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at 0 (scene-relative)");}
+  else{Browser.println("MCCFMaster: Timer_"+agentSafeName+"_1 NOT FOUND");}
+}
+function releaseDwellAgent(agentColonSeg,time){
+  var parts=agentColonSeg.split(":");
+  var dw=Browser.currentScene.getNamedNode("Dwell_"+parts[0]+"_"+parts[1]);
+  if(dw){var tNow=_getSceneNow(parts[0],parseInt(parts[1]));dw.startTime=tNow;dw.enabled=true;Browser.println("MCCFMaster: started Dwell_"+parts[0]+"_"+parts[1]+" at "+tNow);}
+  else{Browser.println("MCCFMaster: Dwell_"+parts[0]+"_"+parts[1]+" NOT FOUND");}
+}
+]]>
+</Script>
+</Scene>
+</X3D>

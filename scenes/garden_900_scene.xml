@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_900 - 2026-05-11T02:05:04 -->
+<Scene id="garden_900" timestamp="2026-05-11T02:05:04" zone_set="garden_900" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="9.2" y="0" z="9.2"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="21.7" y="0" z="10.1"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="10.9" y="0" z="18.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Advocate" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="22.2" y="0" z="21.3"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="temple" label="temple" zone="temple" pos_x="9.70" pos_y="0.00" pos_z="7.90" dwell="15" pace="1.4">
+    <Statement>My heart is full.  Mother Goddees, preserve my bodu.</Statement>
+  </Waypoint>
+  <Waypoint name="garden" label="garden" zone="garden" pos_x="11.10" pos_y="0.00" pos_z="21.50" dwell="15" pace="1.4">
+    <Question speaker="The Steward">Are you going to the temple?</Question>
+    <Response speaker="Cindy">Yes.  I am going to the temple.</Response>
+  </Waypoint>
+  <Waypoint name="pool" label="pool" zone="" pos_x="24.90" pos_y="0.00" pos_z="11.60" dwell="15" pace="1.4">
+    <Question speaker="Cindy">Will I be refreshed?</Question>
+    <Response speaker="The Witness">Yes the pool is refreshing.</Response>
+    <Statement speaker="Cindy">Then I will go to the mountain.</Statement>
+  </Waypoint>
+  <Waypoint name="mountain" label="mouontain" zone="mountain" pos_x="25.50" pos_y="0.00" pos_z="20.50" dwell="15" pace="1.4">
+    <Statement speaker="Cindy">Here my soul soars above the sea.</Statement>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="JourneyToTheMountain" agent="Cindy">
+    <PathWaypoint ref="temple"/>
+    <PathWaypoint ref="garden"/>
+    <PathWaypoint ref="pool"/>
+    <PathWaypoint ref="mountain"/>
+  </Path>
+</Paths>
+</Scene>

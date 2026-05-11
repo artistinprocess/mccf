@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - garden_600 - 2026-05-10T03:45:12 -->
+<ZoneSet id="garden_600" timestamp="2026-05-10T03:45:12">
+<Zone id="temple" zone_type="sacred">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.2" P="0.25" S="0.25"/>
+<Position x="18" y="0" z="18.8"/><Radius value="5"/>
+<AmbientTheme scale="lydian" tempo="medium"/>
+</Zone>
+<Zone id="pool" zone_type="intimate">
+<Descriptor></Descriptor>
+<Weights E="0.4" B="0.1" P="0.2" S="0.3"/>
+<Position x="6.4" y="0" z="7.8"/><Radius value="2"/>
+<AmbientTheme scale="lydian" tempo="medium"/>
+</Zone>
+<Zone id="gardem" zone_type="intimate">
+<Descriptor></Descriptor>
+<Weights E="0.4" B="0.1" P="0.2" S="0.3"/>
+<Position x="32.4" y="0" z="16.3"/><Radius value="2"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+</ZoneSet>
