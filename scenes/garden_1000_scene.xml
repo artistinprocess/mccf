@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_1000 - 2026-05-11T02:40:12 -->
+<Scene id="garden_1000" timestamp="2026-05-11T02:40:12" zone_set="garden_1000" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="6.6" y="0" z="6.5"/></EmotionalArc>
+<EmotionalArc cultivar="The Advocate" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="23.1" y="0" z="30.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="25.3" y="0" z="8.8"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="pool" label="pool" zone="pool" pos_x="8.60" pos_y="0.00" pos_z="9.20" dwell="15" pace="1.4">
+    <Statement speaker="Cindy">It is time to go to the temple.</Statement>
+  </Waypoint>
+  <Waypoint name="temple" label="temple" zone="temple" pos_x="21.30" pos_y="0.00" pos_z="30.60" dwell="15" pace="1.4">
+    <Question speaker="The Advocate">Are you going to the mountain?</Question>
+    <Response speaker="Cindy">Yes.  I am after I pray.</Response>
+  </Waypoint>
+  <Waypoint name="mountain" label="mountain" zone="mountain" pos_x="25.50" pos_y="0.00" pos_z="10.80" dwell="15" pace="1.4">
+    <Question speaker="The Witness">Why are you here?</Question>
+    <Response speaker="Cindy">To free my soul.</Response>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="ToFreeMySoul" agent="Cindy">
+    <PathWaypoint ref="pool"/>
+    <PathWaypoint ref="temple"/>
+    <PathWaypoint ref="mountain"/>
+  </Path>
+</Paths>
+</Scene>

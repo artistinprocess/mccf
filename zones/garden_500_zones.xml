@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - garden_500 - 2026-05-09T21:23:47 -->
+<ZoneSet id="garden_500" timestamp="2026-05-09T21:23:47">
+<Zone id="mountain" zone_type="mountain">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="8.7" y="0" z="26.3"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+<Zone id="pool" zone_type="pool">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="23.7" y="0" z="20.7"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+<Zone id="templ;e" zone_type="templ;e">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="10.4" y="0" z="12.3"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+</ZoneSet>

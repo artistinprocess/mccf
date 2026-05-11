@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_800 - 2026-05-11T00:22:58 -->
+<Scene id="garden_800" timestamp="2026-05-11T00:22:58" zone_set="garden_800" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Zira - English (United States)"><StartPosition x="5.8" y="0" z="4.6"/></EmotionalArc>
+<EmotionalArc cultivar="The Archivist" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="19.8" y="0" z="8.6"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Mark - English (United States)"><StartPosition x="33.8" y="0" z="7.2"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="30.9" y="0" z="22"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="wpgarden" label="TheGarden" zone="garden" pos_x="30.60" pos_y="0.00" pos_z="6.90" dwell="2" pace="1.4">
+    <Question speaker="The Steward">Are you at peace. Cindy?</Question>
+    <Response speaker="Cindy">I am still worried.</Response>
+    <Statement speaker="The Steward">Then rest here, little squirrel.  Peace will come.</Statement>
+  </Waypoint>
+  <Waypoint name="wpmountain" label="Mountain" zone="mountain" pos_x="6.60" pos_y="0.00" pos_z="6.60" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Here I look out over te sea and wonder if he will return from the dark underworld to meet our child.</Statement>
+  </Waypoint>
+  <Waypoint name="wppool" label="Pool" zone="pool" pos_x="10.40" pos_y="0.00" pos_z="27.80" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Let me drwown my worries and wash them away.  Let me be at peace.</Statement>
+  </Waypoint>
+  <Waypoint name="wptemple" label="Temp;e" zone="temple" pos_x="19.10" pos_y="0.00" pos_z="12.50" dwell="2" pace="1.4">
+    <Question speaker="The Archivist">Have you come to honor the Mother Goddess?</Question>
+    <Response speaker="Cindy">I have come to pray for the father of my daughter.</Response>
+    <Statement speaker="The Archivist">It iw well that you pray for his safe return from the underworld.</Statement>
+  </Waypoint>
+  <Waypoint name="wptraining" label="Archery" zone="training" pos_x="30.30" pos_y="0.00" pos_z="25.10" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Archery lets me forget my worries.</Statement>
+    <Statement speaker="The Witness">Concentrate, Salida.  But your worries will not diminish.  Your soul is troubeld.  Go to the pool and bathe.</Statement>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="CindyJourney" agent="Cindy">
+    <PathWaypoint ref="wpmountain"/>
+    <PathWaypoint ref="wptemple"/>
+    <PathWaypoint ref="wptraining"/>
+    <PathWaypoint ref="wppool"/>
+    <PathWaypoint ref="wpgarden"/>
+  </Path>
+</Paths>
+</Scene>
