@@ -239,6 +239,26 @@ footer a:hover { color: var(--warm); }
     </div>
   </a>
 
+  <a class="card" href="mccf_character_creator.html" target="_blank"
+     style="--accent-line: var(--warm)">
+    <div class="card-icon">✦</div>
+    <div class="card-name">Character Creator</div>
+    <div class="card-desc">
+      Author cultivar definitions. Set identity, disposition, emotional field
+      weights, affect regulation, and characteristic phrases. Voice is a
+      character property — select and preview here. H-Anim figure assignment
+      when avatar integration is ready.
+    </div>
+    <div class="card-tags">
+      <span class="tag">cultivars</span><span class="tag">voice</span>
+      <span class="tag">identity</span><span class="tag">XML</span>
+    </div>
+    <div class="card-status" id="status-creator">
+      <div class="card-dot" id="dot-creator"></div>
+      <span id="txt-creator">—</span>
+    </div>
+  </a>
+
   <a class="card" href="mccf_voice.html" target="_blank"
      style="--accent-line: #c060f0">
     <div class="card-icon">◈</div>
@@ -409,7 +429,7 @@ footer a:hover { color: var(--warm); }
   <div style="margin-left:auto;display:flex;gap:16px;">
     <a href="https://aiartistinprocess.blogspot.com" target="_blank">Blog</a>
     <a href="https://github.com/artistinprocess/mccf" target="_blank">GitHub</a>
-    <span style="color:var(--border)">MCCF v2.1 · April 2026</span>
+    <span style="color:var(--border)">MCCF v2.2 · May 2026</span>
   </div>
 </footer>
 
@@ -458,6 +478,14 @@ async function checkServer() {
     document.getElementById('f-episodes').textContent = ep;
     document.getElementById('f-coh').textContent = avgCoh;
     document.getElementById('f-mode').textContent = topMode;
+
+    // Check cultivars
+    try {
+      const c = await fetch(API + '/cultivars/xml', {signal: AbortSignal.timeout(2000)});
+      const cd = await c.json();
+      const cn = (cd.cultivars||[]).length;
+      setCardStatus('creator', true, `${cn} cultivar${cn !== 1 ? 's' : ''} on disk`);
+    } catch { setCardStatus('creator', false, 'offline'); }
 
     // Editor status
     setCardStatus('editor', true, `${n} agents · ${ep} episodes`);

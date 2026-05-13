@@ -42,6 +42,7 @@ Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
 V3 Spec v0.2, April 2026
 """
 
+import os
 import re
 import uuid
 import xml.etree.ElementTree as ET
@@ -177,6 +178,14 @@ class CultivarDefinition:
     failure_mode: str = ""
     version: str = SCHEMA_VERSION
     metadata: dict = field(default_factory=dict)
+    # Voice — character property, authored in Character Creator
+    voice_name:  str   = ""
+    voice_lang:  str   = "en-US"
+    voice_rate:  float = 1.0
+    voice_pitch: float = 1.0
+    # Alias — optional narrative name (e.g. Cherokee name vs family name)
+    # XSD: minOccurs="0" — never required, never breaks validation if absent
+    alias: str = ""
 
     # ---- Character Studio slider interface --------------------------------
 
@@ -207,6 +216,11 @@ class CultivarDefinition:
             "failure_mode": self.failure_mode,
             "version": self.version,
             "metadata": self.metadata,
+            "voice_name":  self.voice_name,
+            "voice_lang":  self.voice_lang,
+            "voice_rate":  self.voice_rate,
+            "voice_pitch": self.voice_pitch,
+            "alias":       self.alias,
         }
 
     def to_xml(self) -> str:
@@ -255,6 +269,15 @@ class CultivarDefinition:
         if self.failure_mode:
             lines.append(f'')
             lines.append(f'  <FailureMode>{self.failure_mode.strip()}</FailureMode>')
+
+        if self.voice_name:
+            lines.append(f'')
+            lines.append(f'  <Voice name="{self.voice_name}" lang="{self.voice_lang}" rate="{self.voice_rate}" pitch="{self.voice_pitch}"/>')
+
+        if self.alias:
+            lines.append(f'')
+            lines.append(f'  <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->')
+            lines.append(f'  <Alias>{self.alias}</Alias>')
 
         if self.metadata:
             lines.append(f'')
@@ -330,6 +353,17 @@ class CultivarDefinition:
             for m in meta_el.findall("Meta"):
                 metadata[m.get("key", "")] = m.get("value", "")
 
+        # Voice
+        voice_el    = root.find("Voice")
+        voice_name  = voice_el.get("name",  "")      if voice_el is not None else ""
+        voice_lang  = voice_el.get("lang",  "en-US") if voice_el is not None else "en-US"
+        voice_rate  = float(voice_el.get("rate",  1.0)) if voice_el is not None else 1.0
+        voice_pitch = float(voice_el.get("pitch", 1.0)) if voice_el is not None else 1.0
+
+        # Alias — optional, minOccurs=0
+        alias_el = root.find("Alias")
+        alias    = alias_el.text.strip() if (alias_el is not None and alias_el.text) else ""
+
         return cls(
             name=name,
             weights=weights,
@@ -344,6 +378,11 @@ class CultivarDefinition:
             failure_mode=failure_mode,
             version=version,
             metadata=metadata,
+            voice_name=voice_name,
+            voice_lang=voice_lang,
+            voice_rate=voice_rate,
+            voice_pitch=voice_pitch,
+            alias=alias,
         )
 
     @classmethod
@@ -373,6 +412,11 @@ class CultivarDefinition:
             constitutional_notes=data.get("constitutional_notes", ""),
             signature_phrases=data.get("signature_phrases", []),
             failure_mode=data.get("failure_mode", ""),
+            voice_name=data.get("voice_name", ""),
+            voice_lang=data.get("voice_lang", "en-US"),
+            voice_rate=float(data.get("voice_rate", 1.0)),
+            voice_pitch=float(data.get("voice_pitch", 1.0)),
+            alias=data.get("alias", ""),
         )
 
 
@@ -430,7 +474,90 @@ class CultivarRegistry:
 
     def __init__(self):
         self._cultivars: dict[str, CultivarDefinition] = {}
+        self._cultivars_dir = os.path.join(os.path.dirname(__file__), "cultivars")
         self._load_defaults()
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        """Scan cultivars/ directory and load any XML files found.
+        Handles two schemas:
+          - New: root tag <CultivarDefinition name="..."> (lambda format)
+          - Old: root tag <EmotionalArc> with <Cultivar agentname="..."> child
+        Files on disk override defaults with the same name."""
+        if not os.path.exists(self._cultivars_dir):
+            return
+        for fname in sorted(os.listdir(self._cultivars_dir)):
+            if not fname.endswith(".xml"):
+                continue
+            fpath = os.path.join(self._cultivars_dir, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    xml_string = f.read()
+                clean = _strip_ns(xml_string)
+                root  = ET.fromstring(clean)
+
+                # New schema: <CultivarDefinition name="...">
+                if root.tag == "CultivarDefinition":
+                    defn = CultivarDefinition._from_element(root)
+                    if defn.name and defn.name != "unnamed":
+                        self._cultivars[defn.name] = defn
+
+                # Old schema: <EmotionalArc><Cultivar agentname="...">
+                elif root.tag == "EmotionalArc":
+                    cultivar_el = root.find("Cultivar")
+                    if cultivar_el is None:
+                        continue
+                    name = cultivar_el.get("agentname", "").strip()
+                    if not name:
+                        continue
+                    weights_el = cultivar_el.find("Weights")
+                    weights = {"E": 0.25, "B": 0.25, "P": 0.25, "S": 0.25}
+                    if weights_el is not None:
+                        for ch in ["E", "B", "P", "S"]:
+                            v = weights_el.get(ch)
+                            if v is not None:
+                                weights[ch] = float(v)
+                    reg_el     = cultivar_el.find("Regulation")
+                    regulation = float(reg_el.get("value", 0.7)) if reg_el is not None else 0.7
+                    color_el   = cultivar_el.find("Color")
+                    color      = color_el.get("hex", "#aaaaaa") if color_el is not None else "#aaaaaa"
+                    voice_el   = cultivar_el.find("Voice")
+                    def _text(el, tag):
+                        child = el.find(tag)
+                        return child.text.strip() if (child is not None and child.text) else ""
+                    phrases_el = cultivar_el.find("Phrases")
+                    phrases    = []
+                    if phrases_el is not None:
+                        phrases = [p.text.strip() for p in phrases_el.findall("Phrase") if p.text]
+                    sc   = ShadowContext.for_cultivar(name)
+                    defn = CultivarDefinition(
+                        name=name,
+                        weights=weights,
+                        regulation=regulation,
+                        shadow_context=sc,
+                        color=color,
+                        description=_text(cultivar_el, "Description"),
+                        failure_mode=_text(cultivar_el, "FailureMode"),
+                        signature_phrases=phrases,
+                        alias=_text(cultivar_el, "Alias"),
+                        voice_name=voice_el.get("name", "")        if voice_el is not None else "",
+                        voice_lang=voice_el.get("lang", "en-US")   if voice_el is not None else "en-US",
+                        voice_rate=float(voice_el.get("rate", 1.0))  if voice_el is not None else 1.0,
+                        voice_pitch=float(voice_el.get("pitch", 1.0)) if voice_el is not None else 1.0,
+                    )
+                    self._cultivars[name] = defn
+
+            except Exception:
+                pass  # malformed file — skip silently
+
+    def _save_to_disk(self, defn: CultivarDefinition):
+        """Persist a CultivarDefinition to cultivars/<slug>.xml."""
+        os.makedirs(self._cultivars_dir, exist_ok=True)
+        slug     = defn.name.lower().replace(" ", "_")
+        filename = f"cultivar_{slug}.xml"
+        fpath    = os.path.join(self._cultivars_dir, filename)
+        with open(fpath, "w", encoding="utf-8") as f:
+            f.write(defn.to_xml())
 
     def _load_defaults(self):
         """Populate from CONSTITUTIONAL_CULTIVARS with lambda defaults."""
@@ -445,6 +572,7 @@ class CultivarRegistry:
 
     def register(self, defn: CultivarDefinition):
         self._cultivars[defn.name] = defn
+        self._save_to_disk(defn)
 
     def get(self, name: str) -> Optional[CultivarDefinition]:
         return self._cultivars.get(name)
@@ -509,10 +637,10 @@ def _reg() -> CultivarRegistry:
 def get_cultivars_xml():
     """
     GET /cultivars/xml
-    Returns all cultivar definitions as XML.
-    Accepts ?name=CultivarName for a single cultivar.
+    Returns all cultivar definitions as JSON { cultivars: [...] } for the
+    Character Creator. Add ?name=X for a single cultivar as XML (legacy).
     """
-    reg = _reg()
+    reg  = _reg()
     name = request.args.get("name")
 
     if name:
@@ -521,7 +649,25 @@ def get_cultivars_xml():
             return jsonify({"error": f"cultivar '{name}' not found"}), 404
         return Response(defn.to_xml(), mimetype="application/xml")
 
-    return Response(reg.to_xml_all(), mimetype="application/xml")
+    cultivars = [
+        {
+            "agentname":   d.name,
+            "disposition": d.description,   # disposition lives in description field
+            "description": d.description,
+            "weights":     d.weights,
+            "regulation":  d.regulation,
+            "color":       d.color,
+            "failure_mode": d.failure_mode,
+            "phrases":     d.signature_phrases,
+            "voice_name":  d.voice_name,
+            "voice_lang":  d.voice_lang,
+            "voice_rate":  d.voice_rate,
+            "voice_pitch": d.voice_pitch,
+            "alias":       d.alias,
+        }
+        for d in reg._cultivars.values()
+    ]
+    return jsonify({"cultivars": cultivars, "count": len(cultivars)})
 
 
 @cultivar_bp.route("/cultivars/xml", methods=["POST"])
@@ -545,9 +691,9 @@ def post_cultivar_xml():
         if not data:
             return jsonify({"error": "XML or JSON body required"}), 400
 
-        name = data.get("name")
+        name = data.get("name") or data.get("agentname")
         if not name:
-            return jsonify({"error": "name required"}), 400
+            return jsonify({"error": "name or agentname required"}), 400
 
         lam = float(data.get("lambda", LAMBDA_DEFAULTS.get(name, LAMBDA_DEFAULT_NEW)))
         sc = ShadowContext(lambda_val=lam)
@@ -561,6 +707,13 @@ def post_cultivar_xml():
             zone_affinity=data.get("zone_affinity", []),
             color=data.get("color", "#aaaaaa"),
             description=data.get("description", ""),
+            failure_mode=data.get("failure_mode", ""),
+            signature_phrases=data.get("phrases", data.get("signature_phrases", [])),
+            voice_name=data.get("voice_name", ""),
+            voice_lang=data.get("voice_lang", "en-US"),
+            voice_rate=float(data.get("voice_rate", 1.0)),
+            voice_pitch=float(data.get("voice_pitch", 1.0)),
+            alias=data.get("alias", ""),
         )
         reg.register(defn)
 
