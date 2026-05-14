@@ -567,44 +567,43 @@
       <!-- H-Anim avatar -->
       <div class="section-head">Avatar Geometry</div>
       <p style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">
-        H-Anim figure file to inline into scene at agent placement position.
+        H-Anim / X3D figure file. Stripped of HUD controls on upload.
+        Inlined at agent placement position in scene.
       </p>
 
       <div class="hanim-stub">
         <div class="hanim-stub-label">H-Anim / X3D Figure</div>
 
-        <!--
-        ═══════════════════════════════════════════════════════════════════════
-        STUB: H-ANIM AVATAR SELECTION
-        ═══════════════════════════════════════════════════════════════════════
-        When H-Anim integration is ready:
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+          <label class="btn" style="flex:1;text-align:center;cursor:pointer;margin:0;">
+            📂 Browse for H-Anim Figure…
+            <input type="file" id="f-hanim-file" accept=".x3d,.wrl"
+                   onchange="onHAnimFileSelected(event)"
+                   style="display:none;">
+          </label>
+          <button class="btn danger" onclick="clearHAnim()" title="Remove figure" style="padding:4px 8px;">✕</button>
+        </div>
 
-        1. Replace this stub with a real file picker:
-              <input type="file" id="f-hanim-file" accept=".x3d,.wrl"
-                     onchange="onHAnimFileSelected(event)">
+        <div id="hanim-file-display" style="display:none;font-size:11px;color:var(--text-dim);margin-bottom:6px;word-break:break-all;"></div>
 
-        2. Store the selected file path in the cultivar XML:
-              <HAnimFigure src="avatars/cindy_loa2.x3d" loa="2"/>
+        <div id="hanim-status" style="display:none;font-size:11px;margin-bottom:6px;"></div>
 
-        3. In mccf_scene_composer.html, when placing an agent:
-              - Read cultivar.hanimSrc from /cultivars/xml response
-              - Generate X3D <Inline url="<hanimSrc>"> at agent placement position
-              - SAI access to H-Anim joints then uses the inlined scene graph node
-              - Position/orientation managed via the Inline's parent Transform node
+        <!-- Animation clip buttons — populated after upload -->
+        <div id="hanim-clips" style="display:none;margin-bottom:8px;">
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Animation Clips</div>
+          <div id="hanim-clip-btns" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
 
-        4. LOA note: Use LOA-2 minimum for emotional expression (includes
-              face/jaw joints needed for Displacer-based facial animation).
-              LOA-1 is body-only; insufficient for expression.
+        <!-- X_ITE preview iframe -->
+        <div id="hanim-preview-wrap" style="display:none;">
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">Preview (X_ITE)</div>
+          <iframe id="hanim-preview" style="width:100%;height:260px;border:1px solid var(--border);border-radius:4px;background:#000;"
+                  allow="fullscreen" referrerpolicy="no-referrer"></iframe>
+        </div>
 
-        5. applyArcCV must remain the gating check — H-Anim displacer writes
-              should also check _x3dTimerActive before driving joint values.
-        ═══════════════════════════════════════════════════════════════════════
-        -->
-
-        <button class="btn" onclick="browseHAnim()" style="width:100%;">
-          📂 Browse for H-Anim Figure…
-        </button>
-        <div class="hanim-stub-file" id="hanim-file-display" style="display:none;"></div>
+        <div id="hanim-empty-msg" style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;">
+          No figure assigned — cylinder placeholder used in scene.
+        </div>
       </div>
 
       <hr class="sep">
@@ -696,7 +695,8 @@ let _voiceMap     = {};         // lang → [voiceObj, ...]
 let _cultivars    = [];         // loaded from /cultivars/xml
 let _selectedName = null;       // currently selected cultivar agentname
 let _isDirty      = false;      // unsaved changes
-let _hanimPath    = '';         // H-Anim figure path (stub)
+let _hanimPath    = '';         // H-Anim figure path
+let _hanimLoa     = 4;          // LOA level from upload response
 let _pendingVoice = null;       // { name, lang } waiting for voice list to load
 
 // ── API helpers ────────────────────────────────────────────────────────
@@ -926,18 +926,90 @@ function getPhrases() {
 }
 
 // ── H-Anim stub ────────────────────────────────────────────────────────
-function browseHAnim() {
-  /*
-   * STUB: H-ANIM FILE BROWSE
-   * Replace with a real <input type="file"> flow when H-Anim integration
-   * is ready. The selected path should be stored in _hanimPath and written
-   * to cultivar XML as <HAnimFigure src="..." loa="2"/>.
-   *
-   * See the inline comment block in the editor-form HTML above for the
-   * full integration checklist (scene composer Inline node, SAI joint
-   * access, _x3dTimerActive guard for displacer writes).
-   */
-  toast('H-Anim integration not yet implemented', true);
+// ── H-Anim file picker → upload → preview ─────────────────────────────
+async function onHAnimFileSelected(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+
+  const statusEl  = document.getElementById('hanim-status');
+  const displayEl = document.getElementById('hanim-file-display');
+  const emptyEl   = document.getElementById('hanim-empty-msg');
+
+  statusEl.textContent  = 'Uploading and stripping HUD controls…';
+  statusEl.style.color  = 'var(--text-dim)';
+  statusEl.style.display = 'block';
+  displayEl.textContent  = file.name;
+  displayEl.style.display = 'block';
+  emptyEl.style.display   = 'none';
+
+  try {
+    const text = await file.text();
+    const res  = await fetch('/avatar/upload', {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/xml',
+        'X-Avatar-Name': (_selectedName || file.name.replace(/\.x3d$/i,''))
+      },
+      body: text
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.error || 'upload failed');
+
+    _hanimPath = data.path;
+    _hanimLoa  = data.loa || 4;
+
+    statusEl.textContent = `LOA-${data.loa} · ${data.joint_count} joints · stripped`;
+    statusEl.style.color = 'var(--accent)';
+
+    // Populate clip buttons
+    _renderHAnimClips(data.clips || []);
+
+    // Launch X_ITE preview
+    _launchHAnimPreview(data.path);
+
+    setDirty();
+  } catch(e) {
+    statusEl.textContent = `Upload failed: ${e.message}`;
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+function _renderHAnimClips(clips) {
+  const wrap = document.getElementById('hanim-clips');
+  const btns = document.getElementById('hanim-clip-btns');
+  if (!clips.length) { wrap.style.display = 'none'; return; }
+  btns.innerHTML = clips.map(function(c) {
+    return `<button class="btn" style="font-size:11px;padding:2px 8px;"
+              onclick="_previewClip('${c}')">${c}</button>`;
+  }).join('');
+  wrap.style.display = 'block';
+}
+
+function _launchHAnimPreview(path) {
+  const wrap   = document.getElementById('hanim-preview-wrap');
+  const iframe = document.getElementById('hanim-preview');
+  // Use local Flask endpoint — avoids localhost/public-URL mismatch
+  iframe.src = `/avatar/preview?src=${encodeURIComponent(path)}`;
+  wrap.style.display = 'block';
+}
+
+function _previewClip(clipName) {
+  // Clip preview: reload X_ITE with the same file — clip selection TBD
+  // For now, toast the clip name so author knows it was registered
+  toast(`Clip: ${clipName}`);
+}
+
+function clearHAnim() {
+  _hanimPath = '';
+  _hanimLoa  = 4;
+  document.getElementById('hanim-file-display').style.display = 'none';
+  document.getElementById('hanim-status').style.display       = 'none';
+  document.getElementById('hanim-clips').style.display        = 'none';
+  document.getElementById('hanim-preview-wrap').style.display = 'none';
+  document.getElementById('hanim-empty-msg').style.display    = 'block';
+  document.getElementById('f-hanim-file').value = '';
+  setDirty();
 }
 
 // ── Dirty tracking ────────────────────────────────────────────────────
@@ -974,7 +1046,7 @@ function buildXmlPreviewHtml(data) {
     h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">FailureMode</span><span class="xml-tag">&gt;</span>${escHtml(data.failure)}<span class="xml-tag">&lt;/</span><span class="xml-kw">FailureMode</span><span class="xml-tag">&gt;</span>\n`;
   }
   if (_hanimPath) {
-    h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">HAnimFigure</span> ${attr('src', _hanimPath)} ${attr('loa','2')}<span class="xml-tag">/&gt;</span>\n`;
+    h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">HAnimFigure</span> ${attr('src', _hanimPath)} ${attr('loa', String(_hanimLoa))}<span class="xml-tag">/&gt;</span>\n`;
   }
   if (data.phrases && data.phrases.length) {
     h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Phrases</span><span class="xml-tag">&gt;</span>\n`;
@@ -1033,7 +1105,8 @@ function readForm() {
     weights:     w,
     regulation:  parseFloat(document.getElementById('w-reg').value).toFixed(2),
     phrases:     getPhrases(),
-    hanimSrc:    _hanimPath || ''
+    hanimSrc:    _hanimPath || '',
+    hanimLoa:    _hanimLoa  || 4
   };
 }
 
@@ -1093,10 +1166,22 @@ function loadForm(c) {
   renderPhrases(c.phrases || []);
 
   // H-Anim
-  _hanimPath = c.hanim_src || '';
+  _hanimPath = c.hanim_src  || '';
+  _hanimLoa  = c.hanim_loa  || 4;
   const hd   = document.getElementById('hanim-file-display');
-  if (_hanimPath) { hd.textContent = _hanimPath; hd.style.display = 'block'; }
-  else            { hd.style.display = 'none'; }
+  const emptyEl = document.getElementById('hanim-empty-msg');
+  if (_hanimPath) {
+    hd.textContent = _hanimPath;
+    hd.style.display = 'block';
+    emptyEl.style.display = 'none';
+    _launchHAnimPreview(_hanimPath);
+  } else {
+    hd.style.display = 'none';
+    document.getElementById('hanim-preview-wrap').style.display = 'none';
+    document.getElementById('hanim-clips').style.display        = 'none';
+    document.getElementById('hanim-status').style.display       = 'none';
+    emptyEl.style.display = 'block';
+  }
 
   updatePreviewBars();
   updateXmlPreview();
@@ -1155,6 +1240,14 @@ function newCharacter() {
   }
   _selectedName = null;
   _hanimPath    = '';
+  _hanimLoa     = 4;
+  document.getElementById('hanim-file-display').style.display = 'none';
+  document.getElementById('hanim-status').style.display       = 'none';
+  document.getElementById('hanim-clips').style.display        = 'none';
+  document.getElementById('hanim-preview-wrap').style.display = 'none';
+  document.getElementById('hanim-empty-msg').style.display    = 'block';
+  const fi = document.getElementById('f-hanim-file');
+  if (fi) fi.value = '';
   _isDirty      = false;
 
   document.getElementById('editor-placeholder').style.display = 'none';
@@ -1206,7 +1299,7 @@ async function saveCharacter() {
     voice_pitch:  parseFloat(data.voicePitch),
     // H-Anim — stub, populated when H-Anim integration complete
     hanim_src:    data.hanimSrc,
-    hanim_loa:    data.hanimSrc ? 2 : null
+    hanim_loa:    data.hanimLoa || 4
   };
 
   /*
@@ -1244,25 +1337,12 @@ async function saveCharacter() {
 // ── Delete ────────────────────────────────────────────────────────────
 async function deleteCharacter() {
   if (!_selectedName) return;
-  if (!confirm(`Delete cultivar "${_selectedName}"?\n\nThis permanently removes the XML file and cannot be undone.`)) return;
-
-  const name = _selectedName;
-  try {
-    const res = await fetch(`/cultivars/xml/${encodeURIComponent(name)}`, {
-      method: 'DELETE'
-    });
-    if (res.ok) {
-      toast(`Cultivar "${name}" deleted.`);
-      // Reset form and reload list
-      newCharacter();
-      await loadCultivars();
-    } else {
-      const err = await res.json().catch(() => ({}));
-      toast(`Delete failed: ${err.error || res.statusText}`, true);
-    }
-  } catch (e) {
-    toast(`Delete error: ${e.message}`, true);
-  }
+  if (!confirm(`Delete cultivar "${_selectedName}"? This removes the XML file.`)) return;
+  /*
+   * NOTE: DELETE endpoint for cultivar XML not yet implemented in mccf_api.py.
+   * Add: DELETE /cultivars/xml/<agentname> → removes cultivars/cultivar_<slug>.xml
+   */
+  toast('Delete not yet implemented — remove XML file manually from cultivars/', true);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────

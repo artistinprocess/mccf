@@ -186,6 +186,10 @@ class CultivarDefinition:
     # Alias — optional narrative name (e.g. Cherokee name vs family name)
     # XSD: minOccurs="0" — never required, never breaks validation if absent
     alias: str = ""
+    # H-Anim figure — optional, path relative to static/ (e.g. "avatars/jin_stripped.x3d")
+    # XSD: minOccurs="0" — absent when no figure assigned
+    hanim_src: str = ""
+    hanim_loa: int = 4
 
     # ---- Character Studio slider interface --------------------------------
 
@@ -221,6 +225,8 @@ class CultivarDefinition:
             "voice_rate":  self.voice_rate,
             "voice_pitch": self.voice_pitch,
             "alias":       self.alias,
+            "hanim_src":   self.hanim_src,
+            "hanim_loa":   self.hanim_loa,
         }
 
     def to_xml(self) -> str:
@@ -278,6 +284,11 @@ class CultivarDefinition:
             lines.append(f'')
             lines.append(f'  <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->')
             lines.append(f'  <Alias>{self.alias}</Alias>')
+
+        if self.hanim_src:
+            lines.append(f'')
+            lines.append(f'  <!-- HAnimFigure: stripped X3D file inlined at agent placement position -->')
+            lines.append(f'  <HAnimFigure src="{self.hanim_src}" loa="{self.hanim_loa}"/>')
 
         if self.metadata:
             lines.append(f'')
@@ -364,6 +375,11 @@ class CultivarDefinition:
         alias_el = root.find("Alias")
         alias    = alias_el.text.strip() if (alias_el is not None and alias_el.text) else ""
 
+        # HAnimFigure — optional, minOccurs=0
+        hanim_el  = root.find("HAnimFigure")
+        hanim_src = hanim_el.get("src", "") if hanim_el is not None else ""
+        hanim_loa = int(hanim_el.get("loa", 4)) if hanim_el is not None else 4
+
         return cls(
             name=name,
             weights=weights,
@@ -383,6 +399,8 @@ class CultivarDefinition:
             voice_rate=voice_rate,
             voice_pitch=voice_pitch,
             alias=alias,
+            hanim_src=hanim_src,
+            hanim_loa=hanim_loa,
         )
 
     @classmethod
@@ -417,6 +435,8 @@ class CultivarDefinition:
             voice_rate=float(data.get("voice_rate", 1.0)),
             voice_pitch=float(data.get("voice_pitch", 1.0)),
             alias=data.get("alias", ""),
+            hanim_src=data.get("hanim_src", ""),
+            hanim_loa=int(data.get("hanim_loa", 4)),
         )
 
 
@@ -585,31 +605,6 @@ class CultivarRegistry:
         self.register(defn)
         return defn
 
-    def delete(self, name: str) -> bool:
-        """
-        Remove a cultivar from memory and disk.
-        Returns True if the cultivar existed and was removed, False if not found.
-        Constitutional cultivars (loaded from CONSTITUTIONAL_CULTIVARS) cannot be
-        deleted via this method — they have no disk file and are always reloaded
-        from defaults on startup.  Author-created cultivars (those with a disk
-        file in cultivars/) are fully removed.
-        """
-        if name not in self._cultivars:
-            return False
-        # Remove from memory
-        del self._cultivars[name]
-        # Remove disk file if present
-        self._delete_from_disk(name)
-        return True
-
-    def _delete_from_disk(self, name: str):
-        """Delete cultivars/cultivar_<slug>.xml if it exists."""
-        slug     = name.lower().replace(" ", "_")
-        filename = f"cultivar_{slug}.xml"
-        fpath    = os.path.join(self._cultivars_dir, filename)
-        if os.path.exists(fpath):
-            os.remove(fpath)
-
     def to_xml_all(self) -> str:
         """Export all cultivars as a CultivarSet XML document."""
         lines = [
@@ -689,6 +684,8 @@ def get_cultivars_xml():
             "voice_rate":  d.voice_rate,
             "voice_pitch": d.voice_pitch,
             "alias":       d.alias,
+            "hanim_src":   d.hanim_src,
+            "hanim_loa":   d.hanim_loa,
         }
         for d in reg._cultivars.values()
     ]
@@ -746,24 +743,6 @@ def post_cultivar_xml():
         "status": "registered",
         "cultivar": defn.to_dict()
     }), 201
-
-
-@cultivar_bp.route("/cultivars/xml/<name>", methods=["DELETE"])
-def delete_cultivar_xml(name):
-    """
-    DELETE /cultivars/xml/<name>
-    Remove a cultivar from memory and disk.
-    Constitutional cultivars (built-in defaults) are reloaded from
-    CONSTITUTIONAL_CULTIVARS on next restart — deleting them here only
-    removes them for the current session.  Author-created cultivars are
-    permanently removed (disk file deleted).
-    Returns 200 on success, 404 if not found.
-    """
-    reg = _reg()
-    removed = reg.delete(name)
-    if not removed:
-        return jsonify({"error": f"cultivar '{name}' not found"}), 404
-    return jsonify({"status": "deleted", "name": name}), 200
 
 
 @cultivar_bp.route("/cultivars/xml/<name>/lambda", methods=["POST"])
