@@ -327,6 +327,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE</div></div>
       <button class="btn accent" onclick="exportX3D()">Export</button>
     </div>
+    <div class="sh" style="margin-top:14px">Exports</div>
     <div class="expopt">
       <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
       <button class="btn cool" onclick="exportZoneXML()">Export</button>
@@ -615,23 +616,10 @@ function loadAgents(){
     return apiGet('/cultivars/xml');
   }).then(function(cx){
     ((cx||{}).cultivars||[]).forEach(function(c){
-      if(!c.agentname) return;
-      if(agents[c.agentname]){
-        // Update existing field agent with cultivar properties
-        agents[c.agentname].color       = c.color       || agents[c.agentname].color;
-        agents[c.agentname].disposition = c.disposition || '';
-        agents[c.agentname].weights     = c.weights     || agents[c.agentname].weights;
-      } else {
-        // Author-created cultivar — not in field yet, add it directly
-        agents[c.agentname] = {
-          name:        c.agentname,
-          weights:     c.weights     || {E:0.25,B:0.25,P:0.25,S:0.25},
-          regulation:  c.regulation  || 0.7,
-          role:        c.role        || 'agent',
-          color:       c.color       || agentColor(c.agentname),
-          disposition: c.disposition || '',
-          voice:       c.voice_name  || ''
-        };
+      if(c.agentname&&agents[c.agentname]){
+        agents[c.agentname].color=c.color||agents[c.agentname].color;
+        agents[c.agentname].disposition=c.disposition||'';
+        agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
       }
     });
     renderAgentRoster();renderPlaced();drawScene();
@@ -1033,7 +1021,7 @@ function placeAgentAt(name,wx,wz){
   var a=agents[name];if(!a)return;
   var voiceSel=document.getElementById('agent-voice-select');
   var voice=voiceSel?voiceSel.value:'';
-  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice};
+  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice,hanim_src:a.hanim_src||'',hanim_loa:a.hanim_loa||4};
   placing=null;placingAgent=null;pendingPos=null;hideHint();renderAll();toast(name+' placed ('+wx.toFixed(1)+',0,'+wz.toFixed(1)+')');
 }
 function confirmWP(){
@@ -1178,16 +1166,26 @@ function buildAX3D(a){
   var pos=a.position||[0,0,0],col=hexToX3D(a.color||'#aab0be'),sn=safeId(a.name),qn=xe(a.name);
   var s='<!-- Agent: '+qn+' -->\n';
   s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
-  s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
-  s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
-  s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
+
+  if(a.hanim_src){
+    // H-Anim figure — inline the stripped file
+    // MCCF-owned ProximitySensor travels with the avatar inside this Transform
+    s+='  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->\n';
+    s+='  <ProximitySensor DEF="Prox_'+sn+'" size="2 2.2 2" enabled="true"/>\n';
+    s+='  <Inline DEF="HAnim_'+sn+'" url="'+xe(a.hanim_src)+'"/>\n';
+  } else {
+    // Cylinder placeholder — used when no H-Anim figure assigned
+    s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
+    s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
+    s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
+  }
+
+  // Name label — always present regardless of figure type
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
   s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
   // Avatar viewpoints — parented inside Transform so they ride with the figure
-  // VP_Eye: eye level, looking forward (-Z direction in X3D)
   s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>\n';
-  // VP_Side: offset right, looking left at avatar (from audience right)
   s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>\n';
   s+='</Transform>\n\n';return s;
 }

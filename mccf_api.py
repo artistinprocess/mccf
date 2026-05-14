@@ -107,6 +107,191 @@ def upload_x3d_scene():
     return jsonify({'status': 'ok', 'output': f'static/x3d/{filename}', 'filename': filename})
 
 
+@app.route('/avatar/upload', methods=['POST'])
+def upload_avatar():
+    """
+    POST /avatar/upload
+    Accepts an H-Anim X3D file, strips scene-control nodes (HUD Transform,
+    ProximitySensor HudProx, TouchSensors, named animation TimeSensors,
+    and their ROUTEs), saves to static/avatars/{slug}_hanim.x3d.
+
+    Uses proper XML parse → node removal → reserialise to avoid the
+    malformed-output problems of line-based heuristics.
+
+    Returns: { status, path, loa, clips, joint_count }
+    """
+    import re as _re
+    import xml.etree.ElementTree as ET
+
+    avatar_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'avatars')
+    os.makedirs(avatar_dir, exist_ok=True)
+
+    avatar_name = request.headers.get('X-Avatar-Name', '').strip() or 'avatar'
+    slug        = _re.sub(r'[^A-Za-z0-9_\-]', '_', avatar_name).lower()
+    filename    = f'{slug}_hanim.x3d'
+    filepath    = os.path.join(avatar_dir, filename)
+
+    content = request.get_data(as_text=True)
+    if not content:
+        return jsonify({'status': 'error', 'error': 'no content'}), 400
+
+    # ── XML parse ────────────────────────────────────────────────────────
+    # Register namespaces so they round-trip correctly
+    ET.register_namespace('', 'https://www.web3d.org/specifications/x3d-4.0.xsd')
+
+    try:
+        # ET doesn't handle the <!DOCTYPE ...> declaration — strip it first,
+        # preserve the <?xml ...?> processing instruction
+        xml_decl   = ''
+        doctype    = ''
+        body       = content
+        lines      = content.splitlines(keepends=True)
+        body_lines = []
+        for line in lines:
+            if line.strip().startswith('<?xml'):
+                xml_decl = line
+            elif line.strip().startswith('<!DOCTYPE'):
+                doctype = line          # save for reference, don't reinsert
+            else:
+                body_lines.append(line)
+        body = ''.join(body_lines)
+
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        return jsonify({'status': 'error', 'error': f'XML parse failed: {e}'}), 400
+
+    # ── DEF names to strip ───────────────────────────────────────────────
+    HUD_TIMER_DEFS = {
+        'DefaultTimer','PitchTimer','YawTimer','RollTimer',
+        'WalkTimer','RunTimer','JumpTimer','KickTimer','StopTimer'
+    }
+    HUD_DEFS = HUD_TIMER_DEFS | {'HudProx','HudXform'}
+    # Touch sensor DEF names — match by suffix pattern
+    def is_touch_sensor(el):
+        return el.tag.split('}')[-1] == 'TouchSensor'
+
+    def is_hud_node(el):
+        tag  = el.tag.split('}')[-1]
+        defv = el.get('DEF', '')
+        if defv in HUD_DEFS:
+            return True
+        if tag == 'TouchSensor':
+            return True
+        if tag == 'TimeSensor' and defv in HUD_TIMER_DEFS:
+            return True
+        return False
+
+    def is_hud_route(el):
+        tag = el.tag.split('}')[-1]
+        if tag != 'ROUTE':
+            return False
+        fn = el.get('fromNode', '')
+        tn = el.get('toNode',   '')
+        strip_nodes = HUD_DEFS | {
+            'Stand_Touch','Pitch_Touch','Yaw_Touch','Roll_Touch',
+            'Walk_Touch','Run_Touch','Jump_Touch','Kick_Touch','Stop_Touch'
+        }
+        return fn in strip_nodes or tn in strip_nodes
+
+    def strip_hud(parent):
+        """Recursively remove HUD nodes from parent's children."""
+        to_remove = []
+        for child in list(parent):
+            if is_hud_node(child) or is_hud_route(child):
+                to_remove.append(child)
+            else:
+                strip_hud(child)
+        for child in to_remove:
+            parent.remove(child)
+
+    strip_hud(root)
+
+    # ── Gather metadata ──────────────────────────────────────────────────
+    hanim_el    = root.find('.//{*}HAnimHumanoid')
+    loa         = int(hanim_el.get('loa', 4)) if hanim_el is not None else 4
+    joint_count = len(root.findall('.//{*}HAnimJoint[@name]'))
+    clips = [
+        el.get('DEF', '').replace('Timer', '')
+        for el in root.findall('.//{*}TimeSensor')
+        if el.get('DEF') and el.get('DEF') not in HUD_TIMER_DEFS
+    ]
+
+    # ── Serialise ────────────────────────────────────────────────────────
+    # Preserve the original <?xml?> declaration; omit DOCTYPE (not needed)
+    ET.indent(root, space='  ')
+    stripped_content = (xml_decl or '<?xml version="1.0" encoding="UTF-8"?>\n') + \
+                       ET.tostring(root, encoding='unicode', xml_declaration=False)
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(stripped_content)
+
+    return jsonify({
+        'status':      'ok',
+        'path':        f'avatars/{filename}',
+        'filename':    filename,
+        'loa':         loa,
+        'joint_count': joint_count,
+        'clips':       clips,
+    })
+
+
+@app.route('/avatar/preview')
+def avatar_preview():
+    """
+    GET /avatar/preview?src=avatars/foo_hanim.x3d
+    Serves a minimal X_ITE HTML page that renders the H-Anim figure locally.
+    """
+    src = request.args.get('src', '').strip()
+    if not src:
+        return "Missing src parameter", 400
+    # Serve directly from /static/ — Flask handles this correctly
+    x3d_src = f'/static/{src}' if not src.startswith('/') else src
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>H-Anim Preview</title>
+  <style>
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    html, body {{ width:100%; height:100%; background:#0a0e18; overflow:hidden; color:#ccc; font-family:monospace; }}
+    x3d-canvas {{ width:100%; height:100%; display:block; }}
+    #err {{ display:none; padding:12px; font-size:12px; color:#f06060; }}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.js"></script>
+</head>
+<body>
+  <div id="err"></div>
+  <x3d-canvas id="canvas" src="{x3d_src}"></x3d-canvas>
+  <script>
+    var c = document.getElementById('canvas');
+    c.addEventListener('load', function() {{
+      document.getElementById('err').style.display = 'none';
+    }});
+    c.addEventListener('error', function(e) {{
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = 'X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e));
+    }});
+  </script>
+</body>
+</html>"""
+    return html, 200, {'Content-Type': 'text/html'}
+
+
+@app.route('/avatar/list', methods=['GET'])
+def list_avatars():
+    """List stripped H-Anim files in static/avatars/."""
+    avatar_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'avatars')
+    if not os.path.isdir(avatar_dir):
+        return jsonify({'avatars': []})
+    files = sorted(
+        [f for f in os.listdir(avatar_dir) if f.endswith('.x3d')],
+        key=lambda f: os.path.getmtime(os.path.join(avatar_dir, f)),
+        reverse=True
+    )
+    return jsonify({'avatars': files})
+
+
 @app.route('/scene/x3d/list', methods=['GET'])
 def list_x3d_scenes():
     """
@@ -300,9 +485,7 @@ def load_scene_xml():
     # agents roster mirrors placedAgents
     agents = {n: dict(a) for n, a in placed_agents.items()}
 
-    # ── zones: parse embedded <Zones> block (Option A — self-contained scene XML)
-    # Falls back to inferring from waypoint zone attributes for legacy files
-    # that pre-date embedded zone support.
+    # ── waypoints + inferred zones from <Waypoints><Waypoint> ────────────
     ZONE_COLORS = {
         'temple':   '#c080f0',
         'pool':     '#60a8f0',
@@ -311,46 +494,6 @@ def load_scene_xml():
         'garden':   '#4af0a8',
         'library':  '#f09040',
     }
-    zones_parsed = {}
-    zones_el = root.find('Zones')
-    if zones_el is not None:
-        for z_el in zones_el.findall('Zone'):
-            z_id       = z_el.get('id', '').strip()
-            z_type     = z_el.get('zone_type', z_id).strip()
-            z_name     = z_el.get('name', z_id).strip()
-            if not z_id:
-                continue
-            pos_el = z_el.find('Position')
-            z_x    = float(pos_el.get('x', width  / 2)) if pos_el is not None else width  / 2
-            z_z    = float(pos_el.get('z', depth  / 2)) if pos_el is not None else depth  / 2
-            rad_el = z_el.find('Radius')
-            radius = float(rad_el.get('value', 4)) if rad_el is not None else 4
-            w_el   = z_el.find('Weights')
-            weights = {'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
-            if w_el is not None:
-                for ch in ['E', 'B', 'P', 'S']:
-                    weights[ch] = float(w_el.get(ch, 0.25))
-            desc_el    = z_el.find('Descriptor')
-            descriptor = (desc_el.text or '').strip() if desc_el is not None else ''
-            at_el      = z_el.find('AmbientTheme')
-            ambient_theme = {
-                'scale': at_el.get('scale', 'major') if at_el is not None else 'major',
-                'tempo': at_el.get('tempo', 'medium') if at_el is not None else 'medium',
-            }
-            col = ZONE_COLORS.get(z_type.lower(), '#888888')
-            zones_parsed[z_id] = {
-                'id':           z_id,
-                'name':         z_name,
-                'zone_type':    z_type,
-                'location':     [round(z_x, 2), 0, round(z_z, 2)],
-                'radius':       radius,
-                'weights':      weights,
-                'descriptor':   descriptor,
-                'ambient_theme': ambient_theme,
-                'color':        col,
-            }
-
-    # ── waypoints + inferred zones (fallback for legacy files) ────────────
     waypoints      = {}
     zones_inferred = {}
 
@@ -381,8 +524,8 @@ def load_scene_xml():
             'qaLines':  qa_lines
         }
 
-        # Infer zone from waypoint only if no embedded Zones block present
-        if zone_id and zone_id not in zones_inferred and not zones_parsed:
+        # Infer zone from waypoint if not already seen
+        if zone_id and zone_id not in zones_inferred:
             col = ZONE_COLORS.get(zone_id.lower(), '#888888')
             zones_inferred[zone_id] = {
                 'id':        zone_id,
@@ -392,9 +535,6 @@ def load_scene_xml():
                 'radius':    4,
                 'color':     col
             }
-
-    # Prefer parsed zones; fall back to inferred for legacy files
-    zones_result = zones_parsed if zones_parsed else zones_inferred
 
     # ── paths from <Paths><Path name agent><PathWaypoint ref> ───────────
     paths = {}
@@ -416,7 +556,7 @@ def load_scene_xml():
 
     return jsonify({
         'sceneConfig':  scene_config,
-        'zones':        zones_result,
+        'zones':        zones_inferred,
         'agents':       agents,
         'placedAgents': placed_agents,
         'waypoints':    waypoints,
