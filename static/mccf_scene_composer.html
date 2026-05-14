@@ -153,6 +153,17 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <button class="btn pri full" onclick="applyScene()">Apply Grid</button>
       </div>
     </div>
+    <div class="sh">Load Existing Scene</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace">
+          <option value="">— saved scenes —</option>
+        </select>
+        <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:12px" title="Refresh list">↺</button>
+      </div>
+      <button class="btn pri full" onclick="loadSceneFromDropdown()">Load Scene</button>
+      <div id="scene-load-log" style="font-size:11px;color:var(--dim);min-height:14px;margin-top:4px"></div>
+    </div>
     <div class="sh">Scene Summary</div>
     <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:18px">Apply grid to begin.</div></div>
     <div class="sh">Zone Set</div>
@@ -316,15 +327,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE</div></div>
       <button class="btn accent" onclick="exportX3D()">Export</button>
     </div>
-    <div class="sh" style="margin-top:14px">Load Scene</div>
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-      <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace">
-        <option value="">— saved scenes —</option>
-      </select>
-      <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:12px">↺</button>
-      <button class="btn" onclick="loadSceneFromDropdown()" style="padding:3px 8px;font-size:12px">Load</button>
-    </div>
-    <div id="scene-load-log" style="font-size:11px;color:var(--dim);min-height:14px"></div>
     <div class="expopt">
       <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
       <button class="btn cool" onclick="exportZoneXML()">Export</button>
@@ -613,10 +615,23 @@ function loadAgents(){
     return apiGet('/cultivars/xml');
   }).then(function(cx){
     ((cx||{}).cultivars||[]).forEach(function(c){
-      if(c.agentname&&agents[c.agentname]){
-        agents[c.agentname].color=c.color||agents[c.agentname].color;
-        agents[c.agentname].disposition=c.disposition||'';
-        agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
+      if(!c.agentname) return;
+      if(agents[c.agentname]){
+        // Update existing field agent with cultivar properties
+        agents[c.agentname].color       = c.color       || agents[c.agentname].color;
+        agents[c.agentname].disposition = c.disposition || '';
+        agents[c.agentname].weights     = c.weights     || agents[c.agentname].weights;
+      } else {
+        // Author-created cultivar — not in field yet, add it directly
+        agents[c.agentname] = {
+          name:        c.agentname,
+          weights:     c.weights     || {E:0.25,B:0.25,P:0.25,S:0.25},
+          regulation:  c.regulation  || 0.7,
+          role:        c.role        || 'agent',
+          color:       c.color       || agentColor(c.agentname),
+          disposition: c.disposition || '',
+          voice:       c.voice_name  || ''
+        };
       }
     });
     renderAgentRoster();renderPlaced();drawScene();
@@ -651,9 +666,9 @@ function setMode(m){
   document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
   if(m==='paths')populatePathUI();
   if(m==='waypoints')populateWPZones();
-  if(m==='agents'){renderAgentRoster();renderPlaced();}
+  if(m==='agents'){loadAgents();}
   if(m==='run')populateRunUI();
-  if(m==='export')refreshSceneList();
+  if(m==='scene'||m==='export')refreshSceneList();
   drawScene();
 }
 function setTool(t){

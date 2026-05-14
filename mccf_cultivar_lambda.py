@@ -585,6 +585,31 @@ class CultivarRegistry:
         self.register(defn)
         return defn
 
+    def delete(self, name: str) -> bool:
+        """
+        Remove a cultivar from memory and disk.
+        Returns True if the cultivar existed and was removed, False if not found.
+        Constitutional cultivars (loaded from CONSTITUTIONAL_CULTIVARS) cannot be
+        deleted via this method — they have no disk file and are always reloaded
+        from defaults on startup.  Author-created cultivars (those with a disk
+        file in cultivars/) are fully removed.
+        """
+        if name not in self._cultivars:
+            return False
+        # Remove from memory
+        del self._cultivars[name]
+        # Remove disk file if present
+        self._delete_from_disk(name)
+        return True
+
+    def _delete_from_disk(self, name: str):
+        """Delete cultivars/cultivar_<slug>.xml if it exists."""
+        slug     = name.lower().replace(" ", "_")
+        filename = f"cultivar_{slug}.xml"
+        fpath    = os.path.join(self._cultivars_dir, filename)
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
     def to_xml_all(self) -> str:
         """Export all cultivars as a CultivarSet XML document."""
         lines = [
@@ -721,6 +746,24 @@ def post_cultivar_xml():
         "status": "registered",
         "cultivar": defn.to_dict()
     }), 201
+
+
+@cultivar_bp.route("/cultivars/xml/<name>", methods=["DELETE"])
+def delete_cultivar_xml(name):
+    """
+    DELETE /cultivars/xml/<name>
+    Remove a cultivar from memory and disk.
+    Constitutional cultivars (built-in defaults) are reloaded from
+    CONSTITUTIONAL_CULTIVARS on next restart — deleting them here only
+    removes them for the current session.  Author-created cultivars are
+    permanently removed (disk file deleted).
+    Returns 200 on success, 404 if not found.
+    """
+    reg = _reg()
+    removed = reg.delete(name)
+    if not removed:
+        return jsonify({"error": f"cultivar '{name}' not found"}), 404
+    return jsonify({"status": "deleted", "name": name}), 200
 
 
 @cultivar_bp.route("/cultivars/xml/<name>/lambda", methods=["POST"])

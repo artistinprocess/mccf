@@ -1244,12 +1244,25 @@ async function saveCharacter() {
 // ── Delete ────────────────────────────────────────────────────────────
 async function deleteCharacter() {
   if (!_selectedName) return;
-  if (!confirm(`Delete cultivar "${_selectedName}"? This removes the XML file.`)) return;
-  /*
-   * NOTE: DELETE endpoint for cultivar XML not yet implemented in mccf_api.py.
-   * Add: DELETE /cultivars/xml/<agentname> → removes cultivars/cultivar_<slug>.xml
-   */
-  toast('Delete not yet implemented — remove XML file manually from cultivars/', true);
+  if (!confirm(`Delete cultivar "${_selectedName}"?\n\nThis permanently removes the XML file and cannot be undone.`)) return;
+
+  const name = _selectedName;
+  try {
+    const res = await fetch(`/cultivars/xml/${encodeURIComponent(name)}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      toast(`Cultivar "${name}" deleted.`);
+      // Reset form and reload list
+      newCharacter();
+      await loadCultivars();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast(`Delete failed: ${err.error || res.statusText}`, true);
+    }
+  } catch (e) {
+    toast(`Delete error: ${e.message}`, true);
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────

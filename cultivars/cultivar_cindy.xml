@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<EmotionalArc id="cultivar_cindy_v1">
-  <title>MCCF Cultivar Definition — Cindy</title>
-  <Cultivar id="cindy_v1" agentname="Cindy" version="1.0">
-    <Timestamp date="2026-04-26" time="00:00:00"/>
-    <Disposition>Cherokee Lady</Disposition>
-    <Description>A young American Indian</Description>
-    <Weights E="0.3284" B="0.2388" P="0.2463" S="0.1866"/>
-    <Regulation value="0.7"/>
-    <Color hex="#aab0be"/>
-  </Cultivar>
-</EmotionalArc>
+<CultivarDefinition name="Cindy" version="1.0"
+    role="agent" color="#aab0be"
+    xmlns="http://mccf.artistinprocess.com/cultivar/v3">
+
+  <!-- Channel weights sum to 1.0 -->
+  <Weights E="0.3267" B="0.2376"
+           P="0.2475" S="0.1881"/>
+
+  <Regulation value="0.7"/>
+
+  <!-- Shadow context: lambda controls arc memory decay -->
+  <!-- Character Studio slider range: 0.05 – 1.0 -->
+  <ShadowContext lambda="0.7" note="moderate memory — uncertainty without over-accumulation"/>
+
+  <Description>A young American Indian who was raised by a ccountry western star in Tennesse.</Description>
+
+  <Voice name="Microsoft Ava Online (Natural) - English (United States)" lang="en-US" rate="1.0" pitch="1.0"/>
+
+  <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->
+  <Alias>Salida</Alias>
+
+</CultivarDefinition>
