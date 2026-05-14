@@ -1,4 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-10T04:49:01 -->
-<Scene id="garden_001" timestamp="2026-05-10T04:49:01" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-14T18:18:24 -->
+<Scene id="garden_001" timestamp="2026-05-14T18:18:24" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Carly Online (Natural) - English (Australia)"><StartPosition x="21.8" y="0" z="12.4"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Ken Online (Natural) - English (Australia)"><StartPosition x="14.8" y="0" z="27.3"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Neil Online (Natural) - English (Australia)"><StartPosition x="4.2" y="0" z="12.6"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="wptemple" label="Temple" zone="temple" pos_x="21.90" pos_y="0.00" pos_z="17.40" dwell="2" pace="1.4">
+    <Statement>I have prayed.  Now I must go shoot my bow.</Statement>
+  </Waypoint>
+  <Waypoint name="wptraining" label="Archery Practive" zone="training" pos_x="11.30" pos_y="0.00" pos_z="26.60" dwell="4" pace="1.4">
+    <Question speaker="The Steward">Are you ready to begin training?</Question>
+    <Response speaker="Cindy">Yes.</Response>
+    <Statement speaker="The Steward">Good.  Let's begin.</Statement>
+  </Waypoint>
+  <Waypoint name="wppool" label="Bathing" zone="pool" pos_x="7.50" pos_y="0.00" pos_z="11.40" dwell="4" pace="1.4">
+    <Question speaker="Cindy">IS the water cold?</Question>
+    <Response speaker="The Steward">The water is refreshing.</Response>
+    <Statement speaker="Cindy">I desperately need a bath.</Statement>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="CindGoesToPractice" agent="Cindy">
+    <PathWaypoint ref="wptemple"/>
+    <PathWaypoint ref="wptraining"/>
+    <PathWaypoint ref="wppool"/>
+  </Path>
+</Paths>
 </Scene>

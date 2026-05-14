@@ -737,9 +737,35 @@ var _pbSpeakerVoiceMap = {};  // speaker name -> SpeechSynthesisVoice object (re
 
 function _xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+async function _buildSceneVoiceMapFromCultivars() {
+  // Preferred path: read voice directly from /cultivars/xml (Character Creator is authoritative)
+  var map = {};
+  if (!_pbVoices.length) return map;
+  try {
+    var r = await fetch(API + '/cultivars/xml');
+    if (!r.ok) return map;
+    var data = await r.json();
+    (data.cultivars || []).forEach(function(c) {
+      var name = c.agentname;
+      var voiceName = c.voice_name;
+      if (!name || !voiceName) return;
+      function baseVoiceName(s) {
+        return s.replace(/\s*-\s*[A-Z].*$/, '').replace(/\s+Desktop\b.*$/, '').replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
+      }
+      var voiceBase = baseVoiceName(voiceName);
+      var v = _pbVoices.find(function(v){ return v.name === voiceName; })
+           || _pbVoices.find(function(v){ return v.name.indexOf(voiceName) === 0; })
+           || _pbVoices.find(function(v){ return voiceName.indexOf(v.name) === 0; })
+           || _pbVoices.find(function(v){ return baseVoiceName(v.name) === voiceBase; });
+      if (v) map[name] = v;
+    });
+  } catch(e) { console.warn('_buildSceneVoiceMapFromCultivars error:', e); }
+  return map;
+}
+
 function _buildSceneVoiceMap() {
-  // Parse window._loadedSceneDefXml for <EmotionalArc cultivar="X" voice="Y"> entries
-  // Returns { speakerName: SpeechSynthesisVoice } using exact or prefix match on voice name
+  // Fallback path: parse <EmotionalArc cultivar="X" voice="Y"> from loaded scene XML
+  // Used when /cultivars/xml is unavailable or returns no voice data.
   var map = {};
   var src = window._loadedSceneDefXml || window._loadedSceneXml;
   if (!src || !_pbVoices.length) return map;
@@ -749,13 +775,10 @@ function _buildSceneVoiceMap() {
       var name = el.getAttribute('cultivar');
       var voiceName = el.getAttribute('voice');
       if (!name || !voiceName) return;
-      // Normalize: strip qualifiers like " - English (United States)", " Desktop", " (lang)"
-      // so "Microsoft Zira - English (United States)" and "Microsoft Zira Desktop" both → "Microsoft Zira"
       function baseVoiceName(s) {
         return s.replace(/\s*-\s*[A-Z].*$/, '').replace(/\s+Desktop\b.*$/, '').replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
       }
       var voiceBase = baseVoiceName(voiceName);
-      // Exact match, then prefix match (both directions), then normalized base match
       var v = _pbVoices.find(function(v){ return v.name === voiceName; })
            || _pbVoices.find(function(v){ return v.name.indexOf(voiceName) === 0; })
            || _pbVoices.find(function(v){ return voiceName.indexOf(v.name) === 0; })
@@ -816,8 +839,24 @@ function pbSpeakQALines(qaLines, onComplete) {
       }
     }
     if ((!_pbSceneVoiceMap || Object.keys(_pbSceneVoiceMap).length === 0) && _pbVoices.length) {
-      _pbSceneVoiceMap = _buildSceneVoiceMap();
+      // Try cultivar API first (Character Creator is authoritative); fall back to arc XML
+      _buildSceneVoiceMapFromCultivars().then(function(map) {
+        if (Object.keys(map).length > 0) {
+          _pbSceneVoiceMap = map;
+        } else {
+          _pbSceneVoiceMap = _buildSceneVoiceMap();
+        }
+        _continueAfterVoiceMap(retriesLeft);
+      }).catch(function() {
+        _pbSceneVoiceMap = _buildSceneVoiceMap();
+        _continueAfterVoiceMap(retriesLeft);
+      });
+      return;
     }
+    _continueAfterVoiceMap(retriesLeft);
+  }
+
+  function _continueAfterVoiceMap(retriesLeft) {
     if (!_pbVoices.length && retriesLeft > 0) {
       setTimeout(function(){ _ensureVoiceMapThenSpeak(retriesLeft - 1); }, 300);
       return;
@@ -828,7 +867,7 @@ function pbSpeakQALines(qaLines, onComplete) {
     if (window.speechSynthesis.speaking) {
       setTimeout(function(){
         if (_pbSpeakToken !== myToken) return; // superseded by a newer session
-        _ensureVoiceMapThenSpeak(0);
+        _continueAfterVoiceMap(0);
       }, 100);
       return;
     }

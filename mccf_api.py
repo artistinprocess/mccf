@@ -300,7 +300,9 @@ def load_scene_xml():
     # agents roster mirrors placedAgents
     agents = {n: dict(a) for n, a in placed_agents.items()}
 
-    # ── waypoints + inferred zones from <Waypoints><Waypoint> ────────────
+    # ── zones: parse embedded <Zones> block (Option A — self-contained scene XML)
+    # Falls back to inferring from waypoint zone attributes for legacy files
+    # that pre-date embedded zone support.
     ZONE_COLORS = {
         'temple':   '#c080f0',
         'pool':     '#60a8f0',
@@ -309,6 +311,46 @@ def load_scene_xml():
         'garden':   '#4af0a8',
         'library':  '#f09040',
     }
+    zones_parsed = {}
+    zones_el = root.find('Zones')
+    if zones_el is not None:
+        for z_el in zones_el.findall('Zone'):
+            z_id       = z_el.get('id', '').strip()
+            z_type     = z_el.get('zone_type', z_id).strip()
+            z_name     = z_el.get('name', z_id).strip()
+            if not z_id:
+                continue
+            pos_el = z_el.find('Position')
+            z_x    = float(pos_el.get('x', width  / 2)) if pos_el is not None else width  / 2
+            z_z    = float(pos_el.get('z', depth  / 2)) if pos_el is not None else depth  / 2
+            rad_el = z_el.find('Radius')
+            radius = float(rad_el.get('value', 4)) if rad_el is not None else 4
+            w_el   = z_el.find('Weights')
+            weights = {'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
+            if w_el is not None:
+                for ch in ['E', 'B', 'P', 'S']:
+                    weights[ch] = float(w_el.get(ch, 0.25))
+            desc_el    = z_el.find('Descriptor')
+            descriptor = (desc_el.text or '').strip() if desc_el is not None else ''
+            at_el      = z_el.find('AmbientTheme')
+            ambient_theme = {
+                'scale': at_el.get('scale', 'major') if at_el is not None else 'major',
+                'tempo': at_el.get('tempo', 'medium') if at_el is not None else 'medium',
+            }
+            col = ZONE_COLORS.get(z_type.lower(), '#888888')
+            zones_parsed[z_id] = {
+                'id':           z_id,
+                'name':         z_name,
+                'zone_type':    z_type,
+                'location':     [round(z_x, 2), 0, round(z_z, 2)],
+                'radius':       radius,
+                'weights':      weights,
+                'descriptor':   descriptor,
+                'ambient_theme': ambient_theme,
+                'color':        col,
+            }
+
+    # ── waypoints + inferred zones (fallback for legacy files) ────────────
     waypoints      = {}
     zones_inferred = {}
 
@@ -339,8 +381,8 @@ def load_scene_xml():
             'qaLines':  qa_lines
         }
 
-        # Infer zone from waypoint if not already seen
-        if zone_id and zone_id not in zones_inferred:
+        # Infer zone from waypoint only if no embedded Zones block present
+        if zone_id and zone_id not in zones_inferred and not zones_parsed:
             col = ZONE_COLORS.get(zone_id.lower(), '#888888')
             zones_inferred[zone_id] = {
                 'id':        zone_id,
@@ -350,6 +392,9 @@ def load_scene_xml():
                 'radius':    4,
                 'color':     col
             }
+
+    # Prefer parsed zones; fall back to inferred for legacy files
+    zones_result = zones_parsed if zones_parsed else zones_inferred
 
     # ── paths from <Paths><Path name agent><PathWaypoint ref> ───────────
     paths = {}
@@ -371,7 +416,7 @@ def load_scene_xml():
 
     return jsonify({
         'sceneConfig':  scene_config,
-        'zones':        zones_inferred,
+        'zones':        zones_result,
         'agents':       agents,
         'placedAgents': placed_agents,
         'waypoints':    waypoints,

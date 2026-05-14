@@ -498,7 +498,18 @@ class PlaybackManager:
                 "steps_seen":    steps,
                 "first_waypoint": first_wp,
             })
-        return files
+
+        # Deduplicate: keep only the newest file per path_name.
+        # Files are already sorted newest-first (reverse=True above), so the
+        # first occurrence of each path_name is the one to keep.
+        seen_paths: set = set()
+        deduped = []
+        for entry in files:
+            key = entry["path_name"].strip().lower()
+            if key not in seen_paths:
+                seen_paths.add(key)
+                deduped.append(entry)
+        return deduped
 
     def start(self, filename: str, pace: float = DEFAULT_PACE,
               loop: bool = False, auto: bool = True) -> dict:

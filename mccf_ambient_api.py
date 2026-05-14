@@ -88,8 +88,22 @@ def ambient_sync():
         audio_feats = data.get("audio_features")
 
         if sensor_data:
-            from mccf_api import compute_channel_vector
-            cv = compute_channel_vector(sensor_data)
+            # Inline — avoids circular import with mccf_api
+            from mccf_core import ChannelVector as _CV
+            def _compute_cv(sd):
+                dist    = float(sd.get("distance",   5.0))
+                dwell   = float(sd.get("dwell",       0.0))
+                vel     = float(sd.get("velocity",    0.0))
+                gaze    = float(sd.get("gaze_angle",  90.0))
+                maxr    = float(sd.get("max_range",   10.0))
+                E = max(0.0, min(1.0, 1.0 - dist / maxr)) if maxr > 0 else 0.5
+                B = max(0.0, min(1.0, dwell / 10.0))
+                P = max(0.0, min(1.0, abs(vel) / 2.0))
+                S = max(0.0, min(1.0, 1.0 - abs(gaze - 90.0) / 90.0))
+                return _CV(E=round(E,4), B=round(B,4), P=round(P,4), S=round(S,4),
+                           outcome_delta=float(sd.get("outcome_delta", 0.0)),
+                           was_dissonant=bool(sd.get("was_dissonant", False)))
+            cv = _compute_cv(sensor_data)
             if scene:
                 cv = scene.apply_zone_pressure(cv, tuple(position))
             field.interact(from_name, to_name, cv)
