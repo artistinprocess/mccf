@@ -78,6 +78,26 @@ def serve_x3d_scene(filename):
     """Serve named X3D files from static/x3d/ directory."""
     from flask import send_from_directory
     x3d_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d')
+
+    # Notify ChorusManager: look for a matching scene XML to pick up Chorus config.
+    # Scene X3D name pattern: {scene_name}.x3d → scenes/{scene_name}_scene.xml
+    try:
+        cm = app.config.get('_chorus_manager')
+        if cm is not None:
+            base = filename.replace('.x3d', '')
+            scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+            candidates = [
+                os.path.join(scenes_dir, base + '_scene.xml'),
+                os.path.join(scenes_dir, base + '.xml'),
+            ]
+            for cpath in candidates:
+                if os.path.exists(cpath):
+                    with open(cpath, encoding='utf-8') as f:
+                        cm.load_config_from_scene_xml(f.read())
+                    break
+    except Exception:
+        pass
+
     return send_from_directory(x3d_dir, filename, mimetype='model/x3d+xml')
 
 
@@ -404,6 +424,25 @@ def list_scenes_for_composer():
     return jsonify({'files': files, 'scenes_dir': scenes_dir})
 
 
+@app.route('/scene/load/scene/raw', methods=['GET'])
+def get_scene_xml_raw():
+    """
+    GET /scene/load/scene/raw?filename=garden_001_scene.xml
+    Returns the raw scene XML text. Used by Scene Composer to restore
+    Chorus config on scene load (not returned by /scene/load/scene JSON endpoint).
+    """
+    filename = os.path.basename(request.args.get('filename', '').strip())
+    if not filename:
+        return 'filename required', 400
+    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    filepath   = os.path.join(scenes_dir, filename)
+    if not os.path.exists(filepath):
+        return f'Not found: {filename}', 404
+    with open(filepath, encoding='utf-8') as f:
+        content = f.read()
+    return content, 200, {'Content-Type': 'application/xml; charset=utf-8'}
+
+
 @app.route('/scene/load/scene', methods=['POST'])
 def load_scene_xml():
     """
@@ -554,6 +593,14 @@ def load_scene_xml():
                 'waypoints': wp_refs
             }
 
+    # Notify Chorus manager — parse scene XML for <Chorus> zone extension.
+    try:
+        cm = app.config.get('_chorus_manager')
+        if cm is not None:
+            cm.load_config_from_scene_xml(raw)
+    except Exception:
+        pass
+
     return jsonify({
         'sceneConfig':  scene_config,
         'zones':        zones_inferred,
@@ -576,6 +623,122 @@ _arc_coherence_history = {}
 librarian = Librarian(field)
 gardener = Gardener(field)
 cultivars: dict = {}   # name → agent config snapshot
+
+# ---------------------------------------------------------------------------
+# AgentRuntimeState — constitutional/expressive split (ϕ + ϵ)
+#
+# Each agent carries two CV vectors per tick:
+#   constitutional_cv (ϕ) — immutable per tick; set by arc/record from authored
+#                            weights + sentiment + arc pressure.  Character as
+#                            written walking into the scene.
+#   expressive_cv     (ϵ) — mutable; written by couplers each tick, bounded by
+#                            max_drift = 1.0 - regulation.  What the scene is
+#                            doing to that character right now.
+#
+# Until couplers are wired, ϵ == ϕ (delta = 0).  The split is the membrane
+# that makes relational drift possible without corrupting authored character.
+#
+# Constraint invariants (enforced here, respected by mccf_couplers.py):
+#   - constitutional_cv is never written by couplers — read-only after arc/record
+#   - expressive_cv drift per channel bounded: |ϵ_ch - ϕ_ch| ≤ max_drift
+#   - max_drift = 1.0 - regulation  (high regulation → tight leash on ϵ)
+#   - Constitutional vector E/B/P/S shape is never replaced or extended
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass, field as dc_field
+
+@dataclass
+class AgentRuntimeState:
+    """
+    Per-agent runtime state carrying the ϕ/ϵ split.
+
+    constitutional_cv (ϕ): dict with keys E, B, P, S — set by arc/record,
+        immutable until next arc/record call.
+    expressive_cv (ϵ):     dict with keys E, B, P, S — written by couplers
+        each tick; initialized equal to ϕ.
+    regulation:            float 0-1, copied from Agent at record time.
+        max_drift = 1.0 - regulation bounds ϵ per channel.
+    last_record_time:      unix timestamp of last arc/record write to ϕ.
+    last_tick_time:        unix timestamp of last coupler tick to ϵ (0 = never).
+    """
+    name:               str
+    constitutional_cv:  dict = dc_field(default_factory=lambda: {"E": 0.25, "B": 0.25, "P": 0.25, "S": 0.25})
+    expressive_cv:      dict = dc_field(default_factory=lambda: {"E": 0.25, "B": 0.25, "P": 0.25, "S": 0.25})
+    regulation:         float = 0.7
+    last_record_time:   float = 0.0
+    last_tick_time:     float = 0.0
+
+    @property
+    def max_drift(self) -> float:
+        """Maximum per-channel deviation ϵ is permitted from ϕ."""
+        return round(1.0 - self.regulation, 4)
+
+    def set_constitutional(self, E: float, B: float, P: float, S: float,
+                           regulation: float = None) -> None:
+        """
+        Write ϕ from arc/record.  Also resets ϵ to ϕ (arc start = clean slate).
+        Optionally refreshes regulation from the live Agent.
+        Called only by arc/record — never by couplers.
+        """
+        self.constitutional_cv = {"E": round(E, 4), "B": round(B, 4),
+                                   "P": round(P, 4), "S": round(S, 4)}
+        # ϵ starts equal to ϕ; couplers will drift it from here
+        self.expressive_cv = dict(self.constitutional_cv)
+        if regulation is not None:
+            self.regulation = regulation
+        self.last_record_time = time.time()
+
+    def apply_expressive_delta(self, deltas: dict) -> None:
+        """
+        Apply coupler-computed deltas to ϵ, enforcing drift bound per channel.
+        deltas: dict with any subset of keys E, B, P, S.
+        Called only by mccf_couplers.py — never by arc/record.
+        """
+        drift_cap = self.max_drift
+        for ch in ("E", "B", "P", "S"):
+            if ch not in deltas:
+                continue
+            phi   = self.constitutional_cv[ch]
+            eps   = self.expressive_cv[ch]
+            new   = eps + deltas[ch]
+            # Clamp to [0, 1]
+            new   = min(1.0, max(0.0, new))
+            # Clamp drift from ϕ
+            new   = min(phi + drift_cap, max(phi - drift_cap, new))
+            self.expressive_cv[ch] = round(new, 4)
+        self.last_tick_time = time.time()
+
+    def as_dict(self) -> dict:
+        """Serialise for API responses."""
+        phi = self.constitutional_cv
+        eps = self.expressive_cv
+        return {
+            "constitutional_cv": phi,
+            "expressive_cv":     eps,
+            "delta": {
+                ch: round(eps[ch] - phi[ch], 4)
+                for ch in ("E", "B", "P", "S")
+            },
+            "regulation":      round(self.regulation, 4),
+            "max_drift":       self.max_drift,
+            "last_record_time": self.last_record_time,
+            "last_tick_time":   self.last_tick_time,
+        }
+
+
+# Registry: agent name → AgentRuntimeState
+_agent_runtime: dict[str, AgentRuntimeState] = {}
+
+
+def get_runtime(name: str, regulation: float = 0.7) -> AgentRuntimeState:
+    """
+    Return the AgentRuntimeState for `name`, creating it if absent.
+    `regulation` is used only on first creation; subsequent updates come
+    from set_constitutional() calls in arc/record.
+    """
+    if name not in _agent_runtime:
+        _agent_runtime[name] = AgentRuntimeState(name=name, regulation=regulation)
+    return _agent_runtime[name]
 
 # v2.0 — HotHouse integration
 # emotional_field and x3d_adapter are initialized lazily after agents register
@@ -663,6 +826,14 @@ drift_manager       = DriftManager()
 
 from mccf_playback import register_playback_api
 playback_manager    = register_playback_api(app, field)
+
+# Register Chorus — must be after playback_manager so we can wire the callback
+from mccf_chorus import register_chorus_api
+chorus_manager = register_chorus_api(app)
+# Wire arc-complete callback: playback server fires chorus at arc end (auto mode)
+playback_manager.chorus_callback = chorus_manager.fire_chorus
+# Store on app.config so load_scene_xml() can notify without circular import
+app.config['_chorus_manager'] = chorus_manager
 
 # Load Garden of the Goddess scene definition if present
 import os as _os_v3
@@ -815,6 +986,10 @@ def get_field():
         name: agent.summary()
         for name, agent in field.agents.items()
     }
+    # Attach runtime state (ϕ/ϵ split) to each agent summary
+    for name in agents_summary:
+        if name in _agent_runtime:
+            agents_summary[name]["runtime"] = _agent_runtime[name].as_dict()
     return jsonify({
         "matrix":              matrix,
         "echo_chamber_risks":  echo,
@@ -830,8 +1005,39 @@ def get_field():
     })
 
 
-@app.route("/agent", methods=["POST"])
-def create_agent():
+@app.route("/field/runtime", methods=["GET"])
+def get_field_runtime():
+    """
+    GET /field/runtime
+
+    Returns the ϕ/ϵ split for all agents that have received at least one
+    arc/record call.  Designed for the right-panel live display.
+
+    Response shape:
+    {
+      "agents": {
+        "<name>": {
+          "constitutional_cv": { E, B, P, S },   # ϕ — authored character
+          "expressive_cv":     { E, B, P, S },   # ϵ — scene pressure
+          "delta":             { E, B, P, S },   # ϵ - ϕ per channel
+          "regulation":        float,
+          "max_drift":         float,
+          "last_record_time":  float,
+          "last_tick_time":    float
+        }
+      },
+      "timestamp": float
+    }
+
+    delta = 0 for all channels until mccf_couplers.py is wired.
+    """
+    return jsonify({
+        "agents": {
+            name: rs.as_dict()
+            for name, rs in _agent_runtime.items()
+        },
+        "timestamp": time.time()
+    })
     data = request.get_json()
     name = data.get("name")
     if not name:
@@ -868,11 +1074,14 @@ def get_agent(name):
     for other in field.agents:
         if other != name:
             params[other] = affect_params_from_agent(agent, other)
-    return jsonify({
+    response = {
         "summary": agent.summary(),
         "weights": agent.weights,
         "affect_toward": params
-    })
+    }
+    if name in _agent_runtime:
+        response["runtime"] = _agent_runtime[name].as_dict()
+    return jsonify(response)
 
 
 @app.route("/cultivar", methods=["POST"])
@@ -1419,6 +1628,14 @@ def arc_record():
     else:
         agent.observe(agent, cv)
 
+    # ── ϕ/ϵ split: write constitutional_cv, seed expressive_cv ──────────
+    # arc/record is the ONLY writer of ϕ.  ϵ is reset to ϕ here so each
+    # waypoint starts from a clean expressive baseline; couplers drift it
+    # from this point until the next waypoint fires.
+    runtime = get_runtime(cultivar, regulation=agent._affect_regulation)
+    runtime.set_constitutional(e_val, b_val, p_val, s_val,
+                               regulation=agent._affect_regulation)
+
     meta = agent.meta_state
     coherence_now = round(agent.coherence_toward(others[0]) if others else 0.5, 4)
 
@@ -1444,6 +1661,7 @@ def arc_record():
         "cultivar":  cultivar,
         "sentiment": sentiment,
         "cv":        {"E": e_val, "B": b_val, "P": p_val, "S": s_val},
+        "runtime":   runtime.as_dict(),
         "meta_state": meta.as_dict(),
         "coherence":  coherence_now,
         "genre":      genre_result

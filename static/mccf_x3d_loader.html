@@ -42,6 +42,75 @@ button.active { background: #4af0a8; color: #111; }
 .tension-mid { color: #4adfc0; }
 .tension-high { color: #df8a4a; }
 .tension-crit { color: #df4a4a; }
+/* ── ϕ/ϵ runtime display ── */
+#runtime-panel {
+  margin-top: 6px;
+  border-top: 1px solid #1c2238;
+  padding-top: 5px;
+}
+#runtime-toggle {
+  color: #7ab8f5; font-size: 10px; cursor: pointer;
+  user-select: none; display: block; margin-bottom: 3px;
+}
+#runtime-toggle:hover { color: #a0d0f8; }
+#runtime-agents { display: block; }
+.rt-agent {
+  margin-top: 4px; padding-top: 3px;
+  border-top: 1px solid #161e2c;
+}
+.rt-agent-name {
+  color: #c0d0e0; font-size: 10px; margin-bottom: 2px;
+}
+.rt-bars { display: flex; flex-direction: column; gap: 1px; }
+.rt-row { display: flex; align-items: center; gap: 3px; font-size: 9px; }
+.rt-ch  { width: 8px; text-align: right; }
+.rt-bar-wrap {
+  flex: 1; height: 4px; background: #0d1520;
+  border-radius: 2px; overflow: hidden; position: relative;
+}
+.rt-bar-phi {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: #3a6090; border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.rt-bar-eps {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: #60d090; border-radius: 2px; opacity: 0.75;
+  transition: width 0.4s ease;
+}
+.rt-val { width: 32px; text-align: right; color: #6a8090; }
+.rt-drift-pos { color: #60d090; }
+.rt-drift-neg { color: #f07060; }
+.rt-drift-zero { color: #2a3a4a; }
+.rt-meta { font-size: 9px; color: #3a5060; margin-top: 2px; }
+/* ── Greek Chorus overlay ── */
+#chorus-overlay {
+  display: none;
+  position: fixed;
+  bottom: 60px; left: 50%; transform: translateX(-50%);
+  max-width: 560px; width: 90%;
+  background: rgba(4, 6, 14, 0.90);
+  border: 1px solid #3a2060;
+  border-radius: 4px;
+  padding: 14px 18px;
+  color: #c8a8f0;
+  font-family: monospace; font-size: 14px; line-height: 1.6;
+  text-align: center;
+  z-index: 200;
+  animation: chorusFadeIn 1.2s ease;
+}
+#chorus-overlay .chorus-zone {
+  font-size: 10px; color: #6a4090; margin-bottom: 6px; letter-spacing: 0.12em;
+}
+#chorus-overlay .chorus-dismiss {
+  display: block; margin-top: 10px;
+  font-size: 10px; color: #5a3080; cursor: pointer; letter-spacing: 0.1em;
+}
+#chorus-overlay .chorus-dismiss:hover { color: #c8a8f0; }
+@keyframes chorusFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 #playback-panel {
   position: fixed; top: 8px; left: 8px;
   background: rgba(0,0,0,0.82);
@@ -95,6 +164,11 @@ button.active { background: #4af0a8; color: #111; }
   <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
     padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
     color:#f0c060;cursor:pointer;">▶ Test SAI</button>
+  <!-- ϕ/ϵ runtime display -->
+  <div id="runtime-panel">
+    <span id="runtime-toggle" onclick="toggleRuntime()">▶ ϕ/ϵ state</span>
+    <div id="runtime-agents" style="display:none;"></div>
+  </div>
 </div>
 
 <div id="playback-panel">
@@ -146,6 +220,13 @@ button.active { background: #4af0a8; color: #111; }
     <div id="pb-question"></div>
     <div id="pb-response"></div>
   </div>
+</div>
+
+<!-- Greek Chorus overlay — text injected by displayChorus() -->
+<div id="chorus-overlay">
+  <div class="chorus-zone" id="chorus-zone-label"></div>
+  <div id="chorus-text"></div>
+  <span class="chorus-dismiss" onclick="dismissChorus()">✕ dismiss</span>
 </div>
 
 <div id="controls">
@@ -253,6 +334,82 @@ function startPolling() {
   pollField();
   pollHotHouse();
   pollLighting();
+  pollRuntime();
+}
+
+// ── ϕ/ϵ runtime display ──────────────────────────────────────────────────────
+
+let _runtimeExpanded = false;
+
+function toggleRuntime() {
+  _runtimeExpanded = !_runtimeExpanded;
+  document.getElementById('runtime-agents').style.display = _runtimeExpanded ? 'block' : 'none';
+  document.getElementById('runtime-toggle').textContent =
+    (_runtimeExpanded ? '▼' : '▶') + ' ϕ/ϵ state';
+}
+
+async function pollRuntime() {
+  if (!pollingActive) { setTimeout(pollRuntime, POLL_MS); return; }
+  try {
+    const r = await fetch(API + '/field/runtime', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    if (_runtimeExpanded) renderRuntime(d.agents || {});
+  } catch(e) { /* silent — endpoint may not be reachable */ }
+  setTimeout(pollRuntime, POLL_MS);
+}
+
+function renderRuntime(agents) {
+  const container = document.getElementById('runtime-agents');
+  if (!container) return;
+  const names = Object.keys(agents);
+  if (!names.length) {
+    container.innerHTML = '<div style="color:#2a3a4a;font-size:9px;margin-top:3px;">no arc/record data yet</div>';
+    return;
+  }
+
+  const CHANNELS = ['E','B','P','S'];
+  const CH_COLOR = {E:'#f07060', B:'#60a8f0', P:'#f0c060', S:'#60f0a8'};
+
+  let html = '';
+  for (const name of names) {
+    const rs  = agents[name];
+    const phi = rs.constitutional_cv;
+    const eps = rs.expressive_cv;
+    const del = rs.delta;
+
+    let bars = '';
+    for (const ch of CHANNELS) {
+      const phiW = Math.round((phi[ch] || 0) * 100);
+      const epsW = Math.round((eps[ch] || 0) * 100);
+      const d    = del[ch] || 0;
+      const dCls = d > 0.005 ? 'rt-drift-pos' : d < -0.005 ? 'rt-drift-neg' : 'rt-drift-zero';
+      const dStr = d === 0 ? '·' : (d > 0 ? '+' : '') + d.toFixed(3);
+      bars += `
+        <div class="rt-row">
+          <span class="rt-ch" style="color:${CH_COLOR[ch]}">${ch}</span>
+          <div class="rt-bar-wrap">
+            <div class="rt-bar-phi" style="width:${phiW}%"></div>
+            <div class="rt-bar-eps" style="width:${epsW}%"></div>
+          </div>
+          <span class="rt-val">${(eps[ch]||0).toFixed(3)}</span>
+          <span class="rt-val ${dCls}" style="width:38px">${dStr}</span>
+        </div>`;
+    }
+
+    const lastTick = rs.last_tick_time > 0
+      ? new Date(rs.last_tick_time * 1000).toLocaleTimeString()
+      : 'never';
+
+    html += `
+      <div class="rt-agent">
+        <div class="rt-agent-name">${name}</div>
+        <div class="rt-bars">${bars}</div>
+        <div class="rt-meta">
+          reg ${rs.regulation.toFixed(2)} · drift cap ±${rs.max_drift.toFixed(2)} · tick ${lastTick}
+        </div>
+      </div>`;
+  }
+  container.innerHTML = html;
 }
 
 // --- /field polling ---
@@ -1278,6 +1435,11 @@ async function pbPlay() {
   _pbSpeakToken = 0;
   _pbLastSpoken = '';
   _pbLastStepKey = '';
+  _x3dLastArrivedSeg = {};   // reset segment tracking — prevents stale seg from previous run
+  _chorusLastTimestamp = 0;  // reset so poll always picks up the next response
+  stopChorusPoll();
+  dismissChorus();
+  fetch(API + '/chorus/clear', {method: 'POST'}).catch(function(){});
   const pace = parseFloat(document.getElementById('pb-pace').value) || 3.0;
   const loop = document.getElementById('pb-loop').checked;
   try {
@@ -1325,6 +1487,8 @@ async function pbStop() {
 }
 async function pbReset() {
   pbStopPolling();
+  stopChorusPoll();
+  dismissChorus();
   _pbResetViaKillScript();
   _lerpDest = {};
   _x3dTimerActive = {};
@@ -1519,6 +1683,18 @@ function pbUpdateDisplayFinal(state) {
     qr.style.display = 'none';
   }
   pbPushPosition(wp);
+  // Arc is complete — fire Chorus on server (async), then poll for response.
+  // X3D-driven mode uses auto:false so the server-side PlaybackSession never
+  // reaches its own arc-complete hook.  Client fires explicitly here instead.
+  var arcFile = (document.getElementById('pb-file') || {}).value || '';
+  if (arcFile) {
+    fetch(API + '/chorus/fire', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({arc_file: arcFile})
+    }).catch(function() {});
+  }
+  startChorusPoll();
 }
 
 // Fetch and cache the scene XML when the X3D scene loads
@@ -1709,6 +1885,15 @@ function x3dFileChanged() {
   if (!canvas) return;
   canvas.src = API + '/static/x3d/' + fname;
   console.log('x3dFileChanged: loaded', fname);
+  // Notify server so ChorusManager can load config from matching scene XML.
+  var sceneName = fname.replace(/\.x3d$/i, '');
+  fetch(API + '/chorus/load', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({scene_name: sceneName})
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ console.log('Chorus config:', JSON.stringify(d)); })
+    .catch(function(){});
 }
 
 window.addEventListener('load', function() {
@@ -1717,6 +1902,77 @@ window.addEventListener('load', function() {
     pbLoadFiles();
   }, 800);
 });
+
+// ─────────────────────────────────────────────
+// Greek Chorus — overlay display (v1)
+// ─────────────────────────────────────────────
+
+var _chorusLastTimestamp = 0;
+var _chorusPollTimer = null;
+
+/**
+ * startChorusPoll() — called from pbUpdateDisplayFinal() at arc-complete.
+ * Polls /chorus/state until a new response arrives (up to 90 s).
+ * Async: LLM latency is covered while audience watches the final pose.
+ */
+function startChorusPoll() {
+  stopChorusPoll();
+  var deadline = Date.now() + 90000;
+  _chorusPollTimer = setInterval(function() {
+    if (Date.now() > deadline) { stopChorusPoll(); return; }
+    fetch(API + '/chorus/state', {signal: AbortSignal.timeout(2000)})
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        // Show if text is non-empty and newer than last displayed
+        if (d.text && d.timestamp > _chorusLastTimestamp) {
+          _chorusLastTimestamp = d.timestamp;
+          displayChorus(d);
+          stopChorusPoll();
+        }
+      })
+      .catch(function() {});
+  }, 800);
+}
+
+function stopChorusPoll() {
+  if (_chorusPollTimer) { clearInterval(_chorusPollTimer); _chorusPollTimer = null; }
+}
+
+function displayChorus(data) {
+  var overlay = document.getElementById('chorus-overlay');
+  var textEl  = document.getElementById('chorus-text');
+  var zoneEl  = document.getElementById('chorus-zone-label');
+  if (!overlay || !textEl) return;
+
+  textEl.textContent = data.text || '';
+  if (zoneEl) zoneEl.textContent = data.zone_id ? ('[ ' + data.zone_id.toUpperCase() + ' ]') : '';
+
+  overlay.style.display = 'block';
+  // Reset CSS animation so fade-in replays each time
+  overlay.style.animation = 'none';
+  void overlay.offsetWidth;
+  overlay.style.animation = '';
+
+  // Auto-dismiss after 18 s
+  clearTimeout(window._chorusAutoDismiss);
+  window._chorusAutoDismiss = setTimeout(dismissChorus, 18000);
+
+  // v2 hook — if server returns display="x3d" and a viewpoint, cut camera.
+  // Viewpoint cut IS the coverage for LLM latency per Day 12 design.
+  if (data.display === 'x3d' && data.viewpoint) {
+    gotoVP(data.viewpoint);
+  }
+
+  console.log('Chorus displayed:', data.text);
+}
+
+function dismissChorus() {
+  var overlay = document.getElementById('chorus-overlay');
+  if (overlay) overlay.style.display = 'none';
+  clearTimeout(window._chorusAutoDismiss);
+  // Clear server state so stale text doesn't re-appear on next arc
+  fetch(API + '/chorus/clear', {method: 'POST'}).catch(function() {});
+}
 
 </script>
 </body>
