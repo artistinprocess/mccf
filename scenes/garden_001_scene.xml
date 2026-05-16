@@ -1,28 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-14T18:18:24 -->
-<Scene id="garden_001" timestamp="2026-05-14T18:18:24" zone_set="garden_001" mode="improvisation" width="40" depth="40">
-<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Carly Online (Natural) - English (Australia)"><StartPosition x="21.8" y="0" z="12.4"/></EmotionalArc>
-<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Ken Online (Natural) - English (Australia)"><StartPosition x="14.8" y="0" z="27.3"/></EmotionalArc>
-<EmotionalArc cultivar="The Witness" actor="ollama" voice="Microsoft Neil Online (Natural) - English (Australia)"><StartPosition x="4.2" y="0" z="12.6"/></EmotionalArc>
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-16T16:33:48 -->
+<Scene id="garden_001" timestamp="2026-05-16T16:33:48" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<Zones>
+  <Zone id="pool" zone_type="pool">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="29.2" y="0" z="22.4"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium"/>
+    <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
+    </Chorus>
+  </Zone>
+  <Zone id="temple" zone_type="temple">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="14.8" y="0" z="8"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium"/>
+    <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
+    </Chorus>
+  </Zone>
+</Zones>
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Annette Online (Natural) - English (Australia)"><StartPosition x="28.5" y="0" z="24.2"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Darren Online (Natural) - English (Australia)"><StartPosition x="15" y="0" z="5.8"/></EmotionalArc>
 <Waypoints>
-  <Waypoint name="wptemple" label="Temple" zone="temple" pos_x="21.90" pos_y="0.00" pos_z="17.40" dwell="2" pace="1.4">
-    <Statement>I have prayed.  Now I must go shoot my bow.</Statement>
+  <Waypoint name="wppool" label="Pool" zone="pool" pos_x="29.20" pos_y="0.00" pos_z="22.40" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">The pool is refreshing.</Statement>
   </Waypoint>
-  <Waypoint name="wptraining" label="Archery Practive" zone="training" pos_x="11.30" pos_y="0.00" pos_z="26.60" dwell="4" pace="1.4">
-    <Question speaker="The Steward">Are you ready to begin training?</Question>
-    <Response speaker="Cindy">Yes.</Response>
-    <Statement speaker="The Steward">Good.  Let's begin.</Statement>
-  </Waypoint>
-  <Waypoint name="wppool" label="Bathing" zone="pool" pos_x="7.50" pos_y="0.00" pos_z="11.40" dwell="4" pace="1.4">
-    <Question speaker="Cindy">IS the water cold?</Question>
-    <Response speaker="The Steward">The water is refreshing.</Response>
-    <Statement speaker="Cindy">I desperately need a bath.</Statement>
+  <Waypoint name="wptemple" label="Temple" zone="temple" pos_x="14.80" pos_y="0.00" pos_z="8.00" dwell="2" pace="1.4">
+    <Question>Hello Cindy.</Question>
+    <Response speaker="The Steward">Hello Steward.</Response>
+    <Question speaker="The Steward">Have you come to pray?</Question>
+    <Response speaker="Cindy">I have come seeking the Librarian.</Response>
   </Waypoint>
 </Waypoints>
 <Paths>
-  <Path name="CindGoesToPractice" agent="Cindy">
+  <Path name="StewardToTemple" agent="The Steward">
     <PathWaypoint ref="wptemple"/>
-    <PathWaypoint ref="wptraining"/>
+  </Path>
+  <Path name="Walktotemple" agent="Cindy">
+    <PathWaypoint ref="wppool"/>
+    <PathWaypoint ref="wptemple"/>
+  </Path>
+  <Path name="pathToPool" agent="The Steward">
+    <PathWaypoint ref="wptemple"/>
     <PathWaypoint ref="wppool"/>
   </Path>
 </Paths>
