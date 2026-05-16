@@ -1352,6 +1352,76 @@ def arc_export_save():
                     "path": filepath, "rows": len(rows)})
 
 
+@app.route("/arc/playback", methods=["GET"])
+def arc_playback_list():
+    """
+    GET /arc/playback
+
+    List arc XML files in exports/ directory, newest-first.
+    Parses each file for metadata the loader needs to populate its dropdown.
+
+    Response shape:
+    {
+      "files": [
+        {
+          "filename":    "arc_Walktotemple_2026-05-16T....xml",
+          "cultivar":    "Cindy",
+          "path_name":   "Walktotemple",
+          "scene_name":  "garden_001",
+          "steps_seen":  2,
+          "first_waypoint": { "pos_x": 29.2, "pos_y": 0.0, "pos_z": 22.4 },
+          "mtime":       1234567890.0
+        }, ...
+      ]
+    }
+    """
+    import os, xml.etree.ElementTree as ET
+
+    exports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
+    os.makedirs(exports_dir, exist_ok=True)
+
+    files = []
+    for fname in sorted(os.listdir(exports_dir), reverse=True):
+        if not fname.endswith(".xml") or not fname.startswith("arc_"):
+            continue
+        fpath = os.path.join(exports_dir, fname)
+        mtime = os.path.getmtime(fpath)
+        meta = {
+            "filename":       fname,
+            "cultivar":       "",
+            "path_name":      "",
+            "scene_name":     "",
+            "steps_seen":     0,
+            "first_waypoint": None,
+            "mtime":          mtime,
+        }
+        try:
+            tree = ET.parse(fpath)
+            root = tree.getroot()
+            # <EmotionalArc scene="garden_001">
+            meta["scene_name"] = root.get("scene", "")
+            cultivar_el = root.find("Cultivar")
+            if cultivar_el is not None:
+                meta["cultivar"]  = cultivar_el.get("agentname", "")
+                meta["path_name"] = cultivar_el.get("path_name", "").replace("_", " ")
+                wps = cultivar_el.findall("Waypoint")
+                meta["steps_seen"] = len(wps)
+                if wps:
+                    first = wps[0]
+                    meta["first_waypoint"] = {
+                        "pos_x": float(first.get("pos_x", 0)),
+                        "pos_y": float(first.get("pos_y", 0)),
+                        "pos_z": float(first.get("pos_z", 0)),
+                    }
+        except Exception:
+            pass  # malformed XML — include with blank meta, don't crash
+        files.append(meta)
+
+    # Sort newest-first by mtime
+    files.sort(key=lambda f: f["mtime"], reverse=True)
+    return jsonify({"files": files})
+
+
 @app.route("/arc/schema", methods=["GET"])
 def arc_schema():
     """

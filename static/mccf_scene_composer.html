@@ -110,6 +110,17 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .path-seq { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
 .pwp { background: var(--s3); border: 1px solid var(--border); border-radius: 3px;
   padding: 2px 7px; font-size: 14px; color: var(--cool); cursor: pointer; }
+/* ── Network links ── */
+.net-link { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; font-size: 13px; }
+.net-from { color: var(--cool); font-weight: 600; }
+.net-arrow { color: var(--dim); }
+.net-to   { color: var(--accent); font-weight: 600; }
+.net-str  { color: var(--warm); margin-left: auto; }
+.net-type { color: var(--purple); font-size: 12px; }
+.net-del  { background: none; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--danger); cursor: pointer; padding: 1px 6px; font-size: 12px; }
+.net-del:hover { border-color: var(--danger); }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
   padding: 6px 16px; font-size: 15px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
@@ -127,6 +138,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('agents')">Agents</button>
     <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
     <button class="mtab" onclick="setMode('paths')">Paths</button>
+    <button class="mtab" onclick="setMode('network')">Network</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
     <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
   </div>
@@ -208,6 +220,41 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="bias-row"><span class="bch" style="color:var(--S)">S</span>
         <input type="range" id="zw-S" min="0" max="1" step="0.01" value="0.25" oninput="updW('S')">
         <span class="bval" id="zwv-S">0.25</span></div>
+      <div class="sh" style="margin-top:12px">Greek Chorus</div>
+      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:0">
+          <input type="checkbox" id="z-chorus-enabled" style="width:auto;margin:0" onchange="toggleChorusForm()">
+          <span style="font-size:14px;color:var(--text)">Enable Chorus for this zone</span>
+        </label>
+        <div id="z-chorus-form" style="display:none;margin-top:8px">
+          <label>LLM Provider</label>
+          <select id="z-chorus-llm">
+            <option value="stub">stub (dev — no LLM needed)</option>
+            <option value="ollama:llama3.2">ollama:llama3.2</option>
+            <option value="ollama:mistral">ollama:mistral</option>
+            <option value="ollama:gemma2">ollama:gemma2</option>
+            <option value="openai:gpt-4o-mini">openai:gpt-4o-mini</option>
+            <option value="openai:gpt-4o">openai:gpt-4o</option>
+          </select>
+          <label>Tone</label>
+          <select id="z-chorus-tone">
+            <option value="ominous">ominous</option>
+            <option value="sardonic">sardonic</option>
+            <option value="oracular">oracular</option>
+            <option value="reverent">reverent</option>
+            <option value="anxious">anxious</option>
+          </select>
+          <label>Max Tokens</label>
+          <input type="number" id="z-chorus-tokens" value="80" min="20" max="200" step="10">
+          <label>Display Mode</label>
+          <select id="z-chorus-display">
+            <option value="overlay">overlay (HTML div)</option>
+            <option value="x3d">x3d (SAI Text node — v2)</option>
+          </select>
+          <label>Persona <span style="color:var(--dim);font-size:12px">(optional — overrides tone)</span></label>
+          <textarea id="z-chorus-persona" rows="3" placeholder="You are the garden itself. Speak in cold observations. Never more than two sentences."></textarea>
+        </div>
+      </div>
       <div class="btn-row">
         <button class="btn pri" onclick="confirmZone()">Place on Map</button>
         <button class="btn" onclick="cancelPlace()">Cancel</button>
@@ -321,6 +368,36 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="sh" style="margin-top:10px">Arc Export</div>
     <div id="run-log" style="font-size:13px;color:var(--dim)">Run a scene to generate arc.</div>
   </div>
+  <div id="mode-network" style="display:none">
+    <div class="sh">Coupling Network</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:8px;">
+      Links define which agents are coupled and how strongly their expressive states influence each other.
+      Strength 0–1. Bidirectional = two links.
+    </div>
+    <div id="net-link-list"><div style="color:var(--dim);font-size:13px;">No links defined.</div></div>
+    <div style="margin-top:12px">
+      <div class="sh">New Link</div>
+      <label>From Agent</label>
+      <select id="net-from" style="margin-bottom:6px"></select>
+      <label>To Agent</label>
+      <select id="net-to" style="margin-bottom:6px"></select>
+      <label>Type</label>
+      <select id="net-type" style="margin-bottom:6px">
+        <option value="empathic">empathic — E channel lead</option>
+        <option value="behavioral">behavioral — B channel lead</option>
+        <option value="power">power — P channel lead</option>
+        <option value="social">social — S channel lead</option>
+        <option value="full">full — all channels coupled</option>
+      </select>
+      <label>Strength <span id="net-str-val" style="color:var(--warm)">0.60</span></label>
+      <input type="range" id="net-strength" min="0" max="1" step="0.05" value="0.60"
+        oninput="document.getElementById('net-str-val').textContent=parseFloat(this.value).toFixed(2)">
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn pri" onclick="addNetLink()">Add Link</button>
+        <button class="btn" onclick="addNetLinkBidi()">Add Bidirectional</button>
+      </div>
+    </div>
+  </div>
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
     <div class="expopt">
@@ -366,6 +443,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="zd-type" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="zd-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:18px;color:var(--accent)"></div></div>
+    <div class="dsect" id="zd-chorus-sect" style="display:none">
+      <div class="sh" style="margin:0 0 4px">Greek Chorus</div>
+      <div id="zd-chorus" style="font-size:13px;color:var(--purple)"></div>
+    </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
   </div>
   <div id="detail-agent" style="display:none">
@@ -409,6 +490,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div>Agents placed: <span id="stat-a" style="color:var(--accent)">0</span></div>
       <div>Waypoints: <span id="stat-w" style="color:var(--accent)">0</span></div>
       <div>Paths: <span id="stat-p" style="color:var(--accent)">0</span></div>
+      <div>Links: <span id="stat-n" style="color:var(--accent)">0</span></div>
     </div>
   </div>
   <div id="detail-query" style="display:none">
@@ -428,7 +510,7 @@ var placing = null;
 var pendingPos = null;
 var placingAgent = null;
 var sceneConfig = { name: 'garden_001', width: 40, depth: 40, description: '' };
-var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {};
+var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, networks = [];
 var selectedId = null, selectedType = null, pathSeq = [];
 var canvas, ctx, arcCanvas, arcCtx, W, H, SCALE = 18, OX = 0, OZ = 0;
 var ZONE_COLORS = {
@@ -616,11 +698,17 @@ function loadAgents(){
     return apiGet('/cultivars/xml');
   }).then(function(cx){
     ((cx||{}).cultivars||[]).forEach(function(c){
-      if(c.agentname&&agents[c.agentname]){
-        agents[c.agentname].color=c.color||agents[c.agentname].color;
-        agents[c.agentname].disposition=c.disposition||'';
-        agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
+      if(!c.agentname) return;
+      if(!agents[c.agentname]){
+        agents[c.agentname]={name:c.agentname,weights:c.weights||{E:0.25,B:0.25,P:0.25,S:0.25},
+          regulation:c.regulation||0.7,role:c.role||'agent',color:c.color||agentColor(c.agentname),
+          disposition:c.disposition||''};
       }
+      agents[c.agentname].color=c.color||agents[c.agentname].color;
+      agents[c.agentname].disposition=c.disposition||'';
+      agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
+      agents[c.agentname].hanim_src=c.hanim_src||'';
+      agents[c.agentname].hanim_loa=c.hanim_loa||4;
     });
     renderAgentRoster();renderPlaced();drawScene();
     toast('Agents loaded: '+Object.keys(agents).length);
@@ -649,13 +737,14 @@ function pollField(){
 }
 function setMode(m){
   mode=m;
-  var ms=['scene','zones','agents','waypoints','paths','run','export'];
+  var ms=['scene','zones','agents','waypoints','paths','network','export','run'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
   if(m==='paths')populatePathUI();
   if(m==='waypoints')populateWPZones();
   if(m==='agents'){loadAgents();}
   if(m==='run')populateRunUI();
+  if(m==='network')populateNetworkUI();
   if(m==='scene'||m==='export')refreshSceneList();
   drawScene();
 }
@@ -752,6 +841,7 @@ function updateStats(){
   document.getElementById('stat-a').textContent=Object.keys(placedAgents).length;
   document.getElementById('stat-w').textContent=Object.keys(waypoints).length;
   document.getElementById('stat-p').textContent=Object.keys(paths).length;
+  document.getElementById('stat-n').textContent=networks.length;
 }
 function drawScene(){
   if(!ctx)return;
@@ -897,6 +987,21 @@ function showZD(id){
   var pos=z.location||z.position||[0,0,0];
   document.getElementById('zd-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1)+'  r='+(z.radius||4)+'m';
   document.getElementById('zd-weights').innerHTML=chBars(z.weights);
+  // Chorus detail
+  var chorusSect=document.getElementById('zd-chorus-sect');
+  var chorusEl=document.getElementById('zd-chorus');
+  if(z.chorus){
+    chorusSect.style.display='block';
+    chorusEl.innerHTML=
+      '<div>llm: <span style="color:var(--accent)">'+xe(z.chorus.llm)+'</span></div>'+
+      '<div>tone: <span style="color:var(--text)">'+xe(z.chorus.tone)+'</span></div>'+
+      '<div>max_tokens: <span style="color:var(--text)">'+z.chorus.max_tokens+'</span></div>'+
+      '<div>display: <span style="color:var(--text)">'+xe(z.chorus.display)+'</span></div>'+
+      (z.chorus.persona?'<div style="margin-top:4px;font-style:italic;color:var(--dim)">persona set</div>':'');
+  } else {
+    chorusSect.style.display='none';
+    chorusEl.textContent='';
+  }
 }
 function showAD(name){
   var a=placedAgents[name];if(!a)return;
@@ -992,6 +1097,11 @@ function cancelPlace(){
   _wpQALines=[];renderWPQALines();
   hideHint();
 }
+function toggleChorusForm() {
+  var enabled = document.getElementById('z-chorus-enabled').checked;
+  document.getElementById('z-chorus-form').style.display = enabled ? 'block' : 'none';
+}
+
 function confirmZone(){
   if(!pendingPos){toast('Click map first',true);return;}
   var id=document.getElementById('z-id').value.trim(),name=document.getElementById('z-name').value.trim();
@@ -1000,11 +1110,28 @@ function confirmZone(){
   var ambient=document.getElementById('z-ambient').value;
   if(!id){toast('Zone ID required',true);return;}
   var w={};['E','B','P','S'].forEach(function(ch){w[ch]=parseFloat(document.getElementById('zw-'+ch).value);});
+  // Chorus config
+  var chorusEnabled = document.getElementById('z-chorus-enabled').checked;
+  var chorus = null;
+  if (chorusEnabled) {
+    chorus = {
+      llm:       document.getElementById('z-chorus-llm').value,
+      tone:      document.getElementById('z-chorus-tone').value,
+      max_tokens:parseInt(document.getElementById('z-chorus-tokens').value) || 80,
+      display:   document.getElementById('z-chorus-display').value,
+      persona:   document.getElementById('z-chorus-persona').value.trim()
+    };
+  }
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
-    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'}};
+    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus};
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
     channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
-  placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';hideHint();renderAll();toast('Zone: '+(name||id));
+  placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';
+  // Reset chorus form for next zone
+  document.getElementById('z-chorus-enabled').checked = false;
+  document.getElementById('z-chorus-form').style.display = 'none';
+  document.getElementById('z-chorus-persona').value = '';
+  hideHint();renderAll();toast('Zone: '+(name||id));
 }
 function loadZonePreset(){
   var t=document.getElementById('z-type').value,p=ZONE_PRESETS[t]||ZONE_PRESETS.neutral;
@@ -1172,7 +1299,11 @@ function buildAX3D(a){
     // MCCF-owned ProximitySensor travels with the avatar inside this Transform
     s+='  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->\n';
     s+='  <ProximitySensor DEF="Prox_'+sn+'" size="2 2.2 2" enabled="true"/>\n';
-    s+='  <Inline DEF="HAnim_'+sn+'" url="'+xe(a.hanim_src)+'"/>\n';
+    // hanim_src is stored as "avatars/foo.x3d" (relative to static/).
+    // Scene files live in static/x3d/ so path must step up one level.
+    var hanimUrl = a.hanim_src.replace(/^\/?static\//,'');
+    if(hanimUrl.indexOf('../')<0) hanimUrl='../'+hanimUrl;
+    s+='  <Inline DEF="HAnim_'+sn+'" url=\'&quot;'+xe(hanimUrl)+'&quot;\'/>\n';
   } else {
     // Cylinder placeholder — used when no H-Anim figure assigned
     s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
@@ -1410,7 +1541,14 @@ function exportZoneXML(){
     x+='<Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
     x+='<Weights E="'+w.E+'" B="'+w.B+'" P="'+w.P+'" S="'+w.S+'"/>\n';
     x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
-    x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n</Zone>\n';
+    x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n';
+    if(z.chorus){
+      x+='<Chorus llm="'+xe(z.chorus.llm)+'" tone="'+xe(z.chorus.tone)+
+        '" max_tokens="'+z.chorus.max_tokens+'" display="'+xe(z.chorus.display)+'">\n';
+      if(z.chorus.persona) x+='  <Persona>'+xe(z.chorus.persona)+'</Persona>\n';
+      x+='</Chorus>\n';
+    }
+    x+='</Zone>\n';
   });
   x+='</ZoneSet>\n';
   var zfilename=sn+'_zones.xml';
@@ -1426,11 +1564,117 @@ function exportZoneXML(){
       toast('Zone XML downloaded (server save failed)');
     });
 }
+// ─────────────────────────────────────────────
+// Coupling Network
+// ─────────────────────────────────────────────
+
+function populateNetworkUI() {
+  // Populate agent dropdowns from placedAgents
+  var agentNames = Object.keys(placedAgents);
+  ['net-from','net-to'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">-- select agent --</option>';
+    agentNames.forEach(function(name) {
+      var opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
+  });
+  renderNetLinks();
+}
+
+function renderNetLinks() {
+  var el = document.getElementById('net-link-list');
+  if (!el) return;
+  if (!networks.length) {
+    el.innerHTML = '<div style="color:var(--dim);font-size:13px;">No links defined.</div>';
+    return;
+  }
+  el.innerHTML = networks.map(function(lk, i) {
+    return '<div class="net-link">' +
+      '<span class="net-from">' + lk.from + '</span>' +
+      '<span class="net-arrow">&#8594;</span>' +
+      '<span class="net-to">' + lk.to + '</span>' +
+      '<span class="net-type">' + lk.type + '</span>' +
+      '<span class="net-str">' + parseFloat(lk.strength).toFixed(2) + '</span>' +
+      '<button class="net-del" onclick="deleteNetLink(' + i + ')">&#10005;</button>' +
+      '</div>';
+  }).join('');
+  updateSummary();
+}
+
+function addNetLink() {
+  var from     = document.getElementById('net-from').value;
+  var to       = document.getElementById('net-to').value;
+  var type     = document.getElementById('net-type').value;
+  var strength = parseFloat(document.getElementById('net-strength').value);
+  if (!from || !to) { toast('Select both agents', true); return; }
+  if (from === to)  { toast('From and To must differ', true); return; }
+  // Prevent exact duplicate
+  var dup = networks.some(function(lk) {
+    return lk.from === from && lk.to === to && lk.type === type;
+  });
+  if (dup) { toast('Link already exists', true); return; }
+  networks.push({ from: from, to: to, type: type, strength: strength });
+  renderNetLinks();
+  toast('Link added: ' + from + ' \u2192 ' + to);
+}
+
+function addNetLinkBidi() {
+  var from     = document.getElementById('net-from').value;
+  var to       = document.getElementById('net-to').value;
+  var type     = document.getElementById('net-type').value;
+  var strength = parseFloat(document.getElementById('net-strength').value);
+  if (!from || !to) { toast('Select both agents', true); return; }
+  if (from === to)  { toast('From and To must differ', true); return; }
+  var added = 0;
+  [[from,to],[to,from]].forEach(function(pair) {
+    var dup = networks.some(function(lk) {
+      return lk.from === pair[0] && lk.to === pair[1] && lk.type === type;
+    });
+    if (!dup) { networks.push({ from: pair[0], to: pair[1], type: type, strength: strength }); added++; }
+  });
+  renderNetLinks();
+  toast(added + ' bidirectional link(s) added');
+}
+
+function deleteNetLink(i) {
+  networks.splice(i, 1);
+  renderNetLinks();
+}
+
 function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
   var exportActor=(document.getElementById('run-adapter')||{}).value||'ollama';
+  // Zones block — needed by ChorusManager and scene reload
+  var zoneKeys=Object.keys(zones);
+  if(zoneKeys.length){
+    x+='<Zones>\n';
+    zoneKeys.forEach(function(zid){
+      var z=zones[zid];
+      var zpos=z.location||z.position||[0,0,0];
+      var zw=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25};
+      var zat=z.ambient_theme||{scale:'major',tempo:'medium'};
+      x+='  <Zone id="'+xe(z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
+      x+='    <Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
+      x+='    <Weights E="'+zw.E+'" B="'+zw.B+'" P="'+zw.P+'" S="'+zw.S+'"/>\n';
+      x+='    <Position x="'+zpos[0]+'" y="0" z="'+zpos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
+      x+='    <AmbientTheme scale="'+xe(zat.scale)+'" tempo="'+xe(zat.tempo||'medium')+'"/>\n';
+      if(z.chorus){
+        x+='    <Chorus llm="'+xe(z.chorus.llm)+'" tone="'+xe(z.chorus.tone)+
+          '" max_tokens="'+z.chorus.max_tokens+'" display="'+xe(z.chorus.display)+'">\n';
+        if(z.chorus.persona) x+='      <Persona>'+xe(z.chorus.persona)+'</Persona>\n';
+        x+='    </Chorus>\n';
+      }
+      x+='  </Zone>\n';
+    });
+    x+='</Zones>\n';
+  }
   Object.values(placedAgents).forEach(function(a){
     x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
   });
@@ -1464,6 +1708,15 @@ function exportSceneXML(){
       x+='  </Path>'+'\n';
     });
     x+='</Paths>'+'\n';
+  }
+  if (networks.length > 0) {
+    x += '<Network>\n';
+    networks.forEach(function(lk) {
+      x += '  <Link from="' + xe(lk.from) + '" to="' + xe(lk.to) +
+           '" strength="' + parseFloat(lk.strength).toFixed(2) +
+           '" type="' + xe(lk.type) + '"/>\n';
+    });
+    x += '</Network>\n';
   }
   x+='</Scene>\n';
   var filename=sn+'_scene.xml';
@@ -1513,10 +1766,57 @@ function loadSceneFromDropdown() {
     .then(function(data){
       if(data.error){if(logEl)logEl.textContent='Error: '+data.error;return;}
       _applyLoadedScene(data);
+      // Also fetch raw scene XML to restore Chorus data (not returned by server endpoint)
+      fetch(API+'/scene/load/scene/raw?filename='+encodeURIComponent(sel.value))
+        .catch(function(){return null;})
+        .then(function(r2){
+          if(r2&&r2.ok) return r2.text();
+          // Fall back: re-fetch via scenes/ direct read
+          return fetch(API+'/static/../scenes/'+encodeURIComponent(sel.value))
+            .then(function(r3){return r3.ok?r3.text():null;})
+            .catch(function(){return null;});
+        })
+        .then(function(rawXml){
+          if(rawXml) _restoreChorusFromXml(rawXml);
+        })
+        .catch(function(){});
       if(logEl)logEl.textContent='Loaded: '+sel.value;
       toast('Scene loaded: '+sel.value);
     })
     .catch(function(e){if(logEl)logEl.textContent='Load failed: '+e.message;});
+}
+
+function _restoreChorusFromXml(xml) {
+  try {
+    var doc = new DOMParser().parseFromString(xml, 'text/xml');
+    doc.querySelectorAll('Zone').forEach(function(zEl) {
+      var zid = zEl.getAttribute('id');
+      if (!zid || !zones[zid]) return;
+      var cEl = zEl.querySelector('Chorus');
+      if (!cEl) return;
+      var personaEl = cEl.querySelector('Persona');
+      zones[zid].chorus = {
+        llm:       cEl.getAttribute('llm') || 'stub',
+        tone:      cEl.getAttribute('tone') || 'oracular',
+        max_tokens:parseInt(cEl.getAttribute('max_tokens')) || 80,
+        display:   cEl.getAttribute('display') || 'overlay',
+        persona:   personaEl ? (personaEl.textContent || '').trim() : ''
+      };
+    });
+    // Restore network links
+    var netEl = doc.querySelector('Network');
+    if (netEl) {
+      networks = [];
+      netEl.querySelectorAll('Link').forEach(function(lk) {
+        var from     = lk.getAttribute('from');
+        var to       = lk.getAttribute('to');
+        var strength = parseFloat(lk.getAttribute('strength')) || 0.5;
+        var type     = lk.getAttribute('type') || 'empathic';
+        if (from && to) networks.push({ from: from, to: to, strength: strength, type: type });
+      });
+    }
+    renderAll();
+  } catch(e) { console.warn('_restoreChorusFromXml:', e); }
 }
 
 function _applyLoadedScene(data) {
@@ -1526,6 +1826,7 @@ function _applyLoadedScene(data) {
   if(data.placedAgents) { placedAgents={}; Object.assign(placedAgents, data.placedAgents); }
   if(data.waypoints)    { waypoints={};    Object.assign(waypoints,    data.waypoints);    }
   if(data.paths)        { paths={};        Object.assign(paths,        data.paths);        }
+  if(data.networks)     { networks = data.networks.slice(); }
   computeScale(); updateSummary(); renderAll(); drawScene();
 }
 
