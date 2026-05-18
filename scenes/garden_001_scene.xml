@@ -1,22 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-16T16:33:48 -->
-<Scene id="garden_001" timestamp="2026-05-16T16:33:48" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-16T19:13:56 -->
+<Scene id="garden_001" timestamp="2026-05-16T19:13:56" zone_set="garden_001" mode="improvisation" width="40" depth="40">
 <Zones>
-  <Zone id="pool" zone_type="pool">
-    <Descriptor></Descriptor>
-    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+  <Zone id="pool" zone_type="sacred_memorial">
+    <Descriptor>A still pool at the edge of the garden. Those who stand here tend to become quiet.</Descriptor>
+    <Weights E="0.30" B="0.20" P="0.25" S="0.25"/>
     <Position x="29.2" y="0" z="22.4"/><Radius value="4"/>
     <AmbientTheme scale="major" tempo="medium"/>
     <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
     </Chorus>
+    <Commands>
+      <OnEnter cultivar="*" command="reflect"/>
+      <OnDwell cultivar="Cindy" duration="5" command="confess"/>
+      <OnExit cultivar="*" command="release"/>
+    </Commands>
+    <Memory capacity="5"/>
   </Zone>
-  <Zone id="temple" zone_type="temple">
-    <Descriptor></Descriptor>
-    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+  <Zone id="temple" zone_type="authority_throne">
+    <Descriptor>The temple entrance. The Steward keeps watch here. The space demands honesty.</Descriptor>
+    <Weights E="0.20" B="0.35" P="0.25" S="0.20"/>
     <Position x="14.8" y="0" z="8"/><Radius value="4"/>
     <AmbientTheme scale="major" tempo="medium"/>
     <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
     </Chorus>
+    <Commands>
+      <OnEnter cultivar="*" command="attend"/>
+      <OnEnter cultivar="Cindy" command="greet"/>
+      <OnDwell cultivar="The Steward" duration="10" command="warn"/>
+    </Commands>
+    <Memory capacity="5"/>
   </Zone>
 </Zones>
 <EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Annette Online (Natural) - English (Australia)"><StartPosition x="28.5" y="0" z="24.2"/></EmotionalArc>
@@ -45,4 +57,8 @@
     <PathWaypoint ref="wppool"/>
   </Path>
 </Paths>
+<Network>
+  <Link from="Cindy" to="The Steward" strength="0.60" type="empathic"/>
+  <Link from="The Steward" to="Cindy" strength="0.60" type="empathic"/>
+</Network>
 </Scene>
