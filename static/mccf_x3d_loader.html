@@ -1424,6 +1424,12 @@ function pbPushPosition(wp) {
 async function pbPlay() {
   const file = document.getElementById('pb-file');
   if (!file || !file.value) { alert('Select an arc file first.'); return; }
+  // Ensure zone command data is loaded — the async fetch may not have completed yet.
+  // If _zoneCommands is still empty, re-trigger the fetch and wait briefly.
+  if (Object.keys(_zoneCommands).length === 0) {
+    _parseSceneZoneData();
+    await new Promise(function(res) { setTimeout(res, 800); });
+  }
   // Kill any stale polls from previous play before starting
   if (window._pbPollingSegment) {
     Object.keys(window._pbPollingSegment).forEach(function(k){ window._pbPollingSegment[k] = false; });
@@ -1464,6 +1470,33 @@ async function pbPlay() {
       pbActivateX3DTimers(cultivars);
       pbUpdateDisplay(stateData);
       _seedArcRecord(stateData);  // seed ϕ for WP1 — pbStep fires only from seg 1 onward
+      // Fire OnEnter for WP1 zone
+      var _wp1 = stateData.current_waypoint || {};
+      var _wp1c = _wp1.cultivar || (cultivars && cultivars[0]) || '';
+      // zone may be on the waypoint dict, or derivable from waypoint name via _waypointZoneMap
+      // Derive zone: server waypoint dict uses 'id' = waypoint name (e.g. 'wppool').
+      // _waypointZoneMap is keyed by waypoint name from scene XML.
+      // Try every field that might carry the waypoint identifier.
+      var _wp1z = _wp1.zone || _wp1.zone_id || '';
+      if (!_wp1z) {
+        var _wp1candidates = [_wp1.id, _wp1.key, _wp1.name, _wp1.label,
+                              (_wp1.id||'').toLowerCase(),
+                              'wp' + (_wp1.id||'').toLowerCase(),
+                              'wp' + (_wp1.label||'').toLowerCase()];
+        for (var _wi = 0; _wi < _wp1candidates.length; _wi++) {
+          if (_wp1candidates[_wi] && _waypointZoneMap[_wp1candidates[_wi]]) {
+            _wp1z = _waypointZoneMap[_wp1candidates[_wi]];
+            break;
+          }
+        }
+      }
+      console.log('pbPlay WP1 zone check: cultivar=' + _wp1c + ' zone=' + _wp1z
+                  + ' wp.id=' + _wp1.id + ' wp.label=' + _wp1.label
+                  + ' waypointZoneMap=' + JSON.stringify(_waypointZoneMap));
+      if (_wp1c && _wp1z) {
+        _agentZone[_wp1c] = _wp1z;
+        _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1);
+      }
       _fireCouplerTick();
     } else {
       // JS-lerp mode: poll drives display
@@ -1538,6 +1571,176 @@ function _seedArcRecord(state) {
     .catch(function() {});
 }
 
+// ─────────────────────────────────────────────
+// Zone Command System — V4
+// ─────────────────────────────────────────────
+// When a waypoint arrival places an agent in a zone that has a matching
+// <OnEnter> command, _fireZoneCommand() calls POST /zone/command.
+// For LLM agents (actor=ollama): Ollama generates a spoken response
+//   from the agent's current observed_cv and zone memory.
+//   Response goes to TTS — environmental speech, not scripted dialogue.
+// For scripted agents: command is logged and written to zone memory only.
+//   The script is holy writ.
+//
+// Zone commands speak from observed_cv (ϕ + ϵ), not ϕ alone.
+// The drama lives in the distance between them.
+
+// Cache parsed zone commands from scene XML: {zone_id: [{event, cultivar, command, duration}]}
+var _zoneCommands = {};
+// Cache zone descriptors: {zone_id: string}
+var _zoneDescriptors = {};
+// Cache actor per cultivar from scene XML: {cultivar_name: 'ollama'|'scripted'}
+var _cultivarActors = {};
+// Cache waypoint name → zone id: {wp_name: zone_id}
+var _waypointZoneMap = {};
+// Track which zones each cultivar currently occupies: {cultivar: zone_id|null}
+var _agentZone = {};
+
+function _parseSceneZoneData() {
+  // Parse <Zone><Commands> and <EmotionalArc actor="..."> from the scene XML.
+  // The scene XML (_scene.xml) lives on the server — fetch it via
+  // GET /scene/load/scene/raw?filename={scene}_scene.xml which returns the raw XML.
+  // This runs after x3dFileChanged() — scene name is derivable from the X3D filename.
+  var xSel = document.getElementById('x3d-file');
+  var fname = xSel ? xSel.value : '';
+  var sceneName = fname.replace(/\.x3d$/i, '');
+  if (!sceneName) return;
+
+  fetch(API + '/scene/load/scene/raw?filename=' + encodeURIComponent(sceneName + '_scene.xml'))
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('fetch failed: ' + r.status); })
+    .then(function(xmlText) {
+      try {
+        var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+
+        // Parse zone commands and descriptors
+        _zoneCommands = {};
+        _zoneDescriptors = {};
+        doc.querySelectorAll('Zone').forEach(function(zEl) {
+          var zid = zEl.getAttribute('id');
+          if (!zid) return;
+          var descEl = zEl.querySelector('Descriptor');
+          _zoneDescriptors[zid] = descEl ? (descEl.textContent||'').trim() : '';
+          var cmds = [];
+          zEl.querySelectorAll('Commands > OnEnter').forEach(function(el) {
+            cmds.push({event:'OnEnter', cultivar: el.getAttribute('cultivar')||'*',
+                       command: el.getAttribute('command')||''});
+          });
+          zEl.querySelectorAll('Commands > OnDwell').forEach(function(el) {
+            cmds.push({event:'OnDwell', cultivar: el.getAttribute('cultivar')||'*',
+                       command: el.getAttribute('command')||'',
+                       duration: parseInt(el.getAttribute('duration')||'0')});
+          });
+          zEl.querySelectorAll('Commands > OnExit').forEach(function(el) {
+            cmds.push({event:'OnExit', cultivar: el.getAttribute('cultivar')||'*',
+                       command: el.getAttribute('command')||''});
+          });
+          if (cmds.length) _zoneCommands[zid] = cmds;
+        });
+
+        // Parse cultivar actors from <EmotionalArc actor="ollama">
+        _cultivarActors = {};
+        doc.querySelectorAll('EmotionalArc[cultivar]').forEach(function(el) {
+          var name  = el.getAttribute('cultivar');
+          var actor = (el.getAttribute('actor')||'scripted').toLowerCase();
+          if (name) _cultivarActors[name] = actor;
+        });
+
+        // Parse waypoint name → zone mapping for client-side zone derivation
+        // (playback step response may not include zone; we derive it from waypoint name)
+        _waypointZoneMap = {};
+        doc.querySelectorAll('Waypoint').forEach(function(el) {
+          var name = el.getAttribute('name');
+          var zone = el.getAttribute('zone');
+          if (name && zone) _waypointZoneMap[name] = zone;
+        });
+
+        console.log('Zone commands parsed:', Object.keys(_zoneCommands),
+                    'Actors:', _cultivarActors,
+                    'WaypointZones:', _waypointZoneMap);
+      } catch(e) { console.warn('_parseSceneZoneData parse error:', e); }
+    })
+    .catch(function(e) { console.warn('_parseSceneZoneData fetch error:', e); });
+}
+
+function _matchZoneCommand(zoneId, cultivar, eventType) {
+  // Find a matching command for (zoneId, cultivar, eventType).
+  // Wildcard '*' matches any cultivar. Specific match takes priority.
+  var cmds = _zoneCommands[zoneId];
+  if (!cmds) return null;
+  var specific = cmds.find(function(c) {
+    return c.event === eventType && c.cultivar === cultivar;
+  });
+  if (specific) return specific;
+  var wildcard = cmds.find(function(c) {
+    return c.event === eventType && c.cultivar === '*';
+  });
+  return wildcard || null;
+}
+
+function _fireZoneCommand(cultivar, zoneId, eventType, step) {
+  // Fire a zone command for cultivar entering/dwelling/exiting zoneId.
+  // Determines actor type, finds matching command, calls /zone/command.
+  if (!zoneId) return;
+  var cmd = _matchZoneCommand(zoneId, cultivar, eventType);
+  if (!cmd || !cmd.command) {
+    console.log('_fireZoneCommand: no command for', cultivar, eventType, zoneId,
+                '(commands loaded:', Object.keys(_zoneCommands), ')');
+    return;
+  }
+
+  var xSel = document.getElementById('x3d-file');
+  var fname = xSel ? xSel.value : '';
+  var sceneName = fname.replace(/\.x3d$/i, '');
+  var actor = _cultivarActors[cultivar] || 'scripted';
+  var zoneDesc = _zoneDescriptors[zoneId] || '';
+
+  console.log('_fireZoneCommand:', cultivar, eventType, zoneId, cmd.command,
+              'actor=' + actor);
+
+  fetch(API + '/zone/command', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      cultivar:        cultivar,
+      actor:           actor,
+      command:         cmd.command,
+      event:           eventType,
+      zone_id:         zoneId,
+      scene:           sceneName,
+      zone_descriptor: zoneDesc,
+      step:            step || 0,
+      ollama_model:    'llama3.2',
+      ollama_url:      'http://localhost:11434'
+    })
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'scripted') {
+        console.log('Zone command (scripted, no speech):', cultivar, cmd.command, zoneId);
+        return;
+      }
+      if (d.status === 'error') {
+        console.warn('Zone command error:', d.error);
+        return;
+      }
+      // LLM response — speak it via TTS as environmental speech
+      // Not routed through pbSpeakQALines — this is zone voice, not character dialogue
+      if (d.response && d.response.trim()) {
+        console.log('Zone command response:', cultivar, cmd.command, '→', d.response.substring(0,60)+'...');
+        // Speak with the cultivar's voice — use the same voice map as the arc
+        var voice = null;
+        if (window._pbVoiceMap && window._pbVoiceMap[cultivar]) {
+          voice = window._pbVoiceMap[cultivar];
+        }
+        var utt = new SpeechSynthesisUtterance(d.response);
+        if (voice) utt.voice = voice;
+        utt.rate = 0.95;
+        utt.pitch = 1.0;
+        speechSynthesis.speak(utt);
+      }
+    })
+    .catch(function(e) { console.warn('_fireZoneCommand fetch error:', e); });
+}
+
 function _fireCouplerTick(sceneName) {
   if (!sceneName) {
     var xSel = document.getElementById('x3d-file');
@@ -1568,11 +1771,35 @@ async function pbStep() {
     const state = await r.json();
     pbUpdateDisplay(state);
     _seedArcRecord(state);   // seed ϕ from arc XML waypoint CV values
+    // Fire zone OnEnter command if this waypoint's zone has one
+    var _stepWp = state.current_waypoint || {};
+    var _stepCultivar = _stepWp.cultivar || (state.cultivars && state.cultivars[0]) || '';
+    var _stepZone = _stepWp.zone || _stepWp.zone_id || '';
+    if (!_stepZone) {
+      var _stepCandidates = [_stepWp.id, _stepWp.key, _stepWp.name, _stepWp.label,
+                             (_stepWp.id||'').toLowerCase(),
+                             'wp' + (_stepWp.id||'').toLowerCase(),
+                             'wp' + (_stepWp.label||'').toLowerCase()];
+      for (var _si = 0; _si < _stepCandidates.length; _si++) {
+        if (_stepCandidates[_si] && _waypointZoneMap[_stepCandidates[_si]]) {
+          _stepZone = _waypointZoneMap[_stepCandidates[_si]];
+          break;
+        }
+      }
+    }
+    var _prevZone = _agentZone[_stepCultivar] || '';
+    if (_stepZone && _stepZone !== _prevZone) {
+      // Agent has moved into a new zone — fire OnExit for old, OnEnter for new
+      if (_prevZone) _fireZoneCommand(_stepCultivar, _prevZone, 'OnExit', _stepWp.stepno||0);
+      _fireZoneCommand(_stepCultivar, _stepZone, 'OnEnter', _stepWp.stepno||0);
+      _agentZone[_stepCultivar] = _stepZone;
+    }
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
   } catch(e) {}
   finally { _pbStepInFlight = false; }
 }
 async function pbStop() {
+  _agentZone = {};  // reset zone tracking on stop
   pbStopPolling();
   pbStopX3DTimers();
   try { const r=await fetch(API+'/arc/playback/stop',{method:'POST'}); pbUpdateDisplay(await r.json()); } catch(e) {}
@@ -1987,6 +2214,8 @@ function x3dFileChanged() {
   }).then(function(r){ return r.json(); })
     .then(function(d){ console.log('Chorus config:', JSON.stringify(d)); })
     .catch(function(){});
+  // Parse zone commands and actor types from scene XML after scene loads
+  setTimeout(_parseSceneZoneData, 500);
 }
 
 window.addEventListener('load', function() {

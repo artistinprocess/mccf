@@ -2140,6 +2140,350 @@ def couplers_tick():
 # End coupler system
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Zone Command System — V4
+# ---------------------------------------------------------------------------
+# Zones carry a <Commands> block in scene XML.  When an agent enters, dwells
+# in, or exits a zone, a dramatic command fires.  For LLM agents (actor=ollama)
+# the command is expanded into a prompt using the agent's current observed_cv
+# and the zone descriptor, then sent to Ollama for a spoken response.
+# For scripted agents the command is logged and written to zone memory only.
+#
+# Command vocabulary (controlled — not freeform strings):
+#   reflect   — pause and consider what this place means right now
+#   confess   — speak something that has been unspoken
+#   release   — acknowledge the transition of leaving
+#   attend    — become present to this space and its demands
+#   greet     — acknowledge another's presence in this space
+#   warn      — speak a concern that has been building
+#   grieve    — give voice to loss
+#   celebrate — give voice to what has been gained
+#   calculate — assess, weigh, consider quietly
+#   initiate  — begin something that needs to begin
+#
+# All expansions speak from observed_cv (ϕ + ϵ), not ϕ alone.
+# The drama lives in the distance between them.
+# ---------------------------------------------------------------------------
+
+import json as _json_zc
+import os as _os_zc
+
+_ZONE_COMMAND_VOCAB = {
+    'reflect':   'Pause and reflect on what this place means to you right now. '
+                 'Speak from where you actually are, not from where you started.',
+    'confess':   'Speak something you have been carrying that has not yet been said. '
+                 'This place calls for honesty.',
+    'release':   'You are leaving this space. Acknowledge what you are leaving behind '
+                 'and what you are carrying forward.',
+    'attend':    'Become present to this space and what it demands of you. '
+                 'Speak what you notice.',
+    'greet':     'Acknowledge the presence of another in this space. '
+                 'Speak as yourself, from where you are right now.',
+    'warn':      'A concern has been building. This is the moment to name it. '
+                 'Speak carefully but clearly.',
+    'grieve':    'Give voice to what has been lost or is ending. '
+                 'Do not perform grief — speak from it.',
+    'celebrate': 'Give voice to what has been gained or is beginning. '
+                 'Speak from your actual state, not from convention.',
+    'calculate': 'Assess what you know, what you need, what the situation requires. '
+                 'Think aloud — briefly.',
+    'initiate':  'Something needs to begin. You are the one to begin it. Speak.',
+}
+
+# Per-zone memory: {scene_name: {zone_id: [event_dict, ...]}}
+_zone_memory: dict = {}
+
+def _get_zone_memory(scene_name: str, zone_id: str) -> list:
+    if scene_name not in _zone_memory:
+        _zone_memory[scene_name] = {}
+    if zone_id not in _zone_memory[scene_name]:
+        # Try loading from disk
+        mem_path = _os_zc.path.join(
+            _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
+            'scenes', f'{scene_name}_zone_memory.json'
+        )
+        if _os_zc.path.exists(mem_path):
+            try:
+                with open(mem_path, encoding='utf-8') as f:
+                    all_mem = _json_zc.load(f)
+                _zone_memory[scene_name] = all_mem
+            except Exception:
+                pass
+        if zone_id not in _zone_memory[scene_name]:
+            _zone_memory[scene_name][zone_id] = []
+    return _zone_memory[scene_name][zone_id]
+
+def _append_zone_memory(scene_name: str, zone_id: str,
+                        event: dict, capacity: int = 5) -> None:
+    mem = _get_zone_memory(scene_name, zone_id)
+    mem.append(event)
+    if len(mem) > capacity:
+        mem[:] = mem[-capacity:]
+    # Persist to disk
+    mem_path = _os_zc.path.join(
+        _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
+        'scenes', f'{scene_name}_zone_memory.json'
+    )
+    try:
+        with open(mem_path, 'w', encoding='utf-8') as f:
+            _json_zc.dump(_zone_memory[scene_name], f, indent=2)
+    except Exception:
+        pass
+
+def _build_zone_prompt(cultivar_name: str, command: str,
+                       observed_cv: dict, zone_descriptor: str,
+                       zone_memory: list, cultivar_description: str = '') -> str:
+    """
+    Build the Ollama prompt for a zone command firing on an LLM agent.
+    Speaks from observed_cv (ϕ + ϵ) — the drama lives in the distance
+    between constitutional identity and current expressive state.
+    """
+    vocab_expansion = _ZONE_COMMAND_VOCAB.get(command, command)
+
+    E = observed_cv.get('E', 0.0)
+    B = observed_cv.get('B', 0.0)
+    P = observed_cv.get('P', 0.0)
+    S = observed_cv.get('S', 0.0)
+
+    # Translate channel values to human-readable state descriptors
+    def _ch(label, val):
+        if val > 0.7:   return f'high {label}'
+        elif val > 0.4: return f'moderate {label}'
+        else:           return f'low {label}'
+
+    state_desc = ', '.join([
+        _ch('emotional intensity', E),
+        _ch('behavioral stability', B),
+        _ch('predictive confidence', P),
+        _ch('social openness', S),
+    ])
+
+    mem_text = ''
+    if zone_memory:
+        recent = zone_memory[-3:]
+        lines = [f"- {e.get('cultivar','?')} {e.get('event','visited')} "
+                 f"({e.get('command','')}) at step {e.get('step','?')}"
+                 for e in recent]
+        mem_text = 'This place remembers:\n' + '\n'.join(lines) + '\n\n'
+
+    desc_text = f'This place: {zone_descriptor}\n\n' if zone_descriptor else ''
+    cultivar_text = f'You are {cultivar_name}' + (
+        f' — {cultivar_description}' if cultivar_description else '') + '.\n'
+
+    prompt = (
+        f'{cultivar_text}'
+        f'Your current state: {state_desc}.\n'
+        f'{desc_text}'
+        f'{mem_text}'
+        f'{vocab_expansion}\n\n'
+        f'Respond in one to three sentences. Speak as yourself, '
+        f'from your current state. Do not explain or narrate — just speak.'
+    )
+    return prompt
+
+
+@app.route('/zone/command', methods=['POST'])
+def zone_command():
+    """
+    POST /zone/command
+
+    Fire a zone command for an LLM agent arriving at, dwelling in,
+    or leaving a zone.  Builds a prompt from the agent\'s current
+    observed_cv and the zone\'s descriptor and memory, calls Ollama,
+    and returns the spoken response.
+
+    For scripted agents (actor != \'ollama\') returns status=\'scripted\'
+    with no LLM call — the loader logs the command and writes zone memory.
+
+    Request body (JSON):
+    {
+      "cultivar":    "Cindy",
+      "actor":       "ollama",            // \'ollama\' or \'scripted\'
+      "command":     "reflect",           // from ZONE_COMMAND_VOCAB
+      "event":       "OnEnter",           // OnEnter | OnDwell | OnExit
+      "zone_id":     "pool",
+      "scene":       "garden_001",
+      "zone_descriptor": "A still pool...",
+      "step":        3,
+      "ollama_model": "llama3.2",         // optional, default llama3.2
+      "ollama_url":  "http://localhost:11434"  // optional
+    }
+
+    Response (LLM agent):
+    {
+      "status":   "ok",
+      "cultivar": "Cindy",
+      "command":  "reflect",
+      "response": "The water does not move...",
+      "zone_id":  "pool",
+      "memory_written": true
+    }
+
+    Response (scripted agent):
+    {
+      "status":   "scripted",
+      "cultivar": "Cindy",
+      "command":  "reflect",
+      "zone_id":  "pool",
+      "memory_written": true
+    }
+    """
+    import urllib.request as _urllib_req
+    import urllib.error  as _urllib_err
+
+    data        = request.get_json() or {}
+    cultivar    = data.get('cultivar', '').strip()
+    actor       = data.get('actor', 'scripted').strip().lower()
+    command     = data.get('command', '').strip()
+    event_type  = data.get('event', 'OnEnter').strip()
+    zone_id     = data.get('zone_id', '').strip()
+    scene_name  = data.get('scene', '').strip()
+    zone_desc   = data.get('zone_descriptor', '').strip()
+    step        = int(data.get('step', 0))
+    ollama_model = data.get('ollama_model', 'llama3.2')
+    ollama_url   = data.get('ollama_url', 'http://localhost:11434')
+
+    if not cultivar or not command or not zone_id:
+        return jsonify({'error': 'cultivar, command, and zone_id are required'}), 400
+
+    if command not in _ZONE_COMMAND_VOCAB:
+        return jsonify({'error': f'Unknown command: {command!r}. '
+                       f'Known: {list(_ZONE_COMMAND_VOCAB)}'}), 400
+
+    # Get current observed_cv for this cultivar
+    runtime = _agent_runtime.get(cultivar)
+    obs_cv  = runtime.observed_cv if runtime else {
+        'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
+
+    # Write zone memory event
+    zone_mem = _get_zone_memory(scene_name, zone_id)
+    mem_event = {
+        'cultivar': cultivar,
+        'event':    event_type,
+        'command':  command,
+        'step':     step,
+        'timestamp': time.time(),
+        'observed_cv': {k: round(v, 3) for k, v in obs_cv.items()},
+    }
+    _append_zone_memory(scene_name, zone_id, mem_event)
+
+    # Scripted agent — log and return without LLM call
+    if actor not in ('ollama', 'llm'):
+        return jsonify({
+            'status':         'scripted',
+            'cultivar':       cultivar,
+            'command':        command,
+            'zone_id':        zone_id,
+            'memory_written': True,
+        })
+
+    # LLM agent — build prompt and call Ollama
+    prompt = _build_zone_prompt(
+        cultivar_name=cultivar,
+        command=command,
+        observed_cv=obs_cv,
+        zone_descriptor=zone_desc,
+        zone_memory=zone_mem,
+        cultivar_description='',
+    )
+
+    try:
+        _payload = _json_zc.dumps({
+            'model':  ollama_model,
+            'prompt': prompt,
+            'stream': False,
+        }).encode('utf-8')
+        _req = _urllib_req.Request(
+            f'{ollama_url}/api/generate',
+            data=_payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        with _urllib_req.urlopen(_req, timeout=30) as _resp:
+            response_text = _json_zc.loads(_resp.read().decode('utf-8')).get('response', '').strip()
+    except _urllib_err.URLError as e:
+        return jsonify({
+            'status':   'error',
+            'cultivar': cultivar,
+            'command':  command,
+            'zone_id':  zone_id,
+            'error':    f'Ollama unreachable: {e}',
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'status':   'error',
+            'cultivar': cultivar,
+            'command':  command,
+            'zone_id':  zone_id,
+            'error':    str(e),
+        }), 500
+
+    return jsonify({
+        'status':         'ok',
+        'cultivar':       cultivar,
+        'command':        command,
+        'zone_id':        zone_id,
+        'response':       response_text,
+        'memory_written': True,
+        'prompt_used':    prompt,
+    })
+
+
+@app.route('/zone/memory', methods=['GET'])
+def zone_memory_get():
+    """
+    GET /zone/memory?scene=garden_001&zone=pool
+
+    Returns the memory events for a zone.
+    """
+    scene_name = request.args.get('scene', '').strip()
+    zone_id    = request.args.get('zone', '').strip()
+    if not scene_name or not zone_id:
+        return jsonify({'error': 'scene and zone params required'}), 400
+    mem = _get_zone_memory(scene_name, zone_id)
+    return jsonify({
+        'scene':   scene_name,
+        'zone_id': zone_id,
+        'events':  mem,
+        'count':   len(mem),
+    })
+
+
+@app.route('/zone/memory', methods=['DELETE'])
+def zone_memory_clear():
+    """
+    DELETE /zone/memory?scene=garden_001&zone=pool
+
+    Clears memory for a zone (or all zones in scene if zone omitted).
+    """
+    scene_name = request.args.get('scene', '').strip()
+    zone_id    = request.args.get('zone', '').strip()
+    if not scene_name:
+        return jsonify({'error': 'scene param required'}), 400
+    if zone_id:
+        if scene_name in _zone_memory:
+            _zone_memory[scene_name][zone_id] = []
+        cleared = zone_id
+    else:
+        _zone_memory[scene_name] = {}
+        cleared = 'all'
+    # Clear from disk too
+    mem_path = _os_zc.path.join(
+        _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
+        'scenes', f'{scene_name}_zone_memory.json'
+    )
+    if _os_zc.path.exists(mem_path):
+        try:
+            _os_zc.remove(mem_path)
+        except Exception:
+            pass
+    return jsonify({'status': 'cleared', 'scene': scene_name, 'zone': cleared})
+
+
+# ---------------------------------------------------------------------------
+# End Zone Command System
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     _steward = Agent("The Steward",
                      weights={"E": 0.40, "B": 0.25, "P": 0.25, "S": 0.10},
