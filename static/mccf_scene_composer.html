@@ -1976,6 +1976,28 @@ async function _sceneArcAdvance(){
     }catch(e){arcRLines.push({speaker:'',text:'[LLM error: '+e.message+']'});}
   }
 
+  // ── arc/record for every waypoint ──────────────────────────────────────
+  // Scripted/statement-only waypoints (no LLM call) never reached arc/record
+  // above — E/B/P/S would remain at placeholder defaults.  Call it now for
+  // any waypoint still at defaults, using authored text for sentiment.
+  // This makes the Constitutional Navigator obsolete: the composer is the
+  // sole arc/record caller for every waypoint in a scene arc.
+  if(E===0.35 && B===0.25 && P===0.25 && S===0.25){
+    var allAuthoredText = arcRLines.map(function(l){return l.text||'';}).join(' ').trim()
+      || arcQLines.map(function(l){return l.text||'';}).join(' ').trim()
+      || (wp.question||'');
+    try{
+      var recResp3 = await apiPost('/arc/record',{
+        cultivar: cultivar,
+        step:     _sceneArcStep+1,
+        waypoint: wpName,
+        response: allAuthoredText
+      });
+      var cv3 = recResp3.cv||null;
+      if(cv3){ E=cv3.E||E; B=cv3.B||B; P=cv3.P||P; S=cv3.S||S; coherence=recResp3.coherence||coherence; }
+    }catch(e){}
+  }
+
   var displayQ=arcQLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'(no question — movement only)';
   var displayR=arcRLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'';
   document.getElementById('run-question').textContent=displayQ;
