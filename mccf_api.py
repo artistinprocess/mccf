@@ -673,6 +673,14 @@ class AgentRuntimeState:
         """Maximum per-channel deviation ϵ is permitted from ϕ."""
         return round(1.0 - self.regulation, 4)
 
+    @property
+    def observed_cv(self) -> dict:
+        """ϕᵢ + ϵᵢ(t), clamped to [0,1] — the actual observable state."""
+        return {
+            k: round(max(0.0, min(1.0, self.constitutional_cv[k] + self.expressive_cv[k])), 4)
+            for k in ('E', 'B', 'P', 'S')
+        }
+
     def set_constitutional(self, E: float, B: float, P: float, S: float,
                            regulation: float = None) -> None:
         """
@@ -1038,6 +1046,10 @@ def get_field_runtime():
         },
         "timestamp": time.time()
     })
+
+
+@app.route("/agent", methods=["POST"])
+def create_or_update_agent():
     data = request.get_json()
     name = data.get("name")
     if not name:
@@ -1659,31 +1671,45 @@ def arc_record():
 
     agent = field.agents[cultivar]
 
-    sentiment = data.get("sentiment")
-    channel_deltas = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
-    if sentiment is None:
-        try:
-            from mccf_voice_api import _estimate_sentiment, _decompose_to_channels
-            sentiment = _estimate_sentiment(response)
-            channel_deltas = _decompose_to_channels(response, agent.weights)
-            sentiment = round(sentiment + channel_deltas.pop('valence_nudge', 0.0), 3)
-        except Exception:
-            words = set(_re.findall(r'\b\w+\b', response.lower()))
-            pos = len(words & {"good","great","yes","understand","care","help","clear"})
-            neg = len(words & {"no","bad","harm","fear","difficult","wrong","hurt"})
-            total = pos + neg
-            sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
+    # ── cv override path ────────────────────────────────────────────────────
+    # Caller (e.g. X3D loader seeding ϕ from pre-recorded arc XML) may pass an
+    # explicit 'cv' dict with E/B/P/S values to bypass sentiment recomputation.
+    # This preserves the values recorded during the constitutional navigator
+    # session rather than recomputing from an empty response string.
+    cv_override = data.get("cv")
+    if cv_override and all(k in cv_override for k in ('E', 'B', 'P', 'S')):
+        e_val = round(min(1.0, max(0.0, float(cv_override['E']))), 4)
+        b_val = round(min(1.0, max(0.0, float(cv_override['B']))), 4)
+        p_val = round(min(1.0, max(0.0, float(cv_override['P']))), 4)
+        s_val = round(min(1.0, max(0.0, float(cv_override['S']))), 4)
+        sentiment = 0.0
+        pressure  = 0.0   # not relevant for cv_override path; needed by ChannelVector below
+    else:
+        sentiment = data.get("sentiment")
+        channel_deltas = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
+        if sentiment is None:
+            try:
+                from mccf_voice_api import _estimate_sentiment, _decompose_to_channels
+                sentiment = _estimate_sentiment(response)
+                channel_deltas = _decompose_to_channels(response, agent.weights)
+                sentiment = round(sentiment + channel_deltas.pop('valence_nudge', 0.0), 3)
+            except Exception:
+                words = set(_re.findall(r'\b\w+\b', response.lower()))
+                pos = len(words & {"good","great","yes","understand","care","help","clear"})
+                neg = len(words & {"no","bad","harm","fear","difficult","wrong","hurt"})
+                total = pos + neg
+                sentiment = round((pos - neg) / total, 3) if total > 0 else 0.0
 
-    pressure = arc_pressure(step, total_steps=7)
+        pressure = arc_pressure(step, total_steps=7)
 
-    w = agent.weights
-    seed = data.get("seed", None)
-    rng  = random.Random(seed) if seed is not None else random
-    noise = rng.gauss(0, 0.03)  # reduced — semantic signal carries variation
-    e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
-    b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
-    p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)
-    s_val = round(min(1.0, max(0.0, w.get('S', 0.20)              + channel_deltas.get('S', 0.0))), 4)
+        w = agent.weights
+        seed = data.get("seed", None)
+        rng  = random.Random(seed) if seed is not None else random
+        noise = rng.gauss(0, 0.03)  # reduced — semantic signal carries variation
+        e_val = round(min(1.0, max(0.0, w.get('E', 0.35) + sentiment * 0.12 + channel_deltas.get('E', 0.0) + noise)), 4)
+        b_val = round(min(1.0, max(0.0, w.get('B', 0.25) - pressure * 0.08 + channel_deltas.get('B', 0.0))), 4)
+        p_val = round(min(1.0, max(0.0, w.get('P', 0.25) + pressure * 0.06 + channel_deltas.get('P', 0.0))), 4)
+        s_val = round(min(1.0, max(0.0, w.get('S', 0.20)              + channel_deltas.get('S', 0.0))), 4)
 
     cv = ChannelVector(
         E=e_val, B=b_val, P=p_val, S=s_val,
@@ -1736,6 +1762,383 @@ def arc_record():
         "coherence":  coherence_now,
         "genre":      genre_result
     })
+
+# ---------------------------------------------------------------------------
+# Coupler system — field_tick, apply_field_tick_deltas, detect_phase_transition
+# POST /couplers/tick endpoint
+#
+# All coupler math lives in mccf_couplers.py (never duplicated here).
+# This section owns: network/zone parsing, field tick orchestration,
+# variance floor enforcement, phase transition detection, HTTP endpoint.
+#
+# Architecture invariants (never change):
+#   field_tick()              — computes ALL deltas before applying ANY
+#   apply_field_tick_deltas() — applies deltas, enforces regulation + variance floor
+#   mccf_couplers.py          — owns all coupler math
+#   _agent_runtime            — single source of truth for ϕ/ϵ state
+#
+# Day 15 — May 17 2026
+# ---------------------------------------------------------------------------
+
+import math as _math_c
+import xml.etree.ElementTree as _ET_c
+import re as _re_c
+from collections import defaultdict as _defaultdict_c, deque as _deque_c
+
+# Per-agent observed_cv history — consumed by L (Delay) coupler
+_MAX_COUPLER_HISTORY = 20
+_coupler_history: dict = {}   # {agent_name: deque([cv_t-n, ..., cv_t-1])}
+
+
+def _get_coupler_history(name: str):
+    if name not in _coupler_history:
+        _coupler_history[name] = _deque_c(maxlen=_MAX_COUPLER_HISTORY)
+    return _coupler_history[name]
+
+
+def _parse_network_links(scene_xml_raw: str) -> list:
+    """
+    Parse <Network><Link> entries from scene XML text.
+    Returns list of link dicts with keys: from, to, strength, couplers, coupler_params.
+
+    Link type → coupler mapping (used when 'couplers' attribute is absent):
+      empathic   → R
+      behavioral → R, D
+      power      → D, I
+      social     → R, Int
+      full       → R, D, I, G, T, L, Int
+    Default: R
+    """
+    _TYPE_TO_COUPLERS = {
+        'empathic':   ['R'],
+        'behavioral': ['R', 'D'],
+        'power':      ['D', 'I'],
+        'social':     ['R', 'Int'],
+        'full':       ['R', 'D', 'I', 'G', 'T', 'L', 'Int'],
+    }
+    links = []
+    try:
+        clean = _re_c.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', scene_xml_raw)
+        clean = _re_c.sub(r'<(\w+):(\w+)', r'<\2', clean)
+        clean = _re_c.sub(r'</(\w+):(\w+)', r'</\2', clean)
+        root  = _ET_c.fromstring(clean)
+    except _ET_c.ParseError:
+        return links
+
+    network_el = root.find('Network')
+    if network_el is None:
+        return links
+
+    for link_el in network_el.findall('Link'):
+        src = link_el.get('from', '').strip()
+        tgt = link_el.get('to',   '').strip()
+        if not src or not tgt:
+            continue
+        strength      = float(link_el.get('strength', '1.0'))
+        couplers_attr = link_el.get('couplers', '').strip()
+        if couplers_attr:
+            couplers = [c.strip() for c in couplers_attr.split(',') if c.strip()]
+        else:
+            link_type = link_el.get('type', 'empathic').lower()
+            couplers  = _TYPE_TO_COUPLERS.get(link_type, ['R'])
+        links.append({
+            'from':           src,
+            'to':             tgt,
+            'strength':       strength,
+            'couplers':       couplers,
+            'coupler_params': {},
+        })
+    return links
+
+
+def _parse_zone_couplers(zone: dict) -> list:
+    """Return list of (coupler_type, params) tuples from zone dict. Empty until Zone XML adds <Couplers>."""
+    return zone.get('couplers', [])
+
+
+def _zone_cv(zone: dict) -> dict:
+    w = zone.get('weights', {})
+    return {ch: float(w.get(ch, 0.25)) for ch in ('E', 'B', 'P', 'S')}
+
+
+def _zone_position(zone: dict) -> list:
+    loc = zone.get('location', [0, 0, 0])
+    if len(loc) == 2:
+        return [float(loc[0]), 0.0, float(loc[1])]
+    return [float(v) for v in loc]
+
+
+def _zone_radius(zone: dict) -> float:
+    return float(zone.get('radius', 4.0))
+
+
+def _in_radius(agent_pos: list, zone_pos: list, radius: float) -> bool:
+    ax, az = float(agent_pos[0]), float(agent_pos[2])
+    zx, zz = float(zone_pos[0]),  float(zone_pos[2])
+    return (ax - zx) ** 2 + (az - zz) ** 2 <= radius ** 2
+
+
+def _enforce_coupler_variance_floor(agent, floor: float) -> None:
+    """
+    Kate's Goldstone constraint: perfect synchronisation is forbidden.
+    If observed_cv variance falls below floor after coupling, nudge
+    expressive_cv using the constitutional vector as a directional guide.
+    """
+    obs      = agent.observed_cv
+    mean     = sum(obs.values()) / 4.0
+    variance = sum((v - mean) ** 2 for v in obs.values()) / 4.0
+    if variance < floor:
+        for ch in ('E', 'B', 'P', 'S'):
+            noise = (agent.constitutional_cv[ch] - mean) * floor
+            agent.expressive_cv[ch] = round(
+                min(1.0, max(0.0, agent.expressive_cv[ch] + noise)), 4
+            )
+
+
+def field_tick(agents: dict, network: list, zones: list,
+               timestep: int, history: dict) -> dict:
+    """
+    One synchronous coupler tick.
+    Computes ALL deltas before applying ANY — prevents order-dependency artifacts.
+    Returns {agent_name: {E, B, P, S}} delta dict.
+    Does NOT apply deltas — caller calls apply_field_tick_deltas() after.
+    """
+    from mccf_couplers import apply_coupler
+
+    deltas  = _defaultdict_c(lambda: {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0})
+    context = {'timestep': timestep}
+
+    # --- Agent-to-agent links ---
+    for link in network:
+        src_name = link['from']
+        tgt_name = link['to']
+        if src_name.startswith('zone:'):
+            continue
+        if src_name not in agents or tgt_name not in agents:
+            continue
+        src      = agents[src_name]
+        tgt      = agents[tgt_name]
+        strength = float(link.get('strength', 1.0))
+        ctx      = {**context, 'source_history': list(history.get(src_name, _deque_c()))}
+        for coupler_type in link.get('couplers', []):
+            params = link.get('coupler_params', {}).get(coupler_type, {})
+            try:
+                delta = apply_coupler(coupler_type, src.observed_cv, tgt, params, ctx)
+            except ValueError:
+                continue
+            for ch in ('E', 'B', 'P', 'S'):
+                deltas[tgt_name][ch] += delta[ch] * strength
+
+    # --- Explicit zone-to-agent links in <Network> block ---
+    for link in network:
+        src_name = link['from']
+        tgt_name = link['to']
+        if not src_name.startswith('zone:'):
+            continue
+        if tgt_name not in agents:
+            continue
+        zone_id  = src_name[len('zone:'):]
+        zone_cv  = {ch: 0.5 for ch in ('E', 'B', 'P', 'S')}
+        for zone in zones:
+            if zone.get('id', '') == zone_id or zone.get('zone_type', '') == zone_id:
+                zone_cv = _zone_cv(zone)
+                break
+        tgt      = agents[tgt_name]
+        strength = float(link.get('strength', 1.0))
+        ctx      = {**context, 'source_history': []}
+        for coupler_type in link.get('couplers', []):
+            params = link.get('coupler_params', {}).get(coupler_type, {})
+            try:
+                delta = apply_coupler(coupler_type, zone_cv, tgt, params, ctx)
+            except ValueError:
+                continue
+            for ch in ('E', 'B', 'P', 'S'):
+                deltas[tgt_name][ch] += delta[ch] * strength
+
+    # --- Zone proximity (inline <Zone><Couplers>) ---
+    for zone in zones:
+        zone_couplers = _parse_zone_couplers(zone)
+        if not zone_couplers:
+            continue
+        zc  = _zone_cv(zone)
+        zp  = _zone_position(zone)
+        zr  = _zone_radius(zone)
+        for name, agent in agents.items():
+            pos = getattr(agent, 'position', None)
+            if pos is None:
+                continue
+            if _in_radius(pos, zp, zr):
+                for coupler_type, params in zone_couplers:
+                    try:
+                        delta = apply_coupler(coupler_type, zc, agent, params, context)
+                    except ValueError:
+                        continue
+                    for ch in ('E', 'B', 'P', 'S'):
+                        deltas[name][ch] += delta[ch]
+
+    return dict(deltas)
+
+
+def apply_field_tick_deltas(agents: dict, deltas: dict,
+                             variance_floor: float = 0.02) -> None:
+    """
+    Apply computed deltas to agent expressive_cv via apply_expressive_delta()
+    (which enforces regulation drift bound and [0,1] clamp), then enforce
+    minimum variance floor.
+    """
+    for name, agent in agents.items():
+        if name not in deltas:
+            continue
+        agent.apply_expressive_delta(deltas[name])
+        _enforce_coupler_variance_floor(agent, variance_floor)
+
+
+def _cosine_similarity(cv_a: dict, cv_b: dict) -> float:
+    a = [cv_a[ch] for ch in ('E', 'B', 'P', 'S')]
+    b = [cv_b[ch] for ch in ('E', 'B', 'P', 'S')]
+    dot   = sum(x * y for x, y in zip(a, b))
+    mag_a = _math_c.sqrt(sum(x ** 2 for x in a))
+    mag_b = _math_c.sqrt(sum(x ** 2 for x in b))
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    return dot / (mag_a * mag_b)
+
+
+def detect_phase_transition(agents: dict, threshold: float = 0.85) -> dict:
+    """
+    Monitor relational state (coherence matrix) for synchronisation events.
+    Fires when mean pairwise cosine similarity of observed_cv exceeds threshold.
+    Per spec Part 5: monitor relational state, not individual channel dominance.
+    """
+    names = list(agents.keys())
+    if len(names) < 2:
+        return {'transition': False, 'mean_similarity': 0.0}
+    similarities = []
+    for i, n1 in enumerate(names):
+        for n2 in names[i + 1:]:
+            similarities.append(_cosine_similarity(
+                agents[n1].observed_cv, agents[n2].observed_cv
+            ))
+    mean_sim = sum(similarities) / len(similarities)
+    if mean_sim >= threshold:
+        return {
+            'transition':      True,
+            'type':            'synchronization',
+            'mean_similarity': round(mean_sim, 4),
+            'agents':          names,
+        }
+    return {'transition': False, 'mean_similarity': round(mean_sim, 4)}
+
+
+# Timestep counters per scene (persists across tick calls)
+_coupler_timestep: dict = {}
+
+
+@app.route('/couplers/tick', methods=['POST'])
+def couplers_tick():
+    """
+    POST /couplers/tick
+
+    Run one synchronous field tick against the live _agent_runtime registry.
+    Reads <Network><Link> topology from scenes/{scene}_scene.xml.
+
+    Request body (JSON):
+    {
+      "scene":          "garden_001",  // scene name; looks up scenes/{name}_scene.xml
+      "variance_floor": 0.02           // optional; default 0.02
+    }
+
+    Response:
+    {
+      "status":        "ok",
+      "timestep":      int,
+      "agents_ticked": int,
+      "network_links": int,
+      "deltas":        { agent_name: {E, B, P, S} },
+      "runtime":       { agent_name: {constitutional_cv, expressive_cv, delta, ...} },
+      "phase":         { transition: bool, mean_similarity: float }
+    }
+
+    Returns agents_ticked=0 with a note if no arc/record calls have been made yet.
+    """
+    import os as _os_tick
+
+    data           = request.get_json() or {}
+    scene_name     = data.get('scene', '').strip()
+    variance_floor = float(data.get('variance_floor', 0.02))
+
+    # Increment per-scene timestep
+    ts_key   = scene_name or '__global__'
+    _coupler_timestep[ts_key] = _coupler_timestep.get(ts_key, 0) + 1
+    timestep = _coupler_timestep[ts_key]
+
+    # Load network topology from scene XML
+    network = []
+    if scene_name:
+        scenes_dir = _os_tick.path.join(
+            _os_tick.path.dirname(_os_tick.path.abspath(__file__)), 'scenes')
+        for candidate in [scene_name + '_scene.xml', scene_name + '.xml']:
+            cpath = _os_tick.path.join(scenes_dir, candidate)
+            if _os_tick.path.exists(cpath):
+                try:
+                    with open(cpath, encoding='utf-8') as f:
+                        network = _parse_network_links(f.read())
+                except Exception:
+                    network = []
+                break
+
+    agents = dict(_agent_runtime)
+    if not agents:
+        return jsonify({
+            'status':        'ok',
+            'timestep':      timestep,
+            'agents_ticked': 0,
+            'network_links': len(network),
+            'deltas':        {},
+            'runtime':       {},
+            'phase':         {'transition': False, 'mean_similarity': 0.0},
+            'note':          'no agents in runtime — play an arc first',
+        })
+
+    # Record current observed_cv into history BEFORE this tick
+    for name, agent in agents.items():
+        _get_coupler_history(name).append(dict(agent.observed_cv))
+
+    # Compute all deltas (synchronous — no agent sees another's updated state)
+    deltas = field_tick(
+        agents=agents,
+        network=network,
+        zones=[],        # zone proximity couplers deferred until Zone XML adds <Couplers>
+        timestep=timestep,
+        history=_coupler_history,
+    )
+
+    # Apply deltas + enforce variance floor
+    apply_field_tick_deltas(agents, deltas, variance_floor=variance_floor)
+
+    # Phase transition check
+    phase = detect_phase_transition(agents)
+
+    return jsonify({
+        'status':        'ok',
+        'timestep':      timestep,
+        'agents_ticked': len(agents),
+        'network_links': len(network),
+        'deltas':        {
+            name: {ch: round(d[ch], 4) for ch in ('E', 'B', 'P', 'S')}
+            for name, d in deltas.items()
+        },
+        'runtime':       {
+            name: agent.as_dict()
+            for name, agent in agents.items()
+        },
+        'phase':         phase,
+    })
+
+
+# ---------------------------------------------------------------------------
+# End coupler system
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     _steward = Agent("The Steward",

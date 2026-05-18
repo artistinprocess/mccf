@@ -175,13 +175,20 @@ X3D ProximitySensor → /sensor API → ChannelVector → CoherenceField
 ### Browser Interfaces
 | File | Purpose |
 |------|---------|
-| `mccf_editor.html` | Agent + coherence field editor |
-| `mccf_waypoint_editor.html` | Scene composer: zones, waypoints, paths, arc analysis |
-| `mccf_x3d_demo.html` | X3D/X_ITE live scene with avatar affect routing |
-| `mccf_voice.html` | Voice agent with Web Speech API |
-| `mccf_ambient.html` | Generative ambient music engine |
-| `mccf_constitutional.html` | Constitutional cultivar arc navigator |
-| `mccf_energy.html` | Energy field / moral topology visualizer |
+| `static/mccf_editor.html` | Agent + coherence field editor |
+| `static/mccf_waypoint_editor.html` | Scene Composer: zones, paths, network topology, arc recording (V4) |
+| `static/mccf_x3d_loader.html` | X3D/X_ITE scene viewer with arc playback and ϕ/ϵ coupler display (V4) |
+| `static/mccf_voice.html` | Voice agent with Web Speech API |
+| `static/mccf_ambient.html` | Generative ambient music engine |
+| `static/mccf_constitutional.html` | Constitutional cultivar arc navigator (V2 — see Scene Composer for V4 workflow) |
+| `static/mccf_energy.html` | Energy field / moral topology visualizer |
+
+### V4 Coupler System
+| File | Purpose |
+|------|---------|
+| `mccf_couplers.py` | All seven coupler implementations (R, D, I, G, T, L, ∫) |
+| `MCCF_Coupler_Implementation_Spec.md` | Coupler design specification |
+| `MCCF_Relational_Dynamics_Extension_Spec.md` | Bayesian trust, salience memory, forgetting, attentional filter — design ready |
 
 ### Demo
 | File | Purpose |
@@ -459,7 +466,83 @@ The warning was written before they got here.
 
 ---
 
-*March 2026 — Len Bullard / Claude Sonnet 4.6 / ChatGPT / Gemini*
+### V4.0 — Coupler System: Relational Emotional Dynamics in X3D
+*May 2026 — "The New York Rocket"*
+
+**The milestone:** ϵ (expressive vector) confirmed drifting from ϕ (constitutional
+vector) under coupler pressure. Two agents in a shared X3D scene now influence
+each other's emotional state through a live field of mathematical relationships.
+This is the first instance of relational dynamics as a field phenomenon in MCCF.
+
+**New file: `mccf_couplers.py`**
+
+All seven coupler functions implementing the relational dynamics specification
+reviewed by Kate Goldstone (Day 12). Each coupler reads the observed state of
+a source agent and computes a delta to apply to the target's expressive vector:
+
+| Coupler | Symbol | What it models |
+|---------|--------|----------------|
+| Resonance | R | Mutual attunement — move toward source state |
+| Damping | D | Stabilization — pull expressive state toward constitutional baseline |
+| Inversion | I | Conflict, counterbalance — move away from source |
+| Gated | G | Conditional coupling — fires inner coupler only when threshold met |
+| Threshold | T | Nonlinear amplification — phase transition trigger |
+| Delay | L | Time-shifted response — resentment, lag, oscillation |
+| Integration | ∫/Int | Slow accumulation — bonding, trauma, baseline drift |
+
+Adaptive R: `R_effective = R · e^(-λ · H_sym)` — asymmetric bonds are unstable.
+Minimum variance floor enforced after every tick — perfect synchronization forbidden.
+Synchronous update: all deltas computed before any applied — no order-dependency artifacts.
+
+**`mccf_api.py` additions:**
+
+- `observed_cv` property on `AgentRuntimeState` — ϕ + ϵ clamped to [0,1]
+- `cv_override` path in `arc/record` — pass explicit E/B/P/S to bypass sentiment
+- `field_tick()`, `apply_field_tick_deltas()`, `detect_phase_transition()`
+- `_parse_network_links()` — reads `<Network><Link>` from scene XML
+- `POST /couplers/tick` endpoint — one field tick per waypoint arrival
+- `POST /agent` dead code fix — route decorator was missing since v2 refactor
+
+**Scene Composer (`static/mccf_waypoint_editor.html`):**
+
+- Network tab: authors `<Network><Link>` topology in scene XML
+- Link types: empathic (R), behavioral (R+D), power (D+I), social (R+Int), full
+- `_sceneArcAdvance()` now calls `arc/record` at every waypoint — scripted and
+  statement-only waypoints use authored text for sentiment estimation
+- Constitutional Navigator no longer required for arc authoring workflow
+
+**X3D Loader (`static/mccf_x3d_loader.html`):**
+
+- `_seedArcRecord()` — seeds ϕ from arc XML CV values on each waypoint arrival
+- `_fireCouplerTick()` — calls `POST /couplers/tick` after each waypoint arrival
+- ϕ/ϵ panel: 8px bars, 11px font, bold non-zero delta values
+
+**Architecture invariants established (never change):**
+```
+ϕ (constitutional_cv) — written ONLY by arc/record. Never by couplers.
+ϵ (expressive_cv)     — written ONLY by apply_expressive_delta().
+observed_cv           — ϕ + ϵ clamped [0,1]. What couplers read.
+max_drift             = 1.0 - regulation. Hard cap on ϵ displacement.
+Variance floor        — enforced after every tick. Perfect sync forbidden.
+field_tick()          — synchronous update. All deltas before any applied.
+```
+
+**Design complete, implementation ready:**
+`MCCF_Relational_Dynamics_Extension_Spec.md` — four extensions designed from
+Kate's "Coherent Incompleteness" discussion (May 17 2026):
+1. Bayesian trust — Beta distribution prior per network link; updates from tick history
+2. Emotional salience memory — phase events and high ϵ drift mark significant moments
+3. Controlled forgetting — ϵ residue decays between sessions, weighted by salience
+4. Attentional filter — per-cultivar receptivity vector in cultivar XML
+
+**Validation:**
+Both Cindy and The Steward appear in the ϕ/ϵ panel during arc playback.
+Small but detectable ϵ variation confirmed. `links=2`, `agents_ticked=2`.
+
+
+---
+
+*March–May 2026 — Len Bullard / Claude Sonnet 4.6 / ChatGPT / Gemini*
 
 ---
 

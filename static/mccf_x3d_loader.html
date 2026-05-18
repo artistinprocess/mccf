@@ -55,34 +55,34 @@ button.active { background: #4af0a8; color: #111; }
 #runtime-toggle:hover { color: #a0d0f8; }
 #runtime-agents { display: block; }
 .rt-agent {
-  margin-top: 4px; padding-top: 3px;
-  border-top: 1px solid #161e2c;
+  margin-top: 6px; padding-top: 4px;
+  border-top: 1px solid #1c2a3a;
 }
 .rt-agent-name {
-  color: #c0d0e0; font-size: 10px; margin-bottom: 2px;
+  color: #d0e0f0; font-size: 11px; font-weight: bold; margin-bottom: 3px;
 }
-.rt-bars { display: flex; flex-direction: column; gap: 1px; }
-.rt-row { display: flex; align-items: center; gap: 3px; font-size: 9px; }
-.rt-ch  { width: 8px; text-align: right; }
+.rt-bars { display: flex; flex-direction: column; gap: 3px; }
+.rt-row { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.rt-ch  { width: 10px; text-align: right; font-weight: bold; }
 .rt-bar-wrap {
-  flex: 1; height: 4px; background: #0d1520;
-  border-radius: 2px; overflow: hidden; position: relative;
+  flex: 1; height: 8px; background: #0d1520;
+  border-radius: 3px; overflow: hidden; position: relative;
 }
 .rt-bar-phi {
   position: absolute; top: 0; left: 0; height: 100%;
-  background: #3a6090; border-radius: 2px;
+  background: #3a6090; border-radius: 3px;
   transition: width 0.4s ease;
 }
 .rt-bar-eps {
   position: absolute; top: 0; left: 0; height: 100%;
-  background: #60d090; border-radius: 2px; opacity: 0.75;
+  background: #60d090; border-radius: 3px; opacity: 0.85;
   transition: width 0.4s ease;
 }
-.rt-val { width: 32px; text-align: right; color: #6a8090; }
-.rt-drift-pos { color: #60d090; }
-.rt-drift-neg { color: #f07060; }
+.rt-val { width: 38px; text-align: right; color: #90b0c0; font-size: 11px; }
+.rt-drift-pos { color: #4af0a8; font-weight: bold; }
+.rt-drift-neg { color: #f07060; font-weight: bold; }
 .rt-drift-zero { color: #2a3a4a; }
-.rt-meta { font-size: 9px; color: #3a5060; margin-top: 2px; }
+.rt-meta { font-size: 10px; color: #4a6070; margin-top: 3px; }
 /* ── Greek Chorus overlay ── */
 #chorus-overlay {
   display: none;
@@ -1463,9 +1463,13 @@ async function pbPlay() {
       // Display WP1 now — avatar is already there. TTS onComplete → pbReleaseDwell → dwell → Timer_1.
       pbActivateX3DTimers(cultivars);
       pbUpdateDisplay(stateData);
+      _seedArcRecord(stateData);  // seed ϕ for WP1 — pbStep fires only from seg 1 onward
+      _fireCouplerTick();
     } else {
       // JS-lerp mode: poll drives display
       pbUpdateDisplay(data.state||data);
+      _seedArcRecord(data.state||data);
+      _fireCouplerTick();
       pbStartPolling(pace);
       pbActivateX3DTimers(cultivars);
     }
@@ -1473,11 +1477,99 @@ async function pbPlay() {
   } catch(e) { document.getElementById('pb-step-info').textContent='Play failed: '+e.message; }
 }
 
+// ─────────────────────────────────────────────
+// Coupler tick — fired at each waypoint arrival
+// ─────────────────────────────────────────────
+// Two-phase, fire-and-forget:
+//   1. _seedArcRecord(state) — calls POST /arc/record to write ϕ for each
+//      cultivar in the current playback state.  arc/record is the ONLY writer
+//      of constitutional_cv (ϕ).  Without this, _agent_runtime is empty and
+//      the coupler tick has nothing to act on.
+//      CV values come directly from the arc XML waypoint (E/B/P/S attributes
+//      recorded during the constitutional navigator session).
+//   2. _fireCouplerTick(sceneName) — calls POST /couplers/tick once ϕ is seeded.
+//
+// pollRuntime() picks up updated ϵ on its next 750ms cycle — the ϕ/ϵ panel
+// will show non-zero delta bars after the first waypoint arrival.
+
+function _seedArcRecord(state) {
+  // Seeds ϕ (constitutional_cv) so arc/record populates _agent_runtime before
+  // the coupler tick runs.  Two paths:
+  //   A) Arc XML has E/B/P/S on the waypoint (recorded with today's composer) —
+  //      pass them directly as a cv override, bypassing sentiment recomputation.
+  //   B) Arc XML has no CV values (recorded before today's composer fix) —
+  //      call arc/record with response='' so it computes from cultivar weights.
+  //      This seeds ϕ with the cultivar's constitutional baseline, which is
+  //      correct and sufficient for the coupler tick to run.
+  if (!state || state.status === 'idle') return;
+  var wp = state.current_waypoint || {};
+  if (!wp.cultivar && state.cultivars && state.cultivars.length) {
+    wp.cultivar = state.cultivars[0];
+  }
+  if (!wp.cultivar) return;
+
+  var body = {
+    cultivar: wp.cultivar,
+    step:     wp.stepno || state.step || 1,
+    response: ''
+  };
+
+  // Path A: arc XML has CV values — use them directly
+  if (wp.E !== undefined && wp.B !== undefined) {
+    body.cv = {
+      E: parseFloat(wp.E) || 0.0,
+      B: parseFloat(wp.B) || 0.0,
+      P: parseFloat(wp.P) || 0.0,
+      S: parseFloat(wp.S) || 0.0
+    };
+  }
+  // Path B: no CV values — arc/record will compute from cultivar weights (no cv key needed)
+
+  fetch(API + '/arc/record', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      console.log('_seedArcRecord: ϕ seeded for ' + wp.cultivar
+        + (d.cv ? ' E=' + (d.cv.E||0).toFixed(3) + ' B=' + (d.cv.B||0).toFixed(3)
+                + ' P=' + (d.cv.P||0).toFixed(3) + ' S=' + (d.cv.S||0).toFixed(3) : ''));
+    })
+    .catch(function() {});
+}
+
+function _fireCouplerTick(sceneName) {
+  if (!sceneName) {
+    var xSel = document.getElementById('x3d-file');
+    var fname = xSel ? xSel.value : '';
+    sceneName = fname.replace(/\.x3d$/i, '');
+  }
+  if (!sceneName) return;
+  fetch(API + '/couplers/tick', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({scene: sceneName})
+  }).then(function(r) { return r.json(); })
+    .then(function(d) {
+      console.log('couplers/tick ts=' + d.timestep
+        + ' links=' + d.network_links
+        + ' agents=' + d.agents_ticked
+        + (d.phase && d.phase.transition ? ' PHASE TRANSITION mean_sim=' + d.phase.mean_similarity : ''));
+    })
+    .catch(function() {});
+}
+
 var _pbStepInFlight = false;
 async function pbStep() {
   if (_pbStepInFlight) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
   _pbStepInFlight = true;
-  try { const r=await fetch(API+'/arc/playback/step',{method:'POST'}); pbUpdateDisplay(await r.json()); } catch(e) {}
+  try {
+    const r = await fetch(API+'/arc/playback/step', {method:'POST'});
+    const state = await r.json();
+    pbUpdateDisplay(state);
+    _seedArcRecord(state);   // seed ϕ from arc XML waypoint CV values
+    _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
+  } catch(e) {}
   finally { _pbStepInFlight = false; }
 }
 async function pbStop() {
@@ -1694,6 +1786,7 @@ function pbUpdateDisplayFinal(state) {
       body: JSON.stringify({arc_file: arcFile})
     }).catch(function() {});
   }
+  _fireCouplerTick();  // final waypoint arrived — one last field tick before arc ends
   startChorusPoll();
 }
 

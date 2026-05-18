@@ -1,19 +1,19 @@
 # MCCF Users Guide
 
-## Multi-Channel Coherence Field — v2.2 ("Q")
+## Multi-Channel Coherence Field — V4 ("The New York Rocket")
 
 **Platform:** Windows 11, Python 3.14, Flask, Ollama  
 **Repository:** <https://github.com/artistinprocess/mccf>  
-**Last updated:** April 2026  
+**Last updated:** May 2026  
 **Authors:** Len Bullard / Claude Sonnet 4.6
 
 ---
 
 > **This is an ongoing research project.** MCCF is under active development.
 > Interfaces, endpoints, and behaviors will change between versions. What you
-> see here reflects V2.2 as tested and confirmed in April 2026. Future versions
-> will extend the arc system, add multi-LLM support, add configurable arc types,
-> and improve X3D rendering. See the repository for current status.
+> see here reflects V4 as tested and confirmed in May 2026. V4 introduces the
+> coupler system — relational emotional dynamics between agents in the X3D scene.
+> See the repository for current status.
 
 ---
 
@@ -37,6 +37,15 @@ The internal name for V2.2 is **Q** — Quantum Persona. Agents exist in
 superposition across behavioral states until the constitutional arc forces a
 collapse. Each waypoint is a measurement. The export is the wave function
 after observation.
+
+V4 ("The New York Rocket") extends this with the **coupler system** — a
+mathematical architecture for relational emotional dynamics between agents.
+In V4, agents in the same X3D scene do not just perform independently. They
+respond to each other through a live field of influence, implemented as seven
+coupler types that model resonance, damping, inversion, conditional coupling,
+threshold effects, delay, and slow integration. The constitutional vector (ϕ)
+remains the authored character identity. The expressive vector (ϵ) is what
+the scene does to that identity in real time. See the Coupler System section.
 
 ---
 
@@ -114,15 +123,17 @@ Go to the Sensors tab. Set From: The Steward, To: The Archivist. Fire ten
 times. Repeat with Archivist to Witness. Watch the coherence matrix populate.
 This builds the interaction history the rest of the system reads from.
 
-**3. Run the Constitutional Arc**
+**3. Record a Scene Arc**
 
 ```
-http://localhost:5000/static/mccf_constitutional.html
+http://localhost:5000/static/mccf_waypoint_editor.html
 ```
 
-Click "The Steward" in the cultivar list. In Setup: select Ollama adapter,
-set model to llama3.2:latest, click Apply. Click "Run Full Arc". When complete,
-click "Export Arc State". This is your first real data.
+Open the Scene Composer. Load or create a scene. In the **Record Scene Arc**
+tab, select a path, set the adapter and model, and click Record Scene Arc.
+The composer records each waypoint through the affective engine, computes
+E/B/P/S values from the dialogue, and saves the arc XML to `exports/`.
+This is your primary authoring workflow in V4.
 
 **4. Open the X3D Scene**
 
@@ -130,10 +141,11 @@ click "Export Arc State". This is your first real data.
 http://localhost:5000/static/mccf_x3d_loader.html
 ```
 
-Three colored avatars should be visible and spatially separated. HUD shows
-agents: 3 and hothouse: 3/3 tracked. Open the Constitutional Navigator in a
-second tab and run an arc — the active avatar will change transparency and
-position in real time as each waypoint completes.
+Load the scene X3D file and select the arc from the dropdown. Click Play Scene
+Arc. Avatars move through their paths and the ϕ/ϵ panel (▼ ϕ/ϵ state, top right)
+shows both the constitutional vector and the live expressive state for each agent.
+After each waypoint arrival, the coupler system runs one field tick — watch the
+ϵ bars drift away from the ϕ bars as agents influence each other.
 
 **5. Start the Ambient Engine**
 
@@ -185,8 +197,13 @@ interaction history. V2.1: Apply no longer wipes the agent's coherence record.
 
 `http://localhost:5000/static/mccf_constitutional.html`
 
-The primary measurement instrument. Runs a named cultivar through seven
-waypoints of escalating pressure and records behavioral state at each step.
+The V2 measurement instrument. Runs a named cultivar through seven waypoints
+of escalating pressure and records behavioral state at each step. In V4 this
+module is no longer required for normal workflow — the Scene Composer's Record
+Scene Arc function handles arc authoring and calls the affective engine at every
+waypoint automatically. The Constitutional Navigator remains useful for isolated
+cultivar testing and for understanding how the E/B/P/S channels respond to
+structured pressure sequences outside the context of a scene.
 
 **Setup:** Select Ollama adapter, set model, click Apply. Check "Speak
 responses" to hear the arc aloud. In Edge, a full list of neural voices
@@ -339,12 +356,20 @@ result in zone\_type showing as neutral and the wrong ambient theme.
 
 `http://localhost:5000/static/mccf_x3d_loader.html`
 
-Three-dimensional spatial representation of the coherence field. Open this
-alongside the Constitutional Navigator to observe avatar changes in real time
-as each arc waypoint completes.
+Three-dimensional spatial representation of the coherence field. In V4 this
+is the primary performance and observation environment. Agents move through
+authored paths, speak their dialogue, and influence each other's emotional
+state through the coupler system — all in the same scene simultaneously.
 
-**Navigation:** VP1-VP7 jump to waypoints. VP8 shows full overview.
+**Navigation:** Use the viewpoint buttons for fixed positions.
 Click/drag to rotate. Scroll to zoom.
+
+**ϕ/ϵ panel:** Click **▼ ϕ/ϵ state** in the top-right overlay to expand the
+live emotional state display. Each agent shows two overlaid bars per channel:
+blue (ϕ — constitutional vector, authored identity) and green (ϵ — expressive
+vector, live coupler-driven state). Non-zero delta values in bright green or
+red indicate active coupler influence. The bars update every 750ms via the
+`/field/runtime` endpoint.
 
 **What you are seeing:**
 
@@ -473,6 +498,154 @@ directly drives avatar Z-position offset from baseline. S=0.5 means no
 movement. S<0.5 retreats from scene center. S>0.5 approaches. Most cultivars
 run below S=0.5 under constitutional arc pressure — the scene shows the cost
 of that disposition in space.
+
+---
+
+---
+
+## The Coupler System (V4)
+
+### The Big Idea
+
+In a traditional animation system, characters move because a director wrote
+keyframes. In MCCF, characters move through emotional space because of what
+is happening between them — and the coupler system is the mechanism that makes
+that possible.
+
+A coupler is a mathematical relationship between two agents in a scene. It reads
+the emotional state of one agent and uses it to push the emotional state of
+another. The result is that characters respond to each other in real time, not
+because someone scripted a response, but because the field between them is
+doing something.
+
+Every agent carries two emotional vectors at all times:
+
+**ϕ (constitutional vector)** — the character as written. The stable identity
+authored in the Character Creator. Frozen at arc load. Written only by the
+affective engine during arc recording. Never touched by couplers.
+
+**ϵ (expressive vector)** — the character as affected. What the scene is doing
+to that identity right now. Written exclusively by couplers each tick. Bounded
+by the agent's regulation value: `max_drift = 1.0 - regulation`.
+
+The observable state at any moment is `ϕ + ϵ`, clamped to [0,1]. The
+architectural guarantee: a scene can move a character deeply without destroying
+who that character is.
+
+### The Seven Couplers
+
+**R — Resonance**
+*The workhorse of synchronization. What happens when two people genuinely hear
+each other.*
+
+Resonance moves a target agent's expressive state toward the source agent's
+state. If Cindy is emotionally elevated and the Steward is near her, resonance
+pulls the Steward toward that elevation. The effect weakens automatically when
+the difference between their states is large — called adaptive coupling. Two
+people who are very far apart emotionally have difficulty connecting. The
+coupling strength decays as asymmetry increases: `R_effective = R · e^(-λ · H_sym)`.
+Asymmetric bonds are unstable. This is not a design choice; it is an observation
+about how emotional resonance actually works.
+
+**D — Damping**
+*The stabilizer. Presence as a calming force. Authority expressed as regulation.*
+
+Damping pulls a target agent's expressive state back toward their constitutional
+baseline. It does not push toward any other state — it reduces intensity. A
+highly regulated character — a therapist, a priest, a commanding officer — can
+damp the emotional volatility of those around them. In dramatic terms, damping
+is what happens when someone walks into a room and things settle down.
+
+**I — Inversion**
+*Conflict, counterbalance, opposition. The coupler of dramatic friction.*
+
+Inversion moves a target agent's expressive state away from the source. Where
+Resonance says "become more like me," Inversion says "push back." This models
+defiance, ideological opposition, complementary roles where one character's rise
+produces another's resistance. Inversion is not hostility — it is structural
+opposition. A skeptic in the presence of a believer. A peacemaker who calms by
+refusing to escalate.
+
+**G — Gated**
+*Conditional influence. Coupling that only activates when something is ready.*
+
+The Gated coupler wraps any other coupler in a condition. It reads the target
+agent's current state and only fires the inner coupler if a threshold is met.
+A gate might say: "only apply resonance if the Steward's social channel is
+above 0.5" — the Steward only opens to Cindy's influence when already in a
+state of social receptivity. Gated couplers make scenes behave differently
+depending on the history of the interaction, not just the current moment.
+
+**T — Threshold**
+*Nonlinear amplification. The tipping point. Phase transition trigger.*
+
+Threshold watches the source agent's state and does nothing until a condition
+is crossed — then amplifies strongly. If a character's emotional channel exceeds
+0.7, Threshold fires and sends a strong signal into the field. This models
+emotional contagion, panic cascades, and the sudden shift when a scene crosses
+a point of no return. Unlike the other couplers which produce gradual drift,
+Threshold produces discontinuous change. It signals a phase transition — a moment
+when the field has crossed into a qualitatively different attractor state.
+
+**L — Delay**
+*Time-shifted response. Resentment, echo, oscillation.*
+
+The Delay coupler responds not to what the source agent is doing now, but to
+what they were doing some number of ticks ago. This introduces temporal structure
+into the relationship. A character still responding to a wound that happened
+earlier in the scene. An echo that arrives after the original signal has moved on.
+An oscillation where one character's response arrives just as the other has shifted
+away, producing a perpetual near-miss. Delay is the coupler of unresolved history.
+
+**∫ — Integration (Int)**
+*Slow accumulation over time. Bonding, habituation, baseline drift.*
+
+Integration produces the slowest, most persistent effect in the system. It moves
+a target agent's expressive state toward the source's state at a very small rate
+per tick — nearly imperceptible moment to moment, but compounding across the full
+length of a scene or across multiple scenes. This is the coupler of bonding and
+of trauma. Two characters linked by integration will end a long arc emotionally
+closer than they began — not because a single dramatic event moved them, but
+because sustained proximity has a cumulative effect.
+
+### How It Works in Practice
+
+The network topology is authored in the Scene Composer (Network tab) and stored
+in the scene XML as `<Network><Link>` elements. Each link specifies a source
+agent, a target agent, the coupler types active on that link, and a global
+strength scalar.
+
+The current test scene uses a bidirectional empathic link between Cindy and
+the Steward at strength 0.60 — both agents apply Resonance to each other.
+
+The field tick runs once per waypoint arrival during arc playback. Every link
+is evaluated. All deltas are computed before any are applied — this synchronous
+update ensures no agent is processed "first." A minimum variance floor prevents
+agents from locking into perfect emotional synchronization after strong coupling.
+The characters always remain distinct.
+
+To observe the coupler system: play an arc, expand the **▼ ϕ/ϵ state** panel,
+and watch the green ϵ bars drift away from the blue ϕ bars as waypoints arrive.
+The delta values (bright green = positive drift, red = negative drift) show
+exactly which channels are being moved by which couplers.
+
+### Authoring Network Topology
+
+In the Scene Composer, open the **Network** tab (between Paths and Export).
+Select source and target agents from the dropdowns, choose the link type
+(empathic, behavioral, power, social, or full), set strength, and click
+Add Link or Add Bidirectional. The network is included in the exported scene
+XML and loaded automatically when the loader opens that scene.
+
+Link types and their default couplers:
+
+| Type | Couplers | Use |
+| --- | --- | --- |
+| empathic | R | Mutual emotional attunement |
+| behavioral | R, D | Patterned response with stabilization |
+| power | D, I | Authority and resistance |
+| social | R, Int | Gradual bonding over time |
+| full | R, D, I, G, T, L, Int | All dynamics active |
 
 ---
 
@@ -645,7 +818,8 @@ updating Python files. Verify version at /ping after restart.
 
 | File | Purpose |
 | --- | --- |
-| mccf\_api.py | Main Flask server, all endpoints, startup agents |
+| mccf\_api.py | Main Flask server, all endpoints, startup agents, coupler tick endpoint |
+| mccf\_couplers.py | All seven coupler implementations (R, D, I, G, T, L, ∫) — V4 |
 | mccf\_core.py | CoherenceField, Agent, MetaState, Gardener |
 | mccf\_llm.py | LLM adapters — Stub, Ollama, Anthropic, OpenAI, Google |
 | mccf\_voice\_api.py | Voice streaming endpoint, arc field recording |
@@ -665,10 +839,10 @@ updating Python files. Verify version at /ping after restart.
 | static/mccf\_launcher.html | Home page |
 | static/mccf\_dashboard.html | Live seven-panel overview |
 | static/mccf\_editor.html | Field Editor |
-| static/mccf\_constitutional.html | Constitutional arc navigator |
+| static/mccf\_constitutional.html | Constitutional arc navigator (V2 — see Scene Composer for V4 workflow) |
 | static/mccf\_voice.html | Voice agent |
-| static/mccf\_waypoint\_editor.html | Scene Composer |
-| static/mccf\_x3d\_loader.html | X3D scene viewer (v3.2) |
+| static/mccf\_waypoint\_editor.html | Scene Composer — zones, paths, agents, network topology, arc recording (V4) |
+| static/mccf\_x3d\_loader.html | X3D scene viewer with arc playback and ϕ/ϵ coupler display (V4) |
 | static/mccf\_lighting.html | Lighting display |
 | static/mccf\_ambient.html | Ambient music engine |
 | static/mccf\_energy.html | Energy field / moral topology |
@@ -682,6 +856,6 @@ updating Python files. Verify version at /ping after restart.
 
 ---
 
-*MCCF Users Guide V2.3.3 — April 2026*  
+*MCCF Users Guide V4.0 — May 2026*  
 *Len Bullard / Claude Sonnet 4.6*  
-*"Q" — Quantum Persona*
+*"The New York Rocket"*
