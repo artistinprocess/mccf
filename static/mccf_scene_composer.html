@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCCF Scene Composer - V3</title>
+<title>MCCF Scene Composer - V4</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
 :root {
@@ -121,6 +121,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .net-del  { background: none; border: 1px solid var(--border); border-radius: 3px;
   color: var(--danger); cursor: pointer; padding: 1px 6px; font-size: 12px; }
 .net-del:hover { border-color: var(--danger); }
+/* waypointOrder badge on path list items */
+.order-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--s3); border: 1px solid var(--warm);
+  font-size: 12px; color: var(--warm); font-weight: 700; flex-shrink: 0;
+}
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
   padding: 6px 16px; font-size: 15px; color: var(--warm); opacity: 0; transition: all 0.18s; pointer-events: none; z-index: 999; }
@@ -131,7 +138,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <body>
 <header>
   <div class="logo">MCCF <span>Scene Composer</span></div>
-  <div class="vbadge">V3</div>
+  <div class="vbadge">V4</div>
   <div class="mode-tabs">
     <button class="mtab active" onclick="setMode('scene')">Scene</button>
     <button class="mtab" onclick="setMode('zones')">Zones</button>
@@ -255,6 +262,12 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
           <textarea id="z-chorus-persona" rows="3" placeholder="You are the garden itself. Speak in cold observations. Never more than two sentences."></textarea>
         </div>
       </div>
+      <div class="sh" style="margin-top:12px">Zone Commands</div>
+      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Rules that trigger Ollama when cultivars enter, dwell, or exit this zone.</div>
+        <div id="z-commands-list" style="margin-bottom:6px"></div>
+        <button class="btn" style="font-size:12px;width:100%" onclick="addZoneCommand()">+ Add Command Rule</button>
+      </div>
       <div class="btn-row">
         <button class="btn pri" onclick="confirmZone()">Place on Map</button>
         <button class="btn" onclick="cancelPlace()">Cancel</button>
@@ -313,6 +326,21 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="sh">New Path</div>
       <label>Path Name</label><input id="p-name" type="text" placeholder="path_witness">
       <label>Agent</label><select id="p-agent"></select>
+      <!-- ── waypointOrder REQUIRED field ── -->
+      <label style="margin-top:10px">
+        Waypoint Order
+        <span style="color:var(--danger);font-size:11px;margin-left:4px">* required — no default</span>
+      </label>
+      <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
+        <input id="p-order" type="number" value="" min="1" step="1" placeholder="1"
+          style="width:72px;flex-shrink:0;border-color:var(--danger)"
+          oninput="this.style.borderColor=this.value?'var(--warm)':'var(--danger)'">
+        <div style="font-size:11px;color:var(--dim);line-height:1.5;padding-top:5px">
+          Same number fires simultaneously.<br>
+          Higher number waits for lower group to complete.<br>
+          <span style="color:var(--danger)">Missing = scene will not run.</span>
+        </div>
+      </div>
       <label>Waypoints (click to add)</label>
       <div id="p-wp-pick" style="max-height:120px;overflow-y:auto;background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px"></div>
       <div id="p-seq" class="path-seq"></div>
@@ -410,7 +438,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="btn cool" onclick="exportZoneXML()">Export</button>
     </div>
     <div class="expopt">
-      <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml wrapper</div></div>
+      <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml — carries waypointOrder</div></div>
       <button class="btn cool" onclick="exportSceneXML()">Export</button>
     </div>
     <div class="expopt" style="border-color:var(--accent)">
@@ -446,6 +474,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="dsect" id="zd-chorus-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Greek Chorus</div>
       <div id="zd-chorus" style="font-size:13px;color:var(--purple)"></div>
+    </div>
+    <div class="dsect" id="zd-commands-sect" style="display:none">
+      <div class="sh" style="margin:0 0 4px">Zone Commands</div>
+      <div id="zd-commands" style="font-size:13px;color:var(--cool)"></div>
     </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
   </div>
@@ -502,7 +534,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 </div>
 <div id="toast" onclick="this.className=''"></div>
 <script>
-// MCCF Scene Composer V3 - Pure ASCII JavaScript
+// MCCF Scene Composer V4 - waypointOrder required sequencing
 var API = 'http://localhost:5000';
 var mode = 'scene';
 var tool = 'select';
@@ -810,8 +842,15 @@ function renderPathList(){
   var el=document.getElementById('path-list'),list=Object.values(paths);
   if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No paths.</div>';return;}
   el.innerHTML=list.map(function(p){
-    return '<div class="obj-item"><span class="obj-name">'+p.name+'</span>'+
-      '<span class="obj-tag">'+(p.agent||'?')+'</span></div>';
+    var orderVal=p.waypointOrder;
+    var hasOrder=(orderVal!==undefined&&orderVal!==null&&String(orderVal).trim()!=='');
+    var badge=hasOrder
+      ?'<span class="order-badge" title="waypointOrder='+orderVal+'">'+orderVal+'</span>'
+      :'<span class="order-badge" style="border-color:var(--danger);color:var(--danger)" title="MISSING waypointOrder — scene will not run">!</span>';
+    return '<div class="obj-item" style="gap:6px">'+badge+
+      '<span class="obj-name">'+p.name+'</span>'+
+      '<span class="obj-tag">'+(p.agent||'?')+'</span>'+
+      '<span style="font-size:12px;color:var(--dim)">'+(p.waypoints||[]).length+'wp</span></div>';
   }).join('');
 }
 function renderAgentRoster(){
@@ -843,6 +882,11 @@ function updateStats(){
   document.getElementById('stat-p').textContent=Object.keys(paths).length;
   document.getElementById('stat-n').textContent=networks.length;
 }
+function drawArcChart(){
+  // Arc chart drawing placeholder — redraws when arc data is available
+  if(!arcCtx)return;
+  arcCtx.clearRect(0,0,arcCanvas.width,arcCanvas.height);
+}
 function drawScene(){
   if(!ctx)return;
   ctx.clearRect(0,0,W,H);
@@ -864,7 +908,7 @@ function drawScene(){
 }
 function drawZone(z){
   var pos=z.location||z.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
-  var p=w2c(pos[0],pos[2]),r=(z.radius||4)*SCALE;
+  var p=w2c(pos[0],pos[2]),r=Math.max(1,(z.radius||4)*SCALE);
   // Expand 3-digit hex to 6-digit so canvas gradient alpha appending is always valid
   var rawCol=ZONE_COLORS[z.zone_type]||'#888888';
   var col=rawCol.replace(/^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/,'#$1$1$2$2$3$3');
@@ -1002,6 +1046,22 @@ function showZD(id){
     chorusSect.style.display='none';
     chorusEl.textContent='';
   }
+  // Commands detail
+  var cmdsSect = document.getElementById('zd-commands-sect');
+  var cmdsEl   = document.getElementById('zd-commands');
+  if (z.commands && z.commands.length) {
+    cmdsSect.style.display = 'block';
+    cmdsEl.innerHTML = z.commands.map(function(r) {
+      return '<div><span style="color:var(--warm)">' + xe(r.event) + '</span>'
+        + ' <span style="color:var(--text)">' + xe(r.cultivar) + '</span>'
+        + ' → <span style="color:var(--cool)">' + xe(r.command) + '</span></div>';
+    }).join('');
+  } else {
+    cmdsSect.style.display = 'none';
+    cmdsEl.textContent = '';
+  }
+  // Pre-load commands into form buffer so editing an existing zone preserves them
+  _loadZoneCommandsIntoForm(z.commands || []);
 }
 function showAD(name){
   var a=placedAgents[name];if(!a)return;
@@ -1086,7 +1146,7 @@ function showQuery(wx,wz){
   document.getElementById('q-pressure').innerHTML=ph;
 }
 function startPlace(t){
-  if(t==='zone'){document.getElementById('zone-form').style.display='block';placing='zone';}
+  if(t==='zone'){document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
   else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';}
   showHint('Click map to place');
 }
@@ -1100,6 +1160,56 @@ function cancelPlace(){
 function toggleChorusForm() {
   var enabled = document.getElementById('z-chorus-enabled').checked;
   document.getElementById('z-chorus-form').style.display = enabled ? 'block' : 'none';
+}
+
+// ── Zone Commands ─────────────────────────────
+var _zoneCommandRules = [];  // [{event, cultivar, command}] — buffer while zone form is open
+
+var ZONE_COMMAND_EVENTS   = ['OnEnter', 'OnExit', 'OnDwell'];
+var ZONE_COMMAND_COMMANDS = ['reflect', 'attend', 'greet', 'release', 'observe', 'respond', 'lament', 'celebrate', 'warn', 'question'];
+
+function addZoneCommand() {
+  _zoneCommandRules.push({event: 'OnEnter', cultivar: '*', command: 'reflect'});
+  renderZoneCommandsForm();
+}
+
+function removeZoneCommand(i) {
+  _zoneCommandRules.splice(i, 1);
+  renderZoneCommandsForm();
+}
+
+function renderZoneCommandsForm() {
+  var el = document.getElementById('z-commands-list');
+  if (!el) return;
+  if (!_zoneCommandRules.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:2px 0">No commands — zone will be silent.</div>';
+    return;
+  }
+  var agentNames = ['*'].concat(Object.keys(placedAgents));
+  el.innerHTML = _zoneCommandRules.map(function(r, i) {
+    var evtOpts = ZONE_COMMAND_EVENTS.map(function(e) {
+      return '<option value="'+e+'"'+(r.event===e?' selected':'')+'>'+e+'</option>';
+    }).join('');
+    var culOpts = agentNames.map(function(n) {
+      return '<option value="'+n+'"'+(r.cultivar===n?' selected':'')+'>'+n+'</option>';
+    }).join('');
+    var cmdOpts = ZONE_COMMAND_COMMANDS.map(function(c) {
+      return '<option value="'+c+'"'+(r.command===c?' selected':'')+'>'+c+'</option>';
+    }).join('');
+    return '<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">'
+      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].event=this.value">'+evtOpts+'</select>'
+      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].cultivar=this.value">'+culOpts+'</select>'
+      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].command=this.value">'+cmdOpts+'</select>'
+      + '<button class="btn danger" style="font-size:11px;padding:2px 6px" onclick="removeZoneCommand('+i+')">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function _loadZoneCommandsIntoForm(commands) {
+  _zoneCommandRules = (commands || []).map(function(r) {
+    return {event: r.event||'OnEnter', cultivar: r.cultivar||'*', command: r.command||'reflect'};
+  });
+  renderZoneCommandsForm();
 }
 
 function confirmZone(){
@@ -1123,14 +1233,17 @@ function confirmZone(){
     };
   }
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
-    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus};
+    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus,
+    commands:_zoneCommandRules.slice()};
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
     channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
   placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';
-  // Reset chorus form for next zone
+  // Reset chorus and commands forms for next zone
   document.getElementById('z-chorus-enabled').checked = false;
   document.getElementById('z-chorus-form').style.display = 'none';
   document.getElementById('z-chorus-persona').value = '';
+  _zoneCommandRules = [];
+  renderZoneCommandsForm();
   hideHint();renderAll();toast('Zone: '+(name||id));
 }
 function loadZonePreset(){
@@ -1192,11 +1305,31 @@ function renderPathSeq(){
       '<span class="pwp" onclick="pathSeq.splice('+i+',1);renderPathSeq()">'+n+'</span>';}).join('');
 }
 function createPath(){
-  var name=document.getElementById('p-name').value.trim(),agent=document.getElementById('p-agent').value;
+  var name=document.getElementById('p-name').value.trim();
+  var agent=document.getElementById('p-agent').value;
   if(!name||!agent||pathSeq.length<2){toast('Name, agent, 2+ waypoints required',true);return;}
-  paths[name]={name:name,agent:agent,waypoints:pathSeq.slice()};
+  // ── waypointOrder REQUIRED — HARD STOP if missing or invalid ──
+  var orderRaw=document.getElementById('p-order').value.trim();
+  if(!orderRaw){
+    toast('waypointOrder is REQUIRED — set a number (1, 2, 3…)',true);
+    document.getElementById('p-order').style.borderColor='var(--danger)';
+    document.getElementById('p-order').focus();
+    return;
+  }
+  var orderInt=parseInt(orderRaw,10);
+  if(isNaN(orderInt)||orderInt<1){
+    toast('waypointOrder must be a positive integer (1, 2, 3…)',true);
+    document.getElementById('p-order').style.borderColor='var(--danger)';
+    document.getElementById('p-order').focus();
+    return;
+  }
+  paths[name]={name:name,agent:agent,waypoints:pathSeq.slice(),waypointOrder:orderInt};
   apiPost('/path',{name:name,agent_name:agent,waypoints:pathSeq.slice()}).catch(function(){});
-  clearPathSeq();renderAll();toast('Path: '+name);
+  // Reset form
+  document.getElementById('p-name').value='';
+  document.getElementById('p-order').value='';
+  document.getElementById('p-order').style.borderColor='var(--danger)';
+  clearPathSeq();renderAll();toast('Path: '+name+' (order='+orderInt+')');
 }
 function showHint(msg){var h=document.getElementById('place-hint');h.textContent=msg;h.style.display='block';}
 function hideHint(){document.getElementById('place-hint').style.display='none';}
@@ -1323,11 +1456,16 @@ function buildAX3D(a){
 function buildInterpNodes(path){
   // Emits all DEF nodes: Interpolators, TimeSensors, Arrival_ Script, Kill_ Script.
   // ROUTEs emitted separately by buildInterpRoutes — always the last items in the X3D scene.
+  // V4: waypointOrder (SFInt32, initializeOnly) added to Arrival_ script.
+  //     Loader reads waypointOrder from _scene.xml <Path> element (not from X3D Script
+  //     node directly, since X_ITE SAI does not expose initializeOnly fields via getNamedNode).
+  //     Both files carry the value; scene XML is the loader's authoritative source.
   var wps=(path.waypoints||[]).map(function(n){return waypoints[n];}).filter(Boolean);
   if(wps.length<2)return '';
   var sa=safeId(path.agent);
   var numSegs=wps.length-1;
-  var out='<!-- Animation nodes: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' -->\n';
+  var order=parseInt(path.waypointOrder)||1;
+  var out='<!-- Animation nodes: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' waypointOrder='+order+' -->\n';
 
   for(var i=0;i<numSegs;i++){
     var p1=wps[i].position||[0,0,0];
@@ -1346,26 +1484,51 @@ function buildInterpNodes(path){
     out+='<TimeSensor DEF="Dwell_'+sa+'_'+seg+'" cycleInterval="'+dwellTime+'" loop="false" enabled="false"/>\n';
   }
 
-  // Arrival_ Script
+  // Arrival_ Script — self-contained movement chain
+  // startFromLoader: JS fires performance.now()/1000+0.1 to start Timer_1
+  // advanceSeg: JS fires completedSeg integer to start Timer_(completedSeg+1)
+  // waypointOrder: initializeOnly — present for documentation; loader reads from _scene.xml
   var dwellDefs=[];
-  for(var d=1;d<=numSegs;d++) dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
+  var timerDefsArr=[];
+  for(var d=1;d<=numSegs;d++){
+    dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
+    timerDefsArr.push("'Timer_"+sa+'_'+d+"'");
+  }
   out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
-  out+='  <field name="arrived" type="SFBool" accessType="inputOnly"/>\n';
-  out+='  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>\n';
-  out+='  <field name="resetSeg" type="SFBool" accessType="inputOnly"/>\n';
-  out+='  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>\n';
+  out+='  <field name="waypointOrder"   type="SFInt32" accessType="initializeOnly" value="'+order+'"/>\n';
+  out+='  <field name="startFromLoader" type="SFTime"  accessType="inputOnly"/>\n';
+  out+='  <field name="arrived"         type="SFBool"  accessType="inputOnly"/>\n';
+  out+='  <field name="releaseDwell"    type="SFBool"  accessType="inputOnly"/>\n';
+  out+='  <field name="advanceSeg"      type="SFInt32" accessType="inputOnly"/>\n';
+  out+='  <field name="resetSeg"        type="SFBool"  accessType="inputOnly"/>\n';
+  out+='  <field name="segmentArrived"  type="SFInt32" accessType="outputOnly"/>\n';
   out+='  <![CDATA[ecmascript:\n';
   out+='  var _seg=0;\n';
-  out+='  function resetSeg(val,time){ if(val) _seg=0; _wasActive=false; }\n';
-  out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
   out+='  var _wasActive=false;\n';
+  out+='  var _timerIds=['+timerDefsArr.join(',')+'];\n';
+  out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
+  out+='  var _maxSeg='+numSegs+';\n';
+  out+='  function initialize(){ Browser.println("Arrival_'+sa+': ready maxSeg="+_maxSeg+" order='+order+'"); }\n';
+  out+='  function resetSeg(val,time){ if(!val)return; _seg=0; _wasActive=false; }\n';
+  out+='  function startFromLoader(val,time){\n';
+  out+='    if(val<=0)return;\n';
+  out+='    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);\n';
+  out+='      if(t){t.startTime=val;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_1 fired at "+val);}\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+' startFromLoader err: "+e);}\n';
+  out+='  }\n';
   out+='  function arrived(val,time){\n';
   out+='    if(val){ _wasActive=true; return; }\n';
   out+='    if(!_wasActive) return;\n';
-  out+='    _wasActive=false;\n';
-  out+='    _seg++;\n';
-  out+='    segmentArrived=_seg;\n';
+  out+='    _wasActive=false; _seg++; segmentArrived=_seg;\n';
   out+='    Browser.println("Arrival_'+sa+': arrived seg "+_seg);\n';
+  out+='  }\n';
+  out+='  function advanceSeg(completedSeg,time){\n';
+  out+='    var nextIdx=completedSeg;\n';
+  out+='    if(nextIdx>=_maxSeg){ Browser.println("Arrival_'+sa+': arc complete"); return; }\n';
+  out+='    var tNow=(time&&time>0)?time:Browser.currentTime;\n';
+  out+='    try{ var t=Browser.currentScene.getNamedNode(_timerIds[nextIdx]);\n';
+  out+='      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_"+(nextIdx+1)+" at "+tNow);}\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+' advanceSeg err: "+e);}\n';
   out+='  }\n';
   out+='  function releaseDwell(val,time){\n';
   out+='    if(!val||_seg<1)return;\n';
@@ -1548,6 +1711,13 @@ function exportZoneXML(){
       if(z.chorus.persona) x+='  <Persona>'+xe(z.chorus.persona)+'</Persona>\n';
       x+='</Chorus>\n';
     }
+    if(z.commands && z.commands.length){
+      x+='<Commands>\n';
+      z.commands.forEach(function(r){
+        x+='  <'+xe(r.event||'OnEnter')+' cultivar="'+xe(r.cultivar||'*')+'" command="'+xe(r.command||'reflect')+'/>\n';
+      });
+      x+='</Commands>\n';
+    }
     x+='</Zone>\n';
   });
   x+='</ZoneSet>\n';
@@ -1701,7 +1871,7 @@ function exportSceneXML(){
   if(Object.keys(paths).length>0){
     x+='<Paths>\n';
     Object.values(paths).forEach(function(p){
-      x+='  <Path name="'+xe(p.name)+'" agent="'+xe(p.agent)+'">'+'\n';
+      x+='  <Path name="'+xe(p.name)+'" agent="'+xe(p.agent)+'" waypointOrder="'+(parseInt(p.waypointOrder)||'MISSING')+'">\n';
       (p.waypoints||[]).forEach(function(wpName){
         x+='    <PathWaypoint ref="'+xe(wpName)+'"/>'+'\n';
       });
@@ -1803,6 +1973,20 @@ function _restoreChorusFromXml(xml) {
         persona:   personaEl ? (personaEl.textContent || '').trim() : ''
       };
     });
+    // Restore zone commands
+    doc.querySelectorAll('Zone').forEach(function(zEl2) {
+      var zid2 = zEl2.getAttribute('id');
+      if (!zid2 || !zones[zid2]) return;
+      var cmdsEl = zEl2.querySelector('Commands');
+      if (!cmdsEl) return;
+      var rules = [];
+      ['OnEnter','OnExit','OnDwell'].forEach(function(evt) {
+        cmdsEl.querySelectorAll(evt).forEach(function(el) {
+          rules.push({event: evt, cultivar: el.getAttribute('cultivar')||'*', command: el.getAttribute('command')||'reflect'});
+        });
+      });
+      if (rules.length) zones[zid2].commands = rules;
+    });
     // Restore network links
     var netEl = doc.querySelector('Network');
     if (netEl) {
@@ -1815,6 +1999,15 @@ function _restoreChorusFromXml(xml) {
         if (from && to) networks.push({ from: from, to: to, strength: strength, type: type });
       });
     }
+    // Restore waypointOrder on paths from <Path waypointOrder="N"> in scene XML
+    doc.querySelectorAll('Path').forEach(function(pEl) {
+      var pname = pEl.getAttribute('name');
+      var orderRaw = pEl.getAttribute('waypointOrder');
+      if (pname && paths[pname] && orderRaw && orderRaw !== 'MISSING') {
+        var orderInt = parseInt(orderRaw, 10);
+        if (!isNaN(orderInt) && orderInt > 0) paths[pname].waypointOrder = orderInt;
+      }
+    });
     renderAll();
   } catch(e) { console.warn('_restoreChorusFromXml:', e); }
 }

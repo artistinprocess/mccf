@@ -202,6 +202,7 @@ button.active { background: #4af0a8; color: #111; }
   </div>
   <div class="pb-row">
     <button id="pb-play-btn" onclick="pbPlay()" style="border-color:#4af0a8;color:#4af0a8;">&#9654; Play Scene Arc</button>
+    <button id="pb-play-all-btn" onclick="pbPlayAll()" style="border-color:#a0f060;color:#a0f060;">&#9654;&#9654; Play All</button>
     <button id="pb-step-btn" onclick="pbStep()" style="border-color:#7ab8f5;color:#7ab8f5;">&#9654;&#9654; Step</button>
     <button id="pb-stop-btn" onclick="pbStop()" style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646; Stop</button>
     <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset</button>
@@ -743,8 +744,15 @@ function applyArcCV(data) {
 let pbPolling = false;
 let pbPollTimer = null;
 var _pbVoices = [];
-var _pbLastSpoken = '';
-var _pbLastStepKey = '';  // step identity — prevents re-firing TTS/display on same step poll
+// Per-cultivar TTS state — keyed by cultivar safe name (name.replace(/[^A-Za-z0-9_]/g,'_'))
+// Shared globals caused concurrent arcs to cancel each other's TTS token chains.
+var _pbLastSpoken  = {};   // {safeName: key string}
+var _pbLastStepKey = {};   // {safeName: stepKey string}
+var _pbCbGeneration = 0;   // incremented each pbPlay; wired callbacks check this to self-expire
+var _pbSpeakToken  = {};   // {safeName: integer}
+var _pbSpeechLock  = false; // global: true while any cultivar is speaking
+var _pbSpeechQueue = [];    // [{fn}] — pending speech chains waiting for lock
+var _pbSpeakTimer  = {};   // {safeName: setTimeout id} — per-cultivar so concurrent arcs don't cancel each other
 
 async function pbLoadFiles() {
   try {
@@ -807,7 +815,7 @@ function pbFileChanged() {
   if (el) el.textContent = (f && f.value) ? 'Ready. Press Play.' : 'No arc loaded.';
   const qr = document.getElementById('pb-qr');
   if (qr) qr.style.display = 'none';
-  _pbLastStepKey = '';
+  _pbLastStepKey = {};
   _lerpDest = {};
   _pbSceneVoiceMap = null;
   pbStopPolling();
@@ -953,40 +961,43 @@ var _pbSceneVoiceMap = null;  // built once per scene load
 // replaces the old one so the correct callback fires when speech finishes.
 var _pbPendingOnComplete = {};
 
-// Cancellation token — incremented each time speechSynthesis.cancel() is called.
-// Each speak session captures the token at start; if it differs on onend, the
-// utterance was cancelled and onComplete must NOT fire.
-var _pbSpeakToken = 0;
+// _pbSpeakToken, _pbLastSpoken, _pbLastStepKey are now per-cultivar dicts (declared above).
 
-function pbSpeakQALines(qaLines, onComplete) {
-  // onComplete — optional callback fired when all TTS lines finish (not cancelled).
+function pbSpeakQALines(qaLines, onComplete, cultivarKey) {
+  // cultivarKey — safe name of the speaking cultivar (e.g. 'Cindy', 'The_Steward').
+  // Used to key _pbLastSpoken, _pbSpeakToken per cultivar so concurrent arcs
+  // do not cancel each other's TTS chains.
+  // Callers that don't pass cultivarKey fall back to a shared '__default__' key
+  // (single-arc compat).
+  var ck = cultivarKey || '__default__';
+
   var voiceEl = document.getElementById('pb-voice');
   if (!voiceEl || !voiceEl.checked) {
+    console.log('pbSpeakQALines: voice off — firing onComplete immediately for', ck);
     if (onComplete) onComplete();
     return;
   }
   if (!window.speechSynthesis || !qaLines || !qaLines.length) {
+    console.log('pbSpeakQALines: no speech engine or empty lines — firing onComplete for', ck);
     if (onComplete) onComplete();
     return;
   }
   var key = qaLines.map(function(l){return l.text;}).join('|');
-  if (key === _pbLastSpoken) {
-    // Same lines already queued or speaking — replace pending onComplete, don't restart.
+  if (key === (_pbLastSpoken[ck] || '')) {
+    // Same lines already queued or speaking for this cultivar — replace pending onComplete.
     if (onComplete) {
-      _pbPendingOnComplete[key] = onComplete;
-      console.log('pbSpeakQALines: duplicate — replaced pending onComplete for key', key.slice(0,40));
+      _pbPendingOnComplete[ck + '|' + key] = onComplete;
+      console.log('pbSpeakQALines: duplicate [' + ck + '] — replaced pending onComplete');
     }
     return;
   }
-  _pbLastSpoken = key;
-  if (onComplete) _pbPendingOnComplete[key] = onComplete;
+  _pbLastSpoken[ck] = key;
+  if (onComplete) _pbPendingOnComplete[ck + '|' + key] = onComplete;
 
-  // Increment token to invalidate any stale onend callbacks from a previous session
-  // that may still be in flight. Do NOT call speechSynthesis.cancel() — cancel fires
-  // onend synchronously on the current utterance, which with the new token would
-  // immediately trigger onComplete for this session before any speech has occurred.
-  _pbSpeakToken++;
-  var myToken = _pbSpeakToken;
+  // Per-cultivar cancellation token — only invalidates this cultivar's chain,
+  // not other cultivars speaking concurrently.
+  _pbSpeakToken[ck] = (_pbSpeakToken[ck] || 0) + 1;
+  var myToken = _pbSpeakToken[ck];
 
   function _ensureVoiceMapThenSpeak(retriesLeft) {
     if (!_pbVoices.length) {
@@ -996,7 +1007,6 @@ function pbSpeakQALines(qaLines, onComplete) {
       }
     }
     if ((!_pbSceneVoiceMap || Object.keys(_pbSceneVoiceMap).length === 0) && _pbVoices.length) {
-      // Try cultivar API first (Character Creator is authoritative); fall back to arc XML
       _buildSceneVoiceMapFromCultivars().then(function(map) {
         if (Object.keys(map).length > 0) {
           _pbSceneVoiceMap = map;
@@ -1018,33 +1028,37 @@ function pbSpeakQALines(qaLines, onComplete) {
       setTimeout(function(){ _ensureVoiceMapThenSpeak(retriesLeft - 1); }, 300);
       return;
     }
-    // Wait for any in-progress speech from a previous session to finish naturally.
-    // Do not cancel — cancel fires onend synchronously which would trigger onComplete
-    // for this session before any speech has occurred.
-    if (window.speechSynthesis.speaking) {
-      setTimeout(function(){
-        if (_pbSpeakToken !== myToken) return; // superseded by a newer session
-        _continueAfterVoiceMap(0);
-      }, 100);
+    // Acquire global speech lock — only one cultivar speaks at a time.
+    // If locked, enqueue this cultivar's speech chain for later.
+    if (_pbSpeechLock) {
+      _pbSpeechQueue.push(function() { _doSpeak(); });
+      console.log('pbSpeakQALines: [' + ck + '] queued (speech lock held), queue length', _pbSpeechQueue.length);
       return;
     }
+    _pbSpeechLock = true;
     _doSpeak();
   }
 
   function _doSpeak() {
     var queue = qaLines.filter(function(l){return l.text && l.text.trim();});
-    var capturedKey = key;
+    var capturedKey   = key;
+    var capturedCk    = ck;
     var capturedToken = myToken;
     var rotationCount = 0;
     function speakNext(i) {
-      // If token has changed, this session was cancelled — do not fire onComplete.
-      if (_pbSpeakToken !== capturedToken) {
-        console.log('pbSpeakQALines: session cancelled (token mismatch) — suppressing onComplete for', capturedKey.slice(0,40));
+      if ((_pbSpeakToken[capturedCk] || 0) !== capturedToken) {
+        console.log('pbSpeakQALines: [' + capturedCk + '] cancelled (token mismatch) — suppressing onComplete');
+        _pbSpeechLock = false;
+        _drainSpeechQueue();
         return;
       }
       if (i >= queue.length) {
-        var cb = _pbPendingOnComplete[capturedKey];
-        delete _pbPendingOnComplete[capturedKey];
+        // Chain complete — release lock and drain next waiting cultivar
+        _pbSpeechLock = false;
+        var cbKey = capturedCk + '|' + capturedKey;
+        var cb = _pbPendingOnComplete[cbKey];
+        delete _pbPendingOnComplete[cbKey];
+        _drainSpeechQueue();
         if (cb) cb();
         return;
       }
@@ -1062,8 +1076,22 @@ function pbSpeakQALines(qaLines, onComplete) {
         }
         if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
       }
-      utt.onend = function() { speakNext(i+1); };
-      utt.onerror = function() { speakNext(i+1); };
+      // Timeout fallback: if browser blocks speech (no user gesture, AudioContext issue),
+      // utt.onend never fires. After 8s per line, force advance so arc doesn't stall.
+      var _uttDone = false;
+      var _uttTimeout = setTimeout(function() {
+        if (!_uttDone) { _uttDone = true; speakNext(i+1); }
+      }, 8000);
+      utt.onend  = function() { if (!_uttDone) { _uttDone = true; clearTimeout(_uttTimeout); speakNext(i+1); } };
+      utt.onerror = function() { if (!_uttDone) { _uttDone = true; clearTimeout(_uttTimeout); speakNext(i+1); } };
+      if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+        console.log('pbSpeakQALines: resumed paused speechSynthesis before speak');
+      }
+      console.log('pbSpeakQALines: speak()', line.text.substring(0,40),
+                  'voice=', utt.voice ? utt.voice.name : 'default',
+                  'pending=', speechSynthesis.pending,
+                  'paused=', speechSynthesis.paused);
       speechSynthesis.speak(utt);
     }
     speakNext(0);
@@ -1072,119 +1100,204 @@ function pbSpeakQALines(qaLines, onComplete) {
   _ensureVoiceMapThenSpeak(3);
 }
 
+// _drainSpeechQueue — called when speech lock is released.
+// Starts the next waiting cultivar's speech chain if any.
+function _drainSpeechQueue() {
+  if (_pbSpeechLock || _pbSpeechQueue.length === 0) return;
+  var next = _pbSpeechQueue.shift();
+  if (next) {
+    _pbSpeechLock = true;
+    next();
+  }
+}
+
 // Track last arrived segment per agent — set by segmentArrived callback
 var _x3dLastArrivedSeg = {};
 
 // Guard: set true when the final waypoint TTS has been handed off, preventing
 // a second pbReleaseDwell call (from the onComplete chain) from re-entering.
-var _pbArcComplete = false;
+var _pbArcComplete = {};  // {agentSafeName: bool} — per-agent arc-complete flag
+var _pbExpectedAgents = 0;      // set by pbPlayAll/pbPlay — how many agents are expected
+var _pbLastArcFiles = [];       // arc file names for Chorus firing
+var _pbCultivarSessionMap = {}; // {cultivarSafeName: session_id} — set by pbPlayAll
 
 function pbReleaseDwell(agentSafeName) {
+  console.log('pbReleaseDwell: ENTERED for', agentSafeName, 'seg=', _x3dLastArrivedSeg[agentSafeName]||0, '_pbArcComplete=', !!_pbArcComplete[agentSafeName]);
   // Called after TTS completes for an X3D-driven agent.
-  // Starts Dwell_{agentSafeName}_{seg} directly via SAI using canvas.browser.currentTime.
-  // Does NOT rely on Arrival_ Script releaseDwell input — Browser.currentTime inside an
-  // externally-triggered Script input field is unreliable in X_ITE (may return 0 or stale value),
-  // causing the TimeSensor to not fire correctly and breaking the ROUTE chain.
+  //
+  // Architecture (Day 18 — self-contained Arrival scripts):
+  //   Each Arrival_X script owns its movement chain.
+  //   JS communicates via two Arrival fields only:
+  //     startFromLoader (SFBool)  — kicks Timer_1 after WP1 dwell
+  //     advanceSeg (SFInt32)      — sends completed seg number; Arrival starts next timer
+  //   MCCFMaster is NOT used for movement. No shared SFString bus. N-agent safe.
 
-  // Guard: if arc is already complete, this is a spurious re-entry from the final
-  // waypoint TTS onComplete callback — ignore it.
-  if (_pbArcComplete) {
+  if (_pbArcComplete[agentSafeName]) {
     console.log('pbReleaseDwell: arc already complete — ignoring spurious call for', agentSafeName);
     return;
   }
-
   if (!canvas || !canvas.browser) return;
+
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
     var seg = _x3dLastArrivedSeg[agentSafeName] || 0;
 
-    // seg=0 means WP1 TTS just completed — no segment has arrived yet.
-    // Wait dwell interval then fire startAgent to begin Timer_1 (first movement).
-    // Use Dwell_1's cycleInterval as the wait duration but don't start the X3D Dwell node —
-    // Dwell_1 is reserved for after WP2 arrival (seg=1).
+    // seg=0: WP1 TTS complete, no segment arrived yet.
+    // Wait dwell interval (Dwell_X_1 cycleInterval) then fire Arrival_X.startFromLoader.
+    // Dwell_X_1 node NOT started here — reserved for after seg=1 arrives.
     if (seg === 0) {
       var dwell0Name = 'Dwell_' + agentSafeName + '_1';
       var dwell0Node = null;
       try { dwell0Node = scene.getNamedNode(dwell0Name); } catch(e) {}
       var dwell0Interval = dwell0Node ? (dwell0Node.cycleInterval || 2.0) : 2.0;
       var _agentForStart = agentSafeName;
-      console.log('pbReleaseDwell: WP1 complete — waiting', dwell0Interval, 's then starting Timer_1 for', agentSafeName);
+      console.log('pbReleaseDwell: WP1 complete — waiting', dwell0Interval,
+                  's then firing startFromLoader for', agentSafeName);
       setTimeout(function() {
         try {
-          var mn = canvas.browser.currentScene.getNamedNode('MCCFMaster');
-          if (mn) {
-            mn.startAgent = _agentForStart;
-            console.log('pbReleaseDwell: WP1 dwell expired — sent startAgent for', _agentForStart);
+          var arr = canvas.browser.currentScene.getNamedNode('Arrival_' + _agentForStart);
+          if (arr) {
+            // Read scene time from Timer_1 node directly — canvas.browser.currentTime
+            // returns 0 in X_ITE when called from JS context. Timer.time is the live
+            // scene clock and is always valid once the scene is running.
+                    // Pass startTime slightly in the future (+100ms) so X_ITE has one
+            // render frame to prepare before the timer begins evaluating fraction.
+            // Using past time causes immediate mid-path snap on fast machines.
+            var _tSrc = 'unknown';
+            var tNow = (function() {
+              var t = canvas && canvas.browser && canvas.browser.currentTime;
+              if (t && t > 1.0) { _tSrc = 'browser.currentTime'; return t + 0.1; }
+              var wall = performance.now() / 1000;
+              if (wall > 1.0) { _tSrc = 'performance.now'; return wall + 0.1; }
+              return 0.1;
+            })();
+            arr.startFromLoader = tNow;
+            console.log('pbReleaseDwell: startFromLoader fired for', _agentForStart, 'at t=', tNow, 'src=', _tSrc);
+          } else {
+            console.warn('pbReleaseDwell: Arrival_' + _agentForStart + ' not found');
           }
-        } catch(e) { console.warn('pbReleaseDwell startAgent error:', e); }
+        } catch(e) { console.warn('pbReleaseDwell startFromLoader error:', e); }
       }, Math.round(dwell0Interval * 1000));
       return;
     }
+
+    // seg>0: segment just arrived — start Dwell, then advance.
     var dwellNodeName = 'Dwell_' + agentSafeName + '_' + seg;
-    var dwellNode = scene.getNamedNode(dwellNodeName);
+    var dwellNode = null;
+    try { dwellNode = scene.getNamedNode(dwellNodeName); } catch(e) {}
+
     if (!dwellNode) {
-      console.warn('pbReleaseDwell: ' + dwellNodeName + ' not found');
+      console.warn('pbReleaseDwell: ' + dwellNodeName + ' not found — advancing immediately');
+      _pbAdvanceSeg(agentSafeName, seg);
       return;
     }
-    // Start Dwell for linger, then after dwell interval start next Timer via MCCFMaster
-    var masterNodeR = scene.getNamedNode('MCCFMaster');
-    if (masterNodeR) {
-      masterNodeR.releaseDwellAgent = agentSafeName + ':' + seg;
-      console.log('pbReleaseDwell: started Dwell ' + agentSafeName + ':' + seg);
-      // After dwell interval, start next timer
-      var dwellInterval = dwellNode ? (dwellNode.cycleInterval || 2.0) : 2.0;
-      var _agentForTimer = agentSafeName;
-      var _segForTimer = seg;
-      setTimeout(function() {
-        try {
-          var scene2 = canvas.browser.currentScene;
-          var nextTimerName = 'Timer_' + _agentForTimer + '_' + (_segForTimer + 1);
-          var nextTimer = null;
-          try { nextTimer = scene2 && scene2.getNamedNode(nextTimerName); } catch(e) {}
-          if (nextTimer) {
-            var mn = scene2 && scene2.getNamedNode('MCCFMaster');
-            if (mn) {
-              mn.startNextTimer = _agentForTimer + ':' + _segForTimer;
-              console.log('pbReleaseDwell: fired startNextTimer for', _agentForTimer, 'after seg', _segForTimer);
-            }
-          } else {
-            // No next timer — last segment dwell expired.
-            // Fetch and display the final waypoint (N waypoints, N-1 segments means the
-            // last waypoint is never reached by segmentArrived). Use pbStep() to advance
-            // the server to the final waypoint, then display it with a special flag that
-            // prevents pbReleaseDwell from being called after its TTS completes.
-            console.log('pbReleaseDwell: fetching final waypoint for', _agentForTimer);
-            _pbArcComplete = true;  // set now so any re-entrant pbReleaseDwell calls are blocked
-            fetch(API + '/arc/playback/step', {method:'POST'})
-              .then(function(r){ return r.json(); })
-              .then(function(d){ pbUpdateDisplayFinal(d); })
-              .catch(function(e){ console.warn('final waypoint fetch failed:', e); });
-          }
-        } catch(e) { console.warn('startNextTimer error:', e); }
-      }, Math.round(dwellInterval * 1000));
-    } else {
-      console.warn('pbReleaseDwell: MCCFMaster not found — cannot start', dwellNodeName);
+
+    try {
+      dwellNode.startTime = _x3dNow(agentSafeName) || (performance.now() / 1000);
+      dwellNode.enabled   = true;
+      console.log('pbReleaseDwell: started', dwellNodeName, 'for', agentSafeName, 'seg', seg);
+    } catch(e) {
+      console.warn('pbReleaseDwell: could not start dwell node:', e);
     }
+
+    var dwellInterval  = dwellNode.cycleInterval || 2.0;
+    var _capturedAgent = agentSafeName;
+    var _capturedSeg   = seg;
+    setTimeout(function() {
+      _pbAdvanceSeg(_capturedAgent, _capturedSeg);
+    }, Math.round(dwellInterval * 1000));
+
   } catch(e) {
     console.warn('pbReleaseDwell error:', e);
+  }
+}
+
+// _pbAdvanceSeg — sends advanceSeg=completedSeg to Arrival_X after dwell expires.
+// Arrival_X starts the next timer if one exists, or logs arc complete.
+// If no next timer found in scene, JS fetches the final waypoint.
+function _pbAdvanceSeg(agentSafeName, completedSeg) {
+  if (_pbArcComplete[agentSafeName]) return;
+  if (!canvas || !canvas.browser) return;
+  try {
+    var scene2 = canvas.browser.currentScene;
+    if (!scene2) return;
+
+    // Peek: does next timer exist?
+    var nextTimerName = 'Timer_' + agentSafeName + '_' + (completedSeg + 1);
+    var nextTimer = null;
+    try { nextTimer = scene2.getNamedNode(nextTimerName); } catch(e) {}
+
+    if (nextTimer) {
+      var arr = null;
+      try { arr = scene2.getNamedNode('Arrival_' + agentSafeName); } catch(e) {}
+      if (arr) {
+        arr.advanceSeg = completedSeg;
+        console.log('_pbAdvanceSeg: advanceSeg=' + completedSeg + ' sent to Arrival_' + agentSafeName);
+      }
+    } else {
+      // Last segment — fetch and display final waypoint for THIS agent's session
+      console.log('_pbAdvanceSeg: last segment for', agentSafeName, '— fetching final waypoint');
+      _pbArcComplete[agentSafeName] = true;
+      var _completedCount = Object.keys(_pbArcComplete).filter(function(k){ return _pbArcComplete[k]; }).length;
+      var _allDone = (_pbExpectedAgents > 0 && _completedCount >= _pbExpectedAgents);
+      console.log('_pbAdvanceSeg: completed', _completedCount, '/', _pbExpectedAgents, 'allDone=', _allDone);
+      // Route step to this agent's specific session (pbPlayAll) or global (pbPlay)
+      var _sid = _pbCultivarSessionMap[agentSafeName] || null;
+      var _stepUrl = _sid
+        ? (API + '/arc/playback/step')
+        : (API + '/arc/playback/step');
+      var _stepBody = _sid
+        ? JSON.stringify({session_id: _sid})
+        : '{}';
+      fetch(_stepUrl, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: _stepBody
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          // For pbPlayAll: extract this agent's session state from the response
+          var _agentState = d;
+          if (_sid && d.sessions && d.sessions[_sid]) {
+            _agentState = d.sessions[_sid].state || d.sessions[_sid];
+          }
+          pbUpdateDisplayFinal(_agentState, _allDone);
+        })
+        .catch(function(e) { console.warn('final waypoint fetch failed:', e); });
+    }
+  } catch(e) {
+    console.warn('_pbAdvanceSeg error:', e);
   }
 }
 
 // Track which avatar safenames are being driven by X3D TimeSensor (not JS lerp)
 var _x3dTimerActive = {};
 
-function _x3dNow() {
-  // Returns X_ITE internal scene time, or null if unavailable.
-  // Diagnostic: log what's on canvas.browser so we know what SAI exposes.
+function _x3dNow(agentSafeName) {
+  // Returns current X_ITE scene time as a positive float, or null.
+  // agentSafeName optional — if provided, tries to read from that agent's Dwell node
+  // (startTime + cycleInterval = completion time = approximately now).
+  // Multiple strategies tried in order of reliability.
   try {
+    // Strategy 1: browser.currentTime — works in some X_ITE builds, returns 0 in others
     var t = canvas && canvas.browser && canvas.browser.currentTime;
-    if (t !== undefined && t !== null) return t;
-    if (canvas && canvas.browser && typeof canvas.browser.getWorldTime === 'function') {
-      var wt = canvas.browser.getWorldTime();
-      if (wt !== undefined && wt !== null) return wt;
+    if (t && t > 0) return t;
+
+    // Strategy 2: read from the just-completed Dwell node for this agent
+    // Dwell.startTime + Dwell.cycleInterval = the scene time when dwell ended = now
+    if (agentSafeName && canvas.browser.currentScene) {
+      var sc = canvas.browser.currentScene;
+      try {
+        var dw = sc.getNamedNode('Dwell_' + agentSafeName + '_1');
+        if (dw && dw.startTime > 0 && dw.cycleInterval > 0) {
+          var dwEnd = dw.startTime + dw.cycleInterval;
+          if (dwEnd > 1.0) return dwEnd;
+        }
+      } catch(e2) {}
     }
-    // Fallback: read .time from any active TimeSensor in the scene
+
+    // Strategy 3: any running TimeSensor's .time field
     if (canvas && canvas.browser && canvas.browser.currentScene) {
       var scene = canvas.browser.currentScene;
       var activeKeys = Object.keys(_x3dTimerActive);
@@ -1192,22 +1305,25 @@ function _x3dNow() {
         var suffix = activeKeys[i].replace(/^Avatar_/, '');
         try {
           var tn = scene.getNamedNode('Timer_' + suffix + '_1');
-          if (tn && tn.time !== undefined && tn.time > 0) return tn.time;
-        } catch(e2) {}
+          if (tn && tn.time > 0) return tn.time;
+        } catch(e3) {}
       }
     }
-    // Log what browser exposes so we can find the right property
-    if (canvas && canvas.browser) {
-      var keys = [];
-      for (var k in canvas.browser) { if (k.toLowerCase().includes('time')) keys.push(k); }
-      console.log('_x3dNow: browser time-related properties:', keys.join(', ') || '(none)');
-    }
+
+    // Strategy 4: wall clock seconds since page load — always works, not scene time
+    // but X_ITE scene clock tracks wall time closely after load
+    var wall = performance.now() / 1000;
+    if (wall > 1.0) return wall;
+
   } catch(e) {}
   return null;
 }
 
-function pbActivateX3DTimers(cultivars) {
-  // Start Timer_{safeName}_1 for each agent and wire Arrival_.segmentArrived -> pbStep.
+function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
+  // cultivars: array of cultivar names to wire
+  // cultivarSessionMap: optional {cultivarName: session_id} — if provided, each
+  //   Arrival_ callback calls pbStepSession(session_id) instead of pbStep().
+  //   Pass undefined/null for single-arc play (uses pbStep() fallback).
   // Uses cultivar names from arc playback state — does NOT enumerate scene.namedNodes
   // because X_ITE SAI does not expose Script DEF nodes via namedNodes enumeration.
   // getNamedNode('Arrival_Cindy') works; Object.keys(scene.namedNodes) misses Script nodes.
@@ -1235,22 +1351,25 @@ function pbActivateX3DTimers(cultivars) {
       var arrNodeName = 'Arrival_' + safeName;
       var timerNodeName = 'Timer_' + safeName + '_1';
       var avatarName = 'Avatar_' + safeName;
+      // Session id for this cultivar — null means single-arc (use pbStep)
+      var sid = (cultivarSessionMap && cultivarSessionMap[cultivarName]) || null;
 
-      // Wire Arrival_ segmentArrived -> pbStep
+      // Wire Arrival_ segmentArrived -> pbStepSession(sid) or pbStep()
       // addFieldCallback on outputOnly Script fields not reliably supported — always poll.
       try {
         var arrNode = scene.getNamedNode(arrNodeName);
         if (!arrNode) {
           console.warn('pbActivateX3DTimers: ' + arrNodeName + ' not found in scene');
         } else {
-          // Attempt addFieldCallback first. If it succeeds, skip poll to avoid double-firing.
-          // Both callback AND poll firing = pbStep called twice = premature dwell release = skipped waypoint.
           var cbWired = false;
           try {
             var field = arrNode.getField('segmentArrived');
             if (field && typeof field.addFieldCallback === 'function') {
               var _lastCbSeg = -1;
-              field.addFieldCallback(arrNodeName + '_cb', function(value) {
+              var _cbGen = _pbCbGeneration;  // capture generation at wire time
+            field.addFieldCallback(arrNodeName + '_cb', function(value) {
+                // Self-expire if a newer pbPlay has run
+                if (_pbCbGeneration !== _cbGen) return;
                 var seg = parseInt(value) || 0;
                 if (seg <= _lastCbSeg) {
                   console.log('segmentArrived callback DUPLICATE suppressed: ' + arrNodeName + ' seg=' + seg);
@@ -1259,13 +1378,15 @@ function pbActivateX3DTimers(cultivars) {
                 _lastCbSeg = seg;
                 console.log('segmentArrived callback: ' + arrNodeName + ' seg=' + seg);
                 _x3dLastArrivedSeg[safeName] = seg;
-                // All segments call pbStep() — server advances to next waypoint.
-                // WP1 is displayed at play start (pbPlay calls pbUpdateDisplay immediately).
-                // seg=1 arrival means avatar has completed segment 1 and is now at WP2.
-                pbStep();
+                if (sid) {
+                  pbStepSession(sid);
+                } else {
+                  pbStep();
+                }
               });
               cbWired = true;
-              console.log('pbActivateX3DTimers: wired segmentArrived callback on', arrNodeName, '— skipping poll');
+              console.log('pbActivateX3DTimers: wired segmentArrived callback on', arrNodeName,
+                          sid ? '(session: ' + sid + ')' : '(single-arc)', '— skipping poll');
             }
           } catch(cbErr) {}
           if (!cbWired) {
@@ -1273,7 +1394,7 @@ function pbActivateX3DTimers(cultivars) {
           }
           // Only install poll if callback not wired
           window._pbPollingSegment[arrNodeName] = !cbWired;
-          if (!cbWired) (function(node, name) {
+          if (!cbWired) (function(node, name, sessionId) {
             var lastSeg = -1;
             var _pollWasActive = window._pbPollingSegment[name];
             var pollId = setInterval(function() {
@@ -1292,11 +1413,15 @@ function pbActivateX3DTimers(cultivars) {
                 if (v > lastSeg) {
                   lastSeg = v;
                   console.log('segmentArrived poll: ' + name + ' seg=' + v);
-                  pbStep();
+                  if (sessionId) {
+                    pbStepSession(sessionId);
+                  } else {
+                    pbStep();
+                  }
                 }
               } catch(e) {}
             }, 200);
-          })(arrNode, arrNodeName);
+          })(arrNode, arrNodeName, sid);
         }
       } catch(e) { console.warn('pbActivateX3DTimers: could not wire', arrNodeName, e); }
 
@@ -1422,11 +1547,14 @@ function pbPushPosition(wp) {
 }
 
 async function pbPlay() {
+  console.log('pbPlay: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
   const file = document.getElementById('pb-file');
   if (!file || !file.value) { alert('Select an arc file first.'); return; }
-  // Ensure zone command data is loaded — the async fetch may not have completed yet.
-  // If _zoneCommands is still empty, re-trigger the fetch and wait briefly.
-  if (Object.keys(_zoneCommands).length === 0) {
+  // Ensure zone command data is loaded.
+  var _zoneDataReady2 = Object.keys(_zoneCommands).length > 0 ||
+                        Object.keys(_cultivarActors).length > 0 ||
+                        Object.keys(_waypointZoneMap).length > 0;
+  if (!_zoneDataReady2) {
     _parseSceneZoneData();
     await new Promise(function(res) { setTimeout(res, 800); });
   }
@@ -1435,13 +1563,21 @@ async function pbPlay() {
     Object.keys(window._pbPollingSegment).forEach(function(k){ window._pbPollingSegment[k] = false; });
   }
   window._pbPollingSegment = {};
-  _pbStepInFlight = false;
-  _pbArcComplete = false;
+  _pbStepInFlight = {};
+  _pbArcComplete = {};
+  _pbExpectedAgents = 0;
+  _pbLastArcFiles = [];
+  _pbCultivarSessionMap = {};
   _pbPendingOnComplete = {};
-  _pbSpeakToken = 0;
-  _pbLastSpoken = '';
-  _pbLastStepKey = '';
+  _pbSpeakToken = {};
+  _pbSpeakTimer = {};
+  _pbSpeechLock  = false;
+  _pbSpeechQueue = [];
+  _pbLastSpoken = {};
+  _pbLastStepKey = {};
   _x3dLastArrivedSeg = {};   // reset segment tracking — prevents stale seg from previous run
+  _zoneCommandQueue = [];
+  _zoneCommandInFlight = false;
   _chorusLastTimestamp = 0;  // reset so poll always picks up the next response
   stopChorusPoll();
   dismissChorus();
@@ -1466,8 +1602,19 @@ async function pbPlay() {
       var el = document.getElementById('pb-step-info');
       if (el) el.textContent = 'Playing — ' + (stateData.total_steps||'?') + ' waypoints';
       console.log('pbPlay: X3D-driven mode — polling suppressed, segmentArrived drives steps');
-      // Display WP1 now — avatar is already there. TTS onComplete → pbReleaseDwell → dwell → Timer_1.
-      pbActivateX3DTimers(cultivars);
+      // Speech unlock — after all awaits, before any speak() calls
+      if (window.speechSynthesis) {
+        try {
+          if (speechSynthesis.paused) speechSynthesis.resume();
+          var _wu = new SpeechSynthesisUtterance(' ');
+          _wu.volume = 0; _wu.rate = 10;
+          _wu.onend = function() { console.log('pbPlay: speech warm-up complete'); };
+          speechSynthesis.speak(_wu);
+        } catch(e) {}
+      }
+      _pbCbGeneration++;
+      pbActivateX3DTimers(cultivars, null);
+      console.log('pbPlay: after pbActivateX3DTimers — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
       pbUpdateDisplay(stateData);
       _seedArcRecord(stateData);  // seed ϕ for WP1 — pbStep fires only from seg 1 onward
       // Fire OnEnter for WP1 zone
@@ -1504,16 +1651,410 @@ async function pbPlay() {
       _seedArcRecord(data.state||data);
       _fireCouplerTick();
       pbStartPolling(pace);
-      pbActivateX3DTimers(cultivars);
+      pbActivateX3DTimers(cultivars, null);
     }
     // pbActivateX3DTimers already called above for X3D mode
   } catch(e) { document.getElementById('pb-step-info').textContent='Play failed: '+e.message; }
 }
 
 // ─────────────────────────────────────────────
+// _validateAndBuildOrderGroups — V4 waypointOrder validator
+// ─────────────────────────────────────────────
+// Reads <Path waypointOrder="N"> from _scene.xml DOM.
+// Returns {1:[safeName,...], 2:[...], ...} on success.
+// Returns null and shows error on any missing/invalid waypointOrder.
+// Also warns (does not halt) if order numbers have gaps.
+// Called in pbPlayAll before any agent is fired.
+function _validateAndBuildOrderGroups(sceneDoc, cultivarList) {
+  var el = document.getElementById('pb-step-info');
+  var pathEls = sceneDoc ? sceneDoc.querySelectorAll('Path') : [];
+
+  if (!pathEls.length) {
+    if (el) el.textContent = 'HALT: no <Path> elements found in scene XML — cannot sequence.';
+    console.error('_validateAndBuildOrderGroups: no Path elements in scene XML');
+    return null;
+  }
+
+  var groups = {};         // {orderInt: [safeName, ...]}
+  var errors = [];
+
+  pathEls.forEach(function(pEl) {
+    var agent = pEl.getAttribute('agent') || '';
+    var name  = pEl.getAttribute('name')  || '';
+    var orderRaw = pEl.getAttribute('waypointOrder');
+
+    // Missing entirely or empty string → authoring error
+    if (orderRaw === null || orderRaw === undefined || String(orderRaw).trim() === '' || orderRaw === 'MISSING') {
+      errors.push('Path "' + name + '" (agent: ' + agent + '): waypointOrder MISSING');
+      return;
+    }
+
+    var orderInt = parseInt(orderRaw, 10);
+    if (isNaN(orderInt) || orderInt < 1) {
+      errors.push('Path "' + name + '" (agent: ' + agent + '): waypointOrder "' + orderRaw + '" is not a positive integer');
+      return;
+    }
+
+    var safeName = agent.replace(/[^A-Za-z0-9_]/g, '_');
+    if (!groups[orderInt]) groups[orderInt] = [];
+    if (groups[orderInt].indexOf(safeName) === -1) groups[orderInt].push(safeName);
+  });
+
+  if (errors.length) {
+    var msg = 'HALT — waypointOrder errors:\n' + errors.join('\n');
+    if (el) el.innerHTML = '<span style="color:#f06060">' + msg.replace(/\n/g,'<br>') + '</span>';
+    console.error('_validateAndBuildOrderGroups:', msg);
+    return null;
+  }
+
+  // Warn on gaps (1 and 3 with no 2) — not a halt, author may have reserved space
+  var orderNums = Object.keys(groups).map(Number).sort(function(a,b){return a-b;});
+  for (var gi = 1; gi < orderNums.length; gi++) {
+    if (orderNums[gi] - orderNums[gi-1] > 1) {
+      console.warn('_validateAndBuildOrderGroups: gap in order numbers between',
+        orderNums[gi-1], 'and', orderNums[gi], '— may be intentional');
+    }
+  }
+
+  console.log('_validateAndBuildOrderGroups: groups =', JSON.stringify(groups));
+  return groups;
+}
+
+// ─────────────────────────────────────────────
+// _pbWaitForGroup — resolves when all agents in group have _pbArcComplete=true
+// ─────────────────────────────────────────────
+// Polls every 200ms. Timeout after 10 minutes (safety valve).
+function _pbWaitForGroup(groupSafeNames) {
+  return new Promise(function(resolve) {
+    var POLL_MS = 200;
+    var MAX_POLLS = 3000; // 10 minutes
+    var polls = 0;
+    function check() {
+      polls++;
+      var allDone = groupSafeNames.every(function(sn) { return !!_pbArcComplete[sn]; });
+      if (allDone) {
+        console.log('_pbWaitForGroup: all complete —', groupSafeNames);
+        resolve();
+        return;
+      }
+      if (polls >= MAX_POLLS) {
+        console.warn('_pbWaitForGroup: timeout waiting for', groupSafeNames,
+          '— completed:', Object.keys(_pbArcComplete).filter(function(k){return _pbArcComplete[k];}));
+        resolve(); // resolve anyway so scene doesn't hang forever
+        return;
+      }
+      setTimeout(check, POLL_MS);
+    }
+    check();
+  });
+}
+
+// ─────────────────────────────────────────────
+// pbPlayAll — ordered group sequencer (V4)
+// ─────────────────────────────────────────────
+// Calls POST /arc/playback/start/all to start every arc as independent
+// server sessions. Groups are fired in ascending waypointOrder. Each group
+// fires simultaneously; the next group waits for ALL _pbArcComplete in the
+// current group before starting.
+//
+// HARD STOP: if any Path in _scene.xml is missing waypointOrder, the scene
+// does not run. The validator logs the specific path name and halts.
+
+async function pbPlayAll() {
+  console.log('pbPlayAll: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
+
+  // ── All async work happens BEFORE speech unlock ──────────────────────────
+  // Edge drops the gesture lock after any await. Speech warm-up must be the
+  // last synchronous operation before the function yields again.
+  // So: fetch arc sessions first, then warm up speech, then proceed.
+
+  // Reset all playback state
+  if (window._pbPollingSegment) {
+    Object.keys(window._pbPollingSegment).forEach(function(k){ window._pbPollingSegment[k] = false; });
+  }
+  window._pbPollingSegment = {};
+  _pbStepInFlight = {};
+  _pbArcComplete = {};
+  _pbExpectedAgents = 0;
+  _pbLastArcFiles = [];
+  _pbCultivarSessionMap = {};
+  _pbPendingOnComplete = {};
+  _pbSpeakToken = {};
+  _pbSpeakTimer = {};
+  _pbSpeechLock  = false;
+  _pbSpeechQueue = [];
+  _pbLastSpoken = {};
+  _pbLastStepKey = {};
+  _x3dLastArrivedSeg = {};
+  _zoneCommandQueue = [];
+  _zoneCommandInFlight = false;
+  _chorusLastTimestamp = 0;
+  stopChorusPoll();
+  dismissChorus();
+  fetch(API + '/chorus/clear', {method: 'POST'}).catch(function(){});
+
+  var pace = parseFloat(document.getElementById('pb-pace').value) || 3.0;
+  var loop = document.getElementById('pb-loop').checked;
+
+  try {
+    console.log('pbPlayAll: try block entered — calling start/all');
+    // Pause all polling so Flask (single-threaded) can service start/all without queuing behind polls
+    pollingActive = false;
+    console.log('pbPlayAll: polling paused — calling start/all');
+    var r = await fetch(API + '/arc/playback/start/all', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pace: pace, loop: loop, auto: false}),
+      signal: AbortSignal.timeout(30000)
+    });
+    console.log('pbPlayAll: start/all status =', r.status);
+    var data = await r.json();
+    console.log('pbPlayAll: start/all data =', JSON.stringify(data).slice(0,300));
+    if (data.error) {
+      document.getElementById('pb-step-info').textContent = 'Play All error: ' + data.error;
+      console.error('pbPlayAll: server error —', data.error);
+      return;
+    }
+
+    var sessions = data.sessions || {};
+    var sessionIds = Object.keys(sessions);
+    pollingActive = true;  // resume polling now that start/all has returned
+    console.log('pbPlayAll: polling resumed — sessionIds =', sessionIds);
+    if (sessionIds.length === 0) {
+      document.getElementById('pb-step-info').textContent = 'No arc files found — check arc exports exist.';
+      console.warn('pbPlayAll: no sessions — arc files missing or server error');
+      return;
+    }
+
+    // Collect all cultivars across all sessions for X3D timer activation
+    var allCultivars = [];
+    var cultivarSessionMap = {};
+    sessionIds.forEach(function(sid) {
+      var s = sessions[sid];
+      var stateData = s.state || s;
+      var cultivars = stateData.cultivars || [];
+      cultivars.forEach(function(c) {
+        if (allCultivars.indexOf(c) === -1) allCultivars.push(c);
+        cultivarSessionMap[c] = sid;
+        // Seed cultivar actor from arc data if not yet in _cultivarActors
+        if (!_cultivarActors[c]) {
+          var actor = stateData.actor || (stateData.current_waypoint||{}).actor || 'ollama';
+          _cultivarActors[c] = actor;
+        }
+      });
+    });
+
+    pbStopPolling();
+    var el = document.getElementById('pb-step-info');
+    if (el) el.textContent = 'Playing ' + sessionIds.length + ' arcs — ' + allCultivars.join(', ');
+
+    // Track expected completions and arc files for Chorus
+    _pbExpectedAgents = allCultivars.length;
+    _pbLastArcFiles = sessionIds.map(function(sid) {
+      return (sessions[sid].state || sessions[sid]).file || '';
+    }).filter(Boolean);
+    // Store cultivar→session map so _pbAdvanceSeg can step the correct session
+    _pbCultivarSessionMap = {};
+    Object.keys(cultivarSessionMap).forEach(function(c) {
+      var safeName = c.replace(/[^A-Za-z0-9_]/g, '_');
+      _pbCultivarSessionMap[safeName] = cultivarSessionMap[c];
+    });
+    console.log('pbPlayAll: expecting', _pbExpectedAgents, 'agents, arc files:', _pbLastArcFiles,
+                'sessionMap:', _pbCultivarSessionMap);
+
+    // ── Speech unlock — MUST be here, after all awaits, before any speak() calls ──
+    // Edge drops gesture lock after await. Warm-up here re-locks it for the
+    // pbUpdateDisplay → pbSpeakQALines calls that follow synchronously.
+    if (window.speechSynthesis) {
+      try {
+        if (speechSynthesis.paused) speechSynthesis.resume();
+        var _warmUp2 = new SpeechSynthesisUtterance(' ');
+        _warmUp2.volume = 0; _warmUp2.rate = 10;
+        _warmUp2.onend = function() { console.log('pbPlayAll: speech warm-up (post-await) complete'); };
+        speechSynthesis.speak(_warmUp2);
+      } catch(e) {}
+    }
+
+    // ── V4: validate waypointOrder and build order groups ──────────────────
+    // Parse _scene.xml to get waypointOrder per path.
+    // _parseSceneZoneData already loaded it — re-fetch the same doc.
+    var xSel2 = document.getElementById('x3d-file');
+    var xFname2 = xSel2 ? xSel2.value : '';
+    var sceneName2 = xFname2.replace(/\.x3d$/i, '');
+    var orderGroups = null;
+
+    var validatorRan = false;
+    if (sceneName2) {
+      try {
+        var sceneXmlResp = await fetch(API + '/scene/load/scene/raw?filename=' +
+          encodeURIComponent(sceneName2 + '_scene.xml'));
+        if (sceneXmlResp.ok) {
+          var sceneXmlText = await sceneXmlResp.text();
+          var sceneDoc = new DOMParser().parseFromString(sceneXmlText, 'text/xml');
+          orderGroups = _validateAndBuildOrderGroups(sceneDoc, allCultivars);
+          validatorRan = true;
+        } else {
+          console.warn('pbPlayAll: scene XML fetch failed (' + sceneXmlResp.status + ') — skipping waypointOrder validation, firing simultaneously');
+        }
+      } catch(xmlErr) {
+        console.warn('pbPlayAll: scene XML fetch error —', xmlErr, '— skipping validation, firing simultaneously');
+      }
+    }
+
+    // Only halt if the validator actually ran and found errors (null = authoring error).
+    // If fetch failed, validatorRan=false and we fall through to simultaneous fallback.
+    if (validatorRan && orderGroups === null) {
+      // pb-step-info already shows the specific error from _validateAndBuildOrderGroups
+      return;
+    }
+
+    // Activate X3D timers (registers Arrival_ callbacks and arms avatars)
+    _pbCbGeneration++;
+    console.log('pbPlayAll: _pbCbGeneration now', _pbCbGeneration);
+    pbActivateX3DTimers(allCultivars, cultivarSessionMap);
+    console.log('pbPlayAll: after pbActivateX3DTimers — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
+
+    if (orderGroups) {
+      // ── Ordered group sequencer ────────────────────────────────────────
+      // Fire groups in ascending order. Each group starts all its agents
+      // simultaneously, then waits for ALL _pbArcComplete before next group.
+      var sortedOrders = Object.keys(orderGroups).map(Number).sort(function(a,b){return a-b;});
+      console.log('pbPlayAll: order sequence =', sortedOrders);
+
+      for (var gi = 0; gi < sortedOrders.length; gi++) {
+        var currentOrder = sortedOrders[gi];
+        var groupNames = orderGroups[currentOrder];
+        console.log('pbPlayAll: firing group order=' + currentOrder + ' agents=' + groupNames.join(','));
+
+        // Find session IDs for this group's cultivars
+        var groupSids = [];
+        groupNames.forEach(function(safeName) {
+          var sid = _pbCultivarSessionMap[safeName];
+          if (sid && groupSids.indexOf(sid) === -1) groupSids.push(sid);
+        });
+
+        // Display WP1, seed phi, fire zone commands for this group
+        groupSids.forEach(function(sid) {
+          var stateData = sessions[sid] ? (sessions[sid].state || sessions[sid]) : null;
+          if (!stateData || stateData.status === 'idle') return;
+          pbUpdateDisplay(stateData);
+          _seedArcRecord(stateData);
+          var _wp1 = stateData.current_waypoint || {};
+          var _wp1c = _wp1.cultivar || ((stateData.cultivars||[])[0]) || '';
+          var _wp1z = _wp1.zone || _wp1.zone_id || '';
+          if (!_wp1z && _wp1c) {
+            var cands = [_wp1.id, _wp1.key, _wp1.name, _wp1.label,
+                         (_wp1.id||'').toLowerCase(),
+                         'wp'+(_wp1.id||'').toLowerCase(),
+                         'wp'+(_wp1.label||'').toLowerCase()];
+            for (var _wi = 0; _wi < cands.length; _wi++) {
+              if (cands[_wi] && _waypointZoneMap[cands[_wi]]) { _wp1z = _waypointZoneMap[cands[_wi]]; break; }
+            }
+          }
+          if (_wp1c && _wp1z) { _agentZone[_wp1c] = _wp1z; _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1); }
+        });
+        _fireCouplerTick();
+        // pbUpdateDisplay above triggers: TTS → pbReleaseDwell → startFromLoader → Timer_1.
+        // Do NOT fire startFromLoader independently here — that would race with TTS.
+        console.log('pbPlayAll: group', currentOrder, 'WP1 chain started for agents', groupNames.join(','));
+
+        // Wait for all agents in this group to complete before next group
+        if (gi < sortedOrders.length - 1) {
+          console.log('pbPlayAll: waiting for group', currentOrder, 'to complete before firing group', sortedOrders[gi+1]);
+          await _pbWaitForGroup(groupNames);
+          console.log('pbPlayAll: group', currentOrder, 'complete — advancing to group', sortedOrders[gi+1]);
+        }
+      }
+
+    } else {
+      // No scene XML / validation skipped — fall back to simultaneous firing
+      console.log('pbPlayAll: no orderGroups (scene XML unavailable) — firing all simultaneously');
+      sessionIds.forEach(function(sid) {
+        var stateData = sessions[sid].state || sessions[sid];
+        if (!stateData || stateData.status === 'idle') return;
+        pbUpdateDisplay(stateData);
+        _seedArcRecord(stateData);
+        var _wp1 = stateData.current_waypoint || {};
+        var _wp1c = _wp1.cultivar || ((stateData.cultivars||[])[0]) || '';
+        var _wp1z = _wp1.zone || _wp1.zone_id || '';
+        if (!_wp1z && _wp1c) {
+          var cands = [_wp1.id, _wp1.key, _wp1.name, _wp1.label,
+                       (_wp1.id||'').toLowerCase(), 'wp'+(_wp1.id||'').toLowerCase(),
+                       'wp'+(_wp1.label||'').toLowerCase()];
+          for (var _wi = 0; _wi < cands.length; _wi++) {
+            if (cands[_wi] && _waypointZoneMap[cands[_wi]]) { _wp1z = _waypointZoneMap[cands[_wi]]; break; }
+          }
+        }
+        if (_wp1c && _wp1z) { _agentZone[_wp1c] = _wp1z; _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1); }
+      });
+      _fireCouplerTick();
+    }
+
+  } catch(e) {
+    pollingActive = true;  // always resume polling on failure
+    document.getElementById('pb-step-info').textContent = 'Play All failed: ' + e.message;
+    console.error('pbPlayAll: CAUGHT EXCEPTION —', e.message, e.stack);
+  }
+}
+
+// ─────────────────────────────────────────────
+// pbStepSession — advance one named session
+// ─────────────────────────────────────────────
+// Called from Arrival_ callbacks when concurrent arcs are active.
+// Routes the step to the correct server session by session_id.
+// Null sessionId falls back to stepping ALL sessions (single-arc compat).
+
+async function pbStepSession(sessionId) {
+  var flagKey = sessionId || '__all__';
+  if (_pbStepInFlight[flagKey]) {
+    console.log('pbStepSession: SKIPPED — in flight (session ' + (sessionId||'all') + ')');
+    return;
+  }
+  _pbStepInFlight[flagKey] = true;
+  try {
+    var body = sessionId ? JSON.stringify({session_id: sessionId}) : '{}';
+    var r = await fetch(API + '/arc/playback/step', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: body
+    });
+    var data = await r.json();
+    // Server returns either a single session state or aggregate; handle both
+    var stateData = data;
+    if (data.sessions && sessionId && data.sessions[sessionId]) {
+      stateData = data.sessions[sessionId];
+    }
+    pbUpdateDisplay(stateData);
+    _seedArcRecord(stateData);
+    // Zone tracking
+    var _stepWp = stateData.current_waypoint || {};
+    var _stepCultivar = _stepWp.cultivar || ((stateData.cultivars||[])[0]) || '';
+    var _stepZone = _stepWp.zone || _stepWp.zone_id || '';
+    if (!_stepZone) {
+      var _cands = [_stepWp.id, _stepWp.key, _stepWp.name, _stepWp.label,
+                   (_stepWp.id||'').toLowerCase(),
+                   'wp'+(_stepWp.id||'').toLowerCase(),
+                   'wp'+(_stepWp.label||'').toLowerCase()];
+      for (var _ci = 0; _ci < _cands.length; _ci++) {
+        if (_cands[_ci] && _waypointZoneMap[_cands[_ci]]) {
+          _stepZone = _waypointZoneMap[_cands[_ci]]; break;
+        }
+      }
+    }
+    var _prevZone = _agentZone[_stepCultivar] || '';
+    if (_stepZone && _stepZone !== _prevZone) {
+      if (_prevZone) _fireZoneCommand(_stepCultivar, _prevZone, 'OnExit', _stepWp.stepno || 0);
+      _fireZoneCommand(_stepCultivar, _stepZone, 'OnEnter', _stepWp.stepno || 0);
+      _agentZone[_stepCultivar] = _stepZone;
+    }
+    _fireCouplerTick();
+  } catch(e) { console.warn('pbStepSession error:', e); }
+  finally { _pbStepInFlight[flagKey] = false; }
+}
+
+// ─────────────────────────────────────────────
 // Coupler tick — fired at each waypoint arrival
 // ─────────────────────────────────────────────
-// Two-phase, fire-and-forget:
 //   1. _seedArcRecord(state) — calls POST /arc/record to write ϕ for each
 //      cultivar in the current playback state.  arc/record is the ONLY writer
 //      of constitutional_cv (ϕ).  Without this, _agent_runtime is empty and
@@ -1595,6 +2136,11 @@ var _cultivarActors = {};
 var _waypointZoneMap = {};
 // Track which zones each cultivar currently occupies: {cultivar: zone_id|null}
 var _agentZone = {};
+// Zone command serial queue — prevents simultaneous Ollama calls timing out.
+// Each entry: {cultivar, zoneId, eventType, step}
+// Commands are drained one at a time; next fires only when current completes/fails.
+var _zoneCommandQueue = [];
+var _zoneCommandInFlight = false;
 
 function _parseSceneZoneData() {
   // Parse <Zone><Commands> and <EmotionalArc actor="..."> from the scene XML.
@@ -1612,9 +2158,10 @@ function _parseSceneZoneData() {
       try {
         var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
 
-        // Parse zone commands and descriptors
-        _zoneCommands = {};
-        _zoneDescriptors = {};
+        // Parse zone commands and descriptors into temp vars first,
+        // then assign atomically — preserves last-good data if new parse is empty.
+        var _newZoneCommands = {};
+        var _newZoneDescriptors = {};
         doc.querySelectorAll('Zone').forEach(function(zEl) {
           var zid = zEl.getAttribute('id');
           if (!zid) return;
@@ -1634,25 +2181,34 @@ function _parseSceneZoneData() {
             cmds.push({event:'OnExit', cultivar: el.getAttribute('cultivar')||'*',
                        command: el.getAttribute('command')||''});
           });
-          if (cmds.length) _zoneCommands[zid] = cmds;
+          if (cmds.length) _newZoneCommands[zid] = cmds;
         });
 
+        // Only assign if we got real data — preserve last-good values otherwise
+        if (Object.keys(_newZoneCommands).length > 0) {
+          _zoneCommands   = _newZoneCommands;
+          _zoneDescriptors = _newZoneDescriptors;
+        }
+
         // Parse cultivar actors from <EmotionalArc actor="ollama">
-        _cultivarActors = {};
+        var _newCultivarActors = {};
         doc.querySelectorAll('EmotionalArc[cultivar]').forEach(function(el) {
           var name  = el.getAttribute('cultivar');
           var actor = (el.getAttribute('actor')||'scripted').toLowerCase();
-          if (name) _cultivarActors[name] = actor;
+          if (name) _newCultivarActors[name] = actor;
         });
 
+        // Assign cultivar actors atomically
+        if (Object.keys(_newCultivarActors).length > 0) _cultivarActors = _newCultivarActors;
+
         // Parse waypoint name → zone mapping for client-side zone derivation
-        // (playback step response may not include zone; we derive it from waypoint name)
-        _waypointZoneMap = {};
+        var _newWaypointZoneMap = {};
         doc.querySelectorAll('Waypoint').forEach(function(el) {
           var name = el.getAttribute('name');
           var zone = el.getAttribute('zone');
-          if (name && zone) _waypointZoneMap[name] = zone;
+          if (name && zone) _newWaypointZoneMap[name] = zone;
         });
+        if (Object.keys(_newWaypointZoneMap).length > 0) _waypointZoneMap = _newWaypointZoneMap;
 
         console.log('Zone commands parsed:', Object.keys(_zoneCommands),
                     'Actors:', _cultivarActors,
@@ -1678,25 +2234,66 @@ function _matchZoneCommand(zoneId, cultivar, eventType) {
 }
 
 function _fireZoneCommand(cultivar, zoneId, eventType, step) {
-  // Fire a zone command for cultivar entering/dwelling/exiting zoneId.
-  // Determines actor type, finds matching command, calls /zone/command.
+  // Enqueue a zone command. Commands are dispatched serially — one Ollama call
+  // at a time — so concurrent arc arrivals don't cause simultaneous 30s timeout races.
   if (!zoneId) return;
   var cmd = _matchZoneCommand(zoneId, cultivar, eventType);
   if (!cmd || !cmd.command) {
-    console.log('_fireZoneCommand: no command for', cultivar, eventType, zoneId,
-                '(commands loaded:', Object.keys(_zoneCommands), ')');
-    return;
+    // No explicit command in scene XML — use default if actor is ollama
+    var actor = _cultivarActors[cultivar] || 'scripted';
+    if (actor === 'ollama' || actor === 'llm') {
+      var defaultCmd = eventType === 'OnEnter' ? 'reflect'
+                     : eventType === 'OnExit'  ? 'release'
+                     :                           'attend';
+      console.log('_fireZoneCommand: no scene XML command — using default', defaultCmd,
+                  'for', cultivar, eventType, zoneId);
+      cmd = {event: eventType, cultivar: cultivar, command: defaultCmd};
+    } else {
+      console.log('_fireZoneCommand: no command for', cultivar, eventType, zoneId,
+                  '(scripted agent, no default)');
+      return;
+    }
   }
+  _zoneCommandQueue.push({cultivar: cultivar, zoneId: zoneId,
+                           eventType: eventType, step: step, cmd: cmd});
+  _drainZoneCommandQueue();
+}
+
+function _drainZoneCommandQueue() {
+  if (_zoneCommandInFlight || _zoneCommandQueue.length === 0) return;
+  var item = _zoneCommandQueue.shift();
+  var cultivar  = item.cultivar;
+  var zoneId    = item.zoneId;
+  var eventType = item.eventType;
+  var step      = item.step;
+  var cmd       = item.cmd;
 
   var xSel = document.getElementById('x3d-file');
   var fname = xSel ? xSel.value : '';
   var sceneName = fname.replace(/\.x3d$/i, '');
-  var actor = _cultivarActors[cultivar] || 'scripted';
+  var actor    = _cultivarActors[cultivar] || 'scripted';
   var zoneDesc = _zoneDescriptors[zoneId] || '';
 
-  console.log('_fireZoneCommand:', cultivar, eventType, zoneId, cmd.command,
-              'actor=' + actor);
+  console.log('_fireZoneCommand (queued):', cultivar, eventType, zoneId, cmd.command,
+              'actor=' + actor, 'queue remaining=' + _zoneCommandQueue.length);
 
+  // Scripted agents don't call Ollama — drain immediately
+  if (actor !== 'ollama' && actor !== 'llm') {
+    fetch(API + '/zone/command', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        cultivar: cultivar, actor: actor, command: cmd.command,
+        event: eventType, zone_id: zoneId, scene: sceneName,
+        zone_descriptor: zoneDesc, step: step || 0,
+        ollama_model: 'llama3.2', ollama_url: 'http://localhost:11434'
+      })
+    }).catch(function(){})
+      .finally(function(){ _drainZoneCommandQueue(); });
+    return;
+  }
+
+  _zoneCommandInFlight = true;
   fetch(API + '/zone/command', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1722,23 +2319,31 @@ function _fireZoneCommand(cultivar, zoneId, eventType, step) {
         console.warn('Zone command error:', d.error);
         return;
       }
-      // LLM response — speak it via TTS as environmental speech
-      // Not routed through pbSpeakQALines — this is zone voice, not character dialogue
       if (d.response && d.response.trim()) {
         console.log('Zone command response:', cultivar, cmd.command, '→', d.response.substring(0,60)+'...');
-        // Speak with the cultivar's voice — use the same voice map as the arc
         var voice = null;
-        if (window._pbVoiceMap && window._pbVoiceMap[cultivar]) {
-          voice = window._pbVoiceMap[cultivar];
-        }
+        if (_pbSceneVoiceMap && _pbSceneVoiceMap[cultivar]) voice = _pbSceneVoiceMap[cultivar];
+        else if (window._pbVoiceMap && window._pbVoiceMap[cultivar]) voice = window._pbVoiceMap[cultivar];
         var utt = new SpeechSynthesisUtterance(d.response);
         if (voice) utt.voice = voice;
         utt.rate = 0.95;
         utt.pitch = 1.0;
-        speechSynthesis.speak(utt);
+        if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+        console.log('pbSpeakQALines: resumed paused speechSynthesis before speak');
+      }
+      console.log('pbSpeakQALines: speak()', line.text.substring(0,40),
+                  'voice=', utt.voice ? utt.voice.name : 'default',
+                  'pending=', speechSynthesis.pending,
+                  'paused=', speechSynthesis.paused);
+      speechSynthesis.speak(utt);
       }
     })
-    .catch(function(e) { console.warn('_fireZoneCommand fetch error:', e); });
+    .catch(function(e) { console.warn('_fireZoneCommand fetch error:', e); })
+    .finally(function() {
+      _zoneCommandInFlight = false;
+      _drainZoneCommandQueue();
+    });
 }
 
 function _fireCouplerTick(sceneName) {
@@ -1762,12 +2367,15 @@ function _fireCouplerTick(sceneName) {
     .catch(function() {});
 }
 
-var _pbStepInFlight = false;
+// Per-session step-in-flight guard. Shared bool caused concurrent Arrival_ callbacks
+// to block each other. Keyed by session_id (or '__single__' for pbStep()).
+var _pbStepInFlight = {};
 async function pbStep() {
-  if (_pbStepInFlight) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
-  _pbStepInFlight = true;
+  if (_pbStepInFlight['__single__']) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
+  _pbStepInFlight['__single__'] = true;
   try {
-    const r = await fetch(API+'/arc/playback/step', {method:'POST'});
+    const r = await fetch(API+'/arc/playback/step', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:'{}'});
     const state = await r.json();
     pbUpdateDisplay(state);
     _seedArcRecord(state);   // seed ϕ from arc XML waypoint CV values
@@ -1796,31 +2404,51 @@ async function pbStep() {
     }
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
   } catch(e) {}
-  finally { _pbStepInFlight = false; }
+  finally { _pbStepInFlight['__single__'] = false; }
 }
 async function pbStop() {
   _agentZone = {};  // reset zone tracking on stop
   pbStopPolling();
   pbStopX3DTimers();
-  try { const r=await fetch(API+'/arc/playback/stop',{method:'POST'}); pbUpdateDisplay(await r.json()); } catch(e) {}
+  try { const r=await fetch(API+'/arc/playback/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); pbUpdateDisplay(await r.json()); } catch(e) {}
 }
 async function pbReset() {
+  console.log('pbReset: called — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
   pbStopPolling();
   stopChorusPoll();
   dismissChorus();
+  // _pbResetViaKillScript reads _x3dTimerActive to find Kill_ nodes —
+  // must run BEFORE _x3dTimerActive is cleared.
   _pbResetViaKillScript();
   _lerpDest = {};
   _x3dTimerActive = {};
-  _pbLastStepKey = '';
-  _pbLastSpoken = '';
-  _pbArcComplete = false;
+  _x3dLastArrivedSeg = {};
+  _pbLastStepKey = {};
+  _pbLastSpoken = {};
+  _pbArcComplete = {};
+  _pbExpectedAgents = 0;
+  _pbLastArcFiles = [];
+  _pbCultivarSessionMap = {};
   _pbPendingOnComplete = {};
-  _pbSpeakToken = 0;
+  _pbSpeakToken = {};
+  _pbSpeakTimer = {};
+  _pbSpeechLock  = false;
+  _pbSpeechQueue = [];
+  _zoneCommandQueue = [];
+  _zoneCommandInFlight = false;
   try {
-    const r=await fetch(API+'/arc/playback/reset',{method:'POST'});
+    const r=await fetch(API+'/arc/playback/reset',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
+      signal:AbortSignal.timeout(4000)
+    });
     pbUpdateDisplay(await r.json());
     var qr=document.getElementById('pb-qr'); if(qr) qr.style.display='none';
-  } catch(e) {}
+    console.log('pbReset: server reset complete');
+  } catch(e) {
+    console.warn('pbReset: server reset timed out or failed —', e.message, '— JS state already cleared');
+    var si=document.getElementById('pb-step-info'); if(si) si.textContent='Reset. Press Play All to replay.';
+    var qr=document.getElementById('pb-qr'); if(qr) qr.style.display='none';
+  }
 }
 
 function _pbResetViaKillScript() {
@@ -1909,13 +2537,22 @@ function pbUpdateDisplay(state) {
     var qEl=document.getElementById('pb-question');
     var rEl=document.getElementById('pb-response');
     if(qaLines.length){
-      // Display all lines in sequence order — prefix Q/R/— with speaker in brackets
       var allText=qaLines.filter(function(l){return l.text&&l.text.trim();})
         .map(function(l){
           var p=l.type==='Question'?'Q':l.type==='Response'?'R':'—';
           return p+(l.speaker?' ['+l.speaker+']':'')+': '+l.text;
         }).join('\n');
-      if(qEl) qEl.textContent=allText;
+      // In pbPlayAll mode, prefix with cultivar name and append rather than overwrite
+      var displayText = (_pbExpectedAgents > 1)
+        ? '[' + cultivar + '] ' + allText
+        : allText;
+      if(qEl) {
+        if (_pbExpectedAgents > 1 && qEl.textContent && qEl.textContent.trim()) {
+          qEl.textContent = qEl.textContent + '\n' + displayText;
+        } else {
+          qEl.textContent = displayText;
+        }
+      }
       if(rEl) rEl.textContent='';
       // TTS fired after lerp delay below
     } else {
@@ -1925,32 +2562,26 @@ function pbUpdateDisplay(state) {
     }
   } else { if(qr) qr.style.display='none'; }
   var pace2 = parseFloat((document.getElementById('pb-pace')||{}).value) || 3.0;
-  // Build a key that identifies this step uniquely — used to prevent re-firing TTS on repeated polls
-  // Step key: use stepno (server step counter) as single stable integer.
-  // pos_x/pos_z and wp.id may differ between pbStep() and pbPollState() responses — don't use them.
-  var stepKey = String(wp.stepno || state.step || wp.id || '');
-  var isNewStep = (stepKey !== _pbLastStepKey);
-  if (isNewStep) _pbLastStepKey = stepKey;
+  // Step key is per-cultivar — prevents one cultivar's arrival from suppressing another's TTS
+  var safeName2 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
+  var stepKey = safeName2 + ':' + String(wp.stepno || state.step || wp.id || '');
+  var isNewStep = (stepKey !== (_pbLastStepKey[safeName2] || ''));
+  if (isNewStep) _pbLastStepKey[safeName2] = stepKey;
   // TTS fires on new step regardless of whether position is X3D-driven or JS-lerped.
   // Decoupled from _x3dTimerActive — dialogue is MCCF domain, not X3D domain.
   if (isNewStep && (qaLines.length || wp.question || wp.response)) {
-    clearTimeout(window._pbSpeakTimer);
-    var safeName2 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
+    clearTimeout(_pbSpeakTimer[safeName2]);
     var isX3DDriven = !!_x3dTimerActive['Avatar_' + safeName2];
-    // X3D-driven: cycleTime fires in the same event cascade as the final fraction_changed=1.0.
-    // X_ITE may deliver cycleTime to the Script before rendering the interpolator's last frame,
-    // so the avatar appears to still be moving when TTS starts. A short settle delay lets the
-    // renderer catch up before speech begins. 150ms = ~9 frames at 60fps — enough without
-    // being perceptible as a pause.
-    // JS-lerp: delay by pace so avatar arrives before speaking. No releaseDwell needed.
+    // X3D-driven: short settle delay before TTS so renderer catches up.
+    // JS-lerp: delay by pace so avatar arrives before speaking.
     var ttsDelay = isX3DDriven ? 1000 : Math.round(pace2 * 1000);
-    window._pbSpeakTimer = setTimeout(function() {
+    _pbSpeakTimer[safeName2] = setTimeout(function() {
       if (qaLines.length) {
         if (isX3DDriven) {
           console.log('pbUpdateDisplay: firing TTS for', safeName2, qaLines.length, 'lines, isX3DDriven=', isX3DDriven);
-          pbSpeakQALines(qaLines, function() { pbReleaseDwell(safeName2); });
+          pbSpeakQALines(qaLines, function() { pbReleaseDwell(safeName2); }, safeName2);
         } else {
-          pbSpeakQALines(qaLines);
+          pbSpeakQALines(qaLines, null, safeName2);
         }
       } else if (wp.response) {
         pbSpeak(wp.response);
@@ -1969,7 +2600,7 @@ function pbUpdateDisplay(state) {
 // pbUpdateDisplayFinal — displays and speaks the last waypoint only.
 // Called from pbReleaseDwell when the last dwell expires and no next timer exists.
 // Does NOT call pbReleaseDwell after TTS — arc is already complete.
-function pbUpdateDisplayFinal(state) {
+function pbUpdateDisplayFinal(state, fireChorus) {
   if (!state || state.status === 'idle') return;
   var wp = state.current_waypoint || {};
   if (!wp.cultivar && state.cultivars && state.cultivars.length) {
@@ -1996,25 +2627,31 @@ function pbUpdateDisplayFinal(state) {
     var rEl = document.getElementById('pb-response');
     if (rEl) rEl.textContent = '';
     // Speak final waypoint lines — no onComplete callback, arc is done.
+    var finalSafeName = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
     console.log('pbUpdateDisplayFinal: speaking final waypoint', wp.id, qaLines.length, 'lines');
-    pbSpeakQALines(qaLines);
+    pbSpeakQALines(qaLines, null, finalSafeName);
   } else if (qr) {
     qr.style.display = 'none';
   }
   pbPushPosition(wp);
-  // Arc is complete — fire Chorus on server (async), then poll for response.
-  // X3D-driven mode uses auto:false so the server-side PlaybackSession never
-  // reaches its own arc-complete hook.  Client fires explicitly here instead.
-  var arcFile = (document.getElementById('pb-file') || {}).value || '';
-  if (arcFile) {
-    fetch(API + '/chorus/fire', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({arc_file: arcFile})
-    }).catch(function() {});
+  _fireCouplerTick();
+  // Fire Chorus only when explicitly requested (all agents complete in pbPlayAll,
+  // or single-arc complete in pbPlay).
+  if (fireChorus !== false) {
+    // Use _pbLastArcFiles if populated (pbPlayAll), else fall back to pb-file dropdown
+    var chorusFiles = _pbLastArcFiles.length > 0
+      ? _pbLastArcFiles
+      : [(document.getElementById('pb-file') || {}).value || ''].filter(Boolean);
+    if (chorusFiles.length > 0) {
+      console.log('pbUpdateDisplayFinal: firing Chorus for', chorusFiles);
+      fetch(API + '/chorus/fire', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({arc_file: chorusFiles[0]})
+      }).catch(function() {});
+      startChorusPoll();
+    }
   }
-  _fireCouplerTick();  // final waypoint arrived — one last field tick before arc ends
-  startChorusPoll();
 }
 
 // Fetch and cache the scene XML when the X3D scene loads
@@ -2248,11 +2885,14 @@ function startChorusPoll() {
         // Show if text is non-empty and newer than last displayed
         if (d.text && d.timestamp > _chorusLastTimestamp) {
           _chorusLastTimestamp = d.timestamp;
+          console.log('Chorus poll: got response —', d.text.substring(0,60));
           displayChorus(d);
           stopChorusPoll();
+        } else if (d.text) {
+          console.log('Chorus poll: text present but stale timestamp', d.timestamp, 'vs', _chorusLastTimestamp);
         }
       })
-      .catch(function() {});
+      .catch(function(e) { console.warn('Chorus poll error:', e.message); });
   }, 800);
 }
 
