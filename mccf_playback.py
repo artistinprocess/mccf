@@ -1,11 +1,11 @@
 """
-MCCF V3 — Playback Mode
-========================
+MCCF V4 — Playback Mode (Day 17 — Concurrent Arc Firing)
+=========================================================
 Implements V3 Spec item 6 (Playback): replay a recorded EmotionalArc XML
 export through the field without calling the LLM.
 
 What it does:
-    Reads an arc export from exports/ directory.
+    Reads arc export files from exports/ directory.
     Extracts waypoints in stepno order (handles any number of waypoints).
     Pushes each waypoint's channel state (E, B, P, S) to the named
     cultivar agent in the CoherenceField at a configurable pace.
@@ -13,42 +13,45 @@ What it does:
     the Master Script does not know or care if values came from a
     live LLM or playback.
     Multiple cultivars in one file play back simultaneously.
+    Multiple arc files play back concurrently in separate sessions.
 
 Stops and holds at the final waypoint by default.
 Optional loop parameter replays from the beginning.
 
 Endpoints:
     GET  /arc/playback                  list available export files
-    POST /arc/playback/start            start playback
-    GET  /arc/playback/state            current playback state
-    POST /arc/playback/step             advance one step manually
-    POST /arc/playback/stop             stop and hold
-    POST /arc/playback/reset            reset to first waypoint
+    POST /arc/playback/start            start playback (one arc)
+    POST /arc/playback/start/all        start ALL arcs simultaneously
+    GET  /arc/playback/state            state of all active sessions
+    GET  /arc/playback/state/<sid>      state of one session
+    POST /arc/playback/step             advance one step (all sessions or one)
+    POST /arc/playback/stop             stop all sessions
+    POST /arc/playback/stop/<sid>       stop one session
+    POST /arc/playback/reset            reset all sessions
+    POST /arc/playback/reset/<sid>      reset one session
 
 POST /arc/playback/start body:
     {
-        "file":    "arc_Cindy_2026-04-26162557.xml",  // required
-        "pace":    3.0,    // seconds per waypoint, default 3.0
-        "loop":    false,  // loop at end, default false
-        "auto":    true    // auto-advance, default true
-                           // false = manual step-through
+        "file":       "arc_Cindy_2026-04-26162557.xml",  // required
+        "session_id": "Cindy",   // optional; defaults to path_name from file
+        "pace":       3.0,
+        "loop":       false,
+        "auto":       false      // false = X3D segmentArrived drives steps
+    }
+
+POST /arc/playback/step body (optional):
+    {
+        "session_id": "Cindy"    // omit to step ALL active sessions
     }
 
 GET /arc/playback/state returns:
     {
-        "status":      "playing" | "paused" | "complete" | "idle",
-        "file":        "arc_Cindy_...",
-        "step":        3,
-        "total_steps": 7,
-        "cultivars":   ["Cindy"],
-        "current_waypoint": {
-            "id": "W3_THE_ASK", "stepno": 3,
-            "E": 0.62, "B": 0.48, "P": 0.71, "S": 0.55,
-            "question": "...", "response": "...",
-            "cultivar": "Cindy"
+        "sessions": {
+            "Cindy":   { status, file, step, total_steps, cultivars,
+                         current_waypoint, pace, loop, auto },
+            "Steward": { ... }
         },
-        "pace":   3.0,
-        "loop":   false
+        "active_count": 2
     }
 
 Register in mccf_api.py:
@@ -56,7 +59,7 @@ Register in mccf_api.py:
     register_playback_api(app, field)
 
 Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
-V3 Spec v0.2, May 2026
+V4 Day 17, May 2026
 """
 
 import os
@@ -270,13 +273,19 @@ class PlaybackSession:
     def __init__(self, arc_data: dict, field,
                  pace: float = DEFAULT_PACE,
                  loop: bool = False,
-                 auto: bool = True):
-        self.arc_data    = arc_data
-        self.field       = field
-        self.pace        = pace
-        self.loop        = loop
-        self.auto        = auto
-        self.filename    = arc_data.get("arc_id", "unknown")
+                 auto: bool = True,
+                 chorus_callback=None,
+                 arc_xml_str: str = ""):
+        self.arc_data       = arc_data
+        self.field          = field
+        self.pace           = pace
+        self.loop           = loop
+        self.auto           = auto
+        self.filename       = arc_data.get("arc_id", "unknown")
+        # Chorus: callback is chorus_manager.fire_chorus(arc_xml_str, cv).
+        # Stored here so _auto_advance can fire it without importing ChorusManager.
+        self._chorus_cb     = chorus_callback   # callable(arc_xml_str, cv) | None
+        self._arc_xml_str   = arc_xml_str       # raw XML text for transcript assembly
 
         # Merge all cultivars into a unified step sequence.
         # For each stepno, collect all cultivar waypoints at that step.
@@ -387,6 +396,7 @@ class PlaybackSession:
                     self._schedule_next()
                 else:
                     self._status = self.STATUS_COMPLETE
+                    self._fire_chorus_if_configured()
                 return
             self._current_step_idx += 1
             self._apply_current_step()
@@ -396,6 +406,24 @@ class PlaybackSession:
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
+
+    def _fire_chorus_if_configured(self):
+        """
+        Fire the Chorus callback after arc completes.
+        Async — callback runs in its own daemon thread (ChorusManager handles threading).
+        CV assembled from the final waypoint of the primary cultivar.
+        """
+        if not self._chorus_cb or not self._arc_xml_str:
+            return
+        try:
+            # Build CV from the last step's primary waypoint
+            last_wps = self._steps[-1] if self._steps else []
+            primary  = last_wps[0] if last_wps else None
+            cv = {"E": primary.E, "B": primary.B,
+                  "P": primary.P, "S": primary.S} if primary else {}
+            self._chorus_cb(self._arc_xml_str, cv)
+        except Exception as e:
+            print(f"Playback chorus fire error: {e}")
 
     def state(self) -> dict:
         with self._lock:
@@ -429,14 +457,39 @@ class PlaybackSession:
 
 class PlaybackManager:
     """
-    Holds the active PlaybackSession and provides file listing.
-    One instance per Flask app.
+    Manages concurrent PlaybackSessions keyed by session_id.
+
+    session_id defaults to the path_name extracted from the arc filename.
+    Starting a second arc with the same session_id replaces the first.
+    Starting arcs with different session_ids runs them concurrently.
+
+    All mutating operations are protected by a per-manager lock.
+    Individual session state reads are lock-free (session._lock is used
+    by PlaybackSession itself for thread safety).
     """
 
     def __init__(self, field):
         self.field = field
-        self._session: Optional[PlaybackSession] = None
+        self._sessions: dict = {}          # session_id -> PlaybackSession
         self._lock = threading.Lock()
+        self.chorus_callback = None        # set by register_chorus_api after wiring
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _session_id_from_file(self, filename: str, arc_data: dict) -> str:
+        """Derive a session_id from arc metadata. Prefers path_name from arc."""
+        # Try arc_id first (may contain path info from filename)
+        arc_id = arc_data.get("arc_id", "")
+        # arc_id is the filename without .xml; extract path_name portion
+        base = arc_id
+        if base.startswith("arc_"):
+            base = base[4:]
+        ts_match = re.search(r'^(.*?)_(\d{4}.*)$', base)
+        if ts_match:
+            return ts_match.group(1)
+        # Fallback: first cultivar name
+        cultivars = arc_data.get("cultivars", [])
+        return cultivars[0] if cultivars else base or filename
 
     def list_files(self) -> list:
         """List arc XML files in exports/ directory."""
@@ -512,7 +565,8 @@ class PlaybackManager:
         return deduped
 
     def start(self, filename: str, pace: float = DEFAULT_PACE,
-              loop: bool = False, auto: bool = True) -> dict:
+              loop: bool = False, auto: bool = True,
+              session_id: str = None) -> dict:
         exports = _exports_dir()
         filepath = os.path.join(exports, filename)
         if not os.path.exists(filepath):
@@ -522,45 +576,142 @@ class PlaybackManager:
         if not arc_data["waypoints"]:
             raise ValueError(f"No waypoints found in {filename}")
 
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                arc_xml_str = f.read()
+        except Exception:
+            arc_xml_str = ""
+
+        # Determine session_id
+        sid = (session_id or "").strip()
+        if not sid:
+            sid = self._session_id_from_file(filename, arc_data)
+
         with self._lock:
-            if self._session:
-                self._session.stop()
-            self._session = PlaybackSession(
+            if sid in self._sessions:
+                self._sessions[sid].stop()
+            session = PlaybackSession(
                 arc_data=arc_data,
                 field=self.field,
                 pace=pace,
                 loop=loop,
                 auto=auto,
+                chorus_callback=self.chorus_callback,
+                arc_xml_str=arc_xml_str,
             )
-            self._session.start()
-        return self._session.state()
+            self._sessions[sid] = session
+            session.start()
 
-    def state(self) -> dict:
-        with self._lock:
-            if not self._session:
-                return {"status": "idle", "message": "No playback session active."}
-            return self._session.state()
+        result = session.state()
+        result["session_id"] = sid
+        return result
 
-    def stop(self) -> dict:
-        with self._lock:
-            if not self._session:
-                return {"status": "idle"}
-            self._session.stop()
-            return self._session.state()
+    def start_all(self, pace: float = DEFAULT_PACE,
+                  loop: bool = False, auto: bool = False) -> dict:
+        """
+        Start all arc files in exports/ simultaneously.
+        Uses newest file per path_name (same dedup as list_files).
+        Returns { sessions: {session_id: state}, started: [session_id, ...] }
+        """
+        files = self.list_files()
+        started = {}
+        for f in files:
+            try:
+                state = self.start(
+                    filename=f["filename"],
+                    pace=pace,
+                    loop=loop,
+                    auto=auto,
+                    session_id=f.get("path_name") or None,
+                )
+                sid = state.get("session_id", f.get("path_name", f["filename"]))
+                started[sid] = state
+            except Exception as e:
+                sid = f.get("path_name", f["filename"])
+                started[sid] = {"status": "error", "error": str(e)}
+        return {"sessions": started, "started": list(started.keys())}
 
-    def step(self) -> dict:
-        with self._lock:
-            if not self._session:
-                return {"status": "idle", "error": "No session active"}
-            self._session.step_forward()
-            return self._session.state()
+    def _state_unlocked(self, session_id: str = None) -> dict:
+        """
+        Build state dict WITHOUT acquiring self._lock.
+        Called only from methods that already hold the lock.
+        """
+        if session_id:
+            sess = self._sessions.get(session_id)
+            if not sess:
+                return {"status": "idle", "session_id": session_id,
+                        "message": f"No session '{session_id}'."}
+            result = sess.state()
+            result["session_id"] = session_id
+            return result
+        all_states = {}
+        for sid, sess in self._sessions.items():
+            s = sess.state()
+            s["session_id"] = sid
+            all_states[sid] = s
+        active = sum(1 for s in all_states.values()
+                     if s.get("status") in ("playing", "paused"))
+        return {"sessions": all_states, "active_count": active}
 
-    def reset(self) -> dict:
+    def state(self, session_id: str = None) -> dict:
+        """
+        Return state dict.
+        session_id=None  → { sessions: {sid: state, ...}, active_count: N }
+        session_id=X     → state for session X, or idle if not found.
+        """
         with self._lock:
-            if not self._session:
-                return {"status": "idle"}
-            self._session.reset()
-            return self._session.state()
+            return self._state_unlocked(session_id)
+
+    def stop(self, session_id: str = None) -> dict:
+        """Stop one or all sessions."""
+        with self._lock:
+            if session_id:
+                sess = self._sessions.get(session_id)
+                if not sess:
+                    return {"status": "idle", "session_id": session_id}
+                sess.stop()
+                result = sess.state()
+                result["session_id"] = session_id
+                return result
+            for sess in self._sessions.values():
+                sess.stop()
+            return self._state_unlocked()
+
+    def step(self, session_id: str = None) -> dict:
+        """
+        Advance one step.
+        session_id=None → advance ALL active sessions, return aggregate state.
+        session_id=X    → advance session X only.
+        """
+        with self._lock:
+            if session_id:
+                sess = self._sessions.get(session_id)
+                if not sess:
+                    return {"status": "idle", "session_id": session_id,
+                            "error": f"No session '{session_id}'"}
+                sess.step_forward()
+                result = sess.state()
+                result["session_id"] = session_id
+                return result
+            for sess in self._sessions.values():
+                if sess._status == PlaybackSession.STATUS_PLAYING:
+                    sess.step_forward()
+            return self._state_unlocked()
+
+    def reset(self, session_id: str = None) -> dict:
+        """Reset one or all sessions."""
+        with self._lock:
+            if session_id:
+                sess = self._sessions.get(session_id)
+                if not sess:
+                    return {"status": "idle", "session_id": session_id}
+                sess.reset()
+                result = sess.state()
+                result["session_id"] = session_id
+                return result
+            for sess in self._sessions.values():
+                sess.reset()
+            return self._state_unlocked()
 
 
 # ---------------------------------------------------------------------------
@@ -585,13 +736,14 @@ def list_playback_files():
 @playback_bp.route("/arc/playback/start", methods=["POST"])
 def start_playback():
     """
-    Start playback of an arc export file.
+    Start playback of one arc export file.
 
     Body: {
-        "file":  "arc_Cindy_2026-04-26162557.xml",
-        "pace":  3.0,
-        "loop":  false,
-        "auto":  true
+        "file":       "arc_Cindy_2026-04-26162557.xml",  // required
+        "session_id": "Cindy",    // optional; defaults to path_name
+        "pace":       3.0,
+        "loop":       false,
+        "auto":       false       // false = X3D segmentArrived drives steps
     }
     """
     data = request.get_json() or {}
@@ -599,12 +751,14 @@ def start_playback():
     if not filename:
         return jsonify({"error": "file required"}), 400
 
-    pace = float(data.get("pace", DEFAULT_PACE))
-    loop = bool(data.get("loop", False))
-    auto = bool(data.get("auto", True))
+    pace       = float(data.get("pace", DEFAULT_PACE))
+    loop       = bool(data.get("loop", False))
+    auto       = bool(data.get("auto", False))
+    session_id = data.get("session_id", "").strip() or None
 
     try:
-        state = _mgr().start(filename, pace=pace, loop=loop, auto=auto)
+        state = _mgr().start(filename, pace=pace, loop=loop,
+                             auto=auto, session_id=session_id)
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 404
     except ValueError as e:
@@ -615,28 +769,74 @@ def start_playback():
     return jsonify({"status": "started", "state": state})
 
 
+@playback_bp.route("/arc/playback/start/all", methods=["POST"])
+def start_all_playback():
+    """
+    Start ALL arc files in exports/ simultaneously.
+
+    Body (optional): { "pace": 3.0, "loop": false, "auto": false }
+    Returns: { sessions: { session_id: state, ... }, started: [...] }
+    """
+    data = request.get_json() or {}
+    pace = float(data.get("pace", DEFAULT_PACE))
+    loop = bool(data.get("loop", False))
+    auto = bool(data.get("auto", False))
+
+    result = _mgr().start_all(pace=pace, loop=loop, auto=auto)
+    return jsonify(result)
+
+
 @playback_bp.route("/arc/playback/state", methods=["GET"])
 def playback_state():
-    """Get current playback state."""
-    return jsonify(_mgr().state())
+    """
+    Get playback state.
+    ?session_id=X  → state for session X only.
+    (no param)     → { sessions: {sid: state, ...}, active_count: N }
+    """
+    session_id = request.args.get("session_id", "").strip() or None
+    return jsonify(_mgr().state(session_id))
+
+
+@playback_bp.route("/arc/playback/state/<session_id>", methods=["GET"])
+def playback_state_by_id(session_id):
+    """Get state for a specific session."""
+    return jsonify(_mgr().state(session_id))
 
 
 @playback_bp.route("/arc/playback/step", methods=["POST"])
 def playback_step():
-    """Advance one step manually."""
-    return jsonify(_mgr().step())
+    """
+    Advance one step.
+    Body: { "session_id": "Cindy" }  → step session Cindy only.
+    Body: {}                          → step ALL active sessions.
+    """
+    data = request.get_json() or {}
+    session_id = data.get("session_id", "").strip() or None
+    return jsonify(_mgr().step(session_id))
 
 
 @playback_bp.route("/arc/playback/stop", methods=["POST"])
 def stop_playback():
-    """Stop (pause) playback, hold current state."""
-    return jsonify(_mgr().stop())
+    """
+    Stop playback.
+    Body: { "session_id": "Cindy" }  → stop session Cindy only.
+    Body: {}                          → stop ALL sessions.
+    """
+    data = request.get_json() or {}
+    session_id = data.get("session_id", "").strip() or None
+    return jsonify(_mgr().stop(session_id))
 
 
 @playback_bp.route("/arc/playback/reset", methods=["POST"])
 def reset_playback():
-    """Reset to first waypoint."""
-    return jsonify(_mgr().reset())
+    """
+    Reset to first waypoint.
+    Body: { "session_id": "Cindy" }  → reset session Cindy only.
+    Body: {}                          → reset ALL sessions.
+    """
+    data = request.get_json() or {}
+    session_id = data.get("session_id", "").strip() or None
+    return jsonify(_mgr().reset(session_id))
 
 
 # ---------------------------------------------------------------------------

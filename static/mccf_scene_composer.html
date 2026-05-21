@@ -445,6 +445,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher</div></div>
       <button class="btn" id="send-btn" onclick="sendToLauncher()" style="border-color:var(--accent);color:var(--accent)">&#9654; Send</button>
     </div>
+    <div class="expopt" style="border-color:var(--purple);margin-top:6px">
+      <div class="explbl"><div style="color:var(--purple)">Open X3D Loader</div><div class="expdsc">Open loader in a new tab — ready to Play All</div></div>
+      <button class="btn" onclick="openLoader()" style="border-color:var(--purple);color:var(--purple)">&#9654; Open Loader</button>
+    </div>
     <div class="sh" style="margin-top:14px">Options</div>
     <label><input type="checkbox" id="exp-sounds" checked style="width:auto;margin-right:6px">Sound node stubs</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-protos" checked style="width:auto;margin-right:6px">Inline PROTOs</label>
@@ -479,7 +483,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="sh" style="margin:0 0 4px">Zone Commands</div>
       <div id="zd-commands" style="font-size:13px;color:var(--cool)"></div>
     </div>
-    <div class="btn-row"><button class="btn danger" onclick="deleteSelected('zone')">Delete</button></div>
+    <div class="btn-row">
+      <button class="btn cool" onclick="editZone(selectedId)">Edit</button>
+      <button class="btn danger" onclick="deleteSelected('zone')">Delete</button>
+    </div>
   </div>
   <div id="detail-agent" style="display:none">
     <div class="sh" style="margin-top:0">Agent</div>
@@ -492,6 +499,16 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="ad-disp" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:18px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar File</div>
+      <div id="ad-hanim" style="font-size:12px;color:var(--dim);word-break:break-all;margin-bottom:4px"></div>
+      <select id="ad-hanim-select" style="display:none;margin-bottom:4px">
+        <option value="">(none — cylinder placeholder)</option>
+      </select>
+      <div class="btn-row" style="margin:0">
+        <button class="btn cool" style="font-size:11px" onclick="toggleHanimEdit()">Edit Avatar</button>
+        <button class="btn pri" style="font-size:11px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Save</button>
+      </div>
+    </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
   <div id="detail-wp" style="display:none">
@@ -716,6 +733,28 @@ function loadAll(){
       Object.keys(fa).forEach(function(n){
         if(!agents[n])agents[n]={name:n,weights:fa[n].weights||{E:0.25,B:0.25,P:0.25,S:0.25},
           regulation:fa[n].regulation||0.7,role:fa[n].role||'agent',color:agentColor(n),disposition:''};
+      });
+      renderAll();
+      // Always load cultivar definitions so hanim_src is populated before any export
+      return apiGet('/cultivars/xml');
+    }).then(function(cx){
+      ((cx||{}).cultivars||[]).forEach(function(c){
+        if(!c.agentname) return;
+        if(!agents[c.agentname]){
+          agents[c.agentname]={name:c.agentname,weights:c.weights||{E:0.25,B:0.25,P:0.25,S:0.25},
+            regulation:c.regulation||0.7,role:c.role||'agent',color:c.color||agentColor(c.agentname),
+            disposition:c.disposition||''};
+        }
+        agents[c.agentname].color=c.color||agents[c.agentname].color;
+        agents[c.agentname].disposition=c.disposition||'';
+        agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
+        agents[c.agentname].hanim_src=c.hanim_src||'';
+        agents[c.agentname].hanim_loa=c.hanim_loa||4;
+        // Refresh placedAgents too — buildAvatarNode reads from placedAgents
+        if(placedAgents[c.agentname]){
+          placedAgents[c.agentname].hanim_src=c.hanim_src||'';
+          placedAgents[c.agentname].hanim_loa=c.hanim_loa||4;
+        }
       });
       renderAll();
     }).catch(function(e){console.warn('loadAll:',e);});
@@ -1074,6 +1113,14 @@ function showAD(name){
   var pos=a.position||[0,0,0];
   document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
+  // Avatar file
+  var hEl=document.getElementById('ad-hanim');
+  if(hEl)hEl.textContent=a.hanim_src||'(placeholder — no avatar file assigned)';
+  // Reset inline edit state
+  var sel=document.getElementById('ad-hanim-select');
+  var sav=document.getElementById('ad-hanim-save');
+  if(sel){sel.style.display='none';}
+  if(sav)sav.style.display='none';
 }
 function setAgentColor(hex){
   var name=document.getElementById('ad-color').dataset.agent;
@@ -1083,6 +1130,60 @@ function setAgentColor(hex){
   colorMap[name]=hex;
   document.getElementById('ad-name').style.color=hex;
   drawScene();
+}
+function toggleHanimEdit(){
+  var sel=document.getElementById('ad-hanim-select');
+  var sav=document.getElementById('ad-hanim-save');
+  var hEl=document.getElementById('ad-hanim');
+  if(!sel)return;
+  var open=sel.style.display!=='none';
+  if(open){
+    sel.style.display='none';
+    if(sav)sav.style.display='none';
+  } else {
+    var name=document.getElementById('ad-name').textContent;
+    var a=placedAgents[name]||agents[name];
+    var currentVal=(a&&a.hanim_src)||'';
+    // Populate dropdown from /avatar/list, then pre-select current value
+    apiGet('/avatar/list').then(function(data){
+      while(sel.options.length>1)sel.remove(1);
+      (data.avatars||[]).forEach(function(f){
+        var opt=document.createElement('option');
+        opt.value='avatars/'+f;
+        opt.textContent=f;
+        sel.appendChild(opt);
+      });
+      // Pre-select current value (from Character Creator or previous save)
+      if(currentVal){
+        var match=Array.from(sel.options).find(function(o){
+          return o.value===currentVal||o.value.split('/').pop()===currentVal.split('/').pop();
+        });
+        if(match) sel.value=match.value;
+      }
+      sel.style.display='block';
+      if(sav)sav.style.display='block';
+    }).catch(function(){
+      // Fallback: show with whatever options exist
+      sel.style.display='block';
+      if(sav)sav.style.display='block';
+    });
+  }
+}
+function saveHanimSrc(){
+  var name=document.getElementById('ad-name').textContent;
+  var sel=document.getElementById('ad-hanim-select');
+  if(!name||!sel)return;
+  var val=sel.value.trim();
+  // Normalise: strip leading slash or static/
+  val=val.replace(/^\/?static\//,'');
+  if(placedAgents[name])placedAgents[name].hanim_src=val;
+  if(agents[name])agents[name].hanim_src=val;
+  var hEl=document.getElementById('ad-hanim');
+  if(hEl)hEl.textContent=val||'(placeholder — no avatar file assigned)';
+  sel.style.display='none';
+  var sav=document.getElementById('ad-hanim-save');
+  if(sav)sav.style.display='none';
+  toast('Avatar file updated for '+name+' — re-export scene to apply');
 }
 function showWD(name){
   var wp=waypoints[name];if(!wp)return;
@@ -1245,6 +1346,44 @@ function confirmZone(){
   _zoneCommandRules = [];
   renderZoneCommandsForm();
   hideHint();renderAll();toast('Zone: '+(name||id));
+}
+function editZone(id){
+  var z=zones[id];if(!z){toast('Zone not found',true);return;}
+  // Populate all form fields from existing zone data
+  document.getElementById('z-id').value=z.id||'';
+  document.getElementById('z-name').value=z.name||'';
+  document.getElementById('z-type').value=z.zone_type||'neutral';
+  document.getElementById('z-radius').value=z.radius||4;
+  document.getElementById('z-desc').value=z.descriptor||'';
+  document.getElementById('z-noise').value=(z.noise_coefficient!==undefined)?z.noise_coefficient:0.10;
+  document.getElementById('z-ambient').value=(z.ambient_theme&&z.ambient_theme.scale)||'dorian';
+  var w=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25};
+  ['E','B','P','S'].forEach(function(ch){
+    document.getElementById('zw-'+ch).value=w[ch]||0.25;
+    document.getElementById('zwv-'+ch).textContent=(w[ch]||0.25).toFixed(2);
+  });
+  // Chorus
+  var chorus=z.chorus||null;
+  document.getElementById('z-chorus-enabled').checked=!!chorus;
+  document.getElementById('z-chorus-form').style.display=chorus?'block':'none';
+  if(chorus){
+    document.getElementById('z-chorus-llm').value=chorus.llm||'stub';
+    document.getElementById('z-chorus-tone').value=chorus.tone||'ominous';
+    document.getElementById('z-chorus-tokens').value=chorus.max_tokens||80;
+    document.getElementById('z-chorus-display').value=chorus.display||'overlay';
+    document.getElementById('z-chorus-persona').value=chorus.persona||'';
+  }
+  // Zone commands
+  _zoneCommandRules=(z.commands||[]).slice();
+  renderZoneCommandsForm();
+  // Set pendingPos so confirmZone doesn't reject — use existing zone location
+  pendingPos=(z.location||[0,0]).slice();
+  // Switch to zones mode and show form
+  if(mode!=='zones')setMode('zones');
+  document.getElementById('zone-form').style.display='block';
+  document.getElementById('zone-form').querySelector('.sh').textContent='Edit Zone';
+  placing='zone';
+  toast('Editing zone: '+(z.name||id));
 }
 function loadZonePreset(){
   var t=document.getElementById('z-type').value,p=ZONE_PRESETS[t]||ZONE_PRESETS.neutral;
@@ -2273,12 +2412,16 @@ function _saveSceneArc(){
     })
     .then(function(){
       document.getElementById('run-log').innerHTML+=
-        '<div style="color:var(--dim)">Launcher updated — ready to play.</div>';
+        '<div style="color:var(--dim)">Launcher updated — </div>'+
+        '<div><button class="btn" onclick="openLoader()" style="margin-top:4px;border-color:var(--purple);color:var(--purple)">&#9654; Open X3D Loader</button></div>';
     })
     .catch(function(){toast('Arc save failed',true);});
 }
 
 
+function openLoader(){
+  window.open(API + '/static/mccf_x3d_loader.html', '_blank');
+}
 function dlFile(fn,content,mime){
   var b=new Blob([content],{type:mime}),url=URL.createObjectURL(b),a=document.createElement('a');
   a.href=url;a.download=fn.split('/').pop();document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);

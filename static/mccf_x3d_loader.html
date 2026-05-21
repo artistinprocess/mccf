@@ -89,6 +89,8 @@ button.active { background: #4af0a8; color: #111; }
   position: fixed;
   bottom: 60px; left: 50%; transform: translateX(-50%);
   max-width: 560px; width: 90%;
+  max-height: 40vh;
+  overflow-y: auto;
   background: rgba(4, 6, 14, 0.90);
   border: 1px solid #3a2060;
   border-radius: 4px;
@@ -96,6 +98,7 @@ button.active { background: #4af0a8; color: #111; }
   color: #c8a8f0;
   font-family: monospace; font-size: 14px; line-height: 1.6;
   text-align: center;
+  word-wrap: break-word;
   z-index: 200;
   animation: chorusFadeIn 1.2s ease;
 }
@@ -118,7 +121,7 @@ button.active { background: #4af0a8; color: #111; }
   padding: 10px 12px;
   font-size: 12px; color: #a0b8c8;
   border-radius: 4px; min-width: 220px;
-  max-width: 280px; z-index: 100;
+  max-width: 340px; z-index: 100;
 }
 #playback-panel .ph { color:#7ab8f5; font-size:13px; margin-bottom:6px; font-weight:bold; }
 #playback-panel select, #playback-panel input[type=number] {
@@ -137,7 +140,7 @@ button.active { background: #4af0a8; color: #111; }
   margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
   display:none;
 }
-#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; white-space:pre-wrap; max-height:160px; overflow-y:auto; }
+#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; white-space:pre-wrap; max-height:260px; overflow-y:auto; }
 #pb-response  { color:#c0d8e8; line-height:1.5; font-size:13px;
                 max-height:120px; overflow-y:auto; }
 #pb-channels  { display:flex; gap:6px; margin-top:4px; }
@@ -205,7 +208,7 @@ button.active { background: #4af0a8; color: #111; }
     <button id="pb-play-all-btn" onclick="pbPlayAll()" style="border-color:#a0f060;color:#a0f060;">&#9654;&#9654; Play All</button>
     <button id="pb-step-btn" onclick="pbStep()" style="border-color:#7ab8f5;color:#7ab8f5;">&#9654;&#9654; Step</button>
     <button id="pb-stop-btn" onclick="pbStop()" style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646; Stop</button>
-    <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset</button>
+    <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset + Replay</button>
   </div>
   <div style="margin-bottom:5px;">
     <button onclick="resetToStartPosition()" style="width:100%;border-color:#c080f0;color:#c080f0;background:none;border:1px solid #c080f0;border-radius:3px;padding:3px 6px;font-family:monospace;font-size:11px;cursor:pointer;">&#8602; Reset Position</button>
@@ -1118,7 +1121,9 @@ var _x3dLastArrivedSeg = {};
 // a second pbReleaseDwell call (from the onComplete chain) from re-entering.
 var _pbArcComplete = {};  // {agentSafeName: bool} — per-agent arc-complete flag
 var _pbExpectedAgents = 0;      // set by pbPlayAll/pbPlay — how many agents are expected
-var _pbLastArcFiles = [];       // arc file names for Chorus firing
+var _pbLastArcFiles = [];       // kept for legacy/debug; not used for Chorus firing
+var _chorusTranscript = [];     // [{label, speaker, text}] — accumulated live during playback
+var _chorusFinalCV   = {};      // {E,B,P,S} — CV from the last waypoint of the last agent to complete
 var _pbCultivarSessionMap = {}; // {cultivarSafeName: session_id} — set by pbPlayAll
 
 function pbReleaseDwell(agentSafeName) {
@@ -1367,7 +1372,10 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
             if (field && typeof field.addFieldCallback === 'function') {
               var _lastCbSeg = -1;
               var _cbGen = _pbCbGeneration;  // capture generation at wire time
-            field.addFieldCallback(arrNodeName + '_cb', function(value) {
+            // Key includes generation so re-registration on Reset+Replay always succeeds.
+            // X_ITE ignores addFieldCallback if the key already exists — a stale key
+            // from the previous run would block the new callback from wiring.
+            field.addFieldCallback(arrNodeName + '_cb_' + _cbGen, function(value) {
                 // Self-expire if a newer pbPlay has run
                 if (_pbCbGeneration !== _cbGen) return;
                 var seg = parseInt(value) || 0;
@@ -1567,6 +1575,8 @@ async function pbPlay() {
   _pbArcComplete = {};
   _pbExpectedAgents = 0;
   _pbLastArcFiles = [];
+  _chorusTranscript = [];     // clear transcript for new run
+  _chorusFinalCV   = {};
   _pbCultivarSessionMap = {};
   _pbPendingOnComplete = {};
   _pbSpeakToken = {};
@@ -1763,7 +1773,21 @@ function _pbWaitForGroup(groupSafeNames) {
 async function pbPlayAll() {
   console.log('pbPlayAll: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
 
-  // ── All async work happens BEFORE speech unlock ──────────────────────────
+  // Guard: prevent concurrent calls (e.g. Reset fires pbPlayAll while Play All button also fired)
+  if (window._pbPlayAllInFlight) {
+    console.warn('pbPlayAll: already in flight — ignoring duplicate call');
+    return;
+  }
+  window._pbPlayAllInFlight = true;
+  try {
+    await _pbPlayAllInner();
+  } finally {
+    window._pbPlayAllInFlight = false;
+  }
+}
+
+async function _pbPlayAllInner() {
+  console.log('_pbPlayAllInner: entered');
   // Edge drops the gesture lock after any await. Speech warm-up must be the
   // last synchronous operation before the function yields again.
   // So: fetch arc sessions first, then warm up speech, then proceed.
@@ -1777,6 +1801,8 @@ async function pbPlayAll() {
   _pbArcComplete = {};
   _pbExpectedAgents = 0;
   _pbLastArcFiles = [];
+  _chorusTranscript = [];     // clear transcript for new run
+  _chorusFinalCV   = {};
   _pbCultivarSessionMap = {};
   _pbPendingOnComplete = {};
   _pbSpeakToken = {};
@@ -1850,9 +1876,30 @@ async function pbPlayAll() {
 
     // Track expected completions and arc files for Chorus
     _pbExpectedAgents = allCultivars.length;
+    // Try .file field first (single-arc sessions supply it); start/all sessions do not.
     _pbLastArcFiles = sessionIds.map(function(sid) {
       return (sessions[sid].state || sessions[sid]).file || '';
     }).filter(Boolean);
+    // Fallback: match arc filenames in pb-file dropdown by cultivar name
+    // Arc filenames are like arc_{sceneName}_{CultivarName}_{timestamp}.xml
+    // Session IDs (path_Cindy) do NOT match arc filenames — use cultivar names instead.
+    if (_pbLastArcFiles.length === 0) {
+      var pbSel = document.getElementById('pb-file');
+      var dropdownVals = pbSel ? Array.from(pbSel.options).map(function(o){return o.value;}).filter(Boolean) : [];
+      allCultivars.forEach(function(cultivar) {
+        // Match any dropdown entry that contains the cultivar name (case-insensitive, underscores normalised)
+        var safeCultivar = cultivar.replace(/[^A-Za-z0-9]/g, '_');
+        var match = dropdownVals.find(function(v) {
+          var vSafe = v.replace(/[^A-Za-z0-9]/g, '_');
+          return vSafe.toLowerCase().indexOf(safeCultivar.toLowerCase()) !== -1;
+        });
+        if (match && _pbLastArcFiles.indexOf(match) === -1) _pbLastArcFiles.push(match);
+      });
+      // If still nothing, use all dropdown values as last resort
+      if (_pbLastArcFiles.length === 0) {
+        _pbLastArcFiles = dropdownVals.slice();
+      }
+    }
     // Store cultivar→session map so _pbAdvanceSeg can step the correct session
     _pbCultivarSessionMap = {};
     Object.keys(cultivarSessionMap).forEach(function(c) {
@@ -2428,6 +2475,8 @@ async function pbReset() {
   _pbArcComplete = {};
   _pbExpectedAgents = 0;
   _pbLastArcFiles = [];
+  _chorusTranscript = [];     // clear transcript on reset
+  _chorusFinalCV   = {};
   _pbCultivarSessionMap = {};
   _pbPendingOnComplete = {};
   _pbSpeakToken = {};
@@ -2436,18 +2485,20 @@ async function pbReset() {
   _pbSpeechQueue = [];
   _zoneCommandQueue = [];
   _zoneCommandInFlight = false;
+  _chorusLastTimestamp = 0;  // reset so next chorus poll is never stale
   try {
     const r=await fetch(API+'/arc/playback/reset',{
       method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
-      signal:AbortSignal.timeout(4000)
+      signal:AbortSignal.timeout(8000)
     });
     pbUpdateDisplay(await r.json());
     var qr=document.getElementById('pb-qr'); if(qr) qr.style.display='none';
-    console.log('pbReset: server reset complete');
+    console.log('pbReset: server reset complete — firing pbPlayAll');
+    pbPlayAll();
   } catch(e) {
-    console.warn('pbReset: server reset timed out or failed —', e.message, '— JS state already cleared');
-    var si=document.getElementById('pb-step-info'); if(si) si.textContent='Reset. Press Play All to replay.';
+    console.warn('pbReset: server reset timed out or failed —', e.message, '— JS state already cleared — firing pbPlayAll anyway');
     var qr=document.getElementById('pb-qr'); if(qr) qr.style.display='none';
+    pbPlayAll();
   }
 }
 
@@ -2567,6 +2618,15 @@ function pbUpdateDisplay(state) {
   var stepKey = safeName2 + ':' + String(wp.stepno || state.step || wp.id || '');
   var isNewStep = (stepKey !== (_pbLastStepKey[safeName2] || ''));
   if (isNewStep) _pbLastStepKey[safeName2] = stepKey;
+  // Accumulate transcript for Chorus — collect every new-step dialogue line as it plays
+  if (isNewStep && qaLines.length) {
+    var _wpLabel = wp.id || wp.label || ('step' + (wp.stepno || step));
+    qaLines.filter(function(l){return l.text && l.text.trim();}).forEach(function(l){
+      _chorusTranscript.push({label: _wpLabel, speaker: l.speaker || cultivar, text: l.text.trim()});
+    });
+    // Track CV of most recent waypoint — will be final CV when last agent completes
+    if (wp.E !== undefined) _chorusFinalCV = {E: wp.E||0, B: wp.B||0, P: wp.P||0, S: wp.S||0};
+  }
   // TTS fires on new step regardless of whether position is X3D-driven or JS-lerped.
   // Decoupled from _x3dTimerActive — dialogue is MCCF domain, not X3D domain.
   if (isNewStep && (qaLines.length || wp.question || wp.response)) {
@@ -2630,6 +2690,18 @@ function pbUpdateDisplayFinal(state, fireChorus) {
     var finalSafeName = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
     console.log('pbUpdateDisplayFinal: speaking final waypoint', wp.id, qaLines.length, 'lines');
     pbSpeakQALines(qaLines, null, finalSafeName);
+    // Accumulate final waypoint into transcript
+    var _finalLabel = wp.id || wp.label || ('step' + (wp.stepno || 0));
+    qaLines.filter(function(l){return l.text && l.text.trim();}).forEach(function(l){
+      var _fSpeaker = l.speaker || (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
+      // Avoid duplicating if pbUpdateDisplay already captured this step
+      var _fKey = _finalLabel + '|' + _fSpeaker + '|' + l.text.trim();
+      var _alreadyIn = _chorusTranscript.some(function(e){
+        return e.label === _finalLabel && e.speaker === _fSpeaker && e.text === l.text.trim();
+      });
+      if (!_alreadyIn) _chorusTranscript.push({label: _finalLabel, speaker: _fSpeaker, text: l.text.trim()});
+    });
+    if (wp.E !== undefined) _chorusFinalCV = {E: wp.E||0, B: wp.B||0, P: wp.P||0, S: wp.S||0};
   } else if (qr) {
     qr.style.display = 'none';
   }
@@ -2638,18 +2710,38 @@ function pbUpdateDisplayFinal(state, fireChorus) {
   // Fire Chorus only when explicitly requested (all agents complete in pbPlayAll,
   // or single-arc complete in pbPlay).
   if (fireChorus !== false) {
-    // Use _pbLastArcFiles if populated (pbPlayAll), else fall back to pb-file dropdown
-    var chorusFiles = _pbLastArcFiles.length > 0
-      ? _pbLastArcFiles
-      : [(document.getElementById('pb-file') || {}).value || ''].filter(Boolean);
-    if (chorusFiles.length > 0) {
-      console.log('pbUpdateDisplayFinal: firing Chorus for', chorusFiles);
+    // Build plain-text transcript from lines accumulated during this run.
+    // Format: [waypoint_label] Speaker: "text"
+    var _transcriptText = _chorusTranscript.map(function(e){
+      return '[' + e.label + '] ' + e.speaker + ': "' + e.text + '"';
+    }).join('\n');
+
+    if (_transcriptText) {
+      // Scene name from the x3d-file selector (strip .x3d extension)
+      var _xSel = document.getElementById('x3d-file');
+      var _sceneName = _xSel ? (_xSel.value || '').replace(/\.x3d$/i, '') : '';
+
+      console.log('pbUpdateDisplayFinal: firing Chorus — transcript lines:', _chorusTranscript.length,
+                  'cv:', JSON.stringify(_chorusFinalCV));
       fetch(API + '/chorus/fire', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({arc_file: chorusFiles[0]})
-      }).catch(function() {});
+        body: JSON.stringify({
+          transcript:  _transcriptText,
+          cv:          _chorusFinalCV,
+          scene_name:  _sceneName
+        })
+      }).then(function(r) {
+        console.log('chorus/fire response status:', r.status);
+        return r.json();
+      }).then(function(d) {
+        console.log('chorus/fire response:', JSON.stringify(d).slice(0,200));
+      }).catch(function(e) {
+        console.warn('chorus/fire fetch error:', e.message);
+      });
       startChorusPoll();
+    } else {
+      console.log('pbUpdateDisplayFinal: no transcript — Chorus skipped');
     }
   }
 }
@@ -2915,9 +3007,12 @@ function displayChorus(data) {
   void overlay.offsetWidth;
   overlay.style.animation = '';
 
-  // Auto-dismiss after 18 s
+  // Auto-dismiss: scale with text length (~60ms/word, min 18s, max 60s)
   clearTimeout(window._chorusAutoDismiss);
-  window._chorusAutoDismiss = setTimeout(dismissChorus, 18000);
+  var wordCount = (data.text || '').split(/\s+/).filter(Boolean).length;
+  var dismissMs = Math.min(60000, Math.max(18000, wordCount * 60));
+  console.log('Chorus auto-dismiss in', dismissMs, 'ms (', wordCount, 'words)');
+  window._chorusAutoDismiss = setTimeout(dismissChorus, dismissMs);
 
   // v2 hook — if server returns display="x3d" and a viewpoint, cut camera.
   // Viewpoint cut IS the coverage for LLM latency per Day 12 design.
