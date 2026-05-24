@@ -603,6 +603,28 @@ function applyHotHouseData(data) {
         honorMat.emissiveColor = new X3D.SFColor(0.9 * conf, 0.75 * conf, 0.1 * conf);
         applied++;
       }
+
+      // Task 3 — Behavior clip selection from observed_cv.
+      // Prefer observed_cv from _lastFieldData (live ϕ+ϵ); fall back to
+      // hotHouse channel values when field data not yet available.
+      try {
+        var fieldAgents = (window._lastFieldData || {}).agents || {};
+        var agentField  = fieldAgents[agentName];
+        var cv;
+        if (agentField && agentField.observed_cv) {
+          cv = agentField.observed_cv;
+        } else if (agentField && agentField.weights) {
+          cv = agentField.weights;
+        } else {
+          cv = {
+            E: d.morphWeight_emotion || 0.25,
+            B: d.animationSpeed      || 0.25,
+            P: d.gazeDirectness      || 0.25,
+            S: d.socialProximity     || 0.25
+          };
+        }
+        selectBehaviorClip(suffix, cv);
+      } catch(behErr) { /* behavior selection is non-critical — skip silently */ }
     }
   } catch(e) {
     // Optional nodes (GazeMat_, BodyMat_, etc.) may not exist in all scenes — skip silently
@@ -611,6 +633,167 @@ function applyHotHouseData(data) {
   const diagEl = document.getElementById('x3d-diag');
   if (diagEl) diagEl.textContent =
     `hothouse: ${tracked}/${Object.keys(agentMap).length} agents | ${applied} nodes updated`;
+}
+
+// ─────────────────────────────────────────────
+// HAnim behavior clip selection — Task 3, Day 23
+// ─────────────────────────────────────────────
+// Reads observed_cv for each agent and selects the appropriate TimeSensor clip.
+// Called from applyHotHouseData() on each poll tick.
+// Only fires SAI writes when the selected clip changes — not on every tick.
+// Hysteresis band of ±0.03 prevents rapid switching at threshold boundaries.
+
+var _BEHAV_HYST = 0.03;
+
+function selectBehaviorClip(agentSafeName, cv) {
+  var config = _agentBehaviorClips[agentSafeName];
+  if (!config || !config.clips || !config.clips.length) return;
+
+  var clips   = config.clips;
+  var defName = config.default || 'Default';
+  var current = _agentCurrentClip[agentSafeName];
+
+  function conditionMet(clip) {
+    var chs = ['E','B','P','S'];
+    for (var i = 0; i < chs.length; i++) {
+      var ch = chs[i];
+      var val = (cv && cv[ch] !== undefined) ? cv[ch] : 0.25;
+      var minKey = ch + '_min', maxKey = ch + '_max';
+      // Hysteresis: widen the window for the currently-playing clip to prevent flutter
+      var hyst = (clip.name === current) ? _BEHAV_HYST : 0;
+      if (clip[minKey] !== undefined && val < clip[minKey] - hyst) return false;
+      if (clip[maxKey] !== undefined && val > clip[maxKey] + hyst) return false;
+    }
+    return true;
+  }
+
+  var oneshots = clips.filter(function(c) { return !c.loop  && conditionMet(c); });
+  var loopers  = clips.filter(function(c) { return  c.loop  && conditionMet(c); });
+  loopers.sort(function(a,b) { return (b.priority||0) - (a.priority||0); });
+
+  var selected;
+  if (oneshots.length) {
+    oneshots.sort(function(a,b) { return (b.priority||0) - (a.priority||0); });
+    selected = oneshots[0];
+  } else if (loopers.length) {
+    selected = loopers[0];
+  } else {
+    selected = clips.find(function(c) { return c.name === defName; }) || clips[0];
+  }
+
+  if (!selected) return;
+  if (selected.name === current) return;   // no change — skip SAI write
+
+  applyBehaviorClip(agentSafeName, selected);
+}
+
+function applyBehaviorClip(agentSafeName, clip) {
+  var timerMap = _behaviorTimerMap[agentSafeName];
+  if (!timerMap) return;
+
+  // Disable all other behavior timers
+  // MECHANISM (confirmed Day 25): enabled=true/false is the correct SAI path.
+  // startTime/stopTime do NOT work in X_ITE for behavior switching.
+  Object.keys(timerMap).forEach(function(base) {
+    if (base !== clip.timerDEF) {
+      try { timerMap[base].enabled = false; } catch(e) {}
+    }
+  });
+
+  // Enable the selected clip
+  var targetNode = timerMap[clip.timerDEF];
+  if (!targetNode) {
+    console.warn('applyBehaviorClip: timer not found:', clip.timerDEF, agentSafeName);
+    return;
+  }
+
+  try {
+    targetNode.enabled = true;
+  } catch(e) {
+    console.warn('applyBehaviorClip: SAI write failed for', agentSafeName, clip.timerDEF, e);
+    return;
+  }
+
+  var previous = _agentCurrentClip[agentSafeName] || '(none)';
+  _agentCurrentClip[agentSafeName] = clip.name;
+
+  if (clip.loop) {
+    _agentLastLoopClip[agentSafeName] = clip.name;
+    console.log('behavior:', agentSafeName, previous, '→', clip.name);
+  } else {
+    // Oneshot: fire once, then return to last looping clip
+    console.log('behavior:', agentSafeName, previous, '→', clip.name, '(oneshot)');
+    var returnTo  = _agentLastLoopClip[agentSafeName] || 'Default';
+    var duration  = 5500;   // conservative fallback — JumpTimer/KickTimer cycleInterval ~5.5s
+    try {
+      var ci = targetNode.cycleInterval;
+      if (ci && ci > 0) duration = Math.round(ci * 1000);
+    } catch(e) {}
+    var _gen = _pbCbGeneration;
+    setTimeout(function() {
+      // Self-expire if a reset has run since this oneshot fired
+      if (_pbCbGeneration !== _gen) return;
+      if (_agentCurrentClip[agentSafeName] !== clip.name) return;
+      var config = _agentBehaviorClips[agentSafeName];
+      if (!config) return;
+      var returnClip = (config.clips || []).find(function(c) { return c.name === returnTo; });
+      if (returnClip) applyBehaviorClip(agentSafeName, returnClip);
+    }, duration + 150);
+  }
+}
+
+// ─────────────────────────────────────────────
+// _switchBehaviorTimer — low-level walk/idle switcher
+// ─────────────────────────────────────────────
+// Stops all behavior timers for an agent, then starts the named one.
+// targetDEF: 'WalkTimer' | 'DefaultTimer' | any BEHAVIOR_TIMER_BASES entry.
+// tNow: unused — kept for call-site compat, ignored.
+// Skips silently if the timer map is not yet built (HAnim still loading).
+// Does NOT go through the clip condition system — this is a direct movement-state
+// switch driven by the path interpolator, not by emotional CV.
+//
+// MECHANISM (confirmed Day 25):
+//   enabled=true  starts the timer immediately and loops.
+//   enabled=false stops it immediately.
+//   startTime/stopTime do NOT work for this purpose in X_ITE — confirmed broken.
+function _switchBehaviorTimer(agentSafeName, targetDEF, tNow) {
+  var timerMap = _behaviorTimerMap[agentSafeName];
+  if (!timerMap) {
+    console.log('_switchBehaviorTimer: no timerMap for', agentSafeName, '— skipping');
+    return;
+  }
+
+  console.log('_switchBehaviorTimer:', agentSafeName, '→', targetDEF);
+
+  // Disable all timers except the target — each in its own try/catch
+  BEHAVIOR_TIMER_BASES.forEach(function(base) {
+    if (base === targetDEF) return;
+    try {
+      var n = timerMap[base];
+      if (n) n.enabled = false;
+    } catch(e) {
+      console.warn('_switchBehaviorTimer: enabled=false failed for', base, e.message);
+    }
+  });
+
+  // Enable the target
+  var target = timerMap[targetDEF];
+  if (!target) {
+    console.warn('_switchBehaviorTimer: timer not found:', targetDEF, agentSafeName);
+    return;
+  }
+  try {
+    target.enabled = true;
+  } catch(e) {
+    console.warn('_switchBehaviorTimer: enabled=true failed:', agentSafeName, targetDEF, e.message);
+    return;
+  }
+
+  var prev = _agentCurrentClip[agentSafeName] || '(none)';
+  _agentCurrentClip[agentSafeName]  = targetDEF.replace('Timer','');
+  _agentLastLoopClip[agentSafeName] = targetDEF.replace('Timer','');
+  if (targetDEF === 'WalkTimer') _agentWalkStartTime[agentSafeName] = Date.now();
+  console.log('_switchBehaviorTimer: done —', agentSafeName, prev, '→', targetDEF);
 }
 
 function applyLighting(scalars) {
@@ -756,6 +939,29 @@ var _pbSpeakToken  = {};   // {safeName: integer}
 var _pbSpeechLock  = false; // global: true while any cultivar is speaking
 var _pbSpeechQueue = [];    // [{fn}] — pending speech chains waiting for lock
 var _pbSpeakTimer  = {};   // {safeName: setTimeout id} — per-cultivar so concurrent arcs don't cancel each other
+
+// ─────────────────────────────────────────────
+// HAnim behavior clip state (Task 2-5, Day 23)
+// ─────────────────────────────────────────────
+// _behaviorTimerMap:   {agentSafeName: {timerDEF: node}}  — resolved at pbActivateX3DTimers time
+// _agentBehaviorClips: {agentSafeName: {clips:[], default:str}} — loaded from cultivar API at arc/record
+// _agentCurrentClip:   {agentSafeName: clipName}  — currently playing clip name
+// _agentLastLoopClip:  {agentSafeName: clipName}  — last looping clip (for oneshot return)
+// Do NOT clear _behaviorTimerMap or _agentBehaviorClips on reset — they survive across plays.
+// DO clear _agentCurrentClip and _agentLastLoopClip on reset so clip state is fresh each play.
+var _behaviorTimerMap    = {};   // populated at pbActivateX3DTimers
+var _agentBehaviorClips  = {};   // populated at _seedArcRecord (first waypoint per cultivar)
+var _agentCurrentClip    = {};   // tracks active clip per agent
+var _agentLastLoopClip   = {};   // tracks last looping clip for oneshot return
+var _agentWalkStartTime  = {};   // {safeName: Date.now()} — wall ms when WalkTimer last started
+var _agentArrivalTimeout = {};   // {safeName: timeoutId} — pending DefaultTimer switch at segment end
+var _agentWaypointCache  = {};   // {safeName: {stepNo: {pos_x,pos_z}}} — built from pbUpdateDisplay
+
+// Known behavior TimeSensor base DEF names in JinLOA4Animated.x3d
+var BEHAVIOR_TIMER_BASES = [
+  'DefaultTimer','PitchTimer','YawTimer','RollTimer',
+  'WalkTimer','RunTimer','JumpTimer','KickTimer'
+];
 
 async function pbLoadFiles() {
   try {
@@ -1179,6 +1385,7 @@ function pbReleaseDwell(agentSafeName) {
             })();
             arr.startFromLoader = tNow;
             console.log('pbReleaseDwell: startFromLoader fired for', _agentForStart, 'at t=', tNow, 'src=', _tSrc);
+            // Walk starts when Timer_1 isActive=true fires — handled by _wirePathTimerBehavior.
           } else {
             console.warn('pbReleaseDwell: Arrival_' + _agentForStart + ' not found');
           }
@@ -1205,6 +1412,8 @@ function pbReleaseDwell(agentSafeName) {
     } catch(e) {
       console.warn('pbReleaseDwell: could not start dwell node:', e);
     }
+    // DefaultTimer fires when Timer_N fraction_changed>=0.99 — handled by _wirePathTimerBehavior.
+    // pbReleaseDwell owns dwell timing only, not behavior switching.
 
     var dwellInterval  = dwellNode.cycleInterval || 2.0;
     var _capturedAgent = agentSafeName;
@@ -1239,6 +1448,8 @@ function _pbAdvanceSeg(agentSafeName, completedSeg) {
       if (arr) {
         arr.advanceSeg = completedSeg;
         console.log('_pbAdvanceSeg: advanceSeg=' + completedSeg + ' sent to Arrival_' + agentSafeName);
+        // WalkTimer is switched on by segmentArrived callback when the next
+        // segment fires — do NOT switch here to avoid a race with the dwell DefaultTimer.
       }
     } else {
       // Last segment — fetch and display final waypoint for THIS agent's session
@@ -1324,6 +1535,172 @@ function _x3dNow(agentSafeName) {
   return null;
 }
 
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// _buildPivotCacheFromSceneXml — parse full waypoint sequence per agent
+// ─────────────────────────────────────────────
+// Reads <Path agent="X"><PathWaypoint ref="wpName"/></Path> and
+// <Waypoint name="wpName" pos_x="X" pos_z="Z"/> from scene XML.
+// Builds _agentWaypointCache[safeName] = {1:{pos_x,pos_z}, 2:..., ...}
+// indexed 1-based by path order. Called at play start from _parseSceneZoneData.
+function _buildPivotCacheFromSceneXml(doc) {
+  // Build name→position map from all Waypoint elements
+  var posMap = {};
+  doc.querySelectorAll('Waypoint').forEach(function(el) {
+    var name = el.getAttribute('name');
+    var px   = el.getAttribute('pos_x');
+    var pz   = el.getAttribute('pos_z');
+    if (name && px !== null && pz !== null) {
+      posMap[name] = { pos_x: parseFloat(px), pos_z: parseFloat(pz) };
+    }
+  });
+
+  // Build ordered cache per agent from Path/PathWaypoint sequence
+  doc.querySelectorAll('Path').forEach(function(pathEl) {
+    var agent    = pathEl.getAttribute('agent') || '';
+    var safeName = agent.replace(/[^A-Za-z0-9_]/g, '_');
+    if (!safeName) return;
+
+    var refs = pathEl.querySelectorAll('PathWaypoint');
+    if (!refs.length) return;
+
+    var cache = {};
+    var stepNo = 1;
+    refs.forEach(function(ref) {
+      var wpName = ref.getAttribute('ref');
+      if (wpName && posMap[wpName]) {
+        cache[stepNo] = posMap[wpName];
+        stepNo++;
+      }
+    });
+
+    if (Object.keys(cache).length > 0) {
+      _agentWaypointCache[safeName] = cache;
+      console.log('_buildPivotCacheFromSceneXml:', safeName,
+        Object.keys(cache).length, 'waypoints —',
+        Object.values(cache).map(function(p){
+          return '(' + p.pos_x + ',' + p.pos_z + ')';
+        }).join(' → '));
+    }
+  });
+}
+
+// _pivotAgentToSegment — rotate avatar to face direction of travel
+// ─────────────────────────────────────────────
+// Writes Y-axis rotation to Avatar_ parent Transform at transit start.
+// heading = atan2(dx, dz): angle from +Z toward +X in X3D Y-up world.
+function _pivotAgentToSegment(safeName, seg) {
+  var cache = _agentWaypointCache[safeName] || {};
+  // Cache is keyed by 1-based stepNo. Segment seg: from step seg → step seg+1.
+  var fromWP = cache[seg];
+  var toWP   = cache[seg + 1];
+
+  // Fallback: if stepno-keyed positions missing, try _waypointPosMap by name.
+  // Arc step IDs (wp.id) are stored in cache as a side-channel when available.
+  if (!fromWP || !toWP) {
+    var fromId = cache['id_' + seg];
+    var toId   = cache['id_' + (seg + 1)];
+    if (fromId && _waypointPosMap[fromId]) fromWP = _waypointPosMap[fromId];
+    if (toId   && _waypointPosMap[toId])   toWP   = _waypointPosMap[toId];
+  }
+
+  if (!fromWP || !toWP) {
+    console.log('_pivotAgentToSegment: missing waypoints for', safeName,
+      'seg', seg, '— cache keys:', Object.keys(cache).join(','));
+    return;
+  }
+
+  var dx = parseFloat(toWP.pos_x || 0) - parseFloat(fromWP.pos_x || 0);
+  var dz = parseFloat(toWP.pos_z || 0) - parseFloat(fromWP.pos_z || 0);
+  if (Math.abs(dx) < 0.001 && Math.abs(dz) < 0.001) return;
+
+  var heading = Math.atan2(dx, dz);
+
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var avatarNode = scene.getNamedNode('Avatar_' + safeName);
+    if (!avatarNode) return;
+    avatarNode.rotation = new X3D.SFRotation(0, 1, 0, heading);
+    console.log('_pivotAgentToSegment:', safeName, 'seg', seg,
+      'dx=' + dx.toFixed(2), 'dz=' + dz.toFixed(2),
+      'heading=' + (heading * 180 / Math.PI).toFixed(1) + 'deg');
+  } catch(e) {
+    console.warn('_pivotAgentToSegment error:', safeName, e.message);
+  }
+}
+
+// _wirePathTimerBehavior — wire isActive/fraction_changed on path Timer nodes
+// ─────────────────────────────────────────────
+// Uses pure X3D timer events to drive walk/idle — no setTimeout, no TTS coupling.
+//   Timer_N isActive TRUE       → WalkTimer on   (transit begins)
+//   Timer_N fraction_changed≥0.99 → DefaultTimer on (transit ends)
+// Called after behavior timer map resolves, once per agent per play.
+// segCount = number of path segments = total_steps - 1.
+function _wirePathTimerBehavior(safeName, gen) {
+  var scene;
+  try { scene = canvas.browser.currentScene; } catch(e) { return; }
+  if (!scene) return;
+
+  // Probe for Timer_N_1 through Timer_N_8 — wire whichever exist.
+  // No need to know segCount in advance.
+  var MAX_SEGS = 8;
+  for (var seg = 1; seg <= MAX_SEGS; seg++) {
+    (function(s) {
+      var timerName = 'Timer_' + safeName + '_' + s;
+      var timerNode;
+      try { timerNode = scene.getNamedNode(timerName); } catch(e) {}
+      if (!timerNode) {
+        console.log('_wirePathTimerBehavior: ' + timerName + ' not found — skipping');
+        return;
+      }
+
+      // isActive TRUE → WalkTimer on
+      var isActiveField;
+      try { isActiveField = timerNode.getField('isActive'); } catch(e) {}
+      if (isActiveField && typeof isActiveField.addFieldCallback === 'function') {
+        isActiveField.addFieldCallback('bhWalk_' + safeName + '_' + s + '_' + gen, function(value) {
+          if (_pbCbGeneration !== gen) return;
+          if (value === true || value === 'true' || value === 1) {
+            console.log('Timer ' + timerName + ' isActive=true → pivot then WalkTimer');
+            // Pivot first so avatar faces direction of travel before walking.
+            // 50ms gap gives X3D one render frame to apply the rotation.
+            var _pivName = safeName;
+            var _pivSeg  = s;
+            var _pivGen  = gen;
+            _pivotAgentToSegment(_pivName, _pivSeg);
+            setTimeout(function() {
+              if (_pbCbGeneration !== _pivGen) return;
+              _switchBehaviorTimer(_pivName, 'WalkTimer', null);
+            }, 50);
+          }
+        });
+      }
+
+      // fraction_changed >= 0.99 → DefaultTimer on (end of transit)
+      var fracField;
+      try { fracField = timerNode.getField('fraction_changed'); } catch(e) {}
+      if (fracField && typeof fracField.addFieldCallback === 'function') {
+        var _arrived = false;  // one-shot per timer run
+        fracField.addFieldCallback('bhIdle_' + safeName + '_' + s + '_' + gen, function(value) {
+          if (_pbCbGeneration !== gen) return;
+          var f = parseFloat(value);
+          if (f >= 0.99 && !_arrived) {
+            _arrived = true;
+            console.log('Timer ' + timerName + ' fraction=' + f.toFixed(3) + ' → DefaultTimer');
+            _switchBehaviorTimer(safeName, 'DefaultTimer', null);
+          }
+          // Reset one-shot when timer restarts (fraction drops back toward 0)
+          if (f < 0.05) _arrived = false;
+        });
+      }
+
+      console.log('_wirePathTimerBehavior: wired ' + timerName);
+    })(seg);
+  }
+}
+
 function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
   // cultivars: array of cultivar names to wire
   // cultivarSessionMap: optional {cultivarName: session_id} — if provided, each
@@ -1386,6 +1763,10 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
                 _lastCbSeg = seg;
                 console.log('segmentArrived callback: ' + arrNodeName + ' seg=' + seg);
                 _x3dLastArrivedSeg[safeName] = seg;
+                // Walk/idle switching is now owned by _wirePathTimerBehavior:
+                //   Timer_N isActive=true  → WalkTimer on
+                //   Timer_N fraction≥0.99  → DefaultTimer on
+                // segmentArrived only advances the arc step counter.
                 if (sid) {
                   pbStepSession(sid);
                 } else {
@@ -1446,6 +1827,87 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
           console.log('pbActivateX3DTimers: armed X3D driving for', avatarName, '— Timer_1 starts after WP1 dwell');
         }
       } catch(e) { console.warn('pbActivateX3DTimers: could not start', timerNodeName, e); }
+
+      // Task 2 — Build behavior timer map for this agent.
+      // Maps base DEF names (e.g. 'WalkTimer') to live scene nodes.
+      // Uses a JS-side map rather than DEF rename — X_ITE SAI does not expose
+      // a reliable DEF rename API, and multi-instance addressing via JS map is
+      // sufficient for MCCF's single-scene-per-session model.
+      // The scene's <IMPORT> statements already register the timer nodes into the
+      // parent scene's imported node table at parse time. We just need to retrieve
+      // them via getImportedNode once the Inline has finished loading.
+      // addImportedNode is NOT needed — calling it throws "already in use" because
+      // the declarative IMPORT did it first. (Confirmed Day 24 diagnostic.)
+      (function(sName, gen) {
+        var attempts = 0;
+        var MAX_ATTEMPTS = 20;
+        var RETRY_MS = 250;
+        function tryMapTimers() {
+          if (_pbCbGeneration !== gen) return;  // reset fired — abandon
+          attempts++;
+          try {
+            var sc = canvas.browser.currentScene;
+            if (!sc) { if (attempts < MAX_ATTEMPTS) setTimeout(tryMapTimers, RETRY_MS); return; }
+
+            // Confirm the Inline is present — DEF="HAnim_AgentSafeName"
+            var inlineNode = null;
+            try { inlineNode = sc.getNamedNode('HAnim_' + sName); } catch(e2) {}
+            if (!inlineNode) {
+              console.log('pbActivateX3DTimers: no HAnim_' + sName + ' Inline — cylinder or static avatar');
+              return;
+            }
+
+            // Retrieve imported nodes registered by the scene's <IMPORT> statements.
+            // AS names follow convention: TimerBase_AgentSafeName (e.g. DefaultTimer_Cindy).
+            var timerMapForAgent = {};
+            BEHAVIOR_TIMER_BASES.forEach(function(base) {
+              var importedName = base + '_' + sName;
+              try {
+                var node = sc.getImportedNode(importedName);
+                if (node) timerMapForAgent[base] = node;
+              } catch(e2) {
+                // Not yet available — Inline still loading
+              }
+            });
+
+            var foundTimers = Object.keys(timerMapForAgent);
+            if (foundTimers.length > 0) {
+              _behaviorTimerMap[sName] = timerMapForAgent;
+              console.log('pbActivateX3DTimers: behavior timers mapped for', sName,
+                          '(attempt ' + attempts + ') —', foundTimers.join(', '));
+              // Start DefaultTimer so avatar plays idle animation before first waypoint
+              var defNode = timerMapForAgent['DefaultTimer'];
+              if (defNode) {
+                try {
+                  // enabled=true is the correct mechanism — confirmed Day 25.
+                  // startTime not needed; enabled=true begins the cycle immediately.
+                  defNode.enabled = true;
+                  _agentCurrentClip[sName]  = 'Default';
+                  _agentLastLoopClip[sName] = 'Default';
+                  console.log('pbActivateX3DTimers: DefaultTimer started for', sName);
+                } catch(e3) {
+                  console.warn('pbActivateX3DTimers: DefaultTimer start failed for', sName, e3);
+                }
+              }
+              // Wire isActive/fraction_changed on all path Timer nodes for clean
+              // walk/idle switching driven purely by X3D timer events.
+              _wirePathTimerBehavior(sName, gen);
+            } else if (attempts < MAX_ATTEMPTS) {
+              console.log('pbActivateX3DTimers: behavior timers not yet available for', sName,
+                          '— retry', attempts, '/', MAX_ATTEMPTS);
+              setTimeout(tryMapTimers, RETRY_MS);
+            } else {
+              console.log('pbActivateX3DTimers: no behavior timers found for', sName,
+                          '— gave up after', MAX_ATTEMPTS, 'attempts');
+            }
+          } catch(e) {
+            console.warn('pbActivateX3DTimers: behavior timer map error for', sName, e);
+            if (attempts < MAX_ATTEMPTS) setTimeout(tryMapTimers, RETRY_MS);
+          }
+        }
+        tryMapTimers();
+      })(safeName, _pbCbGeneration);
+
     });
   } catch(e) { console.warn('pbActivateX3DTimers error:', e); }
 }
@@ -1603,6 +2065,7 @@ async function pbPlay() {
     const data = await r.json();
     if (data.error) { document.getElementById('pb-step-info').textContent='Error: '+data.error; return; }
     var cultivars = (data.state||data).cultivars || [];
+    // Waypoint positions cached progressively by pbUpdateDisplay as steps arrive.
     if (cultivars.length > 0) {
       // X3D-driven mode: display WP1 immediately — avatar starts at WP1 position,
       // so WP1 speech should fire before any movement begins. All segmentArrived
@@ -1867,6 +2330,7 @@ async function _pbPlayAllInner() {
           var actor = stateData.actor || (stateData.current_waypoint||{}).actor || 'ollama';
           _cultivarActors[c] = actor;
         }
+        // Waypoint positions cached progressively by pbUpdateDisplay as steps arrive.
       });
     });
 
@@ -2023,6 +2487,13 @@ async function _pbPlayAllInner() {
         _seedArcRecord(stateData);
         var _wp1 = stateData.current_waypoint || {};
         var _wp1c = _wp1.cultivar || ((stateData.cultivars||[])[0]) || '';
+        // Seed waypoint cache with WP1 position immediately
+        if (_wp1c && _wp1.pos_x !== undefined && _wp1.stepno !== undefined) {
+          var _wp1safe = _wp1c.replace(/[^A-Za-z0-9_]/g, '_');
+          if (!_agentWaypointCache[_wp1safe]) _agentWaypointCache[_wp1safe] = {};
+          _agentWaypointCache[_wp1safe][_wp1.stepno] = { pos_x: _wp1.pos_x, pos_z: _wp1.pos_z };
+          if (_wp1.id) _agentWaypointCache[_wp1safe]['id_' + _wp1.stepno] = _wp1.id;
+        }
         var _wp1z = _wp1.zone || _wp1.zone_id || '';
         if (!_wp1z && _wp1c) {
           var cands = [_wp1.id, _wp1.key, _wp1.name, _wp1.label,
@@ -2129,6 +2600,43 @@ function _seedArcRecord(state) {
   }
   if (!wp.cultivar) return;
 
+  // Task 4 — Load behavior clips for this cultivar if not already loaded.
+  // Fetches GET /cultivars/<name> and stores behavior_clips in _agentBehaviorClips.
+  // Runs once per cultivar per session — guard prevents redundant fetches.
+  var _bcSafeName = wp.cultivar.replace(/[^A-Za-z0-9_]/g, '_');
+  if (!_agentBehaviorClips[_bcSafeName]) {
+    (function(safeName, cultivarName) {
+      fetch(API + '/cultivars/' + encodeURIComponent(cultivarName))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (!data) return;
+          if (data.behavior_clips && data.behavior_clips.length) {
+            _agentBehaviorClips[safeName] = {
+              clips:   data.behavior_clips,
+              default: data.behavior_default || 'Default'
+            };
+            console.log('_seedArcRecord: behavior clips loaded for', cultivarName,
+                        '—', data.behavior_clips.length, 'clips');
+          } else {
+            // No behavior table authored — default to DefaultTimer always running.
+            // This is the correct behavior for cultivars without <Behaviors> in their XML.
+            _agentBehaviorClips[safeName] = {
+              clips:   [{ name:'Default', timerDEF:'DefaultTimer', loop:true, priority:0 }],
+              default: 'Default'
+            };
+            console.log('_seedArcRecord: no behavior clips for', cultivarName, '— DefaultTimer fallback');
+          }
+        })
+        .catch(function() {
+          // Network error — set minimal fallback so behavior system doesn't stall
+          _agentBehaviorClips[safeName] = {
+            clips:   [{ name:'Default', timerDEF:'DefaultTimer', loop:true, priority:0 }],
+            default: 'Default'
+          };
+        });
+    })(_bcSafeName, wp.cultivar);
+  }
+
   var body = {
     cultivar: wp.cultivar,
     step:     wp.stepno || state.step || 1,
@@ -2181,6 +2689,7 @@ var _zoneDescriptors = {};
 var _cultivarActors = {};
 // Cache waypoint name → zone id: {wp_name: zone_id}
 var _waypointZoneMap = {};
+var _waypointPosMap  = {};   // {wpName: {pos_x, pos_z}} — from scene XML, for pivot lookups
 // Track which zones each cultivar currently occupies: {cultivar: zone_id|null}
 var _agentZone = {};
 // Zone command serial queue — prevents simultaneous Ollama calls timing out.
@@ -2249,13 +2758,26 @@ function _parseSceneZoneData() {
         if (Object.keys(_newCultivarActors).length > 0) _cultivarActors = _newCultivarActors;
 
         // Parse waypoint name → zone mapping for client-side zone derivation
+        // Also cache waypoint positions for pivot calculation (keyed by name)
         var _newWaypointZoneMap = {};
+        var _newWaypointPosMap  = {};
         doc.querySelectorAll('Waypoint').forEach(function(el) {
           var name = el.getAttribute('name');
           var zone = el.getAttribute('zone');
+          var px   = el.getAttribute('pos_x');
+          var pz   = el.getAttribute('pos_z');
           if (name && zone) _newWaypointZoneMap[name] = zone;
+          if (name && px !== null && pz !== null) {
+            var _pos = { pos_x: parseFloat(px), pos_z: parseFloat(pz) };
+            _newWaypointPosMap[name.toUpperCase()] = _pos;
+            _newWaypointPosMap[name]               = _pos;
+          }
         });
         if (Object.keys(_newWaypointZoneMap).length > 0) _waypointZoneMap = _newWaypointZoneMap;
+        if (Object.keys(_newWaypointPosMap).length > 0)  _waypointPosMap  = _newWaypointPosMap;
+
+        // Build complete ordered pivot cache from path sequences
+        _buildPivotCacheFromSceneXml(doc);
 
         console.log('Zone commands parsed:', Object.keys(_zoneCommands),
                     'Actors:', _cultivarActors,
@@ -2486,6 +3008,18 @@ async function pbReset() {
   _zoneCommandQueue = [];
   _zoneCommandInFlight = false;
   _chorusLastTimestamp = 0;  // reset so next chorus poll is never stale
+  // Task 5 — Behavior clip state reset.
+  // Clear per-play clip tracking; preserve timer map and clip config
+  // (populated at placement/arc-record — survive reset without re-fetch).
+  _agentCurrentClip   = {};
+  _agentLastLoopClip  = {};
+  _agentWalkStartTime = {};
+  _agentWaypointCache  = {};
+  // Cancel all pending arrival timeouts on reset
+  Object.keys(_agentArrivalTimeout).forEach(function(k) {
+    if (_agentArrivalTimeout[k]) clearTimeout(_agentArrivalTimeout[k]);
+  });
+  _agentArrivalTimeout = {};
   try {
     const r=await fetch(API+'/arc/playback/reset',{
       method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
@@ -2562,6 +3096,22 @@ function pbUpdateDisplay(state) {
     return;
   }
   var wp=state.current_waypoint||{};
+  // Cache waypoint position for pivot calculation, keyed by stepno
+  if (wp.cultivar && wp.stepno !== undefined) {
+    var _pivSafe = wp.cultivar.replace(/[^A-Za-z0-9_]/g, '_');
+    if (!_agentWaypointCache[_pivSafe]) _agentWaypointCache[_pivSafe] = {};
+    var _pivPos = null;
+    if (wp.pos_x !== undefined) {
+      _pivPos = { pos_x: wp.pos_x, pos_z: wp.pos_z };
+    } else if (wp.id && _waypointPosMap[wp.id]) {
+      _pivPos = _waypointPosMap[wp.id];
+    }
+    if (_pivPos) {
+      _agentWaypointCache[_pivSafe][wp.stepno] = _pivPos;
+      // Also store waypoint name so pivot can fall back to _waypointPosMap
+      if (wp.id) _agentWaypointCache[_pivSafe]['id_' + wp.stepno] = wp.id;
+    }
+  }
   // Inject cultivar into wp if server didn't include it (arc XML waypoints carry no cultivar attr)
   if (!wp.cultivar && state.cultivars && state.cultivars.length) {
     wp.cultivar = state.cultivars[0];
