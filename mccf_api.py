@@ -181,24 +181,32 @@ def upload_avatar():
         return jsonify({'status': 'error', 'error': f'XML parse failed: {e}'}), 400
 
     # ── DEF names to strip ───────────────────────────────────────────────
-    HUD_TIMER_DEFS = {
+    # BEHAVIOR_TIMER_DEFS: the eight LOA4 animation clip TimeSensors.
+    # These must SURVIVE stripping — MCCF activates them via SAI at runtime
+    # to drive behavioral state (walk, run, idle, etc.) from the emotional field.
+    # They are NOT HUD nodes. Only their TouchSensor trigger wiring is stripped.
+    BEHAVIOR_TIMER_DEFS = {
         'DefaultTimer','PitchTimer','YawTimer','RollTimer',
-        'WalkTimer','RunTimer','JumpTimer','KickTimer','StopTimer'
+        'WalkTimer','RunTimer','JumpTimer','KickTimer'
     }
-    HUD_DEFS = HUD_TIMER_DEFS | {'HudProx','HudXform'}
-    # Touch sensor DEF names — match by suffix pattern
-    def is_touch_sensor(el):
-        return el.tag.split('}')[-1] == 'TouchSensor'
+    # HUD_ONLY_TIMER_DEFS: timers that are genuinely HUD/interactive-control only.
+    # StopTimer has no behavioral meaning for MCCF and is safe to strip.
+    HUD_ONLY_TIMER_DEFS = {'StopTimer'}
+    # HUD_DEFS: non-timer HUD nodes to strip entirely.
+    HUD_DEFS = HUD_ONLY_TIMER_DEFS | {'HudProx','HudXform'}
 
     def is_hud_node(el):
         tag  = el.tag.split('}')[-1]
         defv = el.get('DEF', '')
+        # Strip HUD structure nodes and StopTimer
         if defv in HUD_DEFS:
             return True
+        # Strip TouchSensors — their button-click wiring is not needed;
+        # MCCF drives timers directly via SAI startTime/stopTime writes
         if tag == 'TouchSensor':
             return True
-        if tag == 'TimeSensor' and defv in HUD_TIMER_DEFS:
-            return True
+        # Behavior TimeSensors (DefaultTimer, WalkTimer etc.) are KEPT —
+        # they are the behavioral clip hooks for MCCF SAI activation
         return False
 
     def is_hud_route(el):
@@ -207,6 +215,10 @@ def upload_avatar():
             return False
         fn = el.get('fromNode', '')
         tn = el.get('toNode',   '')
+        # Strip routes that reference HUD nodes or TouchSensors.
+        # Routes that reference behavior TimeSensors are KEPT so the
+        # RotationInterpolator wiring survives — MCCF needs those ROUTEs
+        # to be intact for the clips to drive joint rotations when activated.
         strip_nodes = HUD_DEFS | {
             'Stand_Touch','Pitch_Touch','Yaw_Touch','Roll_Touch',
             'Walk_Touch','Run_Touch','Jump_Touch','Kick_Touch','Stop_Touch'
@@ -214,12 +226,19 @@ def upload_avatar():
         return fn in strip_nodes or tn in strip_nodes
 
     def strip_hud(parent):
-        """Recursively remove HUD nodes from parent's children."""
+        """Recursively remove HUD nodes from parent's children.
+        Also disables behavior TimeSensors so MCCF owns their activation
+        via SAI startTime/stopTime writes — never auto-start on scene load."""
         to_remove = []
         for child in list(parent):
             if is_hud_node(child) or is_hud_route(child):
                 to_remove.append(child)
             else:
+                # Disable behavior TimeSensors — MCCF activates via SAI
+                tag  = child.tag.split('}')[-1]
+                defv = child.get('DEF', '')
+                if tag == 'TimeSensor' and defv in BEHAVIOR_TIMER_DEFS:
+                    child.set('enabled', 'false')
                 strip_hud(child)
         for child in to_remove:
             parent.remove(child)
@@ -230,10 +249,13 @@ def upload_avatar():
     hanim_el    = root.find('.//{*}HAnimHumanoid')
     loa         = int(hanim_el.get('loa', 4)) if hanim_el is not None else 4
     joint_count = len(root.findall('.//{*}HAnimJoint[@name]'))
+    # Return the behavior clip names that survived stripping.
+    # These are the BEHAVIOR_TIMER_DEFS present in the saved file,
+    # addressable by MCCF via SAI. Strip 'Timer' suffix for readability.
     clips = [
         el.get('DEF', '').replace('Timer', '')
         for el in root.findall('.//{*}TimeSensor')
-        if el.get('DEF') and el.get('DEF') not in HUD_TIMER_DEFS
+        if el.get('DEF') and el.get('DEF') in BEHAVIOR_TIMER_DEFS
     ]
 
     # ── Serialise ────────────────────────────────────────────────────────
@@ -667,6 +689,11 @@ class AgentRuntimeState:
     regulation:         float = 0.7
     last_record_time:   float = 0.0
     last_tick_time:     float = 0.0
+    # Attentional filter — per-channel receptivity to coupler influence (0.0–1.0).
+    # Default 1.0 = fully receptive (current behaviour preserved).
+    # Loaded from <Receptivity> in cultivar XML at arc/record time.
+    # Filters incoming coupler deltas before the drift bound is applied.
+    receptivity: dict = dc_field(default_factory=lambda: {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0})
 
     @property
     def max_drift(self) -> float:
@@ -706,9 +733,13 @@ class AgentRuntimeState:
         for ch in ("E", "B", "P", "S"):
             if ch not in deltas:
                 continue
+            # Attentional filter: scale incoming delta by per-channel receptivity
+            # before applying drift bound.  High-B characters resist B-channel
+            # influence; emotionally open characters accept E-channel signals fully.
+            filtered_delta = deltas[ch] * self.receptivity.get(ch, 1.0)
             phi   = self.constitutional_cv[ch]
             eps   = self.expressive_cv[ch]
-            new   = eps + deltas[ch]
+            new   = eps + filtered_delta
             # Clamp to [0, 1]
             new   = min(1.0, max(0.0, new))
             # Clamp drift from ϕ
@@ -731,6 +762,7 @@ class AgentRuntimeState:
             "max_drift":       self.max_drift,
             "last_record_time": self.last_record_time,
             "last_tick_time":   self.last_tick_time,
+            "receptivity":      self.receptivity,
         }
 
 
@@ -747,6 +779,141 @@ def get_runtime(name: str, regulation: float = 0.7) -> AgentRuntimeState:
     if name not in _agent_runtime:
         _agent_runtime[name] = AgentRuntimeState(name=name, regulation=regulation)
     return _agent_runtime[name]
+
+
+# ---------------------------------------------------------------------------
+# Relational Dynamics — Extensions 1-4
+# Day 26, 2026-05-25
+# Spec: MCCF_Relational_Dynamics_Extension_Spec.md
+# ---------------------------------------------------------------------------
+
+import math as _math_rd
+
+# ---------------------------------------------------------------------------
+# Extension 4: Attentional Filter
+# Per-channel receptivity lives on AgentRuntimeState (added above).
+# Loaded from <Receptivity> in cultivar XML at arc/record time.
+# Applied in apply_expressive_delta() before drift bound.
+# No additional state needed here.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Extension 2: Emotional Salience Memory
+# Extends _arc_coherence_history entries with salience, phase_fired,
+# eps_delta, and timestamp fields.
+# ---------------------------------------------------------------------------
+
+def _compute_salience(coherence_delta: float,
+                      eps_delta: float,
+                      phase_fired: bool) -> float:
+    """
+    Salience = weighted combination of emotional intensity signals.
+    Range: [0.0, 1.0]
+
+    coherence_delta: absolute change in coherence vs. previous step
+    eps_delta:       mean |ϵ - ϕ| across all channels at this step
+    phase_fired:     True if T coupler / phase transition fired this tick
+    """
+    base = min(1.0, abs(coherence_delta) * 3.0 + eps_delta * 2.0)
+    if phase_fired:
+        base = min(1.0, base + 0.4)
+    return round(base, 4)
+
+
+# ---------------------------------------------------------------------------
+# Extension 3: Bayesian Trust as Dynamic Link Strength
+# Per-link Beta(α, β) prior over effective strength.
+# Updated after each coupler tick based on convergence/divergence.
+# ---------------------------------------------------------------------------
+
+# Keyed by (src_name, tgt_name) — direction matters (asymmetric trust)
+_link_trust: dict[tuple, dict] = {}
+
+
+def _get_link_trust(src: str, tgt: str) -> dict:
+    """Return (creating if absent) the Bayesian trust state for link src→tgt."""
+    key = (src, tgt)
+    if key not in _link_trust:
+        _link_trust[key] = {
+            'alpha':    2.0,   # Beta(2,2) — weak prior, uncertain, centred at 0.5
+            'beta':     2.0,
+            'ticks':    0,
+            'last_sim': 0.0,
+            'mu':       0.5,
+        }
+    return _link_trust[key]
+
+
+def _update_link_trust(src: str, tgt: str,
+                       sim_before: float, sim_after: float,
+                       threshold: float = 0.01) -> float:
+    """
+    Update Beta prior for link src→tgt.
+    Convergence (Δsim > threshold) → α += 1
+    Divergence  (Δsim < -threshold) → β += 1
+    Returns new posterior mean μ = α/(α+β).
+    """
+    trust = _get_link_trust(src, tgt)
+    delta = sim_after - sim_before
+    if delta > threshold:
+        trust['alpha'] += 1.0
+    elif delta < -threshold:
+        trust['beta'] += 1.0
+    trust['ticks'] += 1
+    trust['last_sim'] = sim_after
+    mu = trust['alpha'] / (trust['alpha'] + trust['beta'])
+    trust['mu'] = round(mu, 4)
+    return trust['mu']
+
+
+# ---------------------------------------------------------------------------
+# Extension 3: Controlled Forgetting
+# ϵ residue persists between arc sessions, decaying by salience-weighted
+# Ebbinghaus curve.  Off by default; opt-in per scene via <Continuity/>.
+# ---------------------------------------------------------------------------
+
+def _compute_arc_residue(agent_name: str) -> dict:
+    """
+    Compute ϵ residue from the most salient moment in the agent's coherence
+    history.  Returns {E, B, P, S} delta to apply as initial ϵ seed after
+    set_constitutional().  Returns zeros when:
+      - no history exists
+      - top salience < 0.1 (below perceptibility threshold)
+      - residue has decayed below 0.005 per channel
+
+    τ_base = 3600s (1 hour); SALIENCE_SCALE = 24 (high-salience → ~24h half-life)
+    """
+    history = _arc_coherence_history.get(agent_name, [])
+    if not history:
+        return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
+
+    # Find most salient entry — entries without 'salience' default to 0
+    best = max(history, key=lambda r: r.get('salience', 0.0))
+    salience = best.get('salience', 0.0)
+    if salience < 0.1:
+        return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
+
+    elapsed = time.time() - best.get('timestamp', time.time())
+    tau = 3600.0 * (1.0 + salience * 24.0)
+    decay = _math_rd.exp(-elapsed / tau)
+
+    eps_delta = best.get('eps_delta', 0.0)
+    magnitude = salience * eps_delta * decay
+
+    if magnitude < 0.005:
+        return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
+
+    # Distribute residue proportionally across channels using constitutional CV
+    runtime = _agent_runtime.get(agent_name)
+    if not runtime:
+        return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
+
+    phi = runtime.constitutional_cv
+    total_phi = sum(phi.values()) or 1.0
+    return {
+        ch: round(phi[ch] / total_phi * magnitude, 4)
+        for ch in ('E', 'B', 'P', 'S')
+    }
 
 # v2.0 — HotHouse integration
 # emotional_field and x3d_adapter are initialized lazily after agents register
@@ -1729,6 +1896,30 @@ def arc_record():
     # waypoint starts from a clean expressive baseline; couplers drift it
     # from this point until the next waypoint fires.
     runtime = get_runtime(cultivar, regulation=agent._affect_regulation)
+
+    # Attentional filter: load receptivity from cultivar definition if available.
+    # Only refreshed here (not on every tick) — it is a character property.
+    try:
+        rec_data = data.get('receptivity')
+        if rec_data and all(k in rec_data for k in ('E', 'B', 'P', 'S')):
+            runtime.receptivity = {
+                ch: round(min(1.0, max(0.0, float(rec_data[ch]))), 4)
+                for ch in ('E', 'B', 'P', 'S')
+            }
+        elif not rec_data:
+            # Attempt lazy fetch from cultivar registry if not passed by caller
+            try:
+                cd = _cultivar_registry.get(cultivar)
+                if cd and hasattr(cd, 'receptivity') and cd.receptivity:
+                    runtime.receptivity = {
+                        ch: round(min(1.0, max(0.0, float(cd.receptivity.get(ch, 1.0)))), 4)
+                        for ch in ('E', 'B', 'P', 'S')
+                    }
+            except Exception:
+                pass
+    except Exception:
+        pass  # non-critical — receptivity defaults to 1.0 per channel
+
     runtime.set_constitutional(e_val, b_val, p_val, s_val,
                                regulation=agent._affect_regulation)
 
@@ -1740,9 +1931,29 @@ def arc_record():
     _arc_coherence_history[cultivar] = [
         r for r in _arc_coherence_history[cultivar] if r['step'] != step
     ]
+    # Salience: compute from coherence delta, expressive drift, phase transition.
+    # On arc/record we don't yet know phase_fired (that comes from couplers/tick),
+    # so we leave phase_fired=False here; couplers/tick may retroactively update
+    # the most recent history entry's salience when a phase transition fires.
+    prev_entries = _arc_coherence_history[cultivar]
+    prev_coh = prev_entries[-1]['coherence'] if prev_entries else coherence_now
+    eps_delta_now = sum(
+        abs(runtime.expressive_cv[ch] - runtime.constitutional_cv[ch])
+        for ch in ('E', 'B', 'P', 'S')
+    ) / 4.0
+    salience_now = _compute_salience(
+        coherence_delta=coherence_now - prev_coh,
+        eps_delta=eps_delta_now,
+        phase_fired=False
+    )
     _arc_coherence_history[cultivar].append({
-        'step': step, 'coherence': coherence_now,
-        'E': e_val, 'B': b_val, 'P': p_val, 'S': s_val
+        'step':       step,
+        'coherence':  coherence_now,
+        'E': e_val, 'B': b_val, 'P': p_val, 'S': s_val,
+        'salience':   salience_now,
+        'phase_fired': False,
+        'eps_delta':  round(eps_delta_now, 4),
+        'timestamp':  time.time(),
     })
 
     arc_history_rows = sorted(
@@ -1918,7 +2129,14 @@ def field_tick(agents: dict, network: list, zones: list,
             continue
         src      = agents[src_name]
         tgt      = agents[tgt_name]
-        strength = float(link.get('strength', 1.0))
+        authored_strength = float(link.get('strength', 1.0))
+        # Bayesian Trust: authored strength is the baseline (μ=0.5 → no change).
+        # Trust modifies up or down from authored: strength_eff = authored × (1 + μ - 0.5)
+        #   μ=0.5 (no history)      → strength_eff = authored × 1.0  (unchanged)
+        #   μ→1.0 (convergent)      → strength_eff = authored × 1.5  (amplified)
+        #   μ→0.0 (divergent)       → strength_eff = authored × 0.5  (weakened)
+        trust_mu  = _get_link_trust(src_name, tgt_name)['mu']
+        strength  = authored_strength * (1.0 + trust_mu - 0.5)
         ctx      = {**context, 'source_history': list(history.get(src_name, _deque_c()))}
         for coupler_type in link.get('couplers', []):
             params = link.get('coupler_params', {}).get(coupler_type, {})
@@ -2104,6 +2322,17 @@ def couplers_tick():
     for name, agent in agents.items():
         _get_coupler_history(name).append(dict(agent.observed_cv))
 
+    # Bayesian Trust: snapshot cosine similarities BEFORE deltas are applied
+    _sim_before: dict = {}
+    for link in network:
+        src_name = link.get('from', '')
+        tgt_name = link.get('to', '')
+        if src_name.startswith('zone:') or src_name not in agents or tgt_name not in agents:
+            continue
+        _sim_before[(src_name, tgt_name)] = _cosine_similarity(
+            agents[src_name].observed_cv, agents[tgt_name].observed_cv
+        )
+
     # Compute all deltas (synchronous — no agent sees another's updated state)
     deltas = field_tick(
         agents=agents,
@@ -2119,6 +2348,42 @@ def couplers_tick():
     # Phase transition check
     phase = detect_phase_transition(agents)
 
+    # Bayesian Trust: update Beta priors based on convergence/divergence this tick
+    trust_summary: dict = {}
+    for link in network:
+        src_name = link.get('from', '')
+        tgt_name = link.get('to', '')
+        if src_name.startswith('zone:') or src_name not in agents or tgt_name not in agents:
+            continue
+        sim_before = _sim_before.get((src_name, tgt_name), 0.0)
+        sim_after  = _cosine_similarity(
+            agents[src_name].observed_cv, agents[tgt_name].observed_cv
+        )
+        mu = _update_link_trust(src_name, tgt_name, sim_before, sim_after)
+        t  = _get_link_trust(src_name, tgt_name)
+        trust_summary[f'{src_name}→{tgt_name}'] = {
+            'alpha': round(t['alpha'], 2),
+            'beta':  round(t['beta'],  2),
+            'mu':    round(mu, 4),
+            'ticks': t['ticks'],
+        }
+
+    # Salience: if phase transition fired, backfill phase_fired=True on the most
+    # recent coherence history entry for each agent and recompute salience.
+    if phase.get('transition'):
+        for name in agents:
+            hist = _arc_coherence_history.get(name, [])
+            if hist:
+                entry = hist[-1]
+                entry['phase_fired'] = True
+                # Recompute salience with phase bonus
+                prev_coh = hist[-2]['coherence'] if len(hist) >= 2 else entry['coherence']
+                entry['salience'] = _compute_salience(
+                    coherence_delta=entry['coherence'] - prev_coh,
+                    eps_delta=entry.get('eps_delta', 0.0),
+                    phase_fired=True
+                )
+
     return jsonify({
         'status':        'ok',
         'timestep':      timestep,
@@ -2133,12 +2398,83 @@ def couplers_tick():
             for name, agent in agents.items()
         },
         'phase':         phase,
+        'trust':         trust_summary,
     })
 
 
 # ---------------------------------------------------------------------------
 # End coupler system
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Extension 3: Controlled Forgetting — POST /arc/residue
+# ---------------------------------------------------------------------------
+
+@app.route('/arc/residue', methods=['POST'])
+def arc_residue():
+    """
+    POST /arc/residue
+
+    Returns the salience-weighted ϵ residue for an agent from their previous
+    arc session.  The loader calls this before arc/record so the arc can start
+    with ϵ = ϕ + residue rather than ϵ = ϕ (clean slate).
+
+    Opt-in per scene via <Continuity/> element in scene XML.  When absent,
+    the loader should NOT call this endpoint — residue is off by default.
+
+    Request body:
+    {
+      "cultivar":    "Cindy",
+      "scene":       "garden_001",   // for future per-scene continuity config
+      "continuity":  true            // explicit opt-in required
+    }
+
+    Response:
+    {
+      "cultivar": "Cindy",
+      "residue":  { "E": 0.012, "B": 0.003, "P": 0.001, "S": 0.008 },
+      "salience": 0.42,
+      "applied":  true    // false if residue is zero (no history / below threshold)
+    }
+    """
+    data       = request.get_json() or {}
+    cultivar   = data.get('cultivar', '').strip()
+    continuity = data.get('continuity', False)
+
+    if not cultivar:
+        return jsonify({'error': 'cultivar required'}), 400
+
+    if not continuity:
+        return jsonify({
+            'cultivar': cultivar,
+            'residue':  {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0},
+            'salience': 0.0,
+            'applied':  False,
+            'note':     'continuity not enabled for this scene',
+        })
+
+    residue = _compute_arc_residue(cultivar)
+    applied = any(abs(v) >= 0.001 for v in residue.values())
+
+    # If we have a non-trivial residue, apply it to the runtime state now.
+    # set_constitutional() will have been called just before in arc/record,
+    # resetting ϵ = ϕ.  We add residue on top via apply_expressive_delta().
+    if applied and cultivar in _agent_runtime:
+        _agent_runtime[cultivar].apply_expressive_delta(residue)
+
+    # Report the salience of the most recent salient entry for diagnostics
+    history = _arc_coherence_history.get(cultivar, [])
+    best_salience = 0.0
+    if history:
+        best_salience = max(r.get('salience', 0.0) for r in history)
+
+    return jsonify({
+        'cultivar': cultivar,
+        'residue':  residue,
+        'salience': best_salience,
+        'applied':  applied,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -2277,8 +2613,9 @@ def _build_zone_prompt(cultivar_name: str, command: str,
         f'{desc_text}'
         f'{mem_text}'
         f'{vocab_expansion}\n\n'
-        f'Respond in one to three sentences. Speak as yourself, '
-        f'from your current state. Do not explain or narrate — just speak.'
+        f'Respond in ONE sentence only. Speak as yourself, from your current state. '
+        f'Do not explain or narrate. Do not use asterisks, stage directions, or action text. '
+        f'Just speak.'
     )
     return prompt
 
@@ -2390,9 +2727,10 @@ def zone_command():
 
     try:
         _payload = _json_zc.dumps({
-            'model':  ollama_model,
-            'prompt': prompt,
-            'stream': False,
+            'model':   ollama_model,
+            'prompt':  prompt,
+            'stream':  False,
+            'options': {'num_predict': 60},  # ~one sentence; enforces prompt instruction
         }).encode('utf-8')
         _req = _urllib_req.Request(
             f'{ollama_url}/api/generate',
@@ -2582,4 +2920,4 @@ if __name__ == "__main__":
     print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice")
     print("           /hothouse/state /hothouse/x3d /hothouse/humanml")
     print("           /collapse/run /export/x3d /export/python /export/json")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, threaded=True)
