@@ -38,8 +38,24 @@ Backward compatibility:
     is additive. All existing code that reads the dict continues to work.
     CultivarDefinition wraps the dict; the dict is not replaced.
 
+v3.1.0 — HAnim Behavior Activation (Day 23, 2026-05-22):
+    - CultivarDefinition gains behavior_clips and behavior_default fields
+    - <Behaviors> XML element: per-cultivar TimeSensor clip selection table
+    - _from_element(), to_xml(), to_dict(), from_dict() all updated
+    - GET /cultivars/<name> now returns behavior_clips and behavior_default
+    - GET /cultivars/xml now includes behavior data in each cultivar entry
+    - POST /cultivars/xml JSON path now accepts behavior_clips / behavior_default
+    - No changes to registry, lambda, shadow_context, or waypoint helpers
+
+v3.2.0 — Attentional Filter / Relational Dynamics (Day 26, 2026-05-25):
+    - CultivarDefinition gains receptivity field {E, B, P, S} in [0,1]
+    - <Receptivity> XML element: per-channel coupler influence filter
+    - _from_element(), to_xml(), to_dict(), from_dict() all updated
+    - GET /cultivars/xml now includes receptivity in each cultivar entry
+    - Default all 1.0 — no change to existing cultivars without <Receptivity>
+
 Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
-V3 Spec v0.2, April 2026
+V3 Spec v0.2, April 2026 — v3.1.0 HAnim extension May 2026
 """
 
 import os
@@ -72,6 +88,12 @@ LAMBDA_MAX            = 1.00
 
 MCCF_CULTIVAR_NS = "http://mccf.artistinprocess.com/cultivar/v3"
 SCHEMA_VERSION   = "1.0"
+
+# ---------------------------------------------------------------------------
+# Behavior clip channels — the four MCCF channels that can gate a clip
+# ---------------------------------------------------------------------------
+
+_BEHAVIOR_CHANNELS = ("E", "B", "P", "S")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -149,6 +171,75 @@ class ShadowContext:
 
 
 # ---------------------------------------------------------------------------
+# Behavior clip helpers
+# ---------------------------------------------------------------------------
+
+def _parse_behavior_clips(beh_el: ET.Element) -> tuple:
+    """
+    Parse a <Behaviors default="..."> element into (behavior_default, clips).
+
+    Each <Clip> becomes a dict with keys:
+        name, timerDEF, loop (bool), priority (int),
+        and optional E_min, E_max, B_min, B_max, P_min, P_max, S_min, S_max (float)
+
+    Returns (default_name: str, clips: list[dict]).
+    Missing min/max attributes are simply absent from the dict — the loader
+    treats absent bounds as unconstrained (matches any value for that channel).
+    """
+    behavior_default = beh_el.get("default", "Default")
+    clips = []
+    for clip_el in beh_el.findall("{*}Clip"):
+        clip = {
+            "name":     clip_el.get("name", ""),
+            "timerDEF": clip_el.get("timerDEF", "DefaultTimer"),
+            "loop":     clip_el.get("loop", "true").strip().lower() == "true",
+            "priority": int(clip_el.get("priority", "0")),
+        }
+        for ch in _BEHAVIOR_CHANNELS:
+            for bound in ("min", "max"):
+                key = f"{ch}_{bound}"
+                val = clip_el.get(key)
+                if val is not None:
+                    try:
+                        clip[key] = round(float(val), 4)
+                    except ValueError:
+                        pass   # malformed attribute — skip silently
+        clips.append(clip)
+    return behavior_default, clips
+
+
+def _serialize_behavior_clips(behavior_default: str, clips: list) -> list:
+    """
+    Serialize behavior_clips list to XML lines for to_xml().
+    Returns a list of strings to append to the lines list.
+    """
+    if not clips:
+        return []
+    lines = [
+        '',
+        '  <!-- HAnim behavior clip selection table -->',
+        '  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->',
+        '  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->',
+        f'  <Behaviors default="{behavior_default}">',
+    ]
+    for clip in clips:
+        parts = [
+            f'name="{clip["name"]}"',
+            f'timerDEF="{clip["timerDEF"]}"',
+        ]
+        for ch in _BEHAVIOR_CHANNELS:
+            for bound in ("min", "max"):
+                key = f"{ch}_{bound}"
+                if key in clip:
+                    parts.append(f'{key}="{clip[key]}"')
+        parts.append(f'loop="{"true" if clip.get("loop", True) else "false"}"')
+        parts.append(f'priority="{clip.get("priority", 0)}"')
+        lines.append('    <Clip ' + ' '.join(parts) + '/>')
+    lines.append('  </Behaviors>')
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # CultivarDefinition
 # ---------------------------------------------------------------------------
 
@@ -161,6 +252,7 @@ class CultivarDefinition:
     - shadow_context: ShadowContext with lambda
     - XML serialization / deserialization
     - Character Studio slider field for lambda
+    - behavior_clips: HAnim TimeSensor clip selection table (v3.1.0)
 
     The underlying dict is preserved as `raw` for backward compatibility
     with existing code that reads CONSTITUTIONAL_CULTIVARS directly.
@@ -186,10 +278,22 @@ class CultivarDefinition:
     # Alias — optional narrative name (e.g. Cherokee name vs family name)
     # XSD: minOccurs="0" — never required, never breaks validation if absent
     alias: str = ""
-    # H-Anim figure — optional, path relative to static/ (e.g. "avatars/jin_stripped.x3d")
-    # XSD: minOccurs="0" — absent when no figure assigned
+    # H-Anim figure — optional, character property authored in Character Creator
+    # XSD: minOccurs="0" — cylinder placeholder used in scene when absent
     hanim_src: str = ""
     hanim_loa: int = 4
+    # H-Anim behavior clip table (v3.1.0)
+    # List of dicts, each: {name, timerDEF, loop, priority,
+    #                        E_min?, E_max?, B_min?, B_max?, P_min?, P_max?, S_min?, S_max?}
+    # Empty list = no behavior authoring; loader defaults to DefaultTimer always running.
+    # XSD: minOccurs="0" — absent <Behaviors> element is always valid.
+    behavior_clips:   list = field(default_factory=list)
+    behavior_default: str  = "Default"
+    # Attentional filter — per-channel receptivity to coupler influence (v3.2.0)
+    # Dict with keys E, B, P, S; values in [0.0, 1.0].
+    # Default: all 1.0 (fully receptive — no change to existing cultivars).
+    # XSD: minOccurs="0" — absent <Receptivity> element is always valid.
+    receptivity: dict = field(default_factory=lambda: {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0})
 
     # ---- Character Studio slider interface --------------------------------
 
@@ -224,9 +328,12 @@ class CultivarDefinition:
             "voice_lang":  self.voice_lang,
             "voice_rate":  self.voice_rate,
             "voice_pitch": self.voice_pitch,
-            "alias":       self.alias,
-            "hanim_src":   self.hanim_src,
-            "hanim_loa":   self.hanim_loa,
+            "alias":          self.alias,
+            "hanim_src":      self.hanim_src,
+            "hanim_loa":      self.hanim_loa,
+            "behavior_clips":   self.behavior_clips,
+            "behavior_default": self.behavior_default,
+            "receptivity":      self.receptivity,
         }
 
     def to_xml(self) -> str:
@@ -287,8 +394,23 @@ class CultivarDefinition:
 
         if self.hanim_src:
             lines.append(f'')
-            lines.append(f'  <!-- HAnimFigure: stripped X3D file inlined at agent placement position -->')
+            lines.append(f'  <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->')
             lines.append(f'  <HAnimFigure src="{self.hanim_src}" loa="{self.hanim_loa}"/>')
+
+        # Receptivity — after HAnimFigure, before Behaviors
+        default_rec = {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
+        if self.receptivity and self.receptivity != default_rec:
+            r = self.receptivity
+            lines.append(f'')
+            lines.append(f'  <!-- Attentional filter: per-channel receptivity to coupler influence -->')
+            lines.append(f'  <!-- 1.0 = fully receptive; 0.0 = fully resistant -->')
+            lines.append(
+                f'  <Receptivity E="{r.get("E",1.0)}" B="{r.get("B",1.0)}"'
+                f' P="{r.get("P",1.0)}" S="{r.get("S",1.0)}"/>'
+            )
+
+        # Behavior clips — after HAnimFigure, before Metadata
+        lines.extend(_serialize_behavior_clips(self.behavior_default, self.behavior_clips))
 
         if self.metadata:
             lines.append(f'')
@@ -315,33 +437,33 @@ class CultivarDefinition:
         color   = root.get("color", "#aaaaaa")
 
         # Weights
-        w_el = root.find("Weights")
+        w_el = root.find("{*}Weights")
         weights = {"E": 0.25, "B": 0.25, "P": 0.25, "S": 0.25}
         if w_el is not None:
             for ch in ["E", "B", "P", "S"]:
                 weights[ch] = float(w_el.get(ch, 0.25))
 
         # Regulation
-        reg_el = root.find("Regulation")
+        reg_el = root.find("{*}Regulation")
         regulation = float(reg_el.get("value", 0.70)) \
                      if reg_el is not None else 0.70
 
         # ShadowContext
-        sc_el = root.find("ShadowContext")
+        sc_el = root.find("{*}ShadowContext")
         if sc_el is not None:
             shadow_context = ShadowContext.from_element(sc_el)
         else:
             shadow_context = ShadowContext.for_cultivar(name)
 
         # ZoneAffinity
-        za_el = root.find("ZoneAffinity")
+        za_el = root.find("{*}ZoneAffinity")
         zone_affinity = []
         if za_el is not None and za_el.get("zones"):
             zone_affinity = za_el.get("zones").split()
 
-        # Text fields
+        # Text fields — {*} wildcard handles both namespaced and bare XML
         def _text(tag):
-            el = root.find(tag)
+            el = root.find("{*}" + tag)
             return el.text.strip() if (el is not None and el.text) else ""
 
         description         = _text("Description")
@@ -349,36 +471,56 @@ class CultivarDefinition:
         failure_mode        = _text("FailureMode")
 
         # SignaturePhrases
-        sp_el = root.find("SignaturePhrases")
+        sp_el = root.find("{*}SignaturePhrases")
         signature_phrases = []
         if sp_el is not None:
             signature_phrases = [
-                p.text.strip() for p in sp_el.findall("Phrase")
+                p.text.strip() for p in sp_el.findall("{*}Phrase")
                 if p.text
             ]
 
         # Metadata
         metadata = {}
-        meta_el = root.find("Metadata")
+        meta_el = root.find("{*}Metadata")
         if meta_el is not None:
-            for m in meta_el.findall("Meta"):
+            for m in meta_el.findall("{*}Meta"):
                 metadata[m.get("key", "")] = m.get("value", "")
 
         # Voice
-        voice_el    = root.find("Voice")
+        voice_el    = root.find("{*}Voice")
         voice_name  = voice_el.get("name",  "")      if voice_el is not None else ""
         voice_lang  = voice_el.get("lang",  "en-US") if voice_el is not None else "en-US"
         voice_rate  = float(voice_el.get("rate",  1.0)) if voice_el is not None else 1.0
         voice_pitch = float(voice_el.get("pitch", 1.0)) if voice_el is not None else 1.0
 
         # Alias — optional, minOccurs=0
-        alias_el = root.find("Alias")
+        alias_el = root.find("{*}Alias")
         alias    = alias_el.text.strip() if (alias_el is not None and alias_el.text) else ""
 
         # HAnimFigure — optional, minOccurs=0
-        hanim_el  = root.find("HAnimFigure")
+        hanim_el  = root.find("{*}HAnimFigure")
         hanim_src = hanim_el.get("src", "") if hanim_el is not None else ""
         hanim_loa = int(hanim_el.get("loa", 4)) if hanim_el is not None else 4
+
+        # Behaviors — optional, minOccurs=0 (v3.1.0)
+        # Absent element = empty clips list, default = "Default"
+        beh_el = root.find("{*}Behaviors")
+        if beh_el is not None:
+            behavior_default, behavior_clips = _parse_behavior_clips(beh_el)
+        else:
+            behavior_default = "Default"
+            behavior_clips   = []
+
+        # Receptivity — optional, minOccurs=0 (v3.2.0)
+        # Absent element = all channels 1.0 (fully receptive — no change)
+        rec_el = root.find("{*}Receptivity")
+        if rec_el is not None:
+            receptivity = {
+                ch: round(min(1.0, max(0.0, float(rec_el.get(ch, '1.0')))), 4)
+                for ch in ('E', 'B', 'P', 'S')
+            }
+        else:
+            receptivity = {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
 
         return cls(
             name=name,
@@ -401,6 +543,9 @@ class CultivarDefinition:
             alias=alias,
             hanim_src=hanim_src,
             hanim_loa=hanim_loa,
+            behavior_clips=behavior_clips,
+            behavior_default=behavior_default,
+            receptivity=receptivity,
         )
 
     @classmethod
@@ -437,6 +582,9 @@ class CultivarDefinition:
             alias=data.get("alias", ""),
             hanim_src=data.get("hanim_src", ""),
             hanim_loa=int(data.get("hanim_loa", 4)),
+            behavior_clips=data.get("behavior_clips", []),
+            behavior_default=data.get("behavior_default", "Default"),
+            receptivity=data.get("receptivity", {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}),
         )
 
 
@@ -560,10 +708,13 @@ class CultivarRegistry:
                         failure_mode=_text(cultivar_el, "FailureMode"),
                         signature_phrases=phrases,
                         alias=_text(cultivar_el, "Alias"),
-                        voice_name=voice_el.get("name", "")        if voice_el is not None else "",
-                        voice_lang=voice_el.get("lang", "en-US")   if voice_el is not None else "en-US",
+                        voice_name=voice_el.get("name", "")         if voice_el is not None else "",
+                        voice_lang=voice_el.get("lang", "en-US")    if voice_el is not None else "en-US",
                         voice_rate=float(voice_el.get("rate", 1.0))  if voice_el is not None else 1.0,
                         voice_pitch=float(voice_el.get("pitch", 1.0)) if voice_el is not None else 1.0,
+                        # Old schema has no behavior table — empty by design
+                        behavior_clips=[],
+                        behavior_default="Default",
                     )
                     self._cultivars[name] = defn
 
@@ -671,21 +822,24 @@ def get_cultivars_xml():
 
     cultivars = [
         {
-            "agentname":   d.name,
-            "disposition": d.description,   # disposition lives in description field
-            "description": d.description,
-            "weights":     d.weights,
-            "regulation":  d.regulation,
-            "color":       d.color,
-            "failure_mode": d.failure_mode,
-            "phrases":     d.signature_phrases,
-            "voice_name":  d.voice_name,
-            "voice_lang":  d.voice_lang,
-            "voice_rate":  d.voice_rate,
-            "voice_pitch": d.voice_pitch,
-            "alias":       d.alias,
-            "hanim_src":   d.hanim_src,
-            "hanim_loa":   d.hanim_loa,
+            "agentname":        d.name,
+            "disposition":      d.description,   # disposition lives in description field
+            "description":      d.description,
+            "weights":          d.weights,
+            "regulation":       d.regulation,
+            "color":            d.color,
+            "failure_mode":     d.failure_mode,
+            "phrases":          d.signature_phrases,
+            "voice_name":       d.voice_name,
+            "voice_lang":       d.voice_lang,
+            "voice_rate":       d.voice_rate,
+            "voice_pitch":      d.voice_pitch,
+            "alias":            d.alias,
+            "hanim_src":        d.hanim_src,
+            "hanim_loa":        d.hanim_loa,
+            "behavior_clips":   d.behavior_clips,
+            "behavior_default": d.behavior_default,
+            "receptivity":      d.receptivity,
         }
         for d in reg._cultivars.values()
     ]
@@ -736,6 +890,10 @@ def post_cultivar_xml():
             voice_rate=float(data.get("voice_rate", 1.0)),
             voice_pitch=float(data.get("voice_pitch", 1.0)),
             alias=data.get("alias", ""),
+            hanim_src=data.get("hanim_src", ""),
+            hanim_loa=int(data.get("hanim_loa", 4)),
+            behavior_clips=data.get("behavior_clips", []),
+            behavior_default=data.get("behavior_default", "Default"),
         )
         reg.register(defn)
 

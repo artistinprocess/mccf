@@ -408,6 +408,388 @@
 
   /* ── Scroll utility ── */
   .spacer { height: 24px; }
+
+  /* ══════════════════════════════════════════════════
+     HAnim Editor Overlay — Phase 1 (Skin)
+     Phase 2 (Pose/Gesture) and Phase 3 (Face) panels
+     included as stubs, fully activatable in place.
+  ══════════════════════════════════════════════════ */
+
+  #he-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 1000;
+    flex-direction: column;
+    font-family: var(--mono);
+  }
+  #he-overlay.open { display: flex; }
+
+  .he-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .he-header-title {
+    font-size: 11px;
+    color: var(--accent4);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .he-header-cultivar {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .he-header-cultivar span { color: var(--text); }
+  .he-header-close {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .he-header-close:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .he-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Left: X_ITE viewport */
+  .he-viewport {
+    flex: 0 0 55%;
+    background: #010409;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .he-vp-label {
+    position: absolute;
+    top: 8px; left: 10px;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #he-xite-frame {
+    flex: 1;
+    border: none;
+    background: #010409;
+  }
+  .he-vp-toolbar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .he-vp-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 9px;
+    border-radius: var(--radius);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+  }
+  .he-vp-btn:hover { border-color: var(--accent3); color: var(--text); }
+  .he-vp-btn.active { background: var(--accent3); border-color: var(--accent3); color: #000; }
+
+  /* Right: tabbed authoring panel */
+  .he-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .he-tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .he-tab {
+    padding: 8px 16px;
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .he-tab:hover { color: var(--text); }
+  .he-tab.active { color: var(--accent3); border-bottom-color: var(--accent3); }
+
+  .he-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .he-pane::-webkit-scrollbar { width: 4px; }
+  .he-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .he-sec-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .he-section { margin-bottom: 14px; }
+
+  /* Skin tab */
+  .he-drop-zone {
+    border: 1px dashed var(--muted);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+  .he-drop-zone:hover, .he-drop-zone.drag-over {
+    border-color: var(--accent3);
+  }
+  .he-drop-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .he-skin-preview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .he-skin-tile {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 9px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .he-skin-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .he-atlas-name {
+    font-size: 11px;
+    color: var(--accent3);
+    margin: 4px 0 2px;
+  }
+  .he-atlas-hint {
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .he-atlas-canvas {
+    width: 80px; height: 80px;
+    border-radius: 4px;
+    margin: 0 auto 8px;
+    display: block;
+    border: 1px solid var(--border);
+    image-rendering: pixelated;
+  }
+
+  /* Pose stub */
+  .he-stub-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .he-stub-title {
+    color: var(--accent3);
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .he-stub-items {
+    text-align: left;
+    margin: 10px 0;
+    font-size: 10px;
+  }
+  .he-stub-items li { margin: 3px 0 3px 12px; list-style: '→ '; }
+
+  /* Face stub / AU sliders */
+  .he-au-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--surface2);
+  }
+  .he-au-name {
+    font-size: 9px;
+    color: var(--text-dim);
+    width: 148px;
+    flex-shrink: 0;
+  }
+  .he-au-name span { color: var(--muted); }
+  .he-au-slider {
+    flex: 1;
+    height: 3px;
+    -webkit-appearance: none;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    border: none;
+  }
+  .he-au-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .he-au-val {
+    font-size: 9px;
+    color: var(--text);
+    width: 28px;
+    text-align: right;
+  }
+  .he-preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .he-preset-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 0;
+    border-radius: var(--radius);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .he-preset-btn:hover { border-color: var(--accent3); color: var(--text); }
+  .he-preset-btn.on { border-color: var(--accent); color: var(--accent); background: rgba(74,240,168,0.07); }
+
+  /* Receptivity sliders */
+  .he-rec-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .he-rec-label {
+    font-size: 10px;
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .he-rec-slider {
+    flex: 1;
+    height: 3px;
+    -webkit-appearance: none;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    border: none;
+  }
+  .he-rec-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .he-rec-val {
+    font-size: 10px;
+    color: var(--text);
+    width: 30px;
+    text-align: right;
+  }
+
+  /* Status bar */
+  .he-statusbar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 5px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 9px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .he-status-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .he-dirty { color: var(--accent); }
+  .he-export-btn {
+    margin-left: auto;
+    background: var(--accent3);
+    border: none;
+    border-radius: var(--radius);
+    color: #000;
+    font-size: 10px;
+    padding: 4px 14px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .he-export-btn:hover { opacity: 0.85; }
+  .he-export-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* Open HAnim Editor button in center panel */
+  .open-he-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 8px;
+    padding: 7px 0;
+    background: transparent;
+    border: 1px solid var(--accent3);
+    border-radius: var(--radius);
+    color: var(--accent3);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .open-he-btn:hover { background: rgba(96,168,240,0.08); }
+  .open-he-btn:disabled { opacity: 0.3; cursor: default; }
 </style>
 </head>
 <body>
@@ -606,6 +988,11 @@
         </div>
       </div>
 
+      <!-- Open HAnim Editor button — enabled when a figure is loaded -->
+      <button class="open-he-btn" id="open-he-btn" onclick="openHAnimEditor()" disabled>
+        ✦ Open HAnim Editor →
+      </button>
+
       <hr class="sep">
 
       <!-- Save / Delete -->
@@ -678,6 +1065,189 @@
 </div><!-- /main -->
 
 <div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     HAnim Editor Overlay
+     Phases: 1=Skin (live), 2=Pose/Gesture (stub), 3=Face (live)
+════════════════════════════════════════════════════════════════════ -->
+<div id="he-overlay">
+
+  <div class="he-header">
+    <span class="he-header-title">HAnim Editor</span>
+    <span class="he-header-cultivar" id="he-cultivar-label">
+      cultivar: <span id="he-cname">—</span> ·
+      src: <span id="he-src">—</span> ·
+      LOA <span id="he-loa">4</span>
+    </span>
+    <button class="he-header-close" onclick="closeHAnimEditor()">✕ close</button>
+  </div>
+
+  <div class="he-body">
+
+    <!-- X_ITE Viewport -->
+    <div class="he-viewport">
+      <span class="he-vp-label">X_ITE · live preview</span>
+      <iframe id="he-xite-frame" title="HAnim figure preview" allowfullscreen></iframe>
+      <div class="he-vp-toolbar">
+        <button class="he-vp-btn active" id="he-btn-play" onclick="heVpPlay()">▶ play clip</button>
+        <button class="he-vp-btn" id="he-btn-uv" onclick="heVpUvToggle()">uv overlay</button>
+        <button class="he-vp-btn" style="margin-left:auto" onclick="heVpReset()">reset</button>
+      </div>
+    </div>
+
+    <!-- Authoring Panel -->
+    <div class="he-panel">
+      <div class="he-tabs">
+        <div class="he-tab active" id="he-tab-skin" onclick="heShowTab('skin')">skin</div>
+        <div class="he-tab" id="he-tab-pose" onclick="heShowTab('pose')">pose / gesture</div>
+        <div class="he-tab" id="he-tab-face" onclick="heShowTab('face')">face</div>
+      </div>
+
+      <!-- ── TAB: SKIN ────────────────────────────────── -->
+      <div class="he-pane" id="he-pane-skin">
+
+        <div class="he-section">
+          <div class="he-sec-label">current atlas</div>
+          <div class="he-drop-zone" id="he-drop-zone"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="heDropSkin(event)">
+            <input type="file" accept="image/png,image/jpeg" onchange="heSkinFileSelected(event)">
+            <canvas id="he-atlas-canvas" class="he-atlas-canvas" width="80" height="80"></canvas>
+            <div class="he-atlas-name" id="he-atlas-name">Jin.png</div>
+            <div class="he-atlas-hint">drop replacement atlas · 256×256 PNG/JPG</div>
+          </div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">atlas region map</div>
+          <div class="he-skin-preview">
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#1f6feb"></div>face / neck / scalp</div>
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#a371f7"></div>hair detail</div>
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#3fb950"></div>torso front</div>
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#d29922"></div>torso back / clothing</div>
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#f78166"></div>hands / feet</div>
+            <div class="he-skin-tile"><div class="he-skin-dot" style="background:#58a6ff"></div>accessories</div>
+          </div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">ai generation guidance</div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:10px;color:var(--text-dim);line-height:1.7">
+            Generate a 256×256 image. Place the face in the upper-left quadrant (0–128px × 0–128px from top-left).
+            UV layout is fixed — replacement must match atlas region assignments above.
+            Anime-style flat shading works best with current mesh density.
+          </div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">skin url (direct)</div>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="he-skin-url" class="input"
+                   style="flex:1;font-family:var(--mono);font-size:11px;"
+                   placeholder="avatars/Jin.png"
+                   oninput="heSkinUrlChanged()">
+            <button class="btn" onclick="heApplySkinUrl()">apply</button>
+            <button class="btn" onclick="heResetSkin()">reset</button>
+          </div>
+        </div>
+
+      </div><!-- /he-pane-skin -->
+
+      <!-- ── TAB: POSE / GESTURE ──────────────────────── -->
+      <div class="he-pane" id="he-pane-pose" style="display:none">
+        <div class="he-stub-panel">
+          <div class="he-stub-title">Pose / Gesture — Phase 2</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">
+            Joint rotation authoring via SAI, keyframe timeline, and clip management.
+            Unlocks after skin tab is confirmed working.
+          </div>
+          <ul class="he-stub-items">
+            <li>146-joint LOA 4 hierarchy tree</li>
+            <li>Axis-angle sliders per selected joint</li>
+            <li>Mirror left↔right with one click</li>
+            <li>Keyframe timeline — drag markers to reposition</li>
+            <li>Named clip list (Default, Walk, Pitch, Kick…)</li>
+            <li>CV threshold conditions per clip</li>
+            <li>Live playback via TimeSensor enable/disable</li>
+            <li>Export: OrientationInterpolator + ROUTEs</li>
+          </ul>
+          <button class="btn" onclick="toast('Phase 2 — coming next session')">Phase 2 →</button>
+        </div>
+      </div>
+
+      <!-- ── TAB: FACE ────────────────────────────────── -->
+      <div class="he-pane" id="he-pane-face" style="display:none">
+
+        <div class="he-section">
+          <div class="he-sec-label">ekman presets</div>
+          <div class="he-preset-grid" id="he-preset-grid"></div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">facs action units · weight (0–1)</div>
+          <div id="he-au-list"></div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">save expression</div>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="he-expr-name" class="input"
+                   style="flex:1;font-family:var(--mono);font-size:11px;"
+                   placeholder="expression name…">
+            <button class="btn" onclick="heSaveExpression()">save</button>
+            <button class="btn primary" onclick="heAssignToClip()">assign to clip</button>
+          </div>
+          <div id="he-expr-list" style="margin-top:8px;font-size:10px;color:var(--text-dim)"></div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">receptivity · coupler influence filter</div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;">
+            <div class="he-rec-row">
+              <span class="he-rec-label" style="color:var(--E)">E · emotional</span>
+              <input type="range" class="he-rec-slider" min="0" max="100" step="1" value="100"
+                     style="background:var(--E)" data-ch="E"
+                     oninput="heRecChanged(this)">
+              <span class="he-rec-val" id="he-rec-E">1.00</span>
+            </div>
+            <div class="he-rec-row">
+              <span class="he-rec-label" style="color:var(--B)">B · behavioral</span>
+              <input type="range" class="he-rec-slider" min="0" max="100" step="1" value="100"
+                     style="background:var(--B)" data-ch="B"
+                     oninput="heRecChanged(this)">
+              <span class="he-rec-val" id="he-rec-B">1.00</span>
+            </div>
+            <div class="he-rec-row">
+              <span class="he-rec-label" style="color:var(--P)">P · predictive</span>
+              <input type="range" class="he-rec-slider" min="0" max="100" step="1" value="100"
+                     style="background:var(--P)" data-ch="P"
+                     oninput="heRecChanged(this)">
+              <span class="he-rec-val" id="he-rec-P">1.00</span>
+            </div>
+            <div class="he-rec-row">
+              <span class="he-rec-label" style="color:var(--S)">S · social</span>
+              <input type="range" class="he-rec-slider" min="0" max="100" step="1" value="100"
+                     style="background:var(--S)" data-ch="S"
+                     oninput="heRecChanged(this)">
+              <span class="he-rec-val" id="he-rec-S">1.00</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /he-pane-face -->
+
+    </div><!-- /he-panel -->
+  </div><!-- /he-body -->
+
+  <div class="he-statusbar">
+    <div class="he-status-dot"></div>
+    <span id="he-status-text">ready</span>
+    <span class="he-dirty" id="he-dirty-label" style="display:none">● unsaved changes</span>
+    <button class="he-export-btn" id="he-export-btn" onclick="heExport()">export →</button>
+  </div>
+
+</div><!-- /he-overlay -->
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════
@@ -1359,7 +1929,417 @@ async function deleteCharacter() {
 
   // Re-check API periodically
   setInterval(checkApi, 10000);
-})();
+// ══════════════════════════════════════════════════════════════════════════
+// HAnim Editor — Overlay Controller
+// Phase 1: Skin tab (fully functional)
+// Phase 2: Pose/Gesture (stub)
+// Phase 3: Face — FACS AU sliders + Receptivity (fully functional)
+// ══════════════════════════════════════════════════════════════════════════
+
+var _heOpen        = false;
+var _heSkinUrl     = '';       // current skin URL (original)
+var _heSkinPending = '';       // pending replacement skin URL
+var _heDirty       = false;
+var _heReceptivity = { E:1.0, B:1.0, P:1.0, S:1.0 };
+var _heExpressions = [];       // saved expressions: [{name, weights}]
+var _heAuWeights   = {};       // current AU weights
+
+// ── FACS AU table ─────────────────────────────────────────────────────────
+var _he_aus = [
+  ['JinBlink','AU46'],['JinBrowLowerer','AU4'],['JinCheekPuffer','AU33'],
+  ['JinCheekRaiser','AU6'],['JinChinRaiser','AU17'],['JinDimpler','AU14'],
+  ['JinEyesClosed','AU43'],['JinInnerBrowRaiser','AU1'],['JinJawDrop','AU26'],
+  ['JinLidDroop','AU41'],['JinLidTightener','AU7'],['JinLipCornerDepressor','AU15'],
+  ['JinLipCornerPuller','AU12'],['JinLipFunneler','AU22'],['JinLipPressor','AU24'],
+  ['JinLipsPart','AU25'],['JinLipStretcher','AU20'],['JinLipSuck','AU28'],
+  ['JinLowerLipDepressor','AU16'],['JinNasolabialDeepener','AU11'],
+  ['JinNoseWrinkler','AU9'],['JinOuterBrowRaiser','AU2'],['JinSlit','AU44']
+];
+
+// Ekman presets (AU name → weight)
+var _he_presets = {
+  'Neutral':   {},
+  'Happy':     {'JinLipCornerPuller':0.8,'JinCheekRaiser':0.6,'JinLidTightener':0.3},
+  'Sad':       {'JinBrowLowerer':0.5,'JinInnerBrowRaiser':0.6,'JinLipCornerDepressor':0.7},
+  'Angry':     {'JinBrowLowerer':0.9,'JinLidTightener':0.6,'JinNoseWrinkler':0.4},
+  'Fearful':   {'JinInnerBrowRaiser':0.8,'JinOuterBrowRaiser':0.5,'JinEyesClosed':0.1,'JinLipsPart':0.4},
+  'Disgusted': {'JinNoseWrinkler':0.7,'JinLipCornerDepressor':0.5,'JinCheekRaiser':0.3},
+  'Surprised': {'JinInnerBrowRaiser':0.9,'JinOuterBrowRaiser':0.9,'JinJawDrop':0.5}
+};
+
+// ── Open / Close ──────────────────────────────────────────────────────────
+function openHAnimEditor() {
+  if (!_hanimPath) { toast('Load an H-Anim figure first', true); return; }
+  _heOpen = true;
+  _heSkinUrl     = _hanimPath;
+  _heSkinPending = '';
+  _heDirty       = false;
+
+  // Populate header labels
+  document.getElementById('he-cname').textContent = _selectedName || '—';
+  document.getElementById('he-src').textContent   = _hanimPath;
+  document.getElementById('he-loa').textContent   = String(_hanimLoa || 4);
+  document.getElementById('he-skin-url').value    = _hanimPath;
+  document.getElementById('he-atlas-name').textContent =
+    _hanimPath.split('/').pop() || _hanimPath;
+
+  // Load receptivity from cultivar if available
+  var cult = _cultivars.find(function(c){ return c.name === _selectedName; });
+  if (cult && cult.receptivity) {
+    _heReceptivity = cult.receptivity;
+    ['E','B','P','S'].forEach(function(ch) {
+      var v = _heReceptivity[ch] !== undefined ? _heReceptivity[ch] : 1.0;
+      var sl = document.querySelector('.he-rec-slider[data-ch="'+ch+'"]');
+      if (sl) sl.value = Math.round(v * 100);
+      var vl = document.getElementById('he-rec-'+ch);
+      if (vl) vl.textContent = parseFloat(v).toFixed(2);
+    });
+  }
+
+  // Launch X_ITE in the editor iframe
+  var frame = document.getElementById('he-xite-frame');
+  frame.src = '/avatar/preview?src=' + encodeURIComponent(_hanimPath);
+
+  // Draw atlas canvas thumbnail
+  heDrawAtlasCanvas(_hanimPath);
+
+  // Build AU list if not already built
+  _heBuildAuList();
+  _heBuildPresetGrid();
+
+  heSetStatus('loaded · ' + _hanimPath);
+  document.getElementById('he-overlay').classList.add('open');
+}
+
+function closeHAnimEditor() {
+  if (_heDirty) {
+    if (!confirm('Close without exporting? Changes will be lost.')) return;
+  }
+  document.getElementById('he-overlay').classList.remove('open');
+  _heOpen = false;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function heShowTab(t) {
+  ['skin','pose','face'].forEach(function(n) {
+    document.getElementById('he-tab-'+n).classList.toggle('active', n===t);
+    document.getElementById('he-pane-'+n).style.display = n===t ? '' : 'none';
+  });
+}
+
+// ── Viewport toolbar ──────────────────────────────────────────────────────
+function heVpPlay() {
+  var frame = document.getElementById('he-xite-frame');
+  // Reload with a clip param when Phase 2 adds clip management;
+  // for Phase 1, just refresh the preview
+  frame.src = frame.src;
+  toast('Preview refreshed');
+}
+function heVpUvToggle() {
+  var btn = document.getElementById('he-btn-uv');
+  btn.classList.toggle('active');
+  toast(btn.classList.contains('active') ? 'UV overlay on (Phase 2)' : 'UV overlay off');
+}
+function heVpReset() {
+  var frame = document.getElementById('he-xite-frame');
+  frame.src = '/avatar/preview?src=' + encodeURIComponent(_hanimPath);
+  heSetStatus('reset · ' + _hanimPath);
+}
+
+// ── Skin tab ──────────────────────────────────────────────────────────────
+function heDrawAtlasCanvas(src) {
+  var canvas = document.getElementById('he-atlas-canvas');
+  var ctx    = canvas.getContext('2d');
+  // Draw placeholder atlas colour map (real image loads via Image below)
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, 80, 80);
+  // Try to load the actual texture for the thumbnail
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0, 80, 80);
+  };
+  // Flask serves static files; use /static/avatars/<filename>
+  var filename = src.split('/').pop();
+  img.src = '/static/avatars/' + filename;
+  // Fallback: draw region colour blocks
+  img.onerror = function() {
+    ctx.fillStyle = '#1a3a5c'; ctx.fillRect(0,  0, 40, 40);
+    ctx.fillStyle = '#2d1f3d'; ctx.fillRect(40, 0, 40, 40);
+    ctx.fillStyle = '#1a3d2b'; ctx.fillRect(0, 40, 40, 40);
+    ctx.fillStyle = '#3d2d1a'; ctx.fillRect(40,40, 40, 40);
+    ctx.fillStyle = 'rgba(96,168,240,0.5)';
+    ctx.font = '7px IBM Plex Mono'; ctx.fillText('face', 3, 13);
+    ctx.fillStyle = 'rgba(163,113,247,0.5)';
+    ctx.fillText('hair', 43, 13);
+    ctx.fillStyle = 'rgba(63,185,80,0.5)';
+    ctx.fillText('torso', 3, 53);
+    ctx.fillStyle = 'rgba(210,153,34,0.5)';
+    ctx.fillText('limbs', 43, 53);
+  };
+}
+
+function heSkinFileSelected(evt) {
+  var file = evt.target.files[0];
+  if (!file) return;
+  heProcessSkinFile(file);
+}
+
+function heDropSkin(evt) {
+  evt.preventDefault();
+  document.getElementById('he-drop-zone').classList.remove('drag-over');
+  var file = evt.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) {
+    toast('Drop a PNG or JPG image', true);
+    return;
+  }
+  heProcessSkinFile(file);
+}
+
+function heProcessSkinFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    // Show thumbnail
+    var canvas = document.getElementById('he-atlas-canvas');
+    var ctx    = canvas.getContext('2d');
+    var img    = new Image();
+    img.onload = function() { ctx.drawImage(img, 0, 0, 80, 80); };
+    img.src    = e.target.result;
+    document.getElementById('he-atlas-name').textContent = file.name + ' (pending upload)';
+    // Store as data URL for upload at export time
+    _heSkinPending = e.target.result;
+    document.getElementById('he-skin-url').value = file.name;
+    heMarkDirty('skin replacement staged · export to save');
+  };
+  reader.readAsDataURL(file);
+}
+
+function heSkinUrlChanged() {
+  _heSkinPending = document.getElementById('he-skin-url').value;
+  heMarkDirty('skin url changed');
+}
+
+function heApplySkinUrl() {
+  var url = document.getElementById('he-skin-url').value.trim();
+  if (!url) return;
+  _heSkinPending = url;
+  // Reload X_ITE with new texture param (server must support ?skin= override)
+  var frame = document.getElementById('he-xite-frame');
+  frame.src = '/avatar/preview?src=' + encodeURIComponent(_hanimPath) +
+              '&skin=' + encodeURIComponent(url);
+  heMarkDirty('skin url applied to preview');
+}
+
+function heResetSkin() {
+  _heSkinPending = '';
+  document.getElementById('he-skin-url').value = _hanimPath;
+  heDrawAtlasCanvas(_hanimPath);
+  document.getElementById('he-atlas-name').textContent = _hanimPath.split('/').pop();
+  var frame = document.getElementById('he-xite-frame');
+  frame.src = '/avatar/preview?src=' + encodeURIComponent(_hanimPath);
+  heSetStatus('skin reset to original');
+}
+
+// ── Face tab ──────────────────────────────────────────────────────────────
+function _heBuildAuList() {
+  var list = document.getElementById('he-au-list');
+  if (list.children.length) return; // already built
+  _he_aus.forEach(function(au) {
+    var name = au[0], code = au[1];
+    _heAuWeights[name] = 0;
+    var row = document.createElement('div');
+    row.className = 'he-au-row';
+    row.innerHTML =
+      '<span class="he-au-name">' + name + ' <span>' + code + '</span></span>' +
+      '<input type="range" class="he-au-slider" min="0" max="100" step="1" value="0"' +
+      ' data-au="' + name + '" oninput="heAuChanged(this)">' +
+      '<span class="he-au-val" id="he-au-val-' + name + '">0.00</span>';
+    list.appendChild(row);
+  });
+}
+
+function _heBuildPresetGrid() {
+  var grid = document.getElementById('he-preset-grid');
+  if (grid.children.length) return;
+  Object.keys(_he_presets).forEach(function(name) {
+    var btn = document.createElement('button');
+    btn.className = 'he-preset-btn';
+    btn.textContent = name;
+    btn.onclick = function() { heApplyPreset(name, btn); };
+    grid.appendChild(btn);
+  });
+}
+
+function heAuChanged(slider) {
+  var au  = slider.dataset.au;
+  var val = slider.value / 100;
+  _heAuWeights[au] = val;
+  document.getElementById('he-au-val-' + au).textContent = val.toFixed(2);
+  heMarkDirty('AU ' + au + ' = ' + val.toFixed(2));
+  // Phase 3: write to X_ITE via postMessage when iframe SAI is wired
+}
+
+function heApplyPreset(name, btn) {
+  document.querySelectorAll('.he-preset-btn').forEach(function(b){
+    b.classList.remove('on');
+  });
+  btn.classList.add('on');
+  var preset = _he_presets[name] || {};
+  _he_aus.forEach(function(au) {
+    var auName = au[0];
+    var v = preset[auName] || 0;
+    _heAuWeights[auName] = v;
+    var sl = document.querySelector('.he-au-slider[data-au="'+auName+'"]');
+    if (sl) sl.value = Math.round(v * 100);
+    var vl = document.getElementById('he-au-val-' + auName);
+    if (vl) vl.textContent = v.toFixed(2);
+  });
+  heMarkDirty('preset: ' + name);
+}
+
+function heSaveExpression() {
+  var name = document.getElementById('he-expr-name').value.trim();
+  if (!name) { toast('Enter an expression name', true); return; }
+  var weights = Object.assign({}, _heAuWeights);
+  _heExpressions = _heExpressions.filter(function(e){ return e.name !== name; });
+  _heExpressions.push({ name: name, weights: weights });
+  _heRenderExprList();
+  toast('Expression saved: ' + name);
+  heMarkDirty('expression saved');
+}
+
+function _heRenderExprList() {
+  var el = document.getElementById('he-expr-list');
+  if (!_heExpressions.length) { el.textContent = ''; return; }
+  el.innerHTML = _heExpressions.map(function(e) {
+    var active = Object.entries(e.weights)
+      .filter(function(kv){ return kv[1] > 0.05; })
+      .map(function(kv){ return kv[0].replace('Jin','') + ':' + kv[1].toFixed(1); })
+      .join(' · ');
+    return '<div style="padding:3px 0;border-bottom:1px solid var(--surface2)">' +
+      '<span style="color:var(--accent3)">' + e.name + '</span>' +
+      '<span style="color:var(--muted);margin-left:6px;">' + (active||'all 0') + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function heAssignToClip() {
+  toast('Assign to clip — available in Phase 2', false);
+}
+
+function heRecChanged(slider) {
+  var ch  = slider.dataset.ch;
+  var val = slider.value / 100;
+  _heReceptivity[ch] = parseFloat(val.toFixed(2));
+  document.getElementById('he-rec-' + ch).textContent = val.toFixed(2);
+  heMarkDirty('receptivity ' + ch + ' = ' + val.toFixed(2));
+}
+
+// ── Dirty state ───────────────────────────────────────────────────────────
+function heMarkDirty(msg) {
+  _heDirty = true;
+  heSetStatus(msg);
+  document.getElementById('he-dirty-label').style.display = '';
+}
+
+function heSetStatus(msg) {
+  document.getElementById('he-status-text').textContent = msg || 'ready';
+}
+
+// ── Export ────────────────────────────────────────────────────────────────
+async function heExport() {
+  var btn = document.getElementById('he-export-btn');
+  btn.disabled = true;
+  btn.textContent = 'exporting…';
+  heSetStatus('exporting…');
+
+  try {
+    // Build payload
+    var payload = {
+      cultivar:    _selectedName,
+      hanim_src:   _hanimPath,
+      skin_url:    _heSkinPending || _hanimPath,
+      receptivity: _heReceptivity,
+      expressions: _heExpressions,
+      au_weights:  _heAuWeights,
+      clips:       [],       // Phase 2 will populate
+      displacers:  []        // Phase 3 will populate
+    };
+
+    // If skin is a data URL (file drop), upload image first
+    if (_heSkinPending && _heSkinPending.startsWith('data:')) {
+      var imgRes = await fetch(API_URL + '/hanim/skin_upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cultivar:  _selectedName,
+          data_url:  _heSkinPending
+        })
+      });
+      if (imgRes.ok) {
+        var imgData = await imgRes.json();
+        payload.skin_url = imgData.path || payload.skin_url;
+      }
+    }
+
+    var res = await fetch(API_URL + '/hanim/export', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.error || 'export failed');
+
+    // Update Character Creator state
+    if (data.hanim_path) {
+      _hanimPath = data.hanim_path;
+      document.getElementById('hanim-file-display').textContent = _hanimPath;
+      document.getElementById('hanim-file-display').style.display = 'block';
+    }
+    if (data.clips_written) {
+      _renderHAnimClips(data.clips_written);
+    }
+
+    _heDirty = false;
+    document.getElementById('he-dirty-label').style.display = 'none';
+    heSetStatus('exported → ' + (data.hanim_path || _hanimPath));
+    toast('HAnim export saved');
+    setDirty(); // mark character creator dirty so Save Character reflects new hanim
+
+  } catch(e) {
+    heSetStatus('export failed: ' + e.message);
+    toast('Export failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'export →';
+  }
+}
+
+// ── Enable/disable the Open HAnim Editor button ───────────────────────────
+// Called after hanim file upload succeeds and on clearHAnim
+function _heUpdateOpenBtn() {
+  var btn = document.getElementById('open-he-btn');
+  if (btn) btn.disabled = !_hanimPath;
+}
+
+// Patch existing functions to update the button state
+var _orig_onHAnimFileSelected = onHAnimFileSelected;
+onHAnimFileSelected = async function(evt) {
+  await _orig_onHAnimFileSelected(evt);
+  _heUpdateOpenBtn();
+};
+var _orig_clearHAnim = clearHAnim;
+clearHAnim = function() {
+  _orig_clearHAnim();
+  _heUpdateOpenBtn();
+};
+var _orig_loadForm = loadForm;
+loadForm = function(c) {
+  _orig_loadForm(c);
+  _heUpdateOpenBtn();
+};;
 </script>
 </body>
 </html>

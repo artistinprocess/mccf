@@ -83,6 +83,33 @@ button.active { background: #4af0a8; color: #111; }
 .rt-drift-neg { color: #f07060; font-weight: bold; }
 .rt-drift-zero { color: #2a3a4a; }
 .rt-meta { font-size: 10px; color: #4a6070; margin-top: 3px; }
+/* ── Trust panel ── */
+#trust-panel {
+  margin-top: 6px;
+  border-top: 1px solid #1c2238;
+  padding-top: 5px;
+}
+#trust-toggle {
+  color: #f0a060; font-size: 10px; cursor: pointer;
+  user-select: none; display: block; margin-bottom: 3px;
+}
+#trust-toggle:hover { color: #f0c080; }
+#trust-rows { display: block; }
+.tr-row {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10px; margin: 2px 0;
+}
+.tr-label { color: #8090a0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tr-bar-wrap {
+  width: 60px; height: 6px; background: #0d1520;
+  border-radius: 2px; overflow: hidden; position: relative; flex-shrink: 0;
+}
+.tr-bar {
+  position: absolute; top: 0; left: 0; height: 100%;
+  border-radius: 2px; transition: width 0.4s ease;
+}
+.tr-mu  { width: 32px; text-align: right; color: #f0a060; font-size: 10px; flex-shrink: 0; }
+.tr-ticks { width: 24px; text-align: right; color: #4a6070; font-size: 9px; flex-shrink: 0; }
 /* ── Greek Chorus overlay ── */
 #chorus-overlay {
   display: none;
@@ -171,6 +198,11 @@ button.active { background: #4af0a8; color: #111; }
   <div id="runtime-panel">
     <span id="runtime-toggle" onclick="toggleRuntime()">▶ ϕ/ϵ state</span>
     <div id="runtime-agents" style="display:none;"></div>
+  </div>
+  <!-- Trust panel -->
+  <div id="trust-panel">
+    <span id="trust-toggle" onclick="toggleTrust()">▶ trust</span>
+    <div id="trust-rows" style="display:none;"></div>
   </div>
 </div>
 
@@ -344,12 +376,51 @@ function startPolling() {
 // ── ϕ/ϵ runtime display ──────────────────────────────────────────────────────
 
 let _runtimeExpanded = false;
+let _trustExpanded   = false;
+// Last trust data from couplers/tick response — updated each tick call
+window._lastTrustData = {};
 
 function toggleRuntime() {
   _runtimeExpanded = !_runtimeExpanded;
   document.getElementById('runtime-agents').style.display = _runtimeExpanded ? 'block' : 'none';
   document.getElementById('runtime-toggle').textContent =
     (_runtimeExpanded ? '▼' : '▶') + ' ϕ/ϵ state';
+}
+
+function toggleTrust() {
+  _trustExpanded = !_trustExpanded;
+  document.getElementById('trust-rows').style.display = _trustExpanded ? 'block' : 'none';
+  document.getElementById('trust-toggle').textContent =
+    (_trustExpanded ? '▼' : '▶') + ' trust';
+  if (_trustExpanded) renderTrust(window._lastTrustData || {});
+}
+
+function renderTrust(trustData) {
+  var container = document.getElementById('trust-rows');
+  if (!container) return;
+  var links = Object.keys(trustData);
+  if (!links.length) {
+    container.innerHTML = '<div style="color:#2a3a4a;font-size:9px;margin-top:2px;">no trust data yet — play an arc</div>';
+    return;
+  }
+  var html = '';
+  links.forEach(function(label) {
+    var t = trustData[label];
+    var mu = t.mu !== undefined ? t.mu : 0.5;
+    // Bar colour: green when trust > authored (μ>0.5), amber at baseline, red when weakened
+    var pct = Math.round(mu * 100);
+    var barColor = mu > 0.55 ? '#4af0a8' : mu < 0.45 ? '#f06060' : '#f0a060';
+    // strength_eff modifier displayed as signed percentage from authored
+    var modPct = Math.round((mu - 0.5) * 100);
+    var modStr = modPct === 0 ? '±0%' : (modPct > 0 ? '+' + modPct + '%' : modPct + '%');
+    html += '<div class="tr-row">'
+      + '<span class="tr-label" title="' + label + '">' + label + '</span>'
+      + '<div class="tr-bar-wrap"><div class="tr-bar" style="width:' + pct + '%;background:' + barColor + '"></div></div>'
+      + '<span class="tr-mu">' + modStr + '</span>'
+      + '<span class="tr-ticks">' + (t.ticks || 0) + 'T</span>'
+      + '</div>';
+  });
+  container.innerHTML = html;
 }
 
 async function pollRuntime() {
@@ -2932,6 +3003,11 @@ function _fireCouplerTick(sceneName) {
         + ' links=' + d.network_links
         + ' agents=' + d.agents_ticked
         + (d.phase && d.phase.transition ? ' PHASE TRANSITION mean_sim=' + d.phase.mean_similarity : ''));
+      // Capture trust data for panel display
+      if (d.trust && Object.keys(d.trust).length) {
+        window._lastTrustData = d.trust;
+        if (_trustExpanded) renderTrust(d.trust);
+      }
     })
     .catch(function() {});
 }
