@@ -655,6 +655,64 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+  /* ── Region group preset buttons ── */
+  .he-region-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .he-rp-btn {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    line-height: 1.3;
+  }
+  .he-rp-btn:hover { background: var(--bg-mid); color: var(--text-dim); }
+  .he-rp-btn.active {
+    background: var(--accent3);
+    border-color: var(--accent3);
+    color: #000;
+    font-weight: 600;
+  }
+  .he-coupled-badge {
+    display: none;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent3);
+    padding: 2px 5px;
+    border: 1px solid var(--accent3);
+    border-radius: 2px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .he-coupled-badge.on { display: inline-block; }
+
+  .he-face-group-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--accent3);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent3);
+  }
+
   .he-region-header {
     font-size: 11px;
     color: var(--muted);
@@ -1403,7 +1461,21 @@
 
             <!-- Left: joint hierarchy tree -->
             <div class="he-joint-tree-panel">
-              <div class="he-sec-label">joint hierarchy</div>
+              <div class="he-sec-label" style="display:flex;align-items:center;">
+                joint hierarchy
+                <span class="he-coupled-badge" id="he-coupled-badge">coupled</span>
+              </div>
+              <!-- Region group preset buttons -->
+              <div class="he-region-presets" id="he-region-presets">
+                <button class="he-rp-btn" data-rp="spine"     onclick="heRegionSelect('spine')"    title="Select spine group — drives vc7+vc4+vc2+skullbase">spine</button>
+                <button class="he-rp-btn" data-rp="left_arm"  onclick="heRegionSelect('left_arm')"  title="Select left arm group — drives l_shoulder+l_elbow+l_wrist">l arm</button>
+                <button class="he-rp-btn" data-rp="right_arm" onclick="heRegionSelect('right_arm')" title="Select right arm group — drives r_shoulder+r_elbow+r_wrist">r arm</button>
+                <button class="he-rp-btn" data-rp="left_leg"  onclick="heRegionSelect('left_leg')"  title="Select left leg group — drives l_hip+l_knee+l_ankle">l leg</button>
+                <button class="he-rp-btn" data-rp="right_leg" onclick="heRegionSelect('right_leg')" title="Select right leg group — drives r_hip+r_knee+r_ankle">r leg</button>
+                <button class="he-rp-btn" data-rp="head"      onclick="heRegionSelect('head')"      title="Select head group — drives skullbase, neck vertebrae follow">head</button>
+                <button class="he-rp-btn" data-rp="face"      onclick="heRegionSelect('face')"      title="Select face group — drives skullbase with eyes, eyelids, brows and jaw coupled">face</button>
+                <button class="he-rp-btn" data-rp="__clear__" onclick="heRegionClear()"             title="Clear group mode — control individual joints">solo</button>
+              </div>
               <input type="text" class="he-joint-search" id="he-joint-search"
                      placeholder="filter joints…" oninput="hePoseFilterJoints(this.value)">
               <div class="he-joint-tree" id="he-joint-tree">
@@ -1521,6 +1593,15 @@
 
       <!-- ── TAB: FACE ────────────────────────────────── -->
       <div class="he-pane" id="he-pane-face" style="display:none">
+
+        <!-- Active group indicator + back link -->
+        <div class="he-face-group-bar" id="he-face-group-bar" style="display:none">
+          <span id="he-face-group-label"></span>
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <span style="color:var(--muted);font-size:10px;">rotation controls in pose tab</span>
+            <button class="he-rp-btn" onclick="heShowTab('pose')" style="font-size:9px;padding:2px 6px;">← pose</button>
+          </span>
+        </div>
 
         <div class="he-section">
           <div class="he-sec-label">ekman presets</div>
@@ -2291,14 +2372,40 @@ var _heAuWeights   = {};       // current AU weights
 
 // ── FACS AU table ─────────────────────────────────────────────────────────
 var _he_aus = [
-  ['JinBlink','AU46'],['JinBrowLowerer','AU4'],['JinCheekPuffer','AU33'],
-  ['JinCheekRaiser','AU6'],['JinChinRaiser','AU17'],['JinDimpler','AU14'],
-  ['JinEyesClosed','AU43'],['JinInnerBrowRaiser','AU1'],['JinJawDrop','AU26'],
-  ['JinLidDroop','AU41'],['JinLidTightener','AU7'],['JinLipCornerDepressor','AU15'],
-  ['JinLipCornerPuller','AU12'],['JinLipFunneler','AU22'],['JinLipPressor','AU24'],
-  ['JinLipsPart','AU25'],['JinLipStretcher','AU20'],['JinLipSuck','AU28'],
-  ['JinLowerLipDepressor','AU16'],['JinNasolabialDeepener','AU11'],
-  ['JinNoseWrinkler','AU9'],['JinOuterBrowRaiser','AU2'],['JinSlit','AU44']
+  // Brow
+  ['JinBrowLowerer',      'AU4' ],
+  ['JinInnerBrowRaiser',  'AU1' ],
+  ['JinOuterBrowRaiser',  'AU2' ],
+  // Eye / Lid
+  ['JinBlink',            'AU46'],
+  ['JinEyesClosed',       'AU43'],
+  ['JinLidDroop',         'AU41'],
+  ['JinLidTightener',     'AU7' ],
+  ['JinSquint',           'AU44'],
+  ['JinSlit',             'AU44b'],
+  ['JinUpperLidRaiser',   'AU5' ],
+  ['JinWink',             'AU46b'],
+  // Nose / Cheek
+  ['JinNoseWrinkler',     'AU9' ],
+  ['JinCheekRaiser',      'AU6' ],
+  ['JinCheekPuffer',      'AU33'],
+  ['JinNasolabialDeepener','AU11'],
+  // Mouth / Lip
+  ['JinJawDrop',          'AU26'],
+  ['JinLipCornerPuller',  'AU12'],
+  ['JinLipCornerDepressor','AU15'],
+  ['JinLipsPart',         'AU25'],
+  ['JinLipStretcher',     'AU20'],
+  ['JinLipFunneler',      'AU22'],
+  ['JinLipPuckerer',      'AU18'],
+  ['JinLipSuck',          'AU28'],
+  ['JinLipPressor',       'AU24'],
+  ['JinLipTightener',     'AU23'],
+  ['JinUpperLipRaiser',   'AU10'],
+  ['JinLowerLipDepressor','AU16'],
+  ['JinMouthStretch',     'AU27'],
+  ['JinDimpler',          'AU14'],
+  ['JinChinRaiser',       'AU17'],
 ];
 
 // Ekman presets (AU name → weight)
@@ -2486,20 +2593,80 @@ function heResetSkin() {
 }
 
 // ── Face tab ──────────────────────────────────────────────────────────────
+// Human-readable labels for mortals — HAnim AU names are medical terminology
+var _HE_AU_LABELS = {
+  // Brow
+  'JinBrowLowerer':       'Brow lower',
+  'JinInnerBrowRaiser':   'Inner brow raise',
+  'JinOuterBrowRaiser':   'Outer brow raise',
+  // Eye / Lid
+  'JinBlink':             'Blink',
+  'JinEyesClosed':        'Eyes closed',
+  'JinLidDroop':          'Lid droop',
+  'JinLidTightener':      'Lid tighten',
+  'JinSquint':            'Squint',
+  'JinSlit':              'Eye slit',
+  'JinUpperLidRaiser':    'Upper lid raise',
+  'JinWink':              'Wink',
+  // Nose / Cheek
+  'JinNoseWrinkler':      'Nose wrinkle',
+  'JinCheekRaiser':       'Cheek raise',
+  'JinCheekPuffer':       'Cheek puff',
+  'JinNasolabialDeepener':'Nasolabial fold',
+  // Mouth / Lip
+  'JinJawDrop':           'Jaw drop',
+  'JinLipCornerPuller':   'Smile',
+  'JinLipCornerDepressor':'Frown',
+  'JinLipsPart':          'Lips part',
+  'JinLipStretcher':      'Lip stretch',
+  'JinLipFunneler':       'Lip funnel',
+  'JinLipPuckerer':       'Lip pucker',
+  'JinLipSuck':           'Lip suck',
+  'JinLipPressor':        'Lips press',
+  'JinLipTightener':      'Lip tighten',
+  'JinUpperLipRaiser':    'Upper lip raise',
+  'JinLowerLipDepressor': 'Lower lip depress',
+  'JinMouthStretch':      'Mouth stretch',
+  'JinDimpler':           'Dimple',
+  'JinChinRaiser':        'Chin raise',
+};
+
+// AU group dividers for the slider list
+var _HE_AU_GROUPS = [
+  { label: 'brow',       aus: ['JinBrowLowerer','JinInnerBrowRaiser','JinOuterBrowRaiser'] },
+  { label: 'eyes & lids',aus: ['JinBlink','JinEyesClosed','JinLidDroop','JinLidTightener','JinSquint','JinSlit','JinUpperLidRaiser','JinWink'] },
+  { label: 'nose & cheeks', aus: ['JinNoseWrinkler','JinCheekRaiser','JinCheekPuffer','JinNasolabialDeepener'] },
+  { label: 'mouth & lips', aus: ['JinJawDrop','JinLipCornerPuller','JinLipCornerDepressor','JinLipsPart','JinLipStretcher','JinLipFunneler','JinLipPuckerer','JinLipSuck','JinLipPressor','JinLipTightener','JinUpperLipRaiser','JinLowerLipDepressor','JinMouthStretch','JinDimpler','JinChinRaiser'] },
+];
+
 function _heBuildAuList() {
   var list = document.getElementById('he-au-list');
   if (list.children.length) return; // already built
-  _he_aus.forEach(function(au) {
-    var name = au[0], code = au[1];
-    _heAuWeights[name] = 0;
-    var row = document.createElement('div');
-    row.className = 'he-au-row';
-    row.innerHTML =
-      '<span class="he-au-name">' + name + ' <span>' + code + '</span></span>' +
-      '<input type="range" class="he-au-slider" min="0" max="100" step="1" value="0"' +
-      ' data-au="' + name + '" oninput="heAuChanged(this)">' +
-      '<span class="he-au-val" id="he-au-val-' + name + '">0.00</span>';
-    list.appendChild(row);
+
+  // Build by group with section dividers
+  _HE_AU_GROUPS.forEach(function(group) {
+    // Group header
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:9px;letter-spacing:0.12em;text-transform:uppercase;' +
+      'color:var(--muted);padding:6px 0 2px;border-bottom:1px solid var(--border);margin-bottom:2px;';
+    hdr.textContent = group.label;
+    list.appendChild(hdr);
+
+    group.aus.forEach(function(name) {
+      var au   = _he_aus.find(function(a){ return a[0] === name; });
+      var code = au ? au[1] : '';
+      var label = _HE_AU_LABELS[name] || name.replace('Jin','');
+      _heAuWeights[name] = 0;
+      var row = document.createElement('div');
+      row.className = 'he-au-row';
+      row.innerHTML =
+        '<span class="he-au-name">' + label +
+          ' <span title="' + name + '">' + code + '</span></span>' +
+        '<input type="range" class="he-au-slider" min="0" max="100" step="1" value="0"' +
+        ' data-au="' + name + '" oninput="heAuChanged(this)">' +
+        '<span class="he-au-val" id="he-au-val-' + name + '">0.00</span>';
+      list.appendChild(row);
+    });
   });
 }
 
@@ -2521,7 +2688,8 @@ function heAuChanged(slider) {
   _heAuWeights[au] = val;
   document.getElementById('he-au-val-' + au).textContent = val.toFixed(2);
   heMarkDirty('AU ' + au + ' = ' + val.toFixed(2));
-  // Phase 3: write to X_ITE via postMessage when iframe SAI is wired
+  // SAI: set displacer weight in live X_ITE preview
+  hePoseSendSAI({ type: 'setDisplacerWeight', au: au, weight: val });
 }
 
 function heApplyPreset(name, btn) {
@@ -2538,6 +2706,8 @@ function heApplyPreset(name, btn) {
     if (sl) sl.value = Math.round(v * 100);
     var vl = document.getElementById('he-au-val-' + auName);
     if (vl) vl.textContent = v.toFixed(2);
+    // SAI: send each weight to live preview
+    hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: v });
   });
   heMarkDirty('preset: ' + name);
 }
@@ -2569,7 +2739,19 @@ function _heRenderExprList() {
 }
 
 function heAssignToClip() {
-  toast('Assign to clip — available in Phase 2', false);
+  var clip = hePoseCurrentClip();
+  if (!clip) { toast('No clip selected — add a clip in the Pose tab first', true); return; }
+  // Record current AU weights as a face keyframe at current t
+  var kf = _hePoseNearestKeyframe(clip, _heTlT);
+  if (!kf) {
+    // create a keyframe at current t if none nearby
+    kf = { t: _heTlT, joints: {}, auWeights: {} };
+    clip.keyframes.push(kf);
+    clip.keyframes.sort(function(a,b){ return a.t - b.t; });
+  }
+  kf.auWeights = Object.assign({}, _heAuWeights);
+  heMarkDirty('face assigned to clip "' + clip.name + '" at t=' + _heTlT.toFixed(2));
+  toast('Face weights assigned to "' + clip.name + '" at t=' + _heTlT.toFixed(2));
 }
 
 function heRecChanged(slider) {
@@ -2607,8 +2789,12 @@ async function heExport() {
       receptivity: _heReceptivity,
       expressions: _heExpressions,
       au_weights:  _heAuWeights,
-      clips:       [],       // Phase 2 will populate
-      displacers:  []        // Phase 3 will populate
+      clips:       _heClips,
+      // Displacer export: send all non-zero AU weights as {def, weight} pairs
+      // DEF convention: <MeshName>_MorphInterpolator_<AUName> — server resolves by AU suffix
+      displacers:  Object.entries(_heAuWeights)
+                     .filter(function(kv){ return kv[1] > 0; })
+                     .map(function(kv){ return { au: kv[0], weight: kv[1] }; })
     };
 
     // If skin is a data URL (file drop), upload image first
@@ -2725,7 +2911,170 @@ var _REGION_LABELS = {
 var _REGION_ORDER = ['spine','left_arm','right_arm','left_leg','right_leg','other'];
 var _REGION_COLLAPSED = {};
 
-// ── Initialisation ────────────────────────────────────────────────────────
+// ── Body-part group presets (Option 1) ────────────────────────────────────
+// Each preset defines a primary joint (what the sliders control) and
+// coupled joints that follow at reduced ratios.  ratio=1.0 means identical
+// rotation; 0.5 means half the angle.  The axis is inherited from the
+// primary; the sign can be inverted with negative ratio for antagonist pairs.
+//
+// Joint names must match HAnim DEF values from GET /hanim/joints.
+// Ratios can be tuned here without code changes.
+
+var _HE_GROUP_PRESETS = {
+  spine: {
+    label:   'spine',
+    primary: 'vc7',
+    coupled: [
+      { name: 'vc4',      ratio: 0.70 },
+      { name: 'vc2',      ratio: 0.50 },
+      { name: 'skullbase',ratio: 0.30 },
+      { name: 'vt12',     ratio: 0.40 },
+      { name: 'vt10',     ratio: 0.30 },
+    ],
+  },
+  left_arm: {
+    label:   'left arm',
+    primary: 'l_shoulder',
+    coupled: [
+      { name: 'l_elbow',  ratio: 0.60 },
+      { name: 'l_wrist',  ratio: 0.30 },
+    ],
+  },
+  right_arm: {
+    label:   'right arm',
+    primary: 'r_shoulder',
+    coupled: [
+      { name: 'r_elbow',  ratio: 0.60 },
+      { name: 'r_wrist',  ratio: 0.30 },
+    ],
+  },
+  left_leg: {
+    label:   'left leg',
+    primary: 'l_hip',
+    coupled: [
+      { name: 'l_knee',   ratio: -0.50 },   // negative: knee bends opposite to hip
+      { name: 'l_ankle',  ratio:  0.25 },
+    ],
+  },
+  right_leg: {
+    label:   'right leg',
+    primary: 'r_hip',
+    coupled: [
+      { name: 'r_knee',   ratio: -0.50 },
+      { name: 'r_ankle',  ratio:  0.25 },
+    ],
+  },
+  face: {
+    label:   'face',
+    primary: 'skullbase',
+    coupled: [
+      { name: 'l_eyeball_joint',  ratio: 0.80 },
+      { name: 'r_eyeball_joint',  ratio: 0.80 },
+      { name: 'l_eyelid_joint',   ratio: 0.60 },
+      { name: 'r_eyelid_joint',   ratio: 0.60 },
+      { name: 'l_eyebrow_joint',  ratio: 0.40 },
+      { name: 'r_eyebrow_joint',  ratio: 0.40 },
+      { name: 'temporomandibular',ratio: 0.30 },
+    ],
+  },
+  head: {
+    label:   'head',
+    primary: 'skullbase',
+    coupled: [
+      { name: 'vc1',  ratio: 0.50 },
+      { name: 'vc2',  ratio: 0.35 },
+      { name: 'vc3',  ratio: 0.20 },
+    ],
+  },
+};
+
+var _heActiveGroup = null;   // region key string or null
+
+// ── Region group preset functions ─────────────────────────────────────────
+
+function heRegionSelect(region) {
+  var preset = _HE_GROUP_PRESETS[region];
+  if (!preset) return;
+
+  _heActiveGroup = region;
+
+  // Update button highlight
+  document.querySelectorAll('.he-rp-btn[data-rp]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.rp === region);
+  });
+
+  // Show coupled badge in pose tab
+  var badge = document.getElementById('he-coupled-badge');
+  if (badge) badge.classList.add('on');
+
+  // Face and head groups → switch to face tab and show group bar
+  if (region === 'face' || region === 'head') {
+    heShowTab('face');
+    var bar   = document.getElementById('he-face-group-bar');
+    var label = document.getElementById('he-face-group-label');
+    if (bar)   bar.style.display = '';
+    if (label) label.textContent = preset.label + ' group active';
+    toast('Group: ' + preset.label + ' — AU sliders + skullbase rotation');
+    return;
+  }
+
+  // Hide face group bar when switching to non-face group
+  var bar = document.getElementById('he-face-group-bar');
+  if (bar) bar.style.display = 'none';
+
+  // Select primary joint in tree
+  hePoseSelectJoint(preset.primary);
+
+  // Expand the region in the tree so the primary joint is visible
+  var regionForJoint = null;
+  var j = _hePoseJoints.find(function(jj) { return jj.name === preset.primary; });
+  if (j) regionForJoint = j.region || 'other';
+  if (regionForJoint && _REGION_COLLAPSED[regionForJoint]) {
+    _REGION_COLLAPSED[regionForJoint] = false;
+    hePoseRenderTree(_hePoseJoints,
+      document.getElementById('he-joint-search').value.trim() || undefined);
+  }
+
+  toast('Group: ' + preset.label + ' — ' + preset.coupled.length + ' coupled joint' +
+        (preset.coupled.length !== 1 ? 's' : ''));
+}
+
+function heRegionClear() {
+  _heActiveGroup = null;
+  document.querySelectorAll('.he-rp-btn[data-rp]').forEach(function(b) {
+    b.classList.remove('active');
+  });
+  var badge = document.getElementById('he-coupled-badge');
+  if (badge) badge.classList.remove('on');
+  var bar = document.getElementById('he-face-group-bar');
+  if (bar) bar.style.display = 'none';
+  toast('Solo mode — individual joint control');
+}
+
+// ── Coupled SAI send ──────────────────────────────────────────────────────
+// Called from hePoseRotChanged() after sending the primary joint message.
+// For each coupled joint, scales the angle by ratio (axis unchanged except
+// for negative ratio which inverts it — useful for knee/ankle antagonism).
+
+function _hePoseSendCoupled(ax, ay, az, angleRad) {
+  if (!_heActiveGroup) return;
+  var preset = _HE_GROUP_PRESETS[_heActiveGroup];
+  if (!preset) return;
+
+  preset.coupled.forEach(function(c) {
+    var joint = _hePoseJoints.find(function(j) { return j.name === c.name; });
+    if (!joint) return;   // joint not present in this model — skip silently
+
+    var scaledAngle = angleRad * Math.abs(c.ratio);
+    var signFlip    = c.ratio < 0 ? -1 : 1;
+    hePoseSendSAI({
+      type:     'setJointRotation',
+      joint:    joint.def,
+      rotation: [ax, ay, az * signFlip, scaledAngle],
+    });
+    _hePoseTouched.add(c.name);
+  });
+}
 
 function hePoseInit() {
   // Wire event delegation on tree container — once only
@@ -2910,6 +3259,9 @@ function hePoseRotChanged() {
     joint:    _hePoseSelected.def,
     rotation: [ax, ay, az, angleRad]
   });
+
+  // If a group preset is active, drive coupled joints at scaled ratios
+  _hePoseSendCoupled(ax, ay, az, angleRad);
 }
 
 function hePoseSendSAI(msg) {
@@ -3198,7 +3550,9 @@ heExport = async function() {
       expressions: _heExpressions,
       au_weights:  _heAuWeights,
       clips:       clips,
-      displacers:  []
+      displacers:  Object.entries(_heAuWeights)
+                     .filter(function(kv){ return kv[1] > 0; })
+                     .map(function(kv){ return { au: kv[0], weight: kv[1] }; })
     };
 
     if (_heSkinPending && _heSkinPending.startsWith('data:')) {

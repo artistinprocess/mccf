@@ -344,6 +344,7 @@ def avatar_preview():
     //
     // Message types:
     //   setJointRotation  {{ joint: <DEF>, rotation: [ax, ay, az, angle_rad] }}
+    //   setDisplacerWeight {{ au: <AUName e.g. JinBlink>, weight: 0.0-1.0 }}
     //   enableTimer       {{ timerDEF: <DEF> }}
     //   disableAllTimers  {{}}
     //
@@ -359,6 +360,66 @@ def avatar_preview():
           if (!node) {{ console.warn('SAI: joint not found:', msg.joint); return; }}
           var r = msg.rotation || [0, 0, 1, 0];
           node.rotation = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
+
+        }} else if (msg.type === 'setDisplacerWeight') {{
+          // HAnimDisplacer SAI in X_ITE: getNamedNode(DEF) is the only
+          // reliable lookup — tree walking does not work on SAI proxies.
+          // DEF convention (Jin/Colson): <Mesh>_MorphInterpolator_<AUName>
+          // Try all known mesh prefixes from the loaded file.
+          var auName = msg.au;
+          var weight = typeof msg.weight === 'number' ? msg.weight : 0;
+          var _d_prefixes = [
+            'Lower_teeth', 'Center_lower_vermillion_lip', 'Hair',
+            '__0', '__2', '__4',
+            'Head', 'Face', 'Body', 'Skin', 'upper_teeth', 'tongue'
+          ];
+          var found = 0;
+          _d_prefixes.forEach(function(prefix) {{
+            var def = prefix + '_MorphInterpolator_' + auName;
+            try {{
+              var dn = _scene.getNamedNode(def);
+              if (dn) {{
+                dn.weight = new X3D.SFFloat(weight);
+                found++;
+              }}
+            }} catch(ee) {{}}
+          }});
+          if (found === 0) {{
+            console.warn('SAI displacer: no nodes found for AU', auName,
+              '— send {{type:"debugDisplacers"}} to see available DEFs');
+          }}
+
+        }} else if (msg.type === 'debugDisplacers') {{
+          // Diagnostic: discover which displacer DEFs X_ITE can actually resolve.
+          // Run from parent console:
+          //   document.getElementById('he-xite-frame')
+          //     .contentWindow.postMessage({{type:'debugDisplacers'}},'*')
+          var _dbg_aus = [
+            'JinBlink','JinBrowLowerer','JinCheekPuffer','JinCheekRaiser',
+            'JinChinRaiser','JinDimpler','JinEyesClosed','JinInnerBrowRaiser',
+            'JinJawDrop','JinLidDroop','JinLidTightener','JinLipCornerDepressor',
+            'JinLipCornerPuller','JinLipFunneler','JinLipPressor','JinLipsPart',
+            'JinLipStretcher','JinLipSuck','JinLipTightener','JinLowerLipDepressor',
+            'JinMouthStretch','JinNasolabialDeepener','JinNoseWrinkler',
+            'JinOuterBrowRaiser','JinSlit','JinSquint','JinUpperLidRaiser',
+            'JinUpperLipRaiser','JinWink','JinLipPuckerer'
+          ];
+          var _dbg_prefixes = [
+            'Lower_teeth','Center_lower_vermillion_lip','Hair',
+            '__0','__2','__4','Head','Face','Body','Skin','upper_teeth','tongue'
+          ];
+          var _dbg_found = [];
+          _dbg_aus.forEach(function(au) {{
+            _dbg_prefixes.forEach(function(prefix) {{
+              var def = prefix + '_MorphInterpolator_' + au;
+              try {{
+                var dn = _scene.getNamedNode(def);
+                if (dn) _dbg_found.push(def);
+              }} catch(ee) {{}}
+            }});
+          }});
+          console.log('debugDisplacers: found', _dbg_found.length, 'nodes');
+          console.log(_dbg_found.join('\\n'));
 
         }} else if (msg.type === 'enableTimer') {{
           var timer = _scene.getNamedNode(msg.timerDEF);
@@ -540,6 +601,43 @@ def _find_scene_el(root):
     if scene is None:
         scene = root.find('Scene')
     return scene
+
+
+def _update_displacer_weights(scene_el, displacers: list) -> int:
+    """
+    Write AU weight values back into HAnimDisplacer nodes in the X3D tree.
+
+    displacers: list of { au: 'JinBlink', weight: 0.75 }
+
+    DEF naming convention (Jin/Colson): <Mesh>_MorphInterpolator_<AUName>
+    We match on the AU name suffix so all mesh variants are updated.
+
+    Returns count of displacer nodes updated.
+    """
+    if not displacers:
+        return 0
+
+    # Build a lookup: au_name -> weight
+    au_map = {d['au']: float(d['weight']) for d in displacers if 'au' in d}
+    if not au_map:
+        return 0
+
+    ns_prefix = '{https://www.web3d.org/specifications/x3d-namespaces}'
+    updated = 0
+
+    for el in scene_el.iter():
+        tag = el.tag.replace(ns_prefix, '')
+        if tag != 'HAnimDisplacer':
+            continue
+        def_val = el.get('DEF') or ''
+        # Match suffix: _<AUName>
+        for au_name, weight in au_map.items():
+            if def_val.endswith('_' + au_name):
+                el.set('weight', str(round(weight, 6)))
+                updated += 1
+                break  # one AU per displacer node
+
+    return updated
 
 
 def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
@@ -761,6 +859,10 @@ def hanim_export():
 
     clips_written, routes_written = _write_clip_nodes(scene_el, clips, existing_routes)
 
+    # ── Write AU displacer weights ────────────────────────────────────────
+    displacers      = body.get('displacers') or []
+    displacers_updated = _update_displacer_weights(scene_el, displacers)
+
     # ── Parse cultivar XML via CultivarDefinition ─────────────────────────
     try:
         with open(cultivar_filepath, 'r', encoding='utf-8') as fh:
@@ -844,12 +946,13 @@ def hanim_export():
                         'error': f'atomic rename failed (backups preserved): {exc}'}), 500
 
     return jsonify({
-        'status':         'ok',
-        'hanim_path':     f'/static/avatars/{os.path.basename(hanim_src)}',
-        'cultivar_path':  f'cultivars/cultivar_{cultivar_name}.xml',
-        'clips_written':  clips_written,
-        'routes_written': routes_written,
-        'skin_updated':   skin_updated,
+        'status':              'ok',
+        'hanim_path':          f'/static/avatars/{os.path.basename(hanim_src)}',
+        'cultivar_path':       f'cultivars/cultivar_{cultivar_name}.xml',
+        'clips_written':       clips_written,
+        'routes_written':      routes_written,
+        'skin_updated':        skin_updated,
+        'displacers_updated':  displacers_updated,
     })
 
 
