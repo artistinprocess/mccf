@@ -286,8 +286,16 @@ def avatar_preview():
     src = request.args.get('src', '').strip()
     if not src:
         return "Missing src parameter", 400
-    # Serve directly from /static/ — Flask handles this correctly
-    x3d_src = f'/static/{src}' if not src.startswith('/') else src
+    # Normalise src to avatars/ subdir if caller passed a bare filename.
+    # Accepts: 'cindy_hanim.x3d'         -> '/static/avatars/cindy_hanim.x3d'
+    #          'avatars/cindy_hanim.x3d' -> '/static/avatars/cindy_hanim.x3d'
+    #          '/static/avatars/...'     -> unchanged
+    if src.startswith('/'):
+        x3d_src = src
+    elif src.startswith('avatars/') or src.startswith('static/'):
+        x3d_src = f'/static/{src}'
+    else:
+        x3d_src = f'/static/avatars/{src}'
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -299,20 +307,76 @@ def avatar_preview():
     x3d-canvas {{ width:100%; height:100%; display:block; }}
     #err {{ display:none; padding:12px; font-size:12px; color:#f06060; }}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.js"></script>
 </head>
 <body>
   <div id="err"></div>
   <x3d-canvas id="canvas" src="{x3d_src}"></x3d-canvas>
-  <script>
-    var c = document.getElementById('canvas');
-    c.addEventListener('load', function() {{
+  <script type="module">
+    // ── X_ITE SAI — module import pattern (v10.x) ────────────────────────
+    // canvas.browser is NOT available synchronously.
+    // Correct pattern: import X3D module, call X3D.getBrowser(canvas)
+    // inside the canvas 'load' event after the scene is ready.
+    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
+
+    const canvas   = document.getElementById('canvas');
+    let   _browser = null;
+    let   _scene   = null;
+
+    canvas.addEventListener('load', function() {{
       document.getElementById('err').style.display = 'none';
+      try {{
+        _browser = X3D.getBrowser(canvas);
+        _scene   = _browser.currentScene;
+        console.log('SAI ready — scene nodes:', _scene.rootNodes.length);
+      }} catch(e) {{
+        console.warn('SAI init failed:', e.message);
+      }}
     }});
-    c.addEventListener('error', function(e) {{
+
+    canvas.addEventListener('error', function(e) {{
       var el = document.getElementById('err');
       el.style.display = 'block';
       el.textContent = 'X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e));
+    }});
+
+    // ── SAI postMessage listener ──────────────────────────────────────────
+    // Receives messages from the parent HAnim Editor (character_creator.html).
+    //
+    // Message types:
+    //   setJointRotation  {{ joint: <DEF>, rotation: [ax, ay, az, angle_rad] }}
+    //   enableTimer       {{ timerDEF: <DEF> }}
+    //   disableAllTimers  {{}}
+    //
+    // SAI invariant: enabled=true/false is the ONLY timer mechanism in X_ITE.
+    window.addEventListener('message', function(evt) {{
+      if (!_browser || !_scene) return;
+      var msg = evt.data;
+      if (!msg || !msg.type) return;
+
+      try {{
+        if (msg.type === 'setJointRotation') {{
+          var node = _scene.getNamedNode(msg.joint);
+          if (!node) {{ console.warn('SAI: joint not found:', msg.joint); return; }}
+          var r = msg.rotation || [0, 0, 1, 0];
+          node.rotation = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
+
+        }} else if (msg.type === 'enableTimer') {{
+          var timer = _scene.getNamedNode(msg.timerDEF);
+          if (timer) timer.enabled = true;
+
+        }} else if (msg.type === 'disableAllTimers') {{
+          var defs = [
+            'DefaultTimer','WalkTimer','RunTimer','JumpTimer',
+            'KickTimer','PitchTimer','YawTimer','RollTimer'
+          ];
+          defs.forEach(function(def) {{
+            var t = _scene.getNamedNode(def);
+            if (t) t.enabled = false;
+          }});
+        }}
+      }} catch(e) {{
+        console.warn('SAI write error:', e.message, msg);
+      }}
     }});
   </script>
 </body>
@@ -332,6 +396,665 @@ def list_avatars():
         reverse=True
     )
     return jsonify({'avatars': files})
+
+
+# ---------------------------------------------------------------------------
+# HAnim Editor Export Endpoints
+# Day 27 — 2026-05-26
+# Spec: MCCF_HAnim_Editor_Spec.md
+#
+# POST /hanim/skin_upload  — decode base64 data URL → save PNG to static/avatars/
+# POST /hanim/export       — atomic dual-write: HAnim X3D + cultivar XML
+#
+# Phase 1 scope (what runs today):
+#   skin_upload : decode → write → return relative URL
+#   export      : update ImageTexture url (skin swap)
+#                 update <HAnimFigure src>, <Receptivity>, <Behaviors> in cultivar XML
+#                 scaffold TimeSensor/OrientationInterpolator/ROUTE for clips[] array
+#                 (clips[] is empty in Phase 1; full in Phase 2)
+#
+# Architecture invariants enforced here (never relax):
+#   - All exported TimeSensors: enabled="false"   (loader activates via SAI)
+#   - TimeSensor DEF naming: {ClipName}Timer
+#   - ROUTEs always last in Scene element
+#   - Both files backed up (.bak) before any write
+#   - os.replace() rename — neither file updated unless both writes succeed
+# ---------------------------------------------------------------------------
+
+import base64  as _b64
+import shutil  as _shutil_hanim
+import xml.etree.ElementTree as _ET_hanim
+
+_X3D_NS = 'https://www.web3d.org/specifications/x3d-4.0.xsd'
+
+
+def _hanim_base_dir() -> str:
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _avatar_dir() -> str:
+    return os.path.join(_hanim_base_dir(), 'static', 'avatars')
+
+
+def _cultivar_xml_path(cultivar_name: str) -> str:
+    safe = cultivar_name.strip().replace(' ', '_')
+    return os.path.join(_hanim_base_dir(), 'cultivars', f'cultivar_{safe}.xml')
+
+
+def _hanim_x3d_path(hanim_src: str) -> str:
+    """Resolve hanim_src basename to absolute path under static/avatars/."""
+    return os.path.join(_avatar_dir(), os.path.basename(hanim_src))
+
+
+def _hanim_backup(filepath: str) -> None:
+    """Write .bak copy if file exists, overwriting any previous backup."""
+    if os.path.exists(filepath):
+        _shutil_hanim.copy2(filepath, filepath + '.bak')
+
+
+def _parse_x3d_file(filepath: str):
+    """
+    Parse an X3D file.  Strips the XML declaration and DOCTYPE so ElementTree
+    can handle it.  Returns (xml_decl_line: str, root_element).
+    """
+    with open(filepath, 'r', encoding='utf-8') as fh:
+        raw = fh.read()
+    xml_decl = ''
+    body_lines = []
+    for line in raw.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith('<?xml'):
+            xml_decl = line
+        elif stripped.startswith('<!DOCTYPE'):
+            pass   # drop DOCTYPE — not needed for round-trip
+        else:
+            body_lines.append(line)
+    root = _ET_hanim.fromstring(''.join(body_lines))
+    return xml_decl, root
+
+
+def _serialise_x3d(xml_decl: str, root) -> str:
+    """Serialise an ElementTree root back to X3D text."""
+    _ET_hanim.register_namespace('', _X3D_NS)
+    body = _ET_hanim.tostring(root, encoding='unicode', xml_declaration=False)
+    return (xml_decl or '<?xml version="1.0" encoding="UTF-8"?>\n') + body
+
+
+def _update_image_texture_url(root, new_url: str) -> bool:
+    """
+    Find the atlas ImageTexture node and update its url attribute.
+    Prefers DEF containing 'TextureAtlas' (Jin convention).
+    Falls back to first ImageTexture found in tree (with or without namespace).
+    Returns True if a node was updated.
+    """
+    ns = _X3D_NS
+    target = None
+    for el in root.iter(f'{{{ns}}}ImageTexture'):
+        if 'TextureAtlas' in el.get('DEF', '') or 'textureatlas' in el.get('DEF', '').lower():
+            target = el
+            break
+    if target is None:
+        for el in root.iter(f'{{{ns}}}ImageTexture'):
+            target = el
+            break
+    if target is None:
+        for el in root.iter('ImageTexture'):  # no-namespace fallback
+            target = el
+            break
+    if target is None:
+        return False
+    target.set('url', f'"{new_url}"')
+    return True
+
+
+def _collect_routes(root) -> list:
+    """Return all ROUTE element attribute dicts from the tree."""
+    ns = _X3D_NS
+    seen  = set()
+    routes = []
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        for el in root.iter(tag):
+            key = (el.get('fromNode',''), el.get('fromField',''),
+                   el.get('toNode',''),   el.get('toField',''))
+            if key not in seen:
+                seen.add(key)
+                routes.append(dict(el.attrib))
+    return routes
+
+
+def _remove_routes(parent) -> None:
+    """Recursively remove all ROUTE elements from the tree in-place."""
+    ns = _X3D_NS
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        to_remove = [c for c in parent if c.tag == tag]
+        for c in to_remove:
+            parent.remove(c)
+    for child in parent:
+        _remove_routes(child)
+
+
+def _find_scene_el(root):
+    """Return the <Scene> element regardless of namespace presence."""
+    ns = _X3D_NS
+    scene = root.find(f'{{{ns}}}Scene')
+    if scene is None:
+        scene = root.find('Scene')
+    return scene
+
+
+def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
+    """
+    Append TimeSensor + OrientationInterpolator nodes for each clip, then
+    re-append all ROUTEs (existing + new clip ROUTEs) as the last nodes in
+    the Scene element.  Enforces ROUTE-last invariant regardless of clips[].
+
+    In Phase 1, clips is [] — only existing_routes are re-appended last.
+    In Phase 2, clips[] is populated from the editor's keyframe state.
+
+    Returns (clips_written: int, routes_written: int).
+    """
+    ns = _X3D_NS
+    clips_written = 0
+    new_routes    = list(existing_routes)
+
+    for clip in clips:
+        name     = clip.get('name', 'Default')
+        timer_def = clip.get('timerDEF', f'{name}Timer')
+        cycle    = float(clip.get('cycleInterval', 6.0))
+        loop     = 'true' if clip.get('loop', True) else 'false'
+        keyframes = clip.get('keyframes', [])
+
+        # TimeSensor — enabled="false" invariant
+        ts = _ET_hanim.SubElement(scene_el, f'{{{ns}}}TimeSensor')
+        ts.set('DEF',           timer_def)
+        ts.set('cycleInterval', str(cycle))
+        ts.set('loop',          loop)
+        ts.set('enabled',       'false')
+
+        # OrientationInterpolators per joint
+        joint_names = set()
+        for kf in keyframes:
+            joint_names.update(kf.get('joints', {}).keys())
+
+        for joint in sorted(joint_names):
+            interp_def = f'{name}Interp_{joint}'
+            keys, key_vals = [], []
+            for kf in sorted(keyframes, key=lambda k: k.get('t', 0.0)):
+                rot = kf['joints'].get(joint)
+                if rot and len(rot) == 4:
+                    keys.append(str(round(kf.get('t', 0.0), 4)))
+                    key_vals.append(' '.join(str(round(v, 6)) for v in rot))
+            if not keys:
+                continue
+            interp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}OrientationInterpolator')
+            interp.set('DEF',      interp_def)
+            interp.set('key',      ' '.join(keys))
+            interp.set('keyValue', ' '.join(key_vals))
+            # ROUTEs for this interpolator
+            new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
+                                'toNode':   interp_def, 'toField':   'set_fraction'})
+            new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
+                                'toNode':   joint,      'toField':   'rotation'})
+
+        clips_written += 1
+
+    # Deduplicate and append all ROUTEs last — INVARIANT
+    seen_r   = set()
+    unique_r = []
+    for r in new_routes:
+        key = (r.get('fromNode',''), r.get('fromField',''),
+               r.get('toNode',''),  r.get('toField',''))
+        if key not in seen_r:
+            seen_r.add(key)
+            unique_r.append(r)
+
+    for r_attrib in unique_r:
+        re_el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}ROUTE')
+        for k, v in r_attrib.items():
+            re_el.set(k, v)
+
+    return clips_written, len(unique_r)
+
+
+@app.route('/hanim/skin_upload', methods=['POST'])
+def hanim_skin_upload():
+    """
+    POST /hanim/skin_upload
+    Body: { cultivar: str, data_url: str }
+
+    Decodes a base64 data URL (image/png or image/jpeg) and saves it to
+    static/avatars/<cultivar_slug>_skin.png.
+
+    Returns: { status, path }
+      path is the relative URL the X_ITE viewer can load,
+      e.g. '/static/avatars/cindy_skin.png'
+    """
+    import re as _re
+    data      = request.get_json(silent=True) or {}
+    cultivar  = (data.get('cultivar') or '').strip()
+    data_url  = (data.get('data_url') or '').strip()
+
+    if not data_url:
+        return jsonify({'status': 'error', 'error': 'data_url required'}), 400
+
+    match = _re.match(r'^data:(image/(?:png|jpeg|jpg));base64,(.+)$',
+                      data_url, _re.DOTALL)
+    if not match:
+        return jsonify({'status': 'error',
+                        'error': 'data_url must be base64-encoded image/png or image/jpeg'}), 400
+    try:
+        img_bytes = _b64.b64decode(match.group(2))
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'base64 decode failed: {exc}'}), 400
+
+    os.makedirs(_avatar_dir(), exist_ok=True)
+    slug     = _re.sub(r'[^A-Za-z0-9_\-]', '_', cultivar).lower() if cultivar else 'avatar'
+    filename = f'{slug}_skin.png'
+    filepath = os.path.join(_avatar_dir(), filename)
+    try:
+        with open(filepath, 'wb') as fh:
+            fh.write(img_bytes)
+    except OSError as exc:
+        return jsonify({'status': 'error', 'error': f'write failed: {exc}'}), 500
+
+    return jsonify({'status': 'ok', 'path': f'/static/avatars/{filename}'})
+
+
+@app.route('/hanim/export', methods=['POST'])
+def hanim_export():
+    """
+    POST /hanim/export
+    Body (JSON):
+    {
+      cultivar:    str,           # e.g. "Cindy"
+      hanim_src:   str,           # e.g. "cindy_hanim.x3d"
+      skin_url:    str | null,    # relative path or data URL
+      receptivity: { E, B, P, S },
+      expressions: [ { name, au_weights } ],
+      clips:       [ { name, timerDEF, cycleInterval, loop, priority,
+                        keyframes: [{t, joints:{jointName:[ax,ay,az,angle]}}],
+                        cv_conditions } ],
+      displacers:  [ { def, weight } ]
+    }
+
+    Phase 1: skin URL + cultivar XML (HAnimFigure/Receptivity/Behaviors) only.
+    Phase 2: clips[] populated — TimeSensor + OrientationInterpolator nodes written.
+
+    Atomic dual-write via .tmp + os.replace().  Both files backed up first.
+    Neither file is modified if either write fails.
+
+    Returns:
+    {
+      status, hanim_path, cultivar_path,
+      clips_written, routes_written, skin_updated
+    }
+    """
+    import re as _re
+    from mccf_cultivar_lambda import CultivarDefinition
+
+    body          = request.get_json(silent=True) or {}
+    cultivar_name = (body.get('cultivar') or '').strip()
+    hanim_src     = (body.get('hanim_src') or '').strip()
+    skin_url      = (body.get('skin_url') or '').strip()
+    receptivity   = body.get('receptivity') or {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
+    clips         = body.get('clips') or []
+    # expressions / displacers: received, stored for Phase 3; not yet written to X3D
+
+    if not cultivar_name:
+        return jsonify({'status': 'error', 'error': 'cultivar name required'}), 400
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+
+    x3d_filepath      = _hanim_x3d_path(hanim_src)
+    cultivar_filepath = _cultivar_xml_path(cultivar_name)
+
+    if not os.path.exists(x3d_filepath):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+    if not os.path.exists(cultivar_filepath):
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar XML not found for: {cultivar_name}'}), 404
+
+    # ── Handle data URL skin — decode and save before any file writes ────
+    final_skin_url = skin_url if skin_url and not skin_url.startswith('data:') else None
+    if skin_url and skin_url.startswith('data:'):
+        match = _re.match(r'^data:(image/(?:png|jpeg|jpg));base64,(.+)$',
+                          skin_url, _re.DOTALL)
+        if not match:
+            return jsonify({'status': 'error',
+                            'error': 'skin_url data URL must be image/png or image/jpeg'}), 400
+        try:
+            img_bytes = _b64.b64decode(match.group(2))
+        except Exception as exc:
+            return jsonify({'status': 'error',
+                            'error': f'skin data URL decode failed: {exc}'}), 400
+        os.makedirs(_avatar_dir(), exist_ok=True)
+        slug      = _re.sub(r'[^A-Za-z0-9_\-]', '_', cultivar_name).lower()
+        skin_file = f'{slug}_skin.png'
+        skin_path = os.path.join(_avatar_dir(), skin_file)
+        try:
+            with open(skin_path, 'wb') as fh:
+                fh.write(img_bytes)
+        except OSError as exc:
+            return jsonify({'status': 'error',
+                            'error': f'skin image write failed: {exc}'}), 500
+        final_skin_url = f'/static/avatars/{skin_file}'
+
+    # ── Parse X3D ────────────────────────────────────────────────────────
+    try:
+        xml_decl, x3d_root = _parse_x3d_file(x3d_filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D parse failed: {exc}'}), 500
+
+    # ── Update ImageTexture url ──────────────────────────────────────────
+    skin_updated = False
+    if final_skin_url:
+        skin_updated = _update_image_texture_url(x3d_root, final_skin_url)
+
+    # ── Collect existing ROUTEs, strip from tree, re-append last ─────────
+    existing_routes = _collect_routes(x3d_root)
+    scene_el = _find_scene_el(x3d_root)
+    if scene_el is None:
+        return jsonify({'status': 'error',
+                        'error': 'No <Scene> element found in X3D file'}), 500
+    _remove_routes(scene_el)
+
+    clips_written, routes_written = _write_clip_nodes(scene_el, clips, existing_routes)
+
+    # ── Parse cultivar XML via CultivarDefinition ─────────────────────────
+    try:
+        with open(cultivar_filepath, 'r', encoding='utf-8') as fh:
+            cultivar_def = CultivarDefinition.from_xml(fh.read())
+    except Exception as exc:
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar XML parse failed: {exc}'}), 500
+
+    # ── Update cultivar fields ───────────────────────────────────────────
+    cultivar_def.hanim_src = os.path.basename(hanim_src)
+
+    cultivar_def.receptivity = {
+        ch: round(min(1.0, max(0.0, float(receptivity.get(ch, 1.0)))), 4)
+        for ch in ('E', 'B', 'P', 'S')
+    }
+
+    if clips:
+        cultivar_def.behavior_clips = []
+        for clip in clips:
+            c = {
+                'name':     clip.get('name', 'Default'),
+                'timerDEF': clip.get('timerDEF', f'{clip.get("name","Default")}Timer'),
+                'loop':     bool(clip.get('loop', True)),
+                'priority': int(clip.get('priority', 0)),
+            }
+            cv = clip.get('cv_conditions') or {}
+            for ch in ('E', 'B', 'P', 'S'):
+                for bound in ('min', 'max'):
+                    key = f'{ch}_{bound}'
+                    val = cv.get(key)
+                    if val is not None:
+                        try:
+                            c[key] = round(float(val), 4)
+                        except (TypeError, ValueError):
+                            pass
+            cultivar_def.behavior_clips.append(c)
+        p0 = [c for c in cultivar_def.behavior_clips if c.get('priority', 0) == 0]
+        cultivar_def.behavior_default = (
+            p0[0]['name'] if p0 else cultivar_def.behavior_clips[0]['name']
+        )
+
+    # ── Atomic dual-write ────────────────────────────────────────────────
+    # 1. Back up both files
+    _hanim_backup(x3d_filepath)
+    _hanim_backup(cultivar_filepath)
+
+    new_x3d_xml      = _serialise_x3d(xml_decl, x3d_root)
+    new_cultivar_xml = cultivar_def.to_xml()
+
+    tmp_x3d      = x3d_filepath      + '.tmp'
+    tmp_cultivar = cultivar_filepath + '.tmp'
+
+    # 2. Write temp files
+    try:
+        with open(tmp_x3d, 'w', encoding='utf-8') as fh:
+            fh.write(new_x3d_xml)
+        with open(tmp_cultivar, 'w', encoding='utf-8') as fh:
+            fh.write(new_cultivar_xml)
+    except OSError as exc:
+        for p in (tmp_x3d, tmp_cultivar):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return jsonify({'status': 'error', 'error': f'temp write failed: {exc}'}), 500
+
+    # 3. Rename into place — both or neither
+    try:
+        os.replace(tmp_x3d,      x3d_filepath)
+        os.replace(tmp_cultivar, cultivar_filepath)
+    except OSError as exc:
+        # Attempt restore from .bak
+        for src, dst in [(x3d_filepath + '.bak',      x3d_filepath),
+                         (cultivar_filepath + '.bak', cultivar_filepath)]:
+            if os.path.exists(src):
+                try:
+                    _shutil_hanim.copy2(src, dst)
+                except OSError:
+                    pass
+        return jsonify({'status': 'error',
+                        'error': f'atomic rename failed (backups preserved): {exc}'}), 500
+
+    return jsonify({
+        'status':         'ok',
+        'hanim_path':     f'/static/avatars/{os.path.basename(hanim_src)}',
+        'cultivar_path':  f'cultivars/cultivar_{cultivar_name}.xml',
+        'clips_written':  clips_written,
+        'routes_written': routes_written,
+        'skin_updated':   skin_updated,
+    })
+
+
+# ---------------------------------------------------------------------------
+# GET /hanim/joints
+# Day 27 — 2026-05-26
+#
+# Parse the HAnimJoint hierarchy from a stored HAnim X3D file and return
+# a flat array of joint descriptors for the Pose/Gesture tab tree panel.
+#
+# Each entry: { name, def, center, parent, region }
+#   name   — H-Anim 2.0 standard joint name (e.g. "l_hip")
+#   def    — DEF attribute as written in the X3D file (e.g. "hanim_l_hip")
+#   center — [x, y, z] float list from the center attribute (rest position)
+#   parent — parent joint name, or null for humanoid_root
+#   region — one of: spine | left_arm | right_arm | left_leg | right_leg | other
+#
+# Body region assignment uses H-Anim 2.0 standard joint name prefixes and
+# the spine list from the spec (Section 4.2).
+# ---------------------------------------------------------------------------
+
+# H-Anim 2.0 spine joint names (humanoid_root through skull), hierarchy order.
+_SPINE_JOINTS = {
+    'humanoid_root', 'sacroiliac',
+    'vl5','vl4','vl3','vl2','vl1',
+    'vt12','vt11','vt10','vt9','vt8','vt7','vt6','vt5','vt4','vt3','vt2','vt1',
+    'vc7','vc6','vc5','vc4','vc3','vc2','vc1',
+    'skullbase','skull',
+}
+
+
+def _joint_region(name: str) -> str:
+    """
+    Classify a bare H-Anim 2.0 joint name into a body region string.
+    """
+    if name in _SPINE_JOINTS:
+        return 'spine'
+    _ARM_KW = ('shoulder','elbow','radiocarpal','ulnocarpal',
+               'midcarpal','carpometacarpal','metacarpophalangeal',
+               'interphalangeal','carpal','wrist')
+    _LEG_KW = ('hip','knee','talocrural','talocalcaneonavicular',
+               'cuneonavicular','calcaneocuboid','transversetarsal',
+               'tarsometatarsal','metatarsophalangeal','tarsal',
+               'ankle','subtalar')
+    if name.startswith('l_'):
+        low = name[2:]
+        if any(k in low for k in _LEG_KW):
+            return 'left_leg'
+        if any(k in low for k in _ARM_KW):
+            return 'left_arm'
+        return 'left_arm'
+    if name.startswith('r_'):
+        low = name[2:]
+        if any(k in low for k in _LEG_KW):
+            return 'right_leg'
+        if any(k in low for k in _ARM_KW):
+            return 'right_arm'
+        return 'right_arm'
+    return 'other'
+
+
+def _parse_center(center_str: str) -> list:
+    """Parse an X3D SFVec3f center attribute string to [x, y, z] floats."""
+    try:
+        parts = center_str.strip().split()
+        if len(parts) == 3:
+            return [round(float(p), 6) for p in parts]
+    except (ValueError, AttributeError):
+        pass
+    return [0.0, 0.0, 0.0]
+
+
+def _walk_joints(el, parent_name, joints: list) -> None:
+    """
+    Recursively walk the X3D element tree collecting HAnimJoint nodes
+    in depth-first order.
+
+    el          — current XML element (any tag)
+    parent_name — bare H-Anim name of the enclosing HAnimJoint, or None
+    joints      — accumulator list (mutated in place)
+    """
+    tag = el.tag.split('}')[-1]
+
+    if tag != 'HAnimJoint':
+        # Non-joint wrapper (HAnimHumanoid, skeleton, Group, Transform, etc.)
+        # — descend without changing parent context
+        for child in el:
+            _walk_joints(child, parent_name, joints)
+        return
+
+    # Skip USE references — <HAnimJoint USE="hanim_l_hip"/> is a back-reference
+    # to an already-visited DEF node.  ElementTree sees it as a real element
+    # with tag HAnimJoint but no name/DEF, only a USE attribute.
+    if el.get('USE'):
+        return
+
+    def_val  = el.get('DEF', '')
+    name_val = el.get('name', '')
+
+    # Derive bare H-Anim name from name attr first, then strip prefixes from DEF
+    bare_name = name_val
+    if not bare_name:
+        for prefix in ('hanim_', 'HAnimJoint_', 'Joint_'):
+            if def_val.lower().startswith(prefix.lower()):
+                bare_name = def_val[len(prefix):]
+                break
+        if not bare_name:
+            bare_name = def_val
+
+    joints.append({
+        'name':   bare_name,
+        'def':    def_val,
+        'center': _parse_center(el.get('center', '0 0 0')),
+        'parent': parent_name,
+        'region': _joint_region(bare_name),
+    })
+
+    # Recurse into all children unconditionally.
+    # The non-joint wrapper branch at the top of this function handles any
+    # container elements (children, Group, Transform) transparently —
+    # they are descended without changing the parent context.
+    # Do NOT filter by tag here: filtering causes double-counting because
+    # both the container element AND its HAnimJoint contents would be visited.
+    for child in el:
+        _walk_joints(child, bare_name, joints)
+
+
+@app.route('/hanim/joints', methods=['GET'])
+def hanim_joints():
+    """
+    GET /hanim/joints?src=<hanim_src>
+
+    Parse the HAnimJoint hierarchy from static/avatars/<hanim_src> and
+    return a flat ordered array of joint descriptors for the pose tab
+    tree panel.
+
+    Query param:
+      src — HAnim X3D filename (basename only, e.g. 'cindy_hanim.x3d')
+
+    Response:
+    {
+      "joints": [
+        {
+          "name":   "humanoid_root",
+          "def":    "hanim_humanoid_root",
+          "center": [0.0, 0.9149, 0.0],
+          "parent": null,
+          "region": "spine"
+        },
+        ...
+      ],
+      "count": 146,
+      "src":   "cindy_hanim.x3d"
+    }
+
+    Joints are returned depth-first (same order as in the X3D file).
+    The tree panel reconstructs the hierarchy from the parent field.
+
+    404 — file not found
+    400 — src param missing
+    500 — X3D parse error
+    """
+    src = request.args.get('src', '').strip()
+    if not src:
+        return jsonify({'error': 'src param required'}), 400
+
+    filepath = _hanim_x3d_path(src)
+    if not os.path.exists(filepath):
+        return jsonify({'error': f'HAnim X3D not found: {os.path.basename(src)}'}), 404
+
+    try:
+        _, root = _parse_x3d_file(filepath)
+    except Exception as exc:
+        return jsonify({'error': f'X3D parse failed: {exc}'}), 500
+
+    joints = []
+
+    # Preferred entry point: HAnimHumanoid → skeleton subtree
+    ns = _X3D_NS
+    humanoid = root.find(f'.//{{{ns}}}HAnimHumanoid')
+    if humanoid is None:
+        humanoid = root.find('.//HAnimHumanoid')
+
+    if humanoid is not None:
+        # X3D 4.0: skeleton may be a named container child element
+        skeleton_el = humanoid.find(f'{{{ns}}}skeleton')
+        if skeleton_el is None:
+            skeleton_el = humanoid.find('skeleton')
+        start = skeleton_el if skeleton_el is not None else humanoid
+        for child in start:
+            _walk_joints(child, None, joints)
+    else:
+        # Fallback: walk entire document tree
+        _walk_joints(root, None, joints)
+
+    return jsonify({
+        'joints': joints,
+        'count':  len(joints),
+        'src':    os.path.basename(src),
+    })
+
+
+# ---------------------------------------------------------------------------
+# End HAnim Editor Export Endpoints
+# ---------------------------------------------------------------------------
 
 
 @app.route('/scene/x3d/list', methods=['GET'])

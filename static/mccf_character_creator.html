@@ -621,28 +621,268 @@
     image-rendering: pixelated;
   }
 
-  /* Pose stub */
-  .he-stub-panel {
+  /* ── Pose / Gesture tab ── */
+  .he-pose-layout {
+    display: flex;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+  }
+  /* Left: joint tree */
+  .he-joint-tree-panel {
+    flex: 0 0 44%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .he-joint-search {
+    width: 100%;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
-    text-align: center;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 4px 7px;
+    margin-bottom: 6px;
+    box-sizing: border-box;
+    outline: none;
+  }
+  .he-joint-search:focus { border-color: var(--accent3); }
+  .he-joint-tree {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .he-region-header {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 6px 4px 3px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .he-region-header:hover { color: var(--text-dim); }
+  .he-region-toggle { font-size: 8px; }
+  .he-joint-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 4px 3px 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .he-joint-item:hover { background: var(--surface2); color: var(--text); }
+  .he-joint-item.selected {
+    background: rgba(63,185,80,0.12);
+    color: var(--accent3);
+    border: 1px solid rgba(63,185,80,0.25);
+  }
+  .he-joint-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--border);
+  }
+  .he-joint-item.selected .he-joint-dot { background: var(--accent3); }
+  .he-joint-item.touched .he-joint-dot  { background: var(--accent); }
+
+  /* Right: rotation controls + clip management */
+  .he-pose-controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .he-rot-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+  }
+  .he-rot-joint-name {
+    font-size: 12px;
+    color: var(--accent3);
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .he-rot-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .he-rot-label {
+    font-size: 11px;
+    color: var(--muted);
+    width: 14px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .he-rot-slider {
+    flex: 1;
+    height: 3px;
+    -webkit-appearance: none;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    border: none;
+  }
+  .he-rot-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent3);
+    cursor: pointer;
+  }
+  .he-rot-val {
+    font-size: 11px;
+    color: var(--text);
+    width: 34px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .he-rot-btns {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .he-rot-btn {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: 11px;
-    line-height: 1.7;
+    padding: 3px 0;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--mono);
   }
-  .he-stub-title {
-    color: var(--accent3);
+  .he-rot-btn:hover { border-color: var(--accent3); color: var(--text); }
+
+  /* Clip management */
+  .he-clip-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+  }
+  .he-clip-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .he-clip-select {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
     font-size: 12px;
-    margin-bottom: 8px;
+    padding: 3px 6px;
+    outline: none;
   }
-  .he-stub-items {
-    text-align: left;
-    margin: 10px 0;
+  .he-clip-select:focus { border-color: var(--accent3); }
+  .he-clip-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .he-clip-btn:hover { border-color: var(--accent3); color: var(--text); }
+  .he-clip-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .he-clip-props {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+    margin-bottom: 6px;
     font-size: 10px;
   }
-  .he-stub-items li { margin: 3px 0 3px 12px; list-style: '→ '; }
+  .he-clip-prop-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .he-clip-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 3px 6px;
+    box-sizing: border-box;
+    outline: none;
+  }
+  .he-clip-input:focus { border-color: var(--accent3); }
+  .he-clip-check-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  /* Timeline */
+  .he-timeline-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+  }
+  .he-timeline-bar {
+    position: relative;
+    height: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-bottom: 6px;
+    cursor: crosshair;
+  }
+  .he-tl-marker {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent3);
+    border-radius: 2px;
+    cursor: ew-resize;
+    transform: translateX(-50%);
+  }
+  .he-tl-marker.current { background: var(--accent); }
+  .he-tl-btns {
+    display: flex;
+    gap: 4px;
+  }
+  .he-kf-count {
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+    align-self: center;
+  }
 
   /* Face stub / AU sliders */
   .he-au-row {
@@ -1154,25 +1394,128 @@
 
       </div><!-- /he-pane-skin -->
 
-      <!-- ── TAB: POSE / GESTURE ──────────────────────── -->
+      <!-- ── TAB: POSE / GESTURE — Phase 2 (live) ─────── -->
       <div class="he-pane" id="he-pane-pose" style="display:none">
-        <div class="he-stub-panel">
-          <div class="he-stub-title">Pose / Gesture — Phase 2</div>
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">
-            Joint rotation authoring via SAI, keyframe timeline, and clip management.
-            Unlocks after skin tab is confirmed working.
+        <div class="he-pose-layout" style="flex-direction:column;height:auto;">
+
+          <!-- Top row: joint tree + rotation controls -->
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+
+            <!-- Left: joint hierarchy tree -->
+            <div class="he-joint-tree-panel">
+              <div class="he-sec-label">joint hierarchy</div>
+              <input type="text" class="he-joint-search" id="he-joint-search"
+                     placeholder="filter joints…" oninput="hePoseFilterJoints(this.value)">
+              <div class="he-joint-tree" id="he-joint-tree">
+                <div style="font-size:10px;color:var(--text-dim);padding:8px;">
+                  Loading joints…
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: rotation controls -->
+            <div class="he-pose-controls">
+              <div class="he-rot-panel" id="he-rot-panel">
+                <div class="he-rot-joint-name" id="he-rot-joint-name">
+                  — select a joint —
+                </div>
+                <!-- Axis sliders: X, Y, Z (-1 to 1) -->
+                <div class="he-rot-row">
+                  <span class="he-rot-label">X</span>
+                  <input type="range" class="he-rot-slider" id="he-rot-x"
+                         min="-100" max="100" value="0"
+                         oninput="hePoseRotChanged()">
+                  <span class="he-rot-val" id="he-rot-x-val">0.00</span>
+                </div>
+                <div class="he-rot-row">
+                  <span class="he-rot-label">Y</span>
+                  <input type="range" class="he-rot-slider" id="he-rot-y"
+                         min="-100" max="100" value="0"
+                         oninput="hePoseRotChanged()">
+                  <span class="he-rot-val" id="he-rot-y-val">0.00</span>
+                </div>
+                <div class="he-rot-row">
+                  <span class="he-rot-label">Z</span>
+                  <input type="range" class="he-rot-slider" id="he-rot-z"
+                         min="-100" max="100" value="0"
+                         oninput="hePoseRotChanged()">
+                  <span class="he-rot-val" id="he-rot-z-val">0.00</span>
+                </div>
+                <!-- Angle slider: -180 to +180 degrees -->
+                <div class="he-rot-row">
+                  <span class="he-rot-label">∠</span>
+                  <input type="range" class="he-rot-slider" id="he-rot-a"
+                         min="-180" max="180" value="0"
+                         oninput="hePoseRotChanged()">
+                  <span class="he-rot-val" id="he-rot-a-val">0°</span>
+                </div>
+                <div class="he-rot-btns">
+                  <button class="he-rot-btn" onclick="hePoseMirror()" title="Copy to contralateral joint">mirror ↔</button>
+                  <button class="he-rot-btn" onclick="hePoseResetJoint()" title="Reset to rest pose">reset</button>
+                  <button class="he-rot-btn" style="flex:2;border-color:var(--accent);color:var(--accent);"
+                          onclick="hePoseAddKeyframe()" title="Record current pose at timeline position">+ keyframe</button>
+                </div>
+              </div>
+
+              <!-- Clip management -->
+              <div class="he-clip-panel">
+                <div class="he-sec-label" style="margin-bottom:6px">clip</div>
+                <div class="he-clip-row">
+                  <select class="he-clip-select" id="he-clip-select"
+                          onchange="hePoseSelectClip(this.value)"></select>
+                  <button class="he-clip-btn" onclick="hePoseNewClip()" title="New clip">+</button>
+                  <button class="he-clip-btn danger" onclick="hePoseDeleteClip()" title="Delete clip">✕</button>
+                </div>
+                <div class="he-clip-props">
+                  <div>
+                    <div class="he-clip-prop-label">name</div>
+                    <input type="text" class="he-clip-input" id="he-clip-name"
+                           oninput="hePoseClipPropChanged()" placeholder="Default">
+                  </div>
+                  <div>
+                    <div class="he-clip-prop-label">cycle (s)</div>
+                    <input type="number" class="he-clip-input" id="he-clip-cycle"
+                           min="0.1" max="60" step="0.1" value="6.0"
+                           oninput="hePoseClipPropChanged()">
+                  </div>
+                  <div>
+                    <div class="he-clip-prop-label">priority</div>
+                    <input type="number" class="he-clip-input" id="he-clip-priority"
+                           min="0" max="9" step="1" value="0"
+                           oninput="hePoseClipPropChanged()">
+                  </div>
+                  <div style="display:flex;align-items:flex-end;">
+                    <label class="he-clip-check-row" style="margin-bottom:0">
+                      <input type="checkbox" id="he-clip-loop" checked
+                             onchange="hePoseClipPropChanged()">
+                      loop
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <ul class="he-stub-items">
-            <li>146-joint LOA 4 hierarchy tree</li>
-            <li>Axis-angle sliders per selected joint</li>
-            <li>Mirror left↔right with one click</li>
-            <li>Keyframe timeline — drag markers to reposition</li>
-            <li>Named clip list (Default, Walk, Pitch, Kick…)</li>
-            <li>CV threshold conditions per clip</li>
-            <li>Live playback via TimeSensor enable/disable</li>
-            <li>Export: OrientationInterpolator + ROUTEs</li>
-          </ul>
-          <button class="btn" onclick="toast('Phase 2 — coming next session')">Phase 2 →</button>
+
+          <!-- Timeline -->
+          <div class="he-timeline-panel">
+            <div class="he-sec-label" style="margin-bottom:6px">
+              keyframe timeline
+              <span class="he-kf-count" id="he-kf-count">0 keyframes</span>
+            </div>
+            <div class="he-timeline-bar" id="he-timeline-bar"
+                 onclick="hePoseTimelineClick(event)">
+              <!-- keyframe markers injected here by JS -->
+            </div>
+            <div class="he-tl-btns">
+              <button class="he-clip-btn" id="he-tl-t-val"
+                      style="width:44px;text-align:center">t=0.00</button>
+              <button class="he-clip-btn" onclick="hePoseDeleteKeyframe()">del keyframe</button>
+              <button class="he-clip-btn"
+                      style="border-color:var(--accent3);color:var(--accent3);"
+                      onclick="hePosePlayClip()">▶ preview</button>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1393,7 +1736,7 @@ function onVoiceSelected() {
 
   document.getElementById('voice-tier-badge').className = `voice-tier ${tier}`;
   document.getElementById('voice-tier-badge').textContent = voiceTierLabel(tier);
-  document.getElementById('voice-preview-name').textContent = v.name.replace(/^Microsoft /, '').replace(/ Online.*$/, '').replace(/ \(Natural\).*$/, '');
+  document.getElementById('voice-preview-name').textContent = v.name.replace(/^Microsoft /, '').replace(/ Online.*$/, '').replace(/ [(]Natural[)].*$/, '');
   prev.style.display = 'flex';
 
   updateRightVoice();
@@ -1518,7 +1861,7 @@ async function onHAnimFileSelected(evt) {
       method:  'POST',
       headers: {
         'Content-Type':  'application/xml',
-        'X-Avatar-Name': (_selectedName || file.name.replace(/\.x3d$/i,''))
+        'X-Avatar-Name': (_selectedName || file.name.replace(/[.]x3d$/i,''))
       },
       body: text
     });
@@ -1929,6 +2272,8 @@ async function deleteCharacter() {
 
   // Re-check API periodically
   setInterval(checkApi, 10000);
+})();
+
 // ══════════════════════════════════════════════════════════════════════════
 // HAnim Editor — Overlay Controller
 // Phase 1: Skin tab (fully functional)
@@ -2340,6 +2685,573 @@ loadForm = function(c) {
   _orig_loadForm(c);
   _heUpdateOpenBtn();
 };;
+
+// ════════════════════════════════════════════════════════════════════════════
+// POSE / GESTURE TAB — Phase 2
+// Day 27, 2026-05-26
+//
+// State:
+//   _hePoseJoints   — flat joint array from GET /hanim/joints
+//   _hePoseSelected — currently selected joint object or null
+//   _hePoseTouched  — Set of joint names touched this session (dot indicator)
+//   _heClips        — array of clip objects (see _heNewClipObj)
+//   _heClipIdx      — index of current clip in _heClips
+//   _heTlT          — current timeline position (0.0–1.0)
+//   _heTlDragging   — marker element being dragged or null
+//
+// SAI write path:
+//   hePoseSendSAI({type:'setJointRotation', joint:<DEF>, rotation:[x,y,z,a_rad]})
+//   → postMessage to he-xite-frame
+//   The preview page (avatar/preview) listens for this message and calls
+//   browser.currentScene.getNamedNode(DEF).rotation = new X3D.SFRotation(...)
+// ════════════════════════════════════════════════════════════════════════════
+
+var _hePoseJoints   = [];
+var _hePoseSelected = null;
+var _hePoseTouched  = new Set();
+var _heClips        = [];
+var _heClipIdx      = 0;
+var _heTlT          = 0.0;
+var _heTlDragging   = null;
+
+var _REGION_LABELS = {
+  spine:     'spine',
+  left_arm:  'left arm',
+  right_arm: 'right arm',
+  left_leg:  'left leg',
+  right_leg: 'right leg',
+  other:     'other',
+};
+var _REGION_ORDER = ['spine','left_arm','right_arm','left_leg','right_leg','other'];
+var _REGION_COLLAPSED = {};
+
+// ── Initialisation ────────────────────────────────────────────────────────
+
+function hePoseInit() {
+  // Wire event delegation on tree container — once only
+  var tree = document.getElementById('he-joint-tree');
+  if (tree && !tree._delegated) {
+    tree._delegated = true;
+    tree.addEventListener('click', function(e) {
+      // Joint item click
+      var item = e.target.closest('.he-joint-item');
+      if (item && item.dataset.jname) {
+        hePoseSelectJoint(item.dataset.jname);
+        return;
+      }
+      // Region header click
+      var header = e.target.closest('.he-region-header');
+      if (header && header.dataset.region) {
+        hePoseToggleRegion(header.dataset.region);
+      }
+    });
+  }
+
+  // Only load joints once per editor open
+  if (_hePoseJoints.length > 0) { hePoseRenderTree(_hePoseJoints); return; }
+
+  var src = _hanimPath;
+  if (!src) { toast('No HAnim figure loaded', true); return; }
+  // Use basename only
+  var basename = src.split('/').pop();
+
+  fetch(API_URL + '/hanim/joints?src=' + encodeURIComponent(basename))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { toast('Joints load failed: ' + d.error, true); return; }
+      _hePoseJoints = d.joints || [];
+      hePoseRenderTree(_hePoseJoints);
+      // Ensure at least one default clip exists
+      if (_heClips.length === 0) {
+        _heClips.push(_heNewClipObj('Default', 6.0, true, 0));
+        _heClipIdx = 0;
+        hePoseRenderClipList();
+      }
+    })
+    .catch(function(e) { toast('Joints fetch error: ' + e.message, true); });
+}
+
+// ── Clip objects ─────────────────────────────────────────────────────────
+
+function _heNewClipObj(name, cycle, loop, priority) {
+  return {
+    name:          name,
+    timerDEF:      name + 'Timer',
+    cycleInterval: cycle || 6.0,
+    loop:          loop !== false,
+    priority:      priority || 0,
+    keyframes:     [
+      { t: 0.0, joints: {} },
+      { t: 1.0, joints: {} }
+    ],
+    cv_conditions: {}
+  };
+}
+
+function hePoseCurrentClip() {
+  return _heClips[_heClipIdx] || null;
+}
+
+// ── Joint tree render ─────────────────────────────────────────────────────
+
+function hePoseRenderTree(joints, filter) {
+  var tree = document.getElementById('he-joint-tree');
+  if (!tree) return;
+
+  // Group by region
+  var groups = {};
+  _REGION_ORDER.forEach(function(r) { groups[r] = []; });
+  joints.forEach(function(j) {
+    var r = j.region || 'other';
+    if (!groups[r]) groups[r] = [];
+    if (!filter || j.name.indexOf(filter) !== -1 || j.def.indexOf(filter) !== -1) {
+      groups[r].push(j);
+    }
+  });
+
+  var html = '';
+  _REGION_ORDER.forEach(function(region) {
+    var items = groups[region];
+    if (!items || items.length === 0) return;
+    var collapsed = _REGION_COLLAPSED[region];
+    html += '<div class="he-region-header" data-region="' + region + '">';
+    html += '<span class="he-region-toggle">' + (collapsed ? '▶' : '▼') + '</span>';
+    html += _REGION_LABELS[region] || region;
+    html += ' <span style="color:var(--border);font-size:9px;">(' + items.length + ')</span>';
+    html += '</div>';
+    if (!collapsed) {
+      items.forEach(function(j) {
+        var sel     = _hePoseSelected && _hePoseSelected.name === j.name ? ' selected' : '';
+        var touched = _hePoseTouched.has(j.name) ? ' touched' : '';
+        var center  = j.center.map(function(v){return v.toFixed(3);}).join(', ');
+        html += '<div class="he-joint-item' + sel + touched + '"';
+        html += ' data-jname="' + j.name + '"';
+        html += ' title="' + j.def + ' · center: ' + center + '">';
+        html += '<span class="he-joint-dot"></span>';
+        html += '<span style="overflow:hidden;text-overflow:ellipsis;">' + j.name + '</span>';
+        html += '</div>';
+      });
+    }
+  });
+  tree.innerHTML = html || '<div style="font-size:10px;color:var(--muted);padding:8px;">no joints match</div>';
+}
+
+function hePoseToggleRegion(region) {
+  _REGION_COLLAPSED[region] = !_REGION_COLLAPSED[region];
+  hePoseRenderTree(_hePoseJoints,
+    document.getElementById('he-joint-search').value.trim() || undefined);
+}
+
+function hePoseFilterJoints(val) {
+  hePoseRenderTree(_hePoseJoints, val.trim() || undefined);
+}
+
+// ── Joint selection ───────────────────────────────────────────────────────
+
+function hePoseSelectJoint(name) {
+  _hePoseSelected = _hePoseJoints.find(function(j) { return j.name === name; }) || null;
+  hePoseRenderTree(_hePoseJoints,
+    document.getElementById('he-joint-search').value.trim() || undefined);
+
+  var nameEl = document.getElementById('he-rot-joint-name');
+  if (nameEl) nameEl.textContent = name || '— select a joint —';
+
+  if (!_hePoseSelected) return;
+
+  // Load current keyframe rotation for this joint at current t if available
+  var clip = hePoseCurrentClip();
+  var rot = [0, 0, 1, 0];  // identity
+  if (clip) {
+    var kf = _hePoseNearestKeyframe(clip, _heTlT);
+    if (kf && kf.joints[name]) rot = kf.joints[name];
+  }
+  _hePoseSetSliders(rot);
+}
+
+function _hePoseSetSliders(rot) {
+  // rot = [ax, ay, az, angle_radians]
+  var ax = rot[0], ay = rot[1], az = rot[2];
+  var angleDeg = (rot[3] * 180 / Math.PI);
+  document.getElementById('he-rot-x').value    = Math.round(ax * 100);
+  document.getElementById('he-rot-y').value    = Math.round(ay * 100);
+  document.getElementById('he-rot-z').value    = Math.round(az * 100);
+  document.getElementById('he-rot-a').value    = Math.round(angleDeg);
+  document.getElementById('he-rot-x-val').textContent = ax.toFixed(2);
+  document.getElementById('he-rot-y-val').textContent = ay.toFixed(2);
+  document.getElementById('he-rot-z-val').textContent = az.toFixed(2);
+  document.getElementById('he-rot-a-val').textContent = Math.round(angleDeg) + '°';
+}
+
+// ── Rotation slider change → SAI write ───────────────────────────────────
+
+function hePoseRotChanged() {
+  var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
+  var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
+  var az = parseInt(document.getElementById('he-rot-z').value) / 100;
+  var angleDeg = parseInt(document.getElementById('he-rot-a').value);
+  var angleRad = angleDeg * Math.PI / 180;
+
+  document.getElementById('he-rot-x-val').textContent = ax.toFixed(2);
+  document.getElementById('he-rot-y-val').textContent = ay.toFixed(2);
+  document.getElementById('he-rot-z-val').textContent = az.toFixed(2);
+  document.getElementById('he-rot-a-val').textContent = angleDeg + '°';
+
+  if (!_hePoseSelected) return;
+
+  // Mark joint as touched — update dot colour without full tree re-render
+  _hePoseTouched.add(_hePoseSelected.name);
+  var el = document.querySelector('.he-joint-item.selected');
+  if (el) el.classList.add('touched');
+  heMarkDirty('pose edited · ' + _hePoseSelected.name);
+
+  // SAI write to X_ITE preview iframe
+  hePoseSendSAI({
+    type:     'setJointRotation',
+    joint:    _hePoseSelected.def,
+    rotation: [ax, ay, az, angleRad]
+  });
+}
+
+function hePoseSendSAI(msg) {
+  var frame = document.getElementById('he-xite-frame');
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.postMessage(msg, '*');
+  }
+}
+
+// ── Mirror ────────────────────────────────────────────────────────────────
+
+function hePoseMirror() {
+  if (!_hePoseSelected) { toast('Select a joint first', true); return; }
+  var name = _hePoseSelected.name;
+  var mirrorName = null;
+  if (name.startsWith('l_'))      mirrorName = 'r_' + name.slice(2);
+  else if (name.startsWith('r_')) mirrorName = 'l_' + name.slice(2);
+  if (!mirrorName) { toast('No contralateral joint for ' + name, true); return; }
+
+  var mirrorJoint = _hePoseJoints.find(function(j) { return j.name === mirrorName; });
+  if (!mirrorJoint) { toast('Mirror joint not found: ' + mirrorName, true); return; }
+
+  var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
+  var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
+  var az = parseInt(document.getElementById('he-rot-z').value) / 100;
+  var angleRad = parseInt(document.getElementById('he-rot-a').value) * Math.PI / 180;
+
+  // Negate Z axis for bilateral mirror
+  hePoseSendSAI({
+    type:     'setJointRotation',
+    joint:    mirrorJoint.def,
+    rotation: [ax, ay, -az, angleRad]
+  });
+  _hePoseTouched.add(mirrorName);
+  toast('Mirrored → ' + mirrorName);
+}
+
+// ── Reset joint ───────────────────────────────────────────────────────────
+
+function hePoseResetJoint() {
+  if (!_hePoseSelected) return;
+  _hePoseSetSliders([0, 0, 1, 0]);
+  hePoseSendSAI({
+    type:     'setJointRotation',
+    joint:    _hePoseSelected.def,
+    rotation: [0, 0, 1, 0]
+  });
+  _hePoseTouched.delete(_hePoseSelected.name);
+  hePoseRenderTree(_hePoseJoints,
+    document.getElementById('he-joint-search').value.trim() || undefined);
+}
+
+// ── Keyframe management ───────────────────────────────────────────────────
+
+function _hePoseNearestKeyframe(clip, t) {
+  if (!clip || !clip.keyframes.length) return null;
+  var best = clip.keyframes[0];
+  var bestDist = Math.abs(best.t - t);
+  clip.keyframes.forEach(function(kf) {
+    var d = Math.abs(kf.t - t);
+    if (d < bestDist) { bestDist = d; best = kf; }
+  });
+  return bestDist < 0.05 ? best : null;
+}
+
+function hePoseAddKeyframe() {
+  var clip = hePoseCurrentClip();
+  if (!clip) { toast('No clip selected', true); return; }
+
+  // Find or create keyframe at current t (within 0.02 tolerance)
+  var t    = _heTlT;
+  var existing = clip.keyframes.find(function(kf) { return Math.abs(kf.t - t) < 0.02; });
+  if (!existing) {
+    existing = { t: t, joints: {} };
+    clip.keyframes.push(existing);
+    clip.keyframes.sort(function(a, b) { return a.t - b.t; });
+  }
+
+  // Record all touched joints
+  var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
+  var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
+  var az = parseInt(document.getElementById('he-rot-z').value) / 100;
+  var angleRad = parseInt(document.getElementById('he-rot-a').value) * Math.PI / 180;
+
+  if (_hePoseSelected) {
+    existing.joints[_hePoseSelected.name] = [ax, ay, az, angleRad];
+  }
+  // Also store all previously touched joints at this keyframe from other kf
+  _hePoseTouched.forEach(function(jname) {
+    if (!existing.joints[jname] && _hePoseSelected && jname !== _hePoseSelected.name) {
+      // Copy from nearest other keyframe if available
+      var others = clip.keyframes.filter(function(kf) { return kf !== existing && kf.joints[jname]; });
+      if (others.length) {
+        others.sort(function(a,b){ return Math.abs(a.t-t) - Math.abs(b.t-t); });
+        existing.joints[jname] = others[0].joints[jname].slice();
+      }
+    }
+  });
+
+  hePoseRenderTimeline();
+  heMarkDirty('keyframe added at t=' + t.toFixed(2));
+  toast('Keyframe recorded at t=' + t.toFixed(2));
+}
+
+function hePoseDeleteKeyframe() {
+  var clip = hePoseCurrentClip();
+  if (!clip) return;
+  // Don't delete t=0 or t=1 anchors
+  if (_heTlT <= 0.01 || _heTlT >= 0.99) { toast('Cannot delete anchor keyframes (t=0, t=1)', true); return; }
+  var idx = clip.keyframes.findIndex(function(kf) { return Math.abs(kf.t - _heTlT) < 0.02; });
+  if (idx === -1) { toast('No keyframe at current position', true); return; }
+  clip.keyframes.splice(idx, 1);
+  hePoseRenderTimeline();
+  heMarkDirty('keyframe deleted');
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────
+
+function hePoseRenderTimeline() {
+  var bar = document.getElementById('he-timeline-bar');
+  if (!bar) return;
+  var clip = hePoseCurrentClip();
+  var kfs  = clip ? clip.keyframes : [];
+
+  // Remove old markers
+  bar.querySelectorAll('.he-tl-marker').forEach(function(m) { m.remove(); });
+
+  kfs.forEach(function(kf) {
+    var marker = document.createElement('div');
+    marker.className = 'he-tl-marker' + (Math.abs(kf.t - _heTlT) < 0.02 ? ' current' : '');
+    marker.style.left = (kf.t * 100) + '%';
+    marker.dataset.t = kf.t;
+    marker.title = 't=' + kf.t.toFixed(2) + ' · ' + Object.keys(kf.joints).length + ' joints';
+    // Drag to reposition
+    marker.addEventListener('mousedown', function(e) {
+      e.stopPropagation();
+      _heTlDragging = { marker: marker, kf: kf };
+    });
+    bar.appendChild(marker);
+  });
+
+  var countEl = document.getElementById('he-kf-count');
+  if (countEl) countEl.textContent = kfs.length + ' keyframe' + (kfs.length !== 1 ? 's' : '');
+  document.getElementById('he-tl-t-val').textContent = 't=' + _heTlT.toFixed(2);
+}
+
+function hePoseTimelineClick(evt) {
+  if (_heTlDragging) return;
+  var bar   = document.getElementById('he-timeline-bar');
+  var rect  = bar.getBoundingClientRect();
+  _heTlT    = Math.max(0, Math.min(1, (evt.clientX - rect.left) / rect.width));
+  _heTlT    = Math.round(_heTlT * 100) / 100;
+  document.getElementById('he-tl-t-val').textContent = 't=' + _heTlT.toFixed(2);
+  hePoseRenderTimeline();
+}
+
+// Timeline drag handling
+document.addEventListener('mousemove', function(e) {
+  if (!_heTlDragging) return;
+  var bar  = document.getElementById('he-timeline-bar');
+  if (!bar) return;
+  var rect = bar.getBoundingClientRect();
+  var newT = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / rect.width));
+  newT = Math.round(newT * 100) / 100;
+  _heTlDragging.kf.t = newT;
+  _heTlT = newT;
+  _heTlDragging.marker.style.left = (newT * 100) + '%';
+  document.getElementById('he-tl-t-val').textContent = 't=' + newT.toFixed(2);
+});
+document.addEventListener('mouseup', function() {
+  if (_heTlDragging) {
+    var clip = hePoseCurrentClip();
+    if (clip) clip.keyframes.sort(function(a,b){ return a.t - b.t; });
+    hePoseRenderTimeline();
+    heMarkDirty('keyframe repositioned');
+  }
+  _heTlDragging = null;
+});
+
+// ── Preview playback ──────────────────────────────────────────────────────
+
+function hePosePlayClip() {
+  var clip = hePoseCurrentClip();
+  if (!clip || clip.keyframes.length < 2) { toast('Need at least 2 keyframes to preview', true); return; }
+  // Enable the TimeSensor via SAI
+  hePoseSendSAI({ type: 'enableTimer', timerDEF: clip.timerDEF });
+  toast('▶ ' + clip.name + ' — ' + clip.cycleInterval + 's');
+}
+
+// ── Clip list management ──────────────────────────────────────────────────
+
+function hePoseRenderClipList() {
+  var sel = document.getElementById('he-clip-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  _heClips.forEach(function(c, i) {
+    var opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = c.name + (c.loop ? ' ↺' : '');
+    if (i === _heClipIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  hePoseLoadClipProps();
+}
+
+function hePoseLoadClipProps() {
+  var clip = hePoseCurrentClip();
+  if (!clip) return;
+  document.getElementById('he-clip-name').value     = clip.name;
+  document.getElementById('he-clip-cycle').value    = clip.cycleInterval;
+  document.getElementById('he-clip-priority').value = clip.priority;
+  document.getElementById('he-clip-loop').checked   = clip.loop;
+  hePoseRenderTimeline();
+}
+
+function hePoseSelectClip(idx) {
+  _heClipIdx = parseInt(idx);
+  _heTlT = 0.0;
+  hePoseLoadClipProps();
+}
+
+function hePoseNewClip() {
+  var name = 'Clip' + (_heClips.length + 1);
+  _heClips.push(_heNewClipObj(name, 6.0, true, _heClips.length));
+  _heClipIdx = _heClips.length - 1;
+  hePoseRenderClipList();
+  heMarkDirty('new clip: ' + name);
+}
+
+function hePoseDeleteClip() {
+  if (_heClips.length <= 1) { toast('Cannot delete the last clip', true); return; }
+  _heClips.splice(_heClipIdx, 1);
+  _heClipIdx = Math.min(_heClipIdx, _heClips.length - 1);
+  hePoseRenderClipList();
+  heMarkDirty('clip deleted');
+}
+
+function hePoseClipPropChanged() {
+  var clip = hePoseCurrentClip();
+  if (!clip) return;
+  var newName = document.getElementById('he-clip-name').value.trim() || clip.name;
+  clip.name          = newName;
+  clip.timerDEF      = newName + 'Timer';
+  clip.cycleInterval = parseFloat(document.getElementById('he-clip-cycle').value) || 6.0;
+  clip.priority      = parseInt(document.getElementById('he-clip-priority').value) || 0;
+  clip.loop          = document.getElementById('he-clip-loop').checked;
+  hePoseRenderClipList();
+  heMarkDirty('clip props changed');
+}
+
+// ── heShowTab hook ────────────────────────────────────────────────────────
+// Patch heShowTab to initialise the pose tab on first show
+
+var _orig_heShowTab = heShowTab;
+heShowTab = function(t) {
+  _orig_heShowTab(t);
+  if (t === 'pose') hePoseInit();
+};
+
+// ── heExport hook — populate clips[] from pose state ─────────────────────
+// Patch heExport to inject _heClips into the payload before sending.
+// Only clips with at least one non-anchor keyframe (or touched joints) included.
+
+
+// Patch the payload construction inside heExport to pick up clips.
+// Since heExport uses `clips: []` literally, we monkey-patch by replacing
+// the export function body to read _hePoseClipsForExport when available.
+// Simplest approach: override heExport entirely to inject clips.
+
+heExport = async function() {
+  var btn = document.getElementById('he-export-btn');
+  btn.disabled = true;
+  btn.textContent = 'exporting…';
+  heSetStatus('exporting…');
+
+  try {
+    var clips = (_heClips && _heClips.length)
+      ? _heClips
+      : [];
+
+    var payload = {
+      cultivar:    _selectedName,
+      hanim_src:   _hanimPath,
+      skin_url:    _heSkinPending || _hanimPath,
+      receptivity: _heReceptivity,
+      expressions: _heExpressions,
+      au_weights:  _heAuWeights,
+      clips:       clips,
+      displacers:  []
+    };
+
+    if (_heSkinPending && _heSkinPending.startsWith('data:')) {
+      var imgRes = await fetch(API_URL + '/hanim/skin_upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cultivar: _selectedName, data_url: _heSkinPending })
+      });
+      if (imgRes.ok) {
+        var imgData = await imgRes.json();
+        payload.skin_url = imgData.path || payload.skin_url;
+      }
+    }
+
+    var res = await fetch(API_URL + '/hanim/export', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.error || 'export failed');
+
+    if (data.hanim_path) {
+      _hanimPath = data.hanim_path;
+      document.getElementById('hanim-file-display').textContent = _hanimPath;
+      document.getElementById('hanim-file-display').style.display = 'block';
+    }
+    if (data.clips_written) {
+      _renderHAnimClips(data.clips_written);
+    }
+
+    _heDirty = false;
+    document.getElementById('he-dirty-label').style.display = 'none';
+    heSetStatus('exported · ' + data.clips_written + ' clips · ' + (data.hanim_path || _hanimPath));
+    toast('HAnim export saved');
+    setDirty();
+
+  } catch(e) {
+    heSetStatus('export failed: ' + e.message);
+    toast('Export failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'export →';
+  }
+};
+
+// ── X_ITE preview page SAI listener (injected into avatar/preview via postMessage) ──
+// The preview page itself needs to listen for setJointRotation messages.
+// This is handled by the avatar/preview endpoint — see mccf_api.py heVpPlay note.
+// For now, we send the message; the preview page will pick it up once the
+// SAI listener is added to the preview HTML (next step).
 </script>
 </body>
 </html>
