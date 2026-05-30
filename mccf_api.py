@@ -146,126 +146,161 @@ def upload_avatar():
     avatar_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'avatars')
     os.makedirs(avatar_dir, exist_ok=True)
 
-    avatar_name = request.headers.get('X-Avatar-Name', '').strip() or 'avatar'
-    slug        = _re.sub(r'[^A-Za-z0-9_\-]', '_', avatar_name).lower()
-    filename    = f'{slug}_hanim.x3d'
+    raw_name = request.headers.get('X-Avatar-Name', '').strip() or 'avatar'
+    slug     = _re.sub(r'[^A-Za-z0-9_.\-]', '_', raw_name)
+    filename = f'{slug}.x3d'
     filepath    = os.path.join(avatar_dir, filename)
 
     content = request.get_data(as_text=True)
     if not content:
         return jsonify({'status': 'error', 'error': 'no content'}), 400
 
-    # ── XML parse ────────────────────────────────────────────────────────
-    # Register namespaces so they round-trip correctly
-    ET.register_namespace('', 'https://www.web3d.org/specifications/x3d-4.0.xsd')
+    # ── Regex-based stripping ───────────────────────────────────────────
+    # ET.fromstring/tostring destroys large attribute data (coordIndex,
+    # displacements on HAnimDisplacer) and CDATA sections. Use regex instead
+    # to preserve all attribute data exactly as authored.
 
+    import re as _re
+
+    # ── Gather metadata via ET (read-only, no reserialise) ───────────────
+    import xml.etree.ElementTree as _ET
     try:
-        # ET doesn't handle the <!DOCTYPE ...> declaration — strip it first,
-        # preserve the <?xml ...?> processing instruction
-        xml_decl   = ''
-        doctype    = ''
-        body       = content
-        lines      = content.splitlines(keepends=True)
-        body_lines = []
-        for line in lines:
-            if line.strip().startswith('<?xml'):
-                xml_decl = line
-            elif line.strip().startswith('<!DOCTYPE'):
-                doctype = line          # save for reference, don't reinsert
-            else:
-                body_lines.append(line)
-        body = ''.join(body_lines)
-
-        root = ET.fromstring(body)
-    except ET.ParseError as e:
+        _body_lines = []
+        for _line in content.splitlines(keepends=True):
+            if not _line.strip().startswith('<?xml') and \
+               not _line.strip().startswith('<!DOCTYPE'):
+                _body_lines.append(_line)
+        _root = _ET.fromstring(''.join(_body_lines))
+    except _ET.ParseError as e:
         return jsonify({'status': 'error', 'error': f'XML parse failed: {e}'}), 400
 
-    # ── DEF names to strip ───────────────────────────────────────────────
-    # BEHAVIOR_TIMER_DEFS: the eight LOA4 animation clip TimeSensors.
-    # These must SURVIVE stripping — MCCF activates them via SAI at runtime
-    # to drive behavioral state (walk, run, idle, etc.) from the emotional field.
-    # They are NOT HUD nodes. Only their TouchSensor trigger wiring is stripped.
+    hanim_el    = _root.find('.//{*}HAnimHumanoid')
+    loa         = int(hanim_el.get('loa', 4)) if hanim_el is not None else 4
+    joint_count = len(_root.findall('.//{*}HAnimJoint[@name]'))
     BEHAVIOR_TIMER_DEFS = {
         'DefaultTimer','PitchTimer','YawTimer','RollTimer',
         'WalkTimer','RunTimer','JumpTimer','KickTimer'
     }
-    # HUD_ONLY_TIMER_DEFS: timers that are genuinely HUD/interactive-control only.
-    # StopTimer has no behavioral meaning for MCCF and is safe to strip.
-    HUD_ONLY_TIMER_DEFS = {'StopTimer'}
-    # HUD_DEFS: non-timer HUD nodes to strip entirely.
-    HUD_DEFS = HUD_ONLY_TIMER_DEFS | {'HudProx','HudXform'}
-
-    def is_hud_node(el):
-        tag  = el.tag.split('}')[-1]
-        defv = el.get('DEF', '')
-        # Strip HUD structure nodes and StopTimer
-        if defv in HUD_DEFS:
-            return True
-        # Strip TouchSensors — their button-click wiring is not needed;
-        # MCCF drives timers directly via SAI startTime/stopTime writes
-        if tag == 'TouchSensor':
-            return True
-        # Behavior TimeSensors (DefaultTimer, WalkTimer etc.) are KEPT —
-        # they are the behavioral clip hooks for MCCF SAI activation
-        return False
-
-    def is_hud_route(el):
-        tag = el.tag.split('}')[-1]
-        if tag != 'ROUTE':
-            return False
-        fn = el.get('fromNode', '')
-        tn = el.get('toNode',   '')
-        # Strip routes that reference HUD nodes or TouchSensors.
-        # Routes that reference behavior TimeSensors are KEPT so the
-        # RotationInterpolator wiring survives — MCCF needs those ROUTEs
-        # to be intact for the clips to drive joint rotations when activated.
-        strip_nodes = HUD_DEFS | {
-            'Stand_Touch','Pitch_Touch','Yaw_Touch','Roll_Touch',
-            'Walk_Touch','Run_Touch','Jump_Touch','Kick_Touch','Stop_Touch'
-        }
-        return fn in strip_nodes or tn in strip_nodes
-
-    def strip_hud(parent):
-        """Recursively remove HUD nodes from parent's children.
-        Also disables behavior TimeSensors so MCCF owns their activation
-        via SAI startTime/stopTime writes — never auto-start on scene load."""
-        to_remove = []
-        for child in list(parent):
-            if is_hud_node(child) or is_hud_route(child):
-                to_remove.append(child)
-            else:
-                # Disable behavior TimeSensors — MCCF activates via SAI
-                tag  = child.tag.split('}')[-1]
-                defv = child.get('DEF', '')
-                if tag == 'TimeSensor' and defv in BEHAVIOR_TIMER_DEFS:
-                    child.set('enabled', 'false')
-                strip_hud(child)
-        for child in to_remove:
-            parent.remove(child)
-
-    strip_hud(root)
-
-    # ── Gather metadata ──────────────────────────────────────────────────
-    hanim_el    = root.find('.//{*}HAnimHumanoid')
-    loa         = int(hanim_el.get('loa', 4)) if hanim_el is not None else 4
-    joint_count = len(root.findall('.//{*}HAnimJoint[@name]'))
-    # Return the behavior clip names that survived stripping.
-    # These are the BEHAVIOR_TIMER_DEFS present in the saved file,
-    # addressable by MCCF via SAI. Strip 'Timer' suffix for readability.
     clips = [
         el.get('DEF', '').replace('Timer', '')
-        for el in root.findall('.//{*}TimeSensor')
+        for el in _root.findall('.//{*}TimeSensor')
         if el.get('DEF') and el.get('DEF') in BEHAVIOR_TIMER_DEFS
     ]
 
-    # ── Serialise ────────────────────────────────────────────────────────
-    # Preserve the original <?xml?> declaration; omit DOCTYPE (not needed)
-    ET.indent(root, space='  ')
-    stripped_content = (xml_decl or '<?xml version="1.0" encoding="UTF-8"?>\n') + \
-                       ET.tostring(root, encoding='unicode', xml_declaration=False)
+    # ── Regex strip on raw content ───────────────────────────────────────
+    stripped = content
+
+    # 1. Remove DOCTYPE
+    stripped = _re.sub(r'<!DOCTYPE[^>]*>\s*', '', stripped)
+
+    # 2. Remove HUD structure nodes (multi-line)
+    #    HudXform: the Transform wrapping the entire HUD
+    #    HudProx: ProximitySensor
+    stripped = _re.sub(
+        r'<Transform\s[^>]*DEF=["\']HudXform["\'][^>]*>.*?</Transform>\s*',
+        '', stripped, flags=_re.DOTALL)
+    stripped = _re.sub(
+        r'<ProximitySensor\s[^>]*DEF=["\']HudProx["\'][^>]*/>\s*',
+        '', stripped)
+    stripped = _re.sub(
+        r'<ProximitySensor\s[^>]*DEF=["\']HudProx["\'][^>]*>.*?</ProximitySensor>\s*',
+        '', stripped, flags=_re.DOTALL)
+
+    # 3. Remove StopTimer TimeSensor
+    stripped = _re.sub(
+        r'<TimeSensor\s[^>]*DEF=["\']StopTimer["\'][^>]*/>\s*',
+        '', stripped)
+
+    # 4. Remove TouchSensors
+    stripped = _re.sub(
+        r'<TouchSensor\s[^>]*/>\s*', '', stripped)
+    stripped = _re.sub(
+        r'<TouchSensor\s[^>]*>.*?</TouchSensor>\s*', '', stripped, flags=_re.DOTALL)
+
+    # 5. Remove ProtoDeclare/ProtoInstance (HUD menu system)
+    stripped = _re.sub(
+        r'<ProtoDeclare\s[^>]*>.*?</ProtoDeclare>\s*',
+        '', stripped, flags=_re.DOTALL)
+    stripped = _re.sub(
+        r'<ProtoInstance\s[^>]*>.*?</ProtoInstance>\s*',
+        '', stripped, flags=_re.DOTALL)
+    stripped = _re.sub(
+        r'<ProtoInstance\s[^>]*/>\s*', '', stripped)
+
+    # 6. Remove ROUTEs referencing HUD/Touch nodes
+    HUD_ROUTE_NODES = {
+        'HudProx','HudXform','StopTimer',
+        'Stand_Touch','Pitch_Touch','Yaw_Touch','Roll_Touch',
+        'Walk_Touch','Run_Touch','Jump_Touch','Kick_Touch','Stop_Touch'
+    }
+    def strip_hud_routes(text):
+        def should_strip(m):
+            attrs = m.group(0)
+            fn = _re.search(r'fromNode=["\']([^"\']+)["\']', attrs)
+            tn = _re.search(r'toNode=["\']([^"\']+)["\']', attrs)
+            fn = fn.group(1) if fn else ''
+            tn = tn.group(1) if tn else ''
+            return fn in HUD_ROUTE_NODES or tn in HUD_ROUTE_NODES
+        result = []
+        for line in text.split('\n'):
+            if '<ROUTE ' in line and should_strip(_re.search(r'<ROUTE[^>]*/>', line) or
+                                                  type('M', (), {'group': lambda s,n: ''})()) :
+                m = _re.search(r'<ROUTE[^>]*/>', line)
+                if m and should_strip(m):
+                    continue
+            result.append(line)
+        return '\n'.join(result)
+    stripped = strip_hud_routes(stripped)
+
+    # 7. Disable behavior TimeSensors (set enabled="false")
+    for _tdef in BEHAVIOR_TIMER_DEFS:
+        stripped = _re.sub(
+            r'(<TimeSensor\s[^>]*DEF=["\']' + _tdef + r'["\'][^>]*)\benabled=["\'][^"\']*["\']',
+            r'\1enabled="false"', stripped)
+        # If no enabled attr, add it
+        def _add_enabled(m, tdef=_tdef):
+            tag = m.group(0)
+            if 'enabled=' not in tag:
+                tag = tag.replace('/>', ' enabled="false"/>')
+            return tag
+        stripped = _re.sub(
+            r'<TimeSensor\s[^>]*DEF=["\']' + _tdef + r'["\'][^>]*/>',
+            _add_enabled, stripped)
+
+    # 8. Ensure Scripting component declared
+    if '<component name="Scripting"' not in stripped:
+        stripped = stripped.replace(
+            '<component name="HAnim"',
+            '<component name="Scripting" level="1" />\n    <component name="HAnim"', 1)
+
+    # 9. Remove any existing FaceController (clean slate)
+    stripped = _re.sub(
+        r'\s*<Script DEF=["\']FaceController["\'].*?</Script>',
+        '', stripped, flags=_re.DOTALL)
+
+    # 10. Inject FaceController before </Scene>
+    FACE_CONTROLLER = (
+        '\n  <Script DEF="FaceController" directOutput="true">\n'
+        '    <field name="au_name"   type="SFString" accessType="inputOnly"/>\n'
+        '    <field name="au_weight" type="SFFloat"  accessType="inputOnly"/>\n'
+        '    <![CDATA[ecmascript:\n'
+        '      function au_weight(value, time) {\n'
+        '        var adapter = Browser.currentScene.getNamedNode(\n'
+        "                        'AnimationAdapter_' + _au);\n"
+        '        if (adapter) {\n'
+        "          var field = adapter.getField('set_fraction');\n"
+        '          if (field) field.setValue(value * 0.5);\n'
+        '        }\n'
+        '      }\n'
+        '      function au_name(value, time) { _au = value; }\n'
+        "      var _au = '';\n"
+        '    ]]>\n'
+        '  </Script>'
+    )
+    stripped = stripped.replace('</Scene>', FACE_CONTROLLER + '\n</Scene>', 1)
 
     with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(stripped_content)
+        f.write(stripped)
 
     return jsonify({
         'status':      'ok',
@@ -306,138 +341,201 @@ def avatar_preview():
     html, body {{ width:100%; height:100%; background:#0a0e18; overflow:hidden; color:#ccc; font-family:monospace; }}
     x3d-canvas {{ width:100%; height:100%; display:block; }}
     #err {{ display:none; padding:12px; font-size:12px; color:#f06060; }}
+    #morph-overlay {{
+      position:fixed; bottom:10px; right:10px; width:260px;
+      background:rgba(10,12,22,0.92); border:1px solid #2a2a44;
+      border-radius:4px; padding:10px 12px; font-size:12px;
+      line-height:1.6; pointer-events:none; z-index:999; color:#8899bb;
+    }}
+    #morph-overlay .mo-title {{
+      font-size:10px; letter-spacing:0.12em; text-transform:uppercase;
+      color:#556; margin-bottom:5px; border-bottom:1px solid #1e1e30; padding-bottom:3px;
+    }}
+    #morph-overlay .mo-coord        {{ color:#4a7; margin-bottom:2px; font-size:11px; }}
+    #morph-overlay .mo-coord.missing {{ color:#f64; }}
+    #morph-overlay .mo-au-active    {{ color:#8af; font-size:12px; }}
+    #morph-overlay .mo-au-zero      {{ color:#334; }}
+    #morph-overlay .mo-status       {{ color:#fa4; margin-top:4px; font-size:11px; }}
   </style>
 </head>
 <body>
   <div id="err"></div>
   <x3d-canvas id="canvas" src="{x3d_src}"></x3d-canvas>
+  <div id="morph-overlay">
+    <div class="mo-title">morph driver</div>
+    <div id="mo-coords">waiting for scene...</div>
+    <div id="mo-aus"></div>
+    <div id="mo-status" class="mo-status"></div>
+  </div>
   <script type="module">
-    // ── X_ITE SAI — module import pattern (v10.x) ────────────────────────
-    // canvas.browser is NOT available synchronously.
-    // Correct pattern: import X3D module, call X3D.getBrowser(canvas)
-    // inside the canvas 'load' event after the scene is ready.
     import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
+    const canvas = document.getElementById('canvas');
+    let _browser = null, _scene = null;
+    const FACE_COORDS = [
+      'CindyCoord_skull','CindyCoord_jaw',
+      'CindyCoord_l_eyebrow','CindyCoord_r_eyebrow',
+      'CindyCoord_l_eyelid','CindyCoord_r_eyelid',
+      'CindyCoord_l_eyeball','CindyCoord_r_eyeball',
+    ];
+    var _restPose={{}}, _auWeights={{}}, _auData={{}}, _morphReady=false;
 
-    const canvas   = document.getElementById('canvas');
-    let   _browser = null;
-    let   _scene   = null;
+    function _buildAuData() {{
+      // Fallback stub — used only if JSON fetch fails
+      var jawN = _restPose['CindyCoord_jaw'] ? (_restPose['CindyCoord_jaw'].length/3) : 0;
+      var jawIdx=[], jawDel=[];
+      for(var i=0;i<jawN;i++){{ jawIdx.push(i); jawDel.push([0,-0.025,0]); }}
+      return {{ 'JinJawDrop': {{'CindyCoord_jaw':{{indices:jawIdx,deltas:jawDel}}}} }};
+    }}
+
+    function _loadAuData() {{
+      fetch('/static/avatars/cindy_expressions.xml')
+        .then(function(r){{ return r.text(); }})
+        .then(function(xml){{
+          var parser = new DOMParser();
+          var doc = parser.parseFromString(xml, 'application/xml');
+          var result = {{}};
+          doc.querySelectorAll('AU').forEach(function(au){{
+            var auName = au.getAttribute('name');
+            result[auName] = {{}};
+            au.querySelectorAll('Displacement').forEach(function(d){{
+              var coord   = d.getAttribute('coord');
+              var indices = d.getAttribute('coordIndex').trim().split(/\\s+/).map(Number);
+              var vecs    = d.getAttribute('vectors').trim().split(/\\s+/).map(Number);
+              var deltas  = [];
+              for(var i=0;i<vecs.length;i+=3)
+                deltas.push([vecs[i],vecs[i+1],vecs[i+2]]);
+              result[auName][coord] = {{indices:indices, deltas:deltas}};
+            }});
+          }});
+          _auData = result;
+          document.getElementById('mo-status').textContent =
+            'AU data loaded (' + Object.keys(result).length + ' AUs)';
+          console.log('AU data loaded:', Object.keys(result).length, 'AUs');
+        }})
+        .catch(function(e){{
+          console.warn('AU data fetch failed, using stub:', e);
+          document.getElementById('mo-status').textContent = 'AU data: stub only';
+        }});
+    }}
+
+    function _cacheRestPoses() {{
+      var lines=[], allOk=true;
+      FACE_COORDS.forEach(function(def) {{
+        try {{
+          var node=_scene.getNamedNode(def);
+          if(!node) throw new Error('null');
+          var pts=node.point, flat=new Float32Array(pts.length*3);
+          for(var i=0;i<pts.length;i++){{
+            flat[i*3]=pts[i].x; flat[i*3+1]=pts[i].y; flat[i*3+2]=pts[i].z;
+          }}
+          _restPose[def]=flat;
+          lines.push('<div class="mo-coord">'+def.replace('CindyCoord_','')+': '+pts.length+'v &#10003;</div>');
+        }} catch(e) {{
+          lines.push('<div class="mo-coord missing">'+def.replace('CindyCoord_','')+': MISSING</div>');
+          allOk=false;
+        }}
+      }});
+      document.getElementById('mo-coords').innerHTML=lines.join('');
+      return allOk;
+    }}
+
+    function _applyMorph() {{
+      if(!_morphReady) return;
+      var modified={{}};
+      FACE_COORDS.forEach(function(def){{
+        if(_restPose[def]) modified[def]=new Float32Array(_restPose[def]);
+      }});
+      Object.keys(_auWeights).forEach(function(au){{
+        var w=_auWeights[au]; if(!w||w<=0) return;
+        var auDef=_auData[au]; if(!auDef) return;
+        Object.keys(auDef).forEach(function(cd){{
+          var e=auDef[cd]; if(!e||!e.indices||!modified[cd]) return;
+          e.indices.forEach(function(vi,k){{
+            var d=e.deltas[k];
+            modified[cd][vi*3]+=d[0]*w; modified[cd][vi*3+1]+=d[1]*w; modified[cd][vi*3+2]+=d[2]*w;
+          }});
+        }});
+      }});
+      var written=0;
+      Object.keys(modified).forEach(function(def){{
+        try{{
+          var node=_scene.getNamedNode(def); if(!node) return;
+          var flat=modified[def],verts=[];
+          for(var i=0;i<flat.length/3;i++) verts.push(new X3D.SFVec3f(flat[i*3],flat[i*3+1],flat[i*3+2]));
+          node.point=new X3D.MFVec3f(...verts); written++;
+        }}catch(ee){{console.warn('morph write failed',def,ee.message);}}
+      }});
+      _updateOverlayAus();
+      document.getElementById('mo-status').textContent=written+' coord nodes written';
+    }}
+
+    function _updateOverlayAus() {{
+      var el=document.getElementById('mo-aus');
+      var active=Object.entries(_auWeights).filter(function(kv){{return kv[1]>0.01;}})
+                       .sort(function(a,b){{return b[1]-a[1];}});
+      if(!active.length){{
+        el.innerHTML='<div class="mo-au-zero">— no active AUs —</div>'; return;
+      }}
+      el.innerHTML=active.map(function(kv){{
+        var b=Math.round(kv[1]*10);
+        return '<div class="mo-au-active">'+kv[0].replace('Jin','')+
+               ' '+'█'.repeat(b)+'░'.repeat(10-b)+
+               ' '+kv[1].toFixed(2)+'</div>';
+      }}).join('');
+    }}
 
     canvas.addEventListener('load', function() {{
-      document.getElementById('err').style.display = 'none';
+      document.getElementById('err').style.display='none';
       try {{
-        _browser = X3D.getBrowser(canvas);
-        _scene   = _browser.currentScene;
-        console.log('SAI ready — scene nodes:', _scene.rootNodes.length);
-      }} catch(e) {{
-        console.warn('SAI init failed:', e.message);
+        _browser=X3D.getBrowser(canvas);
+        _scene=_browser.currentScene;
+        console.log('SAI ready — scene nodes:',_scene.rootNodes.length);
+        var allOk=_cacheRestPoses();
+        _auData=_buildAuData();
+        _loadAuData();
+        _morphReady=true;
+        document.getElementById('mo-status').textContent=
+          allOk?'morph driver ready':'some coords missing';
+      }}catch(e){{
+        console.warn('SAI init failed:',e.message);
+        document.getElementById('mo-status').textContent='SAI init failed: '+e.message;
       }}
     }});
 
     canvas.addEventListener('error', function(e) {{
-      var el = document.getElementById('err');
-      el.style.display = 'block';
-      el.textContent = 'X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e));
+      var el=document.getElementById('err');
+      el.style.display='block';
+      el.textContent='X_ITE load error: '+(e.detail||e.message||JSON.stringify(e));
     }});
 
-    // ── SAI postMessage listener ──────────────────────────────────────────
-    // Receives messages from the parent HAnim Editor (character_creator.html).
-    //
-    // Message types:
-    //   setJointRotation  {{ joint: <DEF>, rotation: [ax, ay, az, angle_rad] }}
-    //   setDisplacerWeight {{ au: <AUName e.g. JinBlink>, weight: 0.0-1.0 }}
-    //   enableTimer       {{ timerDEF: <DEF> }}
-    //   disableAllTimers  {{}}
-    //
-    // SAI invariant: enabled=true/false is the ONLY timer mechanism in X_ITE.
     window.addEventListener('message', function(evt) {{
-      if (!_browser || !_scene) return;
-      var msg = evt.data;
-      if (!msg || !msg.type) return;
-
+      if(!_browser||!_scene) return;
+      var msg=evt.data; if(!msg||!msg.type) return;
       try {{
-        if (msg.type === 'setJointRotation') {{
-          var node = _scene.getNamedNode(msg.joint);
-          if (!node) {{ console.warn('SAI: joint not found:', msg.joint); return; }}
-          var r = msg.rotation || [0, 0, 1, 0];
-          node.rotation = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
+        if(msg.type==='setJointRotation') {{
+          var node=_scene.getNamedNode(msg.joint);
+          if(!node){{console.warn('SAI: joint not found:',msg.joint);return;}}
+          var r=msg.rotation||[0,0,1,0];
+          node.rotation=new X3D.SFRotation(r[0],r[1],r[2],r[3]);
 
-        }} else if (msg.type === 'setDisplacerWeight') {{
-          // HAnimDisplacer SAI in X_ITE: getNamedNode(DEF) is the only
-          // reliable lookup — tree walking does not work on SAI proxies.
-          // DEF convention (Jin/Colson): <Mesh>_MorphInterpolator_<AUName>
-          // Try all known mesh prefixes from the loaded file.
-          var auName = msg.au;
-          var weight = typeof msg.weight === 'number' ? msg.weight : 0;
-          var _d_prefixes = [
-            'Lower_teeth', 'Center_lower_vermillion_lip', 'Hair',
-            '__0', '__2', '__4',
-            'Head', 'Face', 'Body', 'Skin', 'upper_teeth', 'tongue'
-          ];
-          var found = 0;
-          _d_prefixes.forEach(function(prefix) {{
-            var def = prefix + '_MorphInterpolator_' + auName;
-            try {{
-              var dn = _scene.getNamedNode(def);
-              if (dn) {{
-                dn.weight = new X3D.SFFloat(weight);
-                found++;
-              }}
-            }} catch(ee) {{}}
-          }});
-          if (found === 0) {{
-            console.warn('SAI displacer: no nodes found for AU', auName,
-              '— send {{type:"debugDisplacers"}} to see available DEFs');
-          }}
+        }}else if(msg.type==='setDisplacerWeight') {{
+          var auName=msg.au;
+          var weight=typeof msg.weight==='number'?msg.weight:0;
+          _auWeights[auName]=weight;
+          if(_morphReady) _applyMorph();
+          console.log('morph:',auName,weight.toFixed(3));
 
-        }} else if (msg.type === 'debugDisplacers') {{
-          // Diagnostic: discover which displacer DEFs X_ITE can actually resolve.
-          // Run from parent console:
-          //   document.getElementById('he-xite-frame')
-          //     .contentWindow.postMessage({{type:'debugDisplacers'}},'*')
-          var _dbg_aus = [
-            'JinBlink','JinBrowLowerer','JinCheekPuffer','JinCheekRaiser',
-            'JinChinRaiser','JinDimpler','JinEyesClosed','JinInnerBrowRaiser',
-            'JinJawDrop','JinLidDroop','JinLidTightener','JinLipCornerDepressor',
-            'JinLipCornerPuller','JinLipFunneler','JinLipPressor','JinLipsPart',
-            'JinLipStretcher','JinLipSuck','JinLipTightener','JinLowerLipDepressor',
-            'JinMouthStretch','JinNasolabialDeepener','JinNoseWrinkler',
-            'JinOuterBrowRaiser','JinSlit','JinSquint','JinUpperLidRaiser',
-            'JinUpperLipRaiser','JinWink','JinLipPuckerer'
-          ];
-          var _dbg_prefixes = [
-            'Lower_teeth','Center_lower_vermillion_lip','Hair',
-            '__0','__2','__4','Head','Face','Body','Skin','upper_teeth','tongue'
-          ];
-          var _dbg_found = [];
-          _dbg_aus.forEach(function(au) {{
-            _dbg_prefixes.forEach(function(prefix) {{
-              var def = prefix + '_MorphInterpolator_' + au;
-              try {{
-                var dn = _scene.getNamedNode(def);
-                if (dn) _dbg_found.push(def);
-              }} catch(ee) {{}}
-            }});
-          }});
-          console.log('debugDisplacers: found', _dbg_found.length, 'nodes');
-          console.log(_dbg_found.join('\\n'));
+        }}else if(msg.type==='enableTimer') {{
+          var timer=_scene.getNamedNode(msg.timerDEF);
+          if(timer) timer.enabled=true;
 
-        }} else if (msg.type === 'enableTimer') {{
-          var timer = _scene.getNamedNode(msg.timerDEF);
-          if (timer) timer.enabled = true;
-
-        }} else if (msg.type === 'disableAllTimers') {{
-          var defs = [
-            'DefaultTimer','WalkTimer','RunTimer','JumpTimer',
-            'KickTimer','PitchTimer','YawTimer','RollTimer'
-          ];
-          defs.forEach(function(def) {{
-            var t = _scene.getNamedNode(def);
-            if (t) t.enabled = false;
+        }}else if(msg.type==='disableAllTimers') {{
+          ['DefaultTimer','WalkTimer','RunTimer','JumpTimer',
+           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def){{
+            var t=_scene.getNamedNode(def); if(t) t.enabled=false;
           }});
         }}
-      }} catch(e) {{
-        console.warn('SAI write error:', e.message, msg);
-      }}
+      }}catch(e){{console.warn('SAI write error:',e.message,msg);}}
     }});
   </script>
 </body>

@@ -947,19 +947,20 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 3px 0;
+    padding: 4px 0;
     border-bottom: 1px solid var(--surface2);
   }
   .he-au-name {
-    font-size: 9px;
-    color: var(--text-dim);
-    width: 148px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    width: 160px;
     flex-shrink: 0;
   }
-  .he-au-name span { color: var(--muted); }
+  .he-au-name span { color: var(--text-dim); font-weight: 400; font-size: 10px; }
   .he-au-slider {
     flex: 1;
-    height: 3px;
+    height: 4px;
     -webkit-appearance: none;
     background: var(--border);
     border-radius: 2px;
@@ -969,15 +970,16 @@
   }
   .he-au-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 9px; height: 9px;
+    width: 12px; height: 12px;
     border-radius: 50%;
     background: var(--accent);
     cursor: pointer;
   }
   .he-au-val {
-    font-size: 9px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--text);
-    width: 28px;
+    width: 32px;
     text-align: right;
   }
   .he-preset-grid {
@@ -1604,7 +1606,13 @@
         </div>
 
         <div class="he-section">
-          <div class="he-sec-label">ekman presets</div>
+          <div class="he-sec-label" style="display:flex;align-items:center;justify-content:space-between;">
+            ekman presets
+            <button class="he-preset-btn" onclick="heResetAllAus()"
+                    style="font-size:9px;padding:2px 8px;letter-spacing:0.08em;border-color:#f64;color:#f64;">
+              reset all
+            </button>
+          </div>
           <div class="he-preset-grid" id="he-preset-grid"></div>
         </div>
 
@@ -1942,7 +1950,7 @@ async function onHAnimFileSelected(evt) {
       method:  'POST',
       headers: {
         'Content-Type':  'application/xml',
-        'X-Avatar-Name': (_selectedName || file.name.replace(/[.]x3d$/i,''))
+        'X-Avatar-Name': file.name.replace(/[.]x3d$/i,'').replace(/\s*\(\d+\)$/, '')
       },
       body: text
     });
@@ -2647,8 +2655,8 @@ function _heBuildAuList() {
   _HE_AU_GROUPS.forEach(function(group) {
     // Group header
     var hdr = document.createElement('div');
-    hdr.style.cssText = 'font-size:9px;letter-spacing:0.12em;text-transform:uppercase;' +
-      'color:var(--muted);padding:6px 0 2px;border-bottom:1px solid var(--border);margin-bottom:2px;';
+    hdr.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;' +
+      'color:var(--text-dim);padding:8px 0 3px;border-bottom:1px solid var(--border);margin-bottom:3px;';
     hdr.textContent = group.label;
     list.appendChild(hdr);
 
@@ -2710,6 +2718,23 @@ function heApplyPreset(name, btn) {
     hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: v });
   });
   heMarkDirty('preset: ' + name);
+}
+
+function heResetAllAus() {
+  // Zero all AU sliders, weights, and send reset to morph driver
+  document.querySelectorAll('.he-preset-btn').forEach(function(b){
+    b.classList.remove('on');
+  });
+  _he_aus.forEach(function(au) {
+    var auName = au[0];
+    _heAuWeights[auName] = 0;
+    var sl = document.querySelector('.he-au-slider[data-au="'+auName+'"]');
+    if (sl) sl.value = 0;
+    var vl = document.getElementById('he-au-val-' + auName);
+    if (vl) vl.textContent = '0.00';
+    hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: 0 });
+  });
+  heSetStatus('face reset to neutral');
 }
 
 function heSaveExpression() {
