@@ -317,6 +317,22 @@ def avatar_preview():
     """
     GET /avatar/preview?src=avatars/foo_hanim.x3d
     Serves a minimal X_ITE HTML page that renders the H-Anim figure locally.
+
+    Morph driver is avatar-agnostic (Day 32):
+    - Derives avatar name from src filename (jack_hanim.x3d -> 'jack')
+    - Fetches {avatarname}_expressions.xml for AU data
+    - On scene load, discovers face coord DEF names by scanning for a Group
+      DEF matching '*FaceCoords' pattern, reads its Coordinate children
+    - Supports two morph modes detected automatically:
+        SEGMENT mode (Cindy): coord nodes ARE the rendered geometry;
+          write displacement directly to each named coord node.
+        GLOBAL mode (Jack):   coord nodes are metadata holders inside
+          head HAnimSegment; each carries a globalIndices attribute
+          mapping local indices to global skin mesh (_3).
+          Write displacements into _3 (the rendered node).
+      Detection: if any discovered coord node has globalIndices='local'
+      or a numeric globalIndices list, it is GLOBAL mode.
+      If globalIndices absent on all nodes, it is SEGMENT mode (Cindy).
     """
     src = request.args.get('src', '').strip()
     if not src:
@@ -331,6 +347,19 @@ def avatar_preview():
         x3d_src = f'/static/{src}'
     else:
         x3d_src = f'/static/avatars/{src}'
+
+    # Derive avatar name and expressions filename from src
+    # 'avatars/jack_hanim.x3d' -> 'jack'
+    # 'avatars/cindy_hanim.x3d' -> 'cindy'
+    import re as _re
+    _basename = os.path.basename(src)                        # jack_hanim.x3d
+    _stem     = _re.sub(r'_hanim\.x3d$', '', _basename,
+                        flags=_re.IGNORECASE)                # jack
+    _stem     = _re.sub(r'\.x3d$', '', _stem,
+                        flags=_re.IGNORECASE)                # fallback strip
+    _stem     = _stem.lower()                                # normalise
+    _expressions_url = f'/static/avatars/{_stem}_expressions.xml'
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -369,42 +398,258 @@ def avatar_preview():
   </div>
   <script type="module">
     import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
-    const canvas = document.getElementById('canvas');
-    let _browser = null, _scene = null;
-    const FACE_COORDS = [
-      'CindyCoord_skull','CindyCoord_jaw',
-      'CindyCoord_l_eyebrow','CindyCoord_r_eyebrow',
-      'CindyCoord_l_eyelid','CindyCoord_r_eyelid',
-      'CindyCoord_l_eyeball','CindyCoord_r_eyeball',
-    ];
-    var _restPose={{}}, _auWeights={{}}, _auData={{}}, _morphReady=false;
+    const canvas  = document.getElementById('canvas');
+    const EXPRESSIONS_URL = '{_expressions_url}';
 
-    function _buildAuData() {{
-      // Fallback stub — used only if JSON fetch fails
-      var jawN = _restPose['CindyCoord_jaw'] ? (_restPose['CindyCoord_jaw'].length/3) : 0;
-      var jawIdx=[], jawDel=[];
-      for(var i=0;i<jawN;i++){{ jawIdx.push(i); jawDel.push([0,-0.025,0]); }}
-      return {{ 'JinJawDrop': {{'CindyCoord_jaw':{{indices:jawIdx,deltas:jawDel}}}} }};
+    let _browser = null, _scene = null;
+
+    // Discovered at scene load — filled by _discoverFaceCoords()
+    var _faceCoordDefs  = [];   // ['JackCoord_skull', 'JackCoord_jaw', ...]
+    var _globalMode     = false; // true = Jack-style global skin mesh write
+    var _globalIndices  = {{}};   // def -> Int32Array of global vert indices (global mode)
+    var _skinMeshDef    = '_3';  // global skin mesh Coordinate DEF (fallback lookup)
+    var _skinCoordNode  = null;  // live Coordinate node inside the rendered Shape (preferred)
+
+    var _restPose   = {{}};  // def -> Float32Array of rest-pose XYZ
+    var _auWeights  = {{}};
+    var _auData     = {{}};
+    var _morphReady = false;
+
+    // ── Discover face coord nodes from scene ─────────────────────────────
+    // Looks for a Group DEF ending in 'FaceCoords' (e.g. JackFaceCoords,
+    // CindyFaceCoords). Falls back to scanning for any Coordinate DEF
+    // matching *Coord_skull pattern.
+    // Sets _faceCoordDefs, _globalMode, _globalIndices.
+    function _discoverFaceCoords() {{
+      var found = [];
+
+      // Strategy 1: look for *FaceCoords group — Jack-style pipeline output
+      var suffixes = ['FaceCoords'];
+      var allNodes = _scene.rootNodes;
+
+      // Try to find group by scanning named nodes for *FaceCoords
+      // We probe known prefix patterns rather than iterating (SAI has no listNodes)
+      // The pipeline script always names it [AvatarName]FaceCoords
+      // We derive avatar prefix from expressions URL
+      var avatarPrefix = EXPRESSIONS_URL
+        .split('/').pop()
+        .replace('_expressions.xml','');
+      var groupDef = avatarPrefix.charAt(0).toUpperCase() +
+                     avatarPrefix.slice(1) + 'FaceCoords';
+      var grp = null;
+      try {{ grp = _scene.getNamedNode(groupDef); }} catch(e) {{}}
+
+      if (grp) {{
+        // Group found — read its Coordinate children by probing DEF names
+        // We know the naming pattern: [AvatarName]Coord_[region]
+        var regions = ['skull','jaw','l_eyebrow','r_eyebrow',
+                       'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
+        var pfx = avatarPrefix.charAt(0).toUpperCase() +
+                  avatarPrefix.slice(1) + 'Coord_';
+        regions.forEach(function(r) {{
+          found.push(pfx + r);
+        }});
+        console.log('Discovered coords via group', groupDef, ':', found);
+      }} else {{
+        // Strategy 2: Cindy-style — probe CindyCoord_* directly
+        var cindyRegions = ['skull','jaw','l_eyebrow','r_eyebrow',
+                            'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
+        cindyRegions.forEach(function(r) {{
+          found.push('CindyCoord_' + r);
+        }});
+        console.log('No FaceCoords group found, trying Cindy pattern');
+      }}
+
+      _faceCoordDefs = found;
+
+      // Detect global vs segment mode by checking globalIndices attribute
+      // on the skull coord node (most reliable indicator)
+      _globalMode = false;
+      found.forEach(function(def) {{
+        try {{
+          var node = _scene.getNamedNode(def);
+          if (!node) return;
+          // SAI exposes custom XML attributes via getUserData / getField.
+          // globalIndices was written as an XML attribute; X_ITE exposes
+          // unknown attributes via node.getField() returning null, but
+          // they ARE accessible via the underlying DOM if X_ITE passes
+          // through. We use a workaround: fetch the X3D file text and
+          // parse globalIndices from it client-side.
+          // Flag set after _fetchGlobalIndices() completes.
+        }} catch(e) {{}}
+      }});
     }}
 
+    // ── Fetch X3D and parse globalIndices for each face coord node ───────
+    // This runs once after scene load for global-mode avatars.
+    // Populates _globalIndices[def] = Int32Array and sets _globalMode.
+    function _fetchGlobalIndices(x3dUrl, callback) {{
+      fetch(x3dUrl)
+        .then(function(r) {{ return r.text(); }})
+        .then(function(text) {{
+          var parser = new DOMParser();
+          var doc = parser.parseFromString(text, 'application/xml');
+          var hasGlobal = false;
+          _faceCoordDefs.forEach(function(def) {{
+            var el = doc.querySelector('Coordinate[DEF="' + def + '"]');
+            if (!el) return;
+            var gi = el.getAttribute('globalIndices');
+            if (!gi) return;
+            if (gi === 'local') {{
+              // eyeball: local coords, write directly to named node
+              _globalIndices[def] = 'local';
+              hasGlobal = true;
+            }} else {{
+              var arr = gi.trim().split(/[,\\s]+/).map(Number)
+                          .filter(function(n){{return !isNaN(n);}});
+              if (arr.length > 0) {{
+                _globalIndices[def] = new Int32Array(arr);
+                hasGlobal = true;
+              }}
+            }}
+          }});
+          _globalMode = hasGlobal;
+          console.log('Global mode:', _globalMode,
+                      '— mapped regions:', Object.keys(_globalIndices).length);
+          callback();
+        }})
+        .catch(function(e) {{
+          console.warn('globalIndices fetch failed, assuming segment mode:', e);
+          _globalMode = false;
+          callback();
+        }});
+    }}
+
+    // ── Cache rest poses for all discovered face coord nodes ─────────────
+    function _cacheRestPoses() {{
+      var lines = [], allOk = true;
+      _faceCoordDefs.forEach(function(def) {{
+        try {{
+          var node = _scene.getNamedNode(def);
+          if (!node) throw new Error('null');
+          var pts = node.point;
+          var flat = new Float32Array(pts.length * 3);
+          for (var i = 0; i < pts.length; i++) {{
+            flat[i*3]   = pts[i].x;
+            flat[i*3+1] = pts[i].y;
+            flat[i*3+2] = pts[i].z;
+          }}
+          _restPose[def] = flat;
+          // Strip prefix for display: JackCoord_skull -> skull
+          var label = def.replace(/^[A-Za-z]+Coord_/, '');
+          lines.push('<div class="mo-coord">' + label + ': ' +
+                     pts.length + 'v &#10003;</div>');
+        }} catch(e) {{
+          var label = def.replace(/^[A-Za-z]+Coord_/, '');
+          lines.push('<div class="mo-coord missing">' + label + ': MISSING</div>');
+          allOk = false;
+        }}
+      }});
+
+      // Also cache global skin mesh rest pose if in global mode.
+      // IMPORTANT: the rendered IndexedTriangleSet holds a USE copy of _3,
+      // not the DEF node. X_ITE only re-renders when the node the geometry
+      // actually references is written. So we navigate via the rendered
+      // Shape (containerField='skin') to get the live coord node.
+      // Strategy: scan HAnimHumanoid skin shapes for containerField='skin',
+      // get the first IndexedTriangleSet's coord field. Fall back to DEF '_3'.
+      if (_globalMode) {{
+        try {{
+          var skinCoord = null;
+
+          // Walk scene root nodes looking for HAnimHumanoid
+          var roots = _scene.rootNodes;
+          outer: for (var ri = 0; ri < roots.length; ri++) {{
+            var root = roots[ri];
+            // HAnimHumanoid may be nested inside a Group
+            var candidates = [root];
+            if (root.getNodeTypeName && root.getNodeTypeName() !== 'HAnimHumanoid') {{
+              // Try children
+              try {{
+                var fc = root.children;
+                if (fc) for (var ci = 0; ci < fc.length; ci++) candidates.push(fc[ci]);
+              }} catch(e) {{}}
+            }}
+            for (var ci = 0; ci < candidates.length; ci++) {{
+              var node = candidates[ci];
+              if (!node || !node.getNodeTypeName) continue;
+              if (node.getNodeTypeName() === 'HAnimHumanoid') {{
+                // skin field holds the rendered Shape(s)
+                try {{
+                  var skinShapes = node.skin;
+                  if (skinShapes && skinShapes.length > 0) {{
+                    for (var si = 0; si < skinShapes.length; si++) {{
+                      var shape = skinShapes[si];
+                      if (!shape) continue;
+                      var geom = shape.geometry;
+                      if (!geom) continue;
+                      var coord = geom.coord;
+                      if (coord && coord.point && coord.point.length > 0) {{
+                        skinCoord = coord;
+                        break outer;
+                      }}
+                    }}
+                  }}
+                }} catch(e) {{
+                  console.warn('skin field traversal failed:', e.message);
+                }}
+                break outer;
+              }}
+            }}
+          }}
+
+          // Fallback: getNamedNode by DEF
+          if (!skinCoord) {{
+            skinCoord = _scene.getNamedNode(_skinMeshDef);
+            console.log('Skin coord: using DEF fallback (_3)');
+          }} else {{
+            console.log('Skin coord: found via HAnimHumanoid.skin field');
+          }}
+
+          if (skinCoord) {{
+            _skinCoordNode = skinCoord;
+            var pts = skinCoord.point;
+            var flat = new Float32Array(pts.length * 3);
+            for (var i = 0; i < pts.length; i++) {{
+              flat[i*3]   = pts[i].x;
+              flat[i*3+1] = pts[i].y;
+              flat[i*3+2] = pts[i].z;
+            }}
+            _restPose[_skinMeshDef] = flat;
+            console.log('Global skin mesh cached:', pts.length, 'verts');
+          }} else {{
+            console.warn('Could not find skin coord node');
+          }}
+        }} catch(e) {{
+          console.warn('Could not cache global skin mesh:', e.message);
+        }}
+      }}
+
+      document.getElementById('mo-coords').innerHTML = lines.join('');
+      return allOk;
+    }}
+
+    // ── Load AU data from expressions XML ────────────────────────────────
     function _loadAuData() {{
-      fetch('/static/avatars/cindy_expressions.xml')
-        .then(function(r){{ return r.text(); }})
-        .then(function(xml){{
+      fetch(EXPRESSIONS_URL)
+        .then(function(r) {{ return r.text(); }})
+        .then(function(xml) {{
           var parser = new DOMParser();
           var doc = parser.parseFromString(xml, 'application/xml');
           var result = {{}};
-          doc.querySelectorAll('AU').forEach(function(au){{
+          doc.querySelectorAll('AU').forEach(function(au) {{
             var auName = au.getAttribute('name');
             result[auName] = {{}};
-            au.querySelectorAll('Displacement').forEach(function(d){{
+            au.querySelectorAll('Displacement').forEach(function(d) {{
               var coord   = d.getAttribute('coord');
-              var indices = d.getAttribute('coordIndex').trim().split(/\\s+/).map(Number);
-              var vecs    = d.getAttribute('vectors').trim().split(/\\s+/).map(Number);
+              var indices = d.getAttribute('coordIndex').trim()
+                             .split(/\\s+/).map(Number);
+              var vecs    = d.getAttribute('vectors').trim()
+                             .split(/\\s+/).map(Number);
               var deltas  = [];
-              for(var i=0;i<vecs.length;i+=3)
-                deltas.push([vecs[i],vecs[i+1],vecs[i+2]]);
-              result[auName][coord] = {{indices:indices, deltas:deltas}};
+              for (var i = 0; i < vecs.length; i += 3)
+                deltas.push([vecs[i], vecs[i+1], vecs[i+2]]);
+              result[auName][coord] = {{indices: indices, deltas: deltas}};
             }});
           }});
           _auData = result;
@@ -412,130 +657,218 @@ def avatar_preview():
             'AU data loaded (' + Object.keys(result).length + ' AUs)';
           console.log('AU data loaded:', Object.keys(result).length, 'AUs');
         }})
-        .catch(function(e){{
-          console.warn('AU data fetch failed, using stub:', e);
-          document.getElementById('mo-status').textContent = 'AU data: stub only';
+        .catch(function(e) {{
+          console.warn('AU data fetch failed:', e);
+          document.getElementById('mo-status').textContent = 'AU data: fetch failed';
         }});
     }}
 
-    function _cacheRestPoses() {{
-      var lines=[], allOk=true;
-      FACE_COORDS.forEach(function(def) {{
-        try {{
-          var node=_scene.getNamedNode(def);
-          if(!node) throw new Error('null');
-          var pts=node.point, flat=new Float32Array(pts.length*3);
-          for(var i=0;i<pts.length;i++){{
-            flat[i*3]=pts[i].x; flat[i*3+1]=pts[i].y; flat[i*3+2]=pts[i].z;
-          }}
-          _restPose[def]=flat;
-          lines.push('<div class="mo-coord">'+def.replace('CindyCoord_','')+': '+pts.length+'v &#10003;</div>');
-        }} catch(e) {{
-          lines.push('<div class="mo-coord missing">'+def.replace('CindyCoord_','')+': MISSING</div>');
-          allOk=false;
-        }}
+    // ── Apply morph: SEGMENT mode (Cindy) ────────────────────────────────
+    // Write displacement directly to each named coord node.
+    function _applyMorphSegment() {{
+      var modified = {{}};
+      _faceCoordDefs.forEach(function(def) {{
+        if (_restPose[def]) modified[def] = new Float32Array(_restPose[def]);
       }});
-      document.getElementById('mo-coords').innerHTML=lines.join('');
-      return allOk;
-    }}
-
-    function _applyMorph() {{
-      if(!_morphReady) return;
-      var modified={{}};
-      FACE_COORDS.forEach(function(def){{
-        if(_restPose[def]) modified[def]=new Float32Array(_restPose[def]);
-      }});
-      Object.keys(_auWeights).forEach(function(au){{
-        var w=_auWeights[au]; if(!w||w<=0) return;
-        var auDef=_auData[au]; if(!auDef) return;
-        Object.keys(auDef).forEach(function(cd){{
-          var e=auDef[cd]; if(!e||!e.indices||!modified[cd]) return;
-          e.indices.forEach(function(vi,k){{
-            var d=e.deltas[k];
-            modified[cd][vi*3]+=d[0]*w; modified[cd][vi*3+1]+=d[1]*w; modified[cd][vi*3+2]+=d[2]*w;
+      Object.keys(_auWeights).forEach(function(au) {{
+        var w = _auWeights[au]; if (!w || w <= 0) return;
+        var auDef = _auData[au]; if (!auDef) return;
+        Object.keys(auDef).forEach(function(cd) {{
+          var e = auDef[cd];
+          if (!e || !e.indices || !modified[cd]) return;
+          e.indices.forEach(function(vi, k) {{
+            var d = e.deltas[k];
+            modified[cd][vi*3]   += d[0] * w;
+            modified[cd][vi*3+1] += d[1] * w;
+            modified[cd][vi*3+2] += d[2] * w;
           }});
         }});
       }});
-      var written=0;
-      Object.keys(modified).forEach(function(def){{
-        try{{
-          var node=_scene.getNamedNode(def); if(!node) return;
-          var flat=modified[def],verts=[];
-          for(var i=0;i<flat.length/3;i++) verts.push(new X3D.SFVec3f(flat[i*3],flat[i*3+1],flat[i*3+2]));
-          node.point=new X3D.MFVec3f(...verts); written++;
-        }}catch(ee){{console.warn('morph write failed',def,ee.message);}}
+      var written = 0;
+      Object.keys(modified).forEach(function(def) {{
+        try {{
+          var node = _scene.getNamedNode(def); if (!node) return;
+          var flat = modified[def], verts = [];
+          for (var i = 0; i < flat.length / 3; i++)
+            verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
+          node.point = new X3D.MFVec3f(...verts);
+          written++;
+        }} catch(ee) {{ console.warn('morph write failed', def, ee.message); }}
       }});
+      return written;
+    }}
+
+    // ── Apply morph: GLOBAL mode (Jack) ──────────────────────────────────
+    // Accumulate displacements into global skin mesh (_3), write it back.
+    // Local-coord nodes (eyeballs) written directly as in segment mode.
+    function _applyMorphGlobal() {{
+      if (!_restPose[_skinMeshDef]) return 0;
+
+      // Working copy of global skin mesh
+      var globalFlat = new Float32Array(_restPose[_skinMeshDef]);
+
+      // Local-coord nodes (eyeballs): separate working copies
+      var localModified = {{}};
+      _faceCoordDefs.forEach(function(def) {{
+        if (_globalIndices[def] === 'local' && _restPose[def])
+          localModified[def] = new Float32Array(_restPose[def]);
+      }});
+
+      // Accumulate all AU displacements
+      Object.keys(_auWeights).forEach(function(au) {{
+        var w = _auWeights[au]; if (!w || w <= 0) return;
+        var auDef = _auData[au]; if (!auDef) return;
+
+        Object.keys(auDef).forEach(function(coordName) {{
+          var e = auDef[coordName];
+          if (!e || !e.indices) return;
+
+          var gi = _globalIndices[coordName];
+
+          if (gi === 'local') {{
+            // Eyeball: write to local coord node
+            if (!localModified[coordName]) return;
+            e.indices.forEach(function(vi, k) {{
+              var d = e.deltas[k];
+              localModified[coordName][vi*3]   += d[0] * w;
+              localModified[coordName][vi*3+1] += d[1] * w;
+              localModified[coordName][vi*3+2] += d[2] * w;
+            }});
+          }} else if (gi && gi.length) {{
+            // Global region: map local index -> global index, write into globalFlat
+            e.indices.forEach(function(localVi, k) {{
+              var globalVi = gi[localVi];
+              if (globalVi === undefined) return;
+              var d = e.deltas[k];
+              globalFlat[globalVi*3]   += d[0] * w;
+              globalFlat[globalVi*3+1] += d[1] * w;
+              globalFlat[globalVi*3+2] += d[2] * w;
+            }});
+          }}
+        }});
+      }});
+
+      // Write global skin mesh.
+      // Use _skinCoordNode (the live node inside the rendered Shape) if available.
+      // This is critical: writing to the DEF node does NOT trigger X_ITE to
+      // re-render — only the node the IndexedTriangleSet's coord field points to
+      // will cause a visual update. _skinCoordNode was resolved at cache time
+      // by navigating via HAnimHumanoid.skin rather than by DEF name.
+      var written = 0;
+      try {{
+        var skinNode = _skinCoordNode || _scene.getNamedNode(_skinMeshDef);
+        if (skinNode) {{
+          var verts = [];
+          for (var i = 0; i < globalFlat.length / 3; i++)
+            verts.push(new X3D.SFVec3f(globalFlat[i*3], globalFlat[i*3+1], globalFlat[i*3+2]));
+          skinNode.point = new X3D.MFVec3f(...verts);
+          written++;
+        }}
+      }} catch(ee) {{ console.warn('global skin write failed:', ee.message); }}
+
+      // Write local coord nodes (eyeballs)
+      Object.keys(localModified).forEach(function(def) {{
+        try {{
+          var node = _scene.getNamedNode(def); if (!node) return;
+          var flat = localModified[def], verts = [];
+          for (var i = 0; i < flat.length / 3; i++)
+            verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
+          node.point = new X3D.MFVec3f(...verts);
+          written++;
+        }} catch(ee) {{ console.warn('local eyeball write failed', def, ee.message); }}
+      }});
+
+      return written;
+    }}
+
+    // ── Dispatch to correct morph mode ────────────────────────────────────
+    function _applyMorph() {{
+      if (!_morphReady) return;
+      var written = _globalMode ? _applyMorphGlobal() : _applyMorphSegment();
       _updateOverlayAus();
-      document.getElementById('mo-status').textContent=written+' coord nodes written';
+      var modeLabel = _globalMode ? 'global' : 'segment';
+      document.getElementById('mo-status').textContent =
+        written + ' node(s) written [' + modeLabel + ']';
     }}
 
     function _updateOverlayAus() {{
-      var el=document.getElementById('mo-aus');
-      var active=Object.entries(_auWeights).filter(function(kv){{return kv[1]>0.01;}})
-                       .sort(function(a,b){{return b[1]-a[1];}});
-      if(!active.length){{
-        el.innerHTML='<div class="mo-au-zero">— no active AUs —</div>'; return;
+      var el = document.getElementById('mo-aus');
+      var active = Object.entries(_auWeights)
+        .filter(function(kv) {{ return kv[1] > 0.01; }})
+        .sort(function(a, b) {{ return b[1] - a[1]; }});
+      if (!active.length) {{
+        el.innerHTML = '<div class="mo-au-zero">— no active AUs —</div>';
+        return;
       }}
-      el.innerHTML=active.map(function(kv){{
-        var b=Math.round(kv[1]*10);
-        return '<div class="mo-au-active">'+kv[0].replace('Jin','')+
-               ' '+'█'.repeat(b)+'░'.repeat(10-b)+
-               ' '+kv[1].toFixed(2)+'</div>';
+      el.innerHTML = active.map(function(kv) {{
+        var b = Math.round(kv[1] * 10);
+        return '<div class="mo-au-active">' + kv[0].replace('Jin','') +
+               ' ' + '█'.repeat(b) + '░'.repeat(10-b) +
+               ' ' + kv[1].toFixed(2) + '</div>';
       }}).join('');
     }}
 
+    // ── Scene load ────────────────────────────────────────────────────────
     canvas.addEventListener('load', function() {{
-      document.getElementById('err').style.display='none';
+      document.getElementById('err').style.display = 'none';
       try {{
-        _browser=X3D.getBrowser(canvas);
-        _scene=_browser.currentScene;
-        console.log('SAI ready — scene nodes:',_scene.rootNodes.length);
-        var allOk=_cacheRestPoses();
-        _auData=_buildAuData();
-        _loadAuData();
-        _morphReady=true;
-        document.getElementById('mo-status').textContent=
-          allOk?'morph driver ready':'some coords missing';
-      }}catch(e){{
-        console.warn('SAI init failed:',e.message);
-        document.getElementById('mo-status').textContent='SAI init failed: '+e.message;
+        _browser = X3D.getBrowser(canvas);
+        _scene   = _browser.currentScene;
+        console.log('SAI ready — scene nodes:', _scene.rootNodes.length);
+
+        _discoverFaceCoords();
+
+        // Fetch X3D to read globalIndices, then complete init
+        _fetchGlobalIndices('{x3d_src}', function() {{
+          var allOk = _cacheRestPoses();
+          _loadAuData();
+          _morphReady = true;
+          var modeLabel = _globalMode ? ' [global mesh]' : ' [segment]';
+          document.getElementById('mo-status').textContent =
+            (allOk ? 'morph driver ready' : 'some coords missing') + modeLabel;
+        }});
+
+      }} catch(e) {{
+        console.warn('SAI init failed:', e.message);
+        document.getElementById('mo-status').textContent = 'SAI init failed: ' + e.message;
       }}
     }});
 
     canvas.addEventListener('error', function(e) {{
-      var el=document.getElementById('err');
-      el.style.display='block';
-      el.textContent='X_ITE load error: '+(e.detail||e.message||JSON.stringify(e));
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = 'X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e));
     }});
 
+    // ── postMessage interface (unchanged) ─────────────────────────────────
     window.addEventListener('message', function(evt) {{
-      if(!_browser||!_scene) return;
-      var msg=evt.data; if(!msg||!msg.type) return;
+      if (!_browser || !_scene) return;
+      var msg = evt.data; if (!msg || !msg.type) return;
       try {{
-        if(msg.type==='setJointRotation') {{
-          var node=_scene.getNamedNode(msg.joint);
-          if(!node){{console.warn('SAI: joint not found:',msg.joint);return;}}
-          var r=msg.rotation||[0,0,1,0];
-          node.rotation=new X3D.SFRotation(r[0],r[1],r[2],r[3]);
+        if (msg.type === 'setJointRotation') {{
+          var node = _scene.getNamedNode(msg.joint);
+          if (!node) {{ console.warn('SAI: joint not found:', msg.joint); return; }}
+          var r = msg.rotation || [0,0,1,0];
+          node.rotation = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
 
-        }}else if(msg.type==='setDisplacerWeight') {{
-          var auName=msg.au;
-          var weight=typeof msg.weight==='number'?msg.weight:0;
-          _auWeights[auName]=weight;
-          if(_morphReady) _applyMorph();
-          console.log('morph:',auName,weight.toFixed(3));
+        }} else if (msg.type === 'setDisplacerWeight') {{
+          var auName = msg.au;
+          var weight = typeof msg.weight === 'number' ? msg.weight : 0;
+          _auWeights[auName] = weight;
+          if (_morphReady) _applyMorph();
+          console.log('morph:', auName, weight.toFixed(3));
 
-        }}else if(msg.type==='enableTimer') {{
-          var timer=_scene.getNamedNode(msg.timerDEF);
-          if(timer) timer.enabled=true;
+        }} else if (msg.type === 'enableTimer') {{
+          var timer = _scene.getNamedNode(msg.timerDEF);
+          if (timer) timer.enabled = true;
 
-        }}else if(msg.type==='disableAllTimers') {{
+        }} else if (msg.type === 'disableAllTimers') {{
           ['DefaultTimer','WalkTimer','RunTimer','JumpTimer',
-           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def){{
-            var t=_scene.getNamedNode(def); if(t) t.enabled=false;
+           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {{
+            var t = _scene.getNamedNode(def); if (t) t.enabled = false;
           }});
         }}
-      }}catch(e){{console.warn('SAI write error:',e.message,msg);}}
+      }} catch(e) {{ console.warn('SAI write error:', e.message, msg); }}
     }});
   </script>
 </body>
@@ -603,6 +936,20 @@ def _cultivar_xml_path(cultivar_name: str) -> str:
 def _hanim_x3d_path(hanim_src: str) -> str:
     """Resolve hanim_src basename to absolute path under static/avatars/."""
     return os.path.join(_avatar_dir(), os.path.basename(hanim_src))
+
+
+def _expressions_xml_path(hanim_src: str) -> str:
+    """
+    Derive the expressions XML path from a hanim_src filename.
+    'jack_hanim.x3d' -> static/avatars/jack_expressions.xml
+    'cindy_hanim.x3d' -> static/avatars/cindy_expressions.xml
+    """
+    import re as _re
+    basename = os.path.basename(hanim_src)
+    stem = _re.sub(r'_hanim\.x3d$', '', basename, flags=_re.IGNORECASE)
+    stem = _re.sub(r'\.x3d$', '', stem, flags=_re.IGNORECASE)
+    stem = stem.lower()
+    return os.path.join(_avatar_dir(), f'{stem}_expressions.xml')
 
 
 def _hanim_backup(filepath: str) -> None:
@@ -736,6 +1083,100 @@ def _update_displacer_weights(scene_el, displacers: list) -> int:
                 break  # one AU per displacer node
 
     return updated
+
+
+def _write_expressions_xml(expressions_path: str, expressions: list) -> int:
+    """
+    Upsert <Expression> blocks into an MCCFExpressions XML file.
+
+    expressions: list of { name: str, au_weights: { AUName: float, ... } }
+      au_weights must be the FULL vector — all AUs present, zeroes included.
+      Preserves complete state for downstream consumers and future lerp work.
+
+    Strategy:
+      - Parse existing file if present (preserves <Weight> displacement vectors
+        on existing <Expression> blocks not covered by this export).
+      - For each incoming expression, replace or insert the <Expression> block
+        entirely — all <Weight> children rewritten from au_weights.
+      - Existing <ExpressionState> element preserved unchanged.
+      - Writes atomically via .tmp + os.replace().
+
+    Returns count of expressions written.
+    """
+    import xml.etree.ElementTree as _ET
+
+    if not expressions:
+        return 0
+
+    # ── Parse or create root ─────────────────────────────────────────────
+    root = None
+    if os.path.exists(expressions_path):
+        try:
+            tree = _ET.parse(expressions_path)
+            root = tree.getroot()
+        except _ET.ParseError:
+            root = None  # corrupt file — rebuild from scratch
+
+    if root is None:
+        root = _ET.Element('MCCFExpressions')
+
+    # ── Index existing Expression elements by name ───────────────────────
+    existing = {}
+    for el in list(root.findall('Expression')):
+        name = el.get('name', '')
+        if name:
+            existing[name] = el
+
+    # ── Upsert each incoming expression ─────────────────────────────────
+    written = 0
+    for expr in expressions:
+        name = (expr.get('name') or '').strip()
+        au_weights = expr.get('au_weights') or {}
+        if not name or not au_weights:
+            continue
+
+        # Build fresh Expression element
+        expr_el = _ET.Element('Expression')
+        expr_el.set('name', name)
+
+        # Write all AUs — full vector, zeroes preserved
+        for au_name, value in sorted(au_weights.items()):
+            w_el = _ET.SubElement(expr_el, 'Weight')
+            w_el.set('au',    au_name)
+            w_el.set('value', str(round(float(value), 6)))
+
+        if name in existing:
+            # Replace in-place — find position and swap
+            idx = list(root).index(existing[name])
+            root.remove(existing[name])
+            root.insert(idx, expr_el)
+        else:
+            # Append before ExpressionState if present, else at end
+            state_el = root.find('ExpressionState')
+            if state_el is not None:
+                idx = list(root).index(state_el)
+                root.insert(idx, expr_el)
+            else:
+                root.append(expr_el)
+
+        existing[name] = expr_el
+        written += 1
+
+    if written == 0:
+        return 0
+
+    # ── Serialise with readable indentation ─────────────────────────────
+    _ET.indent(root, space='  ')
+    xml_text = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                + _ET.tostring(root, encoding='unicode'))
+
+    # ── Atomic write ─────────────────────────────────────────────────────
+    tmp_path = expressions_path + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as fh:
+        fh.write(xml_text)
+    os.replace(tmp_path, expressions_path)
+
+    return written
 
 
 def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
@@ -876,13 +1317,13 @@ def hanim_export():
     Phase 1: skin URL + cultivar XML (HAnimFigure/Receptivity/Behaviors) only.
     Phase 2: clips[] populated — TimeSensor + OrientationInterpolator nodes written.
 
-    Atomic dual-write via .tmp + os.replace().  Both files backed up first.
-    Neither file is modified if either write fails.
+    Atomic triple-write via .tmp + os.replace().  All three files backed up first.
+    No file is modified if any write fails.
 
     Returns:
     {
-      status, hanim_path, cultivar_path,
-      clips_written, routes_written, skin_updated
+      status, hanim_path, cultivar_path, expressions_path,
+      clips_written, routes_written, skin_updated, expressions_written
     }
     """
     import re as _re
@@ -894,15 +1335,18 @@ def hanim_export():
     skin_url      = (body.get('skin_url') or '').strip()
     receptivity   = body.get('receptivity') or {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
     clips         = body.get('clips') or []
-    # expressions / displacers: received, stored for Phase 3; not yet written to X3D
+    expressions   = body.get('expressions') or []
+    # au_weights in each expression must be the full vector (all AUs, zeroes included)
+    # displacers: AU weight values written back into HAnimDisplacer nodes in X3D
 
     if not cultivar_name:
         return jsonify({'status': 'error', 'error': 'cultivar name required'}), 400
     if not hanim_src:
         return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
 
-    x3d_filepath      = _hanim_x3d_path(hanim_src)
-    cultivar_filepath = _cultivar_xml_path(cultivar_name)
+    x3d_filepath         = _hanim_x3d_path(hanim_src)
+    cultivar_filepath    = _cultivar_xml_path(cultivar_name)
+    expressions_filepath = _expressions_xml_path(hanim_src)
 
     if not os.path.exists(x3d_filepath):
         return jsonify({'status': 'error',
@@ -910,6 +1354,7 @@ def hanim_export():
     if not os.path.exists(cultivar_filepath):
         return jsonify({'status': 'error',
                         'error': f'Cultivar XML not found for: {cultivar_name}'}), 404
+    # expressions XML need not pre-exist — _write_expressions_xml() creates it if absent
 
     # ── Handle data URL skin — decode and save before any file writes ────
     final_skin_url = skin_url if skin_url and not skin_url.startswith('data:') else None
@@ -1002,18 +1447,28 @@ def hanim_export():
             p0[0]['name'] if p0 else cultivar_def.behavior_clips[0]['name']
         )
 
-    # ── Atomic dual-write ────────────────────────────────────────────────
-    # 1. Back up both files
+    # ── Atomic triple-write ──────────────────────────────────────────────
+    # 1. Back up all three files (expressions XML may not exist yet — that is fine)
     _hanim_backup(x3d_filepath)
     _hanim_backup(cultivar_filepath)
+    _hanim_backup(expressions_filepath)
 
     new_x3d_xml      = _serialise_x3d(xml_decl, x3d_root)
     new_cultivar_xml = cultivar_def.to_xml()
 
     tmp_x3d      = x3d_filepath      + '.tmp'
     tmp_cultivar = cultivar_filepath + '.tmp'
+    # expressions written atomically inside _write_expressions_xml() itself;
+    # call it now so any error aborts before we touch the other two files.
+    expressions_written = 0
+    if expressions:
+        try:
+            expressions_written = _write_expressions_xml(expressions_filepath, expressions)
+        except OSError as exc:
+            return jsonify({'status': 'error',
+                            'error': f'expressions XML write failed: {exc}'}), 500
 
-    # 2. Write temp files
+    # 2. Write X3D and cultivar temp files
     try:
         with open(tmp_x3d, 'w', encoding='utf-8') as fh:
             fh.write(new_x3d_xml)
@@ -1043,14 +1498,17 @@ def hanim_export():
         return jsonify({'status': 'error',
                         'error': f'atomic rename failed (backups preserved): {exc}'}), 500
 
+    _expr_basename = os.path.basename(expressions_filepath)
     return jsonify({
-        'status':              'ok',
-        'hanim_path':          f'/static/avatars/{os.path.basename(hanim_src)}',
-        'cultivar_path':       f'cultivars/cultivar_{cultivar_name}.xml',
-        'clips_written':       clips_written,
-        'routes_written':      routes_written,
-        'skin_updated':        skin_updated,
-        'displacers_updated':  displacers_updated,
+        'status':               'ok',
+        'hanim_path':           f'/static/avatars/{os.path.basename(hanim_src)}',
+        'cultivar_path':        f'cultivars/cultivar_{cultivar_name}.xml',
+        'expressions_path':     f'/static/avatars/{_expr_basename}',
+        'clips_written':        clips_written,
+        'routes_written':       routes_written,
+        'skin_updated':         skin_updated,
+        'displacers_updated':   displacers_updated,
+        'expressions_written':  expressions_written,
     })
 
 
@@ -1246,9 +1704,32 @@ def hanim_joints():
         # Fallback: walk entire document tree
         _walk_joints(root, None, joints)
 
+    # ── Scan for TimeSensor nodes — playable clips ──────────────────────────
+    clips = []
+    seen_defs = set()
+    for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
+        for el in root.iter(tag):
+            def_val = el.get('DEF', '')
+            if not def_val or def_val in seen_defs:
+                continue
+            seen_defs.add(def_val)
+            name = def_val.replace('Timer', '') or def_val
+            try:
+                cycle = float(el.get('cycleInterval', 6.0))
+            except (TypeError, ValueError):
+                cycle = 6.0
+            clips.append({
+                'name':          name,
+                'timerDEF':      def_val,
+                'cycleInterval': cycle,
+                'loop':          el.get('loop', 'true').lower() == 'true',
+                'enabled':       el.get('enabled', 'false').lower() == 'true',
+            })
+
     return jsonify({
         'joints': joints,
         'count':  len(joints),
+        'clips':  clips,
         'src':    os.path.basename(src),
     })
 

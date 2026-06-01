@@ -871,6 +871,19 @@
   }
   .he-clip-btn:hover { border-color: var(--accent3); color: var(--text); }
   .he-clip-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .he-pb-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 8px;
+    border-radius: var(--radius);
+    font-size: 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+  }
+  .he-pb-btn:hover { border-color: var(--accent3); color: var(--text); }
+  .he-pb-btn.playing { border-color: var(--accent); color: var(--accent); background: rgba(74,240,168,0.07); }
   .he-clip-props {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -981,12 +994,6 @@
     color: var(--text);
     width: 32px;
     text-align: right;
-  }
-  .he-preset-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
-    margin-bottom: 10px;
   }
   .he-preset-btn {
     background: var(--surface2);
@@ -1531,6 +1538,15 @@
                 </div>
               </div>
 
+              <!-- Playback clips — from X3D TimeSensors -->
+              <div class="he-clip-panel" id="he-playback-panel" style="display:none">
+                <div class="he-sec-label" style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+                  playback
+                  <button class="he-clip-btn" onclick="heStopAllClips()" style="font-size:9px;padding:1px 6px;">■ stop all</button>
+                </div>
+                <div id="he-playback-btns" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+              </div>
+
               <!-- Clip management -->
               <div class="he-clip-panel">
                 <div class="he-sec-label" style="margin-bottom:6px">clip</div>
@@ -1607,13 +1623,21 @@
 
         <div class="he-section">
           <div class="he-sec-label" style="display:flex;align-items:center;justify-content:space-between;">
-            ekman presets
+            load expression
             <button class="he-preset-btn" onclick="heResetAllAus()"
                     style="font-size:9px;padding:2px 8px;letter-spacing:0.08em;border-color:#f64;color:#f64;">
               reset all
             </button>
           </div>
-          <div class="he-preset-grid" id="he-preset-grid"></div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="he-expr-load-select" class="input"
+                    style="flex:1;font-family:var(--mono);font-size:11px;">
+              <option value="">— no expressions saved —</option>
+            </select>
+            <button class="btn" onclick="heLoadSelectedExpression()">load</button>
+          </div>
+          <div id="he-expr-load-status"
+               style="margin-top:4px;font-size:10px;color:var(--muted);min-height:14px;"></div>
         </div>
 
         <div class="he-section">
@@ -2170,6 +2194,22 @@ function loadForm(c) {
   // H-Anim
   _hanimPath = c.hanim_src  || '';
   _hanimLoa  = c.hanim_loa  || 4;
+
+  // Load clips from cultivar into pose tab
+  if (c.behavior_clips && c.behavior_clips.length) {
+    _heClips = c.behavior_clips.map(function(cl) {
+      return _heNewClipObj(
+        cl.name     || 'Default',
+        cl.cycleInterval || 6.0,
+        cl.loop !== false,
+        cl.priority || 0
+      );
+    });
+    _heClipIdx = 0;
+  } else {
+    _heClips   = [];
+    _heClipIdx = 0;
+  }
   const hd   = document.getElementById('hanim-file-display');
   const emptyEl = document.getElementById('hanim-empty-msg');
   if (_hanimPath) {
@@ -2416,17 +2456,6 @@ var _he_aus = [
   ['JinChinRaiser',       'AU17'],
 ];
 
-// Ekman presets (AU name → weight)
-var _he_presets = {
-  'Neutral':   {},
-  'Happy':     {'JinLipCornerPuller':0.8,'JinCheekRaiser':0.6,'JinLidTightener':0.3},
-  'Sad':       {'JinBrowLowerer':0.5,'JinInnerBrowRaiser':0.6,'JinLipCornerDepressor':0.7},
-  'Angry':     {'JinBrowLowerer':0.9,'JinLidTightener':0.6,'JinNoseWrinkler':0.4},
-  'Fearful':   {'JinInnerBrowRaiser':0.8,'JinOuterBrowRaiser':0.5,'JinEyesClosed':0.1,'JinLipsPart':0.4},
-  'Disgusted': {'JinNoseWrinkler':0.7,'JinLipCornerDepressor':0.5,'JinCheekRaiser':0.3},
-  'Surprised': {'JinInnerBrowRaiser':0.9,'JinOuterBrowRaiser':0.9,'JinJawDrop':0.5}
-};
-
 // ── Open / Close ──────────────────────────────────────────────────────────
 function openHAnimEditor() {
   if (!_hanimPath) { toast('Load an H-Anim figure first', true); return; }
@@ -2434,12 +2463,13 @@ function openHAnimEditor() {
   _heSkinUrl     = _hanimPath;
   _heSkinPending = '';
   _heDirty       = false;
+  _heExpressions = [];   // reset — reloaded from disk below
 
   // Populate header labels
   document.getElementById('he-cname').textContent = _selectedName || '—';
   document.getElementById('he-src').textContent   = _hanimPath;
   document.getElementById('he-loa').textContent   = String(_hanimLoa || 4);
-  document.getElementById('he-skin-url').value    = _hanimPath;
+  document.getElementById('he-skin-url').value    = '';
   document.getElementById('he-atlas-name').textContent =
     _hanimPath.split('/').pop() || _hanimPath;
 
@@ -2465,7 +2495,9 @@ function openHAnimEditor() {
 
   // Build AU list if not already built
   _heBuildAuList();
-  _heBuildPresetGrid();
+
+  // Fetch expressions XML for this avatar and populate dropdown
+  _heLoadExpressionsFromXml(_hanimPath);
 
   heSetStatus('loaded · ' + _hanimPath);
   document.getElementById('he-overlay').classList.add('open');
@@ -2489,11 +2521,11 @@ function heShowTab(t) {
 
 // ── Viewport toolbar ──────────────────────────────────────────────────────
 function heVpPlay() {
-  var frame = document.getElementById('he-xite-frame');
-  // Reload with a clip param when Phase 2 adds clip management;
-  // for Phase 1, just refresh the preview
-  frame.src = frame.src;
-  toast('Preview refreshed');
+  var clip = hePoseCurrentClip();
+  if (!clip) { toast('No clip selected', true); return; }
+  hePoseSendSAI({ type: 'enableTimer', timerDEF: clip.timerDEF });
+  heSetStatus('▶ ' + clip.name);
+  toast('▶ ' + clip.name + ' · ' + clip.cycleInterval + 's');
 }
 function heVpUvToggle() {
   var btn = document.getElementById('he-btn-uv');
@@ -2575,13 +2607,17 @@ function heProcessSkinFile(file) {
 }
 
 function heSkinUrlChanged() {
-  _heSkinPending = document.getElementById('he-skin-url').value;
+  var val = document.getElementById('he-skin-url').value;
+  // Don't treat X3D files as skin URLs
+  if (val && val.match(/\.x3d$/i)) return;
+  _heSkinPending = val;
   heMarkDirty('skin url changed');
 }
 
 function heApplySkinUrl() {
   var url = document.getElementById('he-skin-url').value.trim();
   if (!url) return;
+  if (url.match(/\.x3d$/i)) { toast('Skin must be an image file, not an X3D file', true); return; }
   _heSkinPending = url;
   // Reload X_ITE with new texture param (server must support ?skin= override)
   var frame = document.getElementById('he-xite-frame');
@@ -2592,7 +2628,7 @@ function heApplySkinUrl() {
 
 function heResetSkin() {
   _heSkinPending = '';
-  document.getElementById('he-skin-url').value = _hanimPath;
+  document.getElementById('he-skin-url').value = '';
   heDrawAtlasCanvas(_hanimPath);
   document.getElementById('he-atlas-name').textContent = _hanimPath.split('/').pop();
   var frame = document.getElementById('he-xite-frame');
@@ -2678,16 +2714,101 @@ function _heBuildAuList() {
   });
 }
 
-function _heBuildPresetGrid() {
-  var grid = document.getElementById('he-preset-grid');
-  if (grid.children.length) return;
-  Object.keys(_he_presets).forEach(function(name) {
-    var btn = document.createElement('button');
-    btn.className = 'he-preset-btn';
-    btn.textContent = name;
-    btn.onclick = function() { heApplyPreset(name, btn); };
-    grid.appendChild(btn);
+// ── Load expressions from avatar's XML file ───────────────────────────────
+// Derives URL from hanim path: 'avatars/cindy_hanim.x3d' → '/static/avatars/cindy_expressions.xml'
+// Populates _heExpressions and refreshes the dropdown.
+// Called each time openHAnimEditor() runs so the dropdown reflects disk state.
+function _heLoadExpressionsFromXml(hanimPath) {
+  var basename = hanimPath.split('/').pop();
+  var stem = basename.replace(/_hanim\.x3d$/i, '')
+                     .replace(/\.x3d$/i, '')
+                     .toLowerCase();
+  var url = '/static/avatars/' + stem + '_expressions.xml';
+
+  fetch(url)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(function(text) {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(text, 'application/xml');
+      var exprs = doc.querySelectorAll('Expression');
+      // Merge XML expressions into _heExpressions — XML is source of truth
+      // but don't overwrite any in-memory entries not yet exported
+      exprs.forEach(function(el) {
+        var name = el.getAttribute('name');
+        if (!name) return;
+        var weights = {};
+        el.querySelectorAll('Weight').forEach(function(w) {
+          var au  = w.getAttribute('au');
+          var val = parseFloat(w.getAttribute('value'));
+          if (au && !isNaN(val)) weights[au] = val;
+        });
+        _heExpressions.push({ name: name, weights: weights });
+      });
+      _heRefreshExprDropdown();
+      heSetStatus('expressions loaded · ' + _heExpressions.length + ' found · ' + stem);
+    })
+    .catch(function() {
+      // No expressions file yet — keep whatever is in memory, show dropdown as-is
+      _heRefreshExprDropdown();
+      heSetStatus('no expressions file found for ' + stem);
+    });
+}
+
+// ── Expression dropdown — populated from _heExpressions (loaded from XML) ─
+function _heRefreshExprDropdown() {
+  var sel = document.getElementById('he-expr-load-select');
+  if (!sel) return;
+  var prev = sel.value;
+  sel.innerHTML = '';
+  if (!_heExpressions.length) {
+    var opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '— no expressions saved —';
+    sel.appendChild(opt);
+    document.getElementById('he-expr-load-status').textContent = '';
+    return;
+  }
+  _heExpressions.forEach(function(e) {
+    var opt = document.createElement('option');
+    opt.value = e.name;
+    opt.textContent = e.name;
+    sel.appendChild(opt);
   });
+  // Restore previous selection if still present
+  if (prev && Array.from(sel.options).some(function(o){ return o.value === prev; })) {
+    sel.value = prev;
+  }
+}
+
+function heLoadSelectedExpression() {
+  var sel = document.getElementById('he-expr-load-select');
+  var name = sel ? sel.value : '';
+  if (!name) { toast('No expression selected', true); return; }
+  var expr = _heExpressions.find(function(e){ return e.name === name; });
+  if (!expr) { toast('Expression not found: ' + name, true); return; }
+  // Apply weights to sliders and send to morph driver
+  _he_aus.forEach(function(au) {
+    var auName = au[0];
+    var v = expr.weights[auName] !== undefined ? expr.weights[auName] : 0;
+    _heAuWeights[auName] = v;
+    var sl = document.querySelector('.he-au-slider[data-au="'+auName+'"]');
+    if (sl) sl.value = Math.round(v * 100);
+    var vl = document.getElementById('he-au-val-' + auName);
+    if (vl) vl.textContent = v.toFixed(2);
+    hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: v });
+  });
+  // Show active AUs in status line
+  var active = Object.entries(expr.weights)
+    .filter(function(kv){ return kv[1] > 0.05; })
+    .map(function(kv){ return kv[0].replace('Jin','') + ':' + kv[1].toFixed(1); })
+    .join(' · ');
+  document.getElementById('he-expr-load-status').textContent =
+    active || 'all 0';
+  heMarkDirty('loaded: ' + name);
+  heSetStatus('expression loaded · ' + name);
 }
 
 function heAuChanged(slider) {
@@ -2700,31 +2821,8 @@ function heAuChanged(slider) {
   hePoseSendSAI({ type: 'setDisplacerWeight', au: au, weight: val });
 }
 
-function heApplyPreset(name, btn) {
-  document.querySelectorAll('.he-preset-btn').forEach(function(b){
-    b.classList.remove('on');
-  });
-  btn.classList.add('on');
-  var preset = _he_presets[name] || {};
-  _he_aus.forEach(function(au) {
-    var auName = au[0];
-    var v = preset[auName] || 0;
-    _heAuWeights[auName] = v;
-    var sl = document.querySelector('.he-au-slider[data-au="'+auName+'"]');
-    if (sl) sl.value = Math.round(v * 100);
-    var vl = document.getElementById('he-au-val-' + auName);
-    if (vl) vl.textContent = v.toFixed(2);
-    // SAI: send each weight to live preview
-    hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: v });
-  });
-  heMarkDirty('preset: ' + name);
-}
-
 function heResetAllAus() {
   // Zero all AU sliders, weights, and send reset to morph driver
-  document.querySelectorAll('.he-preset-btn').forEach(function(b){
-    b.classList.remove('on');
-  });
   _he_aus.forEach(function(au) {
     var auName = au[0];
     _heAuWeights[auName] = 0;
@@ -2734,6 +2832,8 @@ function heResetAllAus() {
     if (vl) vl.textContent = '0.00';
     hePoseSendSAI({ type: 'setDisplacerWeight', au: auName, weight: 0 });
   });
+  var statusEl = document.getElementById('he-expr-load-status');
+  if (statusEl) statusEl.textContent = '';
   heSetStatus('face reset to neutral');
 }
 
@@ -2744,8 +2844,12 @@ function heSaveExpression() {
   _heExpressions = _heExpressions.filter(function(e){ return e.name !== name; });
   _heExpressions.push({ name: name, weights: weights });
   _heRenderExprList();
-  toast('Expression saved: ' + name);
-  heMarkDirty('expression saved');
+  _heRefreshExprDropdown();
+  // Select the just-saved expression in the dropdown
+  var sel = document.getElementById('he-expr-load-select');
+  if (sel) sel.value = name;
+  toast('Expression saved: ' + name + ' — export to persist');
+  heSetStatus('expression saved · ' + name + ' · export to write to disk');
 }
 
 function _heRenderExprList() {
@@ -2810,7 +2914,7 @@ async function heExport() {
     var payload = {
       cultivar:    _selectedName,
       hanim_src:   _hanimPath,
-      skin_url:    _heSkinPending || _hanimPath,
+      skin_url:    _heSkinPending || null,
       receptivity: _heReceptivity,
       expressions: _heExpressions,
       au_weights:  _heAuWeights,
@@ -3032,8 +3136,8 @@ function heRegionSelect(region) {
   var badge = document.getElementById('he-coupled-badge');
   if (badge) badge.classList.add('on');
 
-  // Face and head groups → switch to face tab and show group bar
-  if (region === 'face' || region === 'head') {
+  // Face group → switch to face tab and show group bar (AU sliders + skullbase)
+  if (region === 'face') {
     heShowTab('face');
     var bar   = document.getElementById('he-face-group-bar');
     var label = document.getElementById('he-face-group-label');
@@ -3042,6 +3146,9 @@ function heRegionSelect(region) {
     toast('Group: ' + preset.label + ' — AU sliders + skullbase rotation');
     return;
   }
+
+  // Head group → stay on pose tab, select skullbase, coupled neck vertebrae follow
+  // (rotation controls live in pose tab, not face tab)
 
   // Hide face group bar when switching to non-face group
   var bar = document.getElementById('he-face-group-bar');
@@ -3122,7 +3229,11 @@ function hePoseInit() {
   }
 
   // Only load joints once per editor open
-  if (_hePoseJoints.length > 0) { hePoseRenderTree(_hePoseJoints); return; }
+  if (_hePoseJoints.length > 0) {
+    hePoseRenderTree(_hePoseJoints);
+    _heRenderPlaybackClips(_hePlaybackClips);
+    return;
+  }
 
   var src = _hanimPath;
   if (!src) { toast('No HAnim figure loaded', true); return; }
@@ -3135,7 +3246,9 @@ function hePoseInit() {
       if (d.error) { toast('Joints load failed: ' + d.error, true); return; }
       _hePoseJoints = d.joints || [];
       hePoseRenderTree(_hePoseJoints);
-      // Ensure at least one default clip exists
+      // Populate playback panel from X3D TimeSensors
+      _heRenderPlaybackClips(d.clips || []);
+      // Ensure at least one default authoring clip exists
       if (_heClips.length === 0) {
         _heClips.push(_heNewClipObj('Default', 6.0, true, 0));
         _heClipIdx = 0;
@@ -3476,6 +3589,64 @@ function hePosePlayClip() {
   toast('▶ ' + clip.name + ' — ' + clip.cycleInterval + 's');
 }
 
+// ── Playback clips — X3D TimeSensors ─────────────────────────────────────
+// These are the pre-existing animation clips baked into the X3D file.
+// Distinct from authoring clips (_heClips) which are new keyframe sequences.
+
+var _hePlaybackClips  = [];   // [{name, timerDEF, cycleInterval}]
+var _hePlayingTimer   = null; // currently active timerDEF or null
+
+function _heRenderPlaybackClips(clips) {
+  _hePlaybackClips = clips;
+  var panel = document.getElementById('he-playback-panel');
+  var btns  = document.getElementById('he-playback-btns');
+  if (!panel || !btns) return;
+  if (!clips.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  btns.innerHTML = '';
+  clips.forEach(function(c) {
+    var btn = document.createElement('button');
+    btn.className   = 'he-pb-btn';
+    btn.textContent = c.name;
+    btn.title       = c.timerDEF + ' · ' + c.cycleInterval + 's' + (c.loop ? ' ↺' : '');
+    btn.dataset.timer = c.timerDEF;
+    btn.onclick = function() { hePlaybackClip(c, btn); };
+    btns.appendChild(btn);
+  });
+}
+
+function hePlaybackClip(clip, btn) {
+  // Stop whatever is currently playing
+  if (_hePlayingTimer) {
+    hePoseSendSAI({ type: 'disableAllTimers' });
+    // Clear active state on all buttons
+    document.querySelectorAll('.he-pb-btn').forEach(function(b) {
+      b.classList.remove('playing');
+    });
+    // If clicking the already-playing clip, just stop
+    if (_hePlayingTimer === clip.timerDEF) {
+      _hePlayingTimer = null;
+      heSetStatus('stopped · ' + clip.name);
+      return;
+    }
+  }
+  // Start new clip
+  hePoseSendSAI({ type: 'enableTimer', timerDEF: clip.timerDEF });
+  _hePlayingTimer = clip.timerDEF;
+  btn.classList.add('playing');
+  heSetStatus('▶ ' + clip.name + ' · ' + clip.cycleInterval + 's');
+  toast('▶ ' + clip.name);
+}
+
+function heStopAllClips() {
+  hePoseSendSAI({ type: 'disableAllTimers' });
+  _hePlayingTimer = null;
+  document.querySelectorAll('.he-pb-btn').forEach(function(b) {
+    b.classList.remove('playing');
+  });
+  heSetStatus('stopped');
+}
+
 // ── Clip list management ──────────────────────────────────────────────────
 
 function hePoseRenderClipList() {
@@ -3570,7 +3741,7 @@ heExport = async function() {
     var payload = {
       cultivar:    _selectedName,
       hanim_src:   _hanimPath,
-      skin_url:    _heSkinPending || _hanimPath,
+      skin_url:    _heSkinPending || null,
       receptivity: _heReceptivity,
       expressions: _heExpressions,
       au_weights:  _heAuWeights,
