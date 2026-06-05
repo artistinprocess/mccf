@@ -360,36 +360,36 @@ def avatar_preview():
     _stem     = _stem.lower()                                # normalise
     _expressions_url = f'/static/avatars/{_stem}_expressions.xml'
 
-    html = f"""<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>H-Anim Preview</title>
   <style>
-    * {{ margin:0; padding:0; box-sizing:border-box; }}
-    html, body {{ width:100%; height:100%; background:#0a0e18; overflow:hidden; color:#ccc; font-family:monospace; }}
-    x3d-canvas {{ width:100%; height:100%; display:block; }}
-    #err {{ display:none; padding:12px; font-size:12px; color:#f06060; }}
-    #morph-overlay {{
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#0a0e18; overflow:hidden; color:#ccc; font-family:monospace; }
+    x3d-canvas { width:100%; height:100%; display:block; }
+    #err { display:none; padding:12px; font-size:12px; color:#f06060; }
+    #morph-overlay {
       position:fixed; bottom:10px; right:10px; width:260px;
       background:rgba(10,12,22,0.92); border:1px solid #2a2a44;
       border-radius:4px; padding:10px 12px; font-size:12px;
       line-height:1.6; pointer-events:none; z-index:999; color:#8899bb;
-    }}
-    #morph-overlay .mo-title {{
+    }
+    #morph-overlay .mo-title {
       font-size:10px; letter-spacing:0.12em; text-transform:uppercase;
       color:#556; margin-bottom:5px; border-bottom:1px solid #1e1e30; padding-bottom:3px;
-    }}
-    #morph-overlay .mo-coord        {{ color:#4a7; margin-bottom:2px; font-size:11px; }}
-    #morph-overlay .mo-coord.missing {{ color:#f64; }}
-    #morph-overlay .mo-au-active    {{ color:#8af; font-size:12px; }}
-    #morph-overlay .mo-au-zero      {{ color:#334; }}
-    #morph-overlay .mo-status       {{ color:#fa4; margin-top:4px; font-size:11px; }}
+    }
+    #morph-overlay .mo-coord        { color:#4a7; margin-bottom:2px; font-size:11px; }
+    #morph-overlay .mo-coord.missing { color:#f64; }
+    #morph-overlay .mo-au-active    { color:#8af; font-size:12px; }
+    #morph-overlay .mo-au-zero      { color:#334; }
+    #morph-overlay .mo-status       { color:#fa4; margin-top:4px; font-size:11px; }
   </style>
 </head>
 <body>
   <div id="err"></div>
-  <x3d-canvas id="canvas" src="{x3d_src}"></x3d-canvas>
+  <x3d-canvas id="canvas" src="__X3D_SRC__"></x3d-canvas>
   <div id="morph-overlay">
     <div class="mo-title">morph driver</div>
     <div id="mo-coords">waiting for scene...</div>
@@ -399,28 +399,29 @@ def avatar_preview():
   <script type="module">
     import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
     const canvas  = document.getElementById('canvas');
-    const EXPRESSIONS_URL = '{_expressions_url}';
+    const EXPRESSIONS_URL = '__EXPRESSIONS_URL__';
 
     let _browser = null, _scene = null;
 
     // Discovered at scene load — filled by _discoverFaceCoords()
     var _faceCoordDefs  = [];   // ['JackCoord_skull', 'JackCoord_jaw', ...]
     var _globalMode     = false; // true = Jack-style global skin mesh write
-    var _globalIndices  = {{}};   // def -> Int32Array of global vert indices (global mode)
+    var _globalIndices  = {};   // def -> Int32Array of global vert indices (global mode)
     var _skinMeshDef    = '_3';  // global skin mesh Coordinate DEF (fallback lookup)
     var _skinCoordNode  = null;  // live Coordinate node inside the rendered Shape (preferred)
 
-    var _restPose   = {{}};  // def -> Float32Array of rest-pose XYZ
-    var _auWeights  = {{}};
-    var _auData     = {{}};
+    var _restPose   = {};  // def -> Float32Array of rest-pose XYZ
+    var _auWeights  = {};
+    var _auData     = {};
     var _morphReady = false;
+    var _animTimersStopped = [];  // animation timer DEFs stopped by slider — restart on play
 
     // ── Discover face coord nodes from scene ─────────────────────────────
     // Looks for a Group DEF ending in 'FaceCoords' (e.g. JackFaceCoords,
     // CindyFaceCoords). Falls back to scanning for any Coordinate DEF
     // matching *Coord_skull pattern.
     // Sets _faceCoordDefs, _globalMode, _globalIndices.
-    function _discoverFaceCoords() {{
+    function _discoverFaceCoords() {
       var found = [];
 
       // Strategy 1: look for *FaceCoords group — Jack-style pipeline output
@@ -437,36 +438,36 @@ def avatar_preview():
       var groupDef = avatarPrefix.charAt(0).toUpperCase() +
                      avatarPrefix.slice(1) + 'FaceCoords';
       var grp = null;
-      try {{ grp = _scene.getNamedNode(groupDef); }} catch(e) {{}}
+      try { grp = _scene.getNamedNode(groupDef); } catch(e) {}
 
-      if (grp) {{
+      if (grp) {
         // Group found — read its Coordinate children by probing DEF names
         // We know the naming pattern: [AvatarName]Coord_[region]
         var regions = ['skull','jaw','l_eyebrow','r_eyebrow',
                        'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
         var pfx = avatarPrefix.charAt(0).toUpperCase() +
                   avatarPrefix.slice(1) + 'Coord_';
-        regions.forEach(function(r) {{
+        regions.forEach(function(r) {
           found.push(pfx + r);
-        }});
+        });
         console.log('Discovered coords via group', groupDef, ':', found);
-      }} else {{
+      } else {
         // Strategy 2: Cindy-style — probe CindyCoord_* directly
         var cindyRegions = ['skull','jaw','l_eyebrow','r_eyebrow',
                             'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
-        cindyRegions.forEach(function(r) {{
+        cindyRegions.forEach(function(r) {
           found.push('CindyCoord_' + r);
-        }});
+        });
         console.log('No FaceCoords group found, trying Cindy pattern');
-      }}
+      }
 
       _faceCoordDefs = found;
 
       // Detect global vs segment mode by checking globalIndices attribute
       // on the skull coord node (most reliable indicator)
       _globalMode = false;
-      found.forEach(function(def) {{
-        try {{
+      found.forEach(function(def) {
+        try {
           var node = _scene.getNamedNode(def);
           if (!node) return;
           // SAI exposes custom XML attributes via getUserData / getField.
@@ -476,75 +477,75 @@ def avatar_preview():
           // through. We use a workaround: fetch the X3D file text and
           // parse globalIndices from it client-side.
           // Flag set after _fetchGlobalIndices() completes.
-        }} catch(e) {{}}
-      }});
-    }}
+        } catch(e) {}
+      });
+    }
 
     // ── Fetch X3D and parse globalIndices for each face coord node ───────
     // This runs once after scene load for global-mode avatars.
     // Populates _globalIndices[def] = Int32Array and sets _globalMode.
-    function _fetchGlobalIndices(x3dUrl, callback) {{
+    function _fetchGlobalIndices(x3dUrl, callback) {
       fetch(x3dUrl)
-        .then(function(r) {{ return r.text(); }})
-        .then(function(text) {{
+        .then(function(r) { return r.text(); })
+        .then(function(text) {
           var parser = new DOMParser();
           var doc = parser.parseFromString(text, 'application/xml');
           var hasGlobal = false;
-          _faceCoordDefs.forEach(function(def) {{
+          _faceCoordDefs.forEach(function(def) {
             var el = doc.querySelector('Coordinate[DEF="' + def + '"]');
             if (!el) return;
             var gi = el.getAttribute('globalIndices');
             if (!gi) return;
-            if (gi === 'local') {{
+            if (gi === 'local') {
               // eyeball: local coords, write directly to named node
               _globalIndices[def] = 'local';
               hasGlobal = true;
-            }} else {{
+            } else {
               var arr = gi.trim().split(/[,\\s]+/).map(Number)
-                          .filter(function(n){{return !isNaN(n);}});
-              if (arr.length > 0) {{
+                          .filter(function(n){return !isNaN(n);});
+              if (arr.length > 0) {
                 _globalIndices[def] = new Int32Array(arr);
                 hasGlobal = true;
-              }}
-            }}
-          }});
+              }
+            }
+          });
           _globalMode = hasGlobal;
           console.log('Global mode:', _globalMode,
                       '— mapped regions:', Object.keys(_globalIndices).length);
           callback();
-        }})
-        .catch(function(e) {{
+        })
+        .catch(function(e) {
           console.warn('globalIndices fetch failed, assuming segment mode:', e);
           _globalMode = false;
           callback();
-        }});
-    }}
+        });
+    }
 
     // ── Cache rest poses for all discovered face coord nodes ─────────────
-    function _cacheRestPoses() {{
+    function _cacheRestPoses() {
       var lines = [], allOk = true;
-      _faceCoordDefs.forEach(function(def) {{
-        try {{
+      _faceCoordDefs.forEach(function(def) {
+        try {
           var node = _scene.getNamedNode(def);
           if (!node) throw new Error('null');
           var pts = node.point;
           var flat = new Float32Array(pts.length * 3);
-          for (var i = 0; i < pts.length; i++) {{
+          for (var i = 0; i < pts.length; i++) {
             flat[i*3]   = pts[i].x;
             flat[i*3+1] = pts[i].y;
             flat[i*3+2] = pts[i].z;
-          }}
+          }
           _restPose[def] = flat;
           // Strip prefix for display: JackCoord_skull -> skull
           var label = def.replace(/^[A-Za-z]+Coord_/, '');
           lines.push('<div class="mo-coord">' + label + ': ' +
                      pts.length + 'v &#10003;</div>');
-        }} catch(e) {{
+        } catch(e) {
           var label = def.replace(/^[A-Za-z]+Coord_/, '');
           lines.push('<div class="mo-coord missing">' + label + ': MISSING</div>');
           allOk = false;
-        }}
-      }});
+        }
+      });
 
       // Also cache global skin mesh rest pose if in global mode.
       // IMPORTANT: the rendered IndexedTriangleSet holds a USE copy of _3,
@@ -553,94 +554,94 @@ def avatar_preview():
       // Shape (containerField='skin') to get the live coord node.
       // Strategy: scan HAnimHumanoid skin shapes for containerField='skin',
       // get the first IndexedTriangleSet's coord field. Fall back to DEF '_3'.
-      if (_globalMode) {{
-        try {{
+      if (_globalMode) {
+        try {
           var skinCoord = null;
 
           // Walk scene root nodes looking for HAnimHumanoid
           var roots = _scene.rootNodes;
-          outer: for (var ri = 0; ri < roots.length; ri++) {{
+          outer: for (var ri = 0; ri < roots.length; ri++) {
             var root = roots[ri];
             // HAnimHumanoid may be nested inside a Group
             var candidates = [root];
-            if (root.getNodeTypeName && root.getNodeTypeName() !== 'HAnimHumanoid') {{
+            if (root.getNodeTypeName && root.getNodeTypeName() !== 'HAnimHumanoid') {
               // Try children
-              try {{
+              try {
                 var fc = root.children;
                 if (fc) for (var ci = 0; ci < fc.length; ci++) candidates.push(fc[ci]);
-              }} catch(e) {{}}
-            }}
-            for (var ci = 0; ci < candidates.length; ci++) {{
+              } catch(e) {}
+            }
+            for (var ci = 0; ci < candidates.length; ci++) {
               var node = candidates[ci];
               if (!node || !node.getNodeTypeName) continue;
-              if (node.getNodeTypeName() === 'HAnimHumanoid') {{
+              if (node.getNodeTypeName() === 'HAnimHumanoid') {
                 // skin field holds the rendered Shape(s)
-                try {{
+                try {
                   var skinShapes = node.skin;
-                  if (skinShapes && skinShapes.length > 0) {{
-                    for (var si = 0; si < skinShapes.length; si++) {{
+                  if (skinShapes && skinShapes.length > 0) {
+                    for (var si = 0; si < skinShapes.length; si++) {
                       var shape = skinShapes[si];
                       if (!shape) continue;
                       var geom = shape.geometry;
                       if (!geom) continue;
                       var coord = geom.coord;
-                      if (coord && coord.point && coord.point.length > 0) {{
+                      if (coord && coord.point && coord.point.length > 0) {
                         skinCoord = coord;
                         break outer;
-                      }}
-                    }}
-                  }}
-                }} catch(e) {{
+                      }
+                    }
+                  }
+                } catch(e) {
                   console.warn('skin field traversal failed:', e.message);
-                }}
+                }
                 break outer;
-              }}
-            }}
-          }}
+              }
+            }
+          }
 
           // Fallback: getNamedNode by DEF
-          if (!skinCoord) {{
+          if (!skinCoord) {
             skinCoord = _scene.getNamedNode(_skinMeshDef);
             console.log('Skin coord: using DEF fallback (_3)');
-          }} else {{
+          } else {
             console.log('Skin coord: found via HAnimHumanoid.skin field');
-          }}
+          }
 
-          if (skinCoord) {{
+          if (skinCoord) {
             _skinCoordNode = skinCoord;
             var pts = skinCoord.point;
             var flat = new Float32Array(pts.length * 3);
-            for (var i = 0; i < pts.length; i++) {{
+            for (var i = 0; i < pts.length; i++) {
               flat[i*3]   = pts[i].x;
               flat[i*3+1] = pts[i].y;
               flat[i*3+2] = pts[i].z;
-            }}
+            }
             _restPose[_skinMeshDef] = flat;
             console.log('Global skin mesh cached:', pts.length, 'verts');
-          }} else {{
+          } else {
             console.warn('Could not find skin coord node');
-          }}
-        }} catch(e) {{
+          }
+        } catch(e) {
           console.warn('Could not cache global skin mesh:', e.message);
-        }}
-      }}
+        }
+      }
 
       document.getElementById('mo-coords').innerHTML = lines.join('');
       return allOk;
-    }}
+    }
 
     // ── Load AU data from expressions XML ────────────────────────────────
-    function _loadAuData() {{
+    function _loadAuData() {
       fetch(EXPRESSIONS_URL)
-        .then(function(r) {{ return r.text(); }})
-        .then(function(xml) {{
+        .then(function(r) { return r.text(); })
+        .then(function(xml) {
           var parser = new DOMParser();
           var doc = parser.parseFromString(xml, 'application/xml');
-          var result = {{}};
-          doc.querySelectorAll('AU').forEach(function(au) {{
+          var result = {};
+          doc.querySelectorAll('AU').forEach(function(au) {
             var auName = au.getAttribute('name');
-            result[auName] = {{}};
-            au.querySelectorAll('Displacement').forEach(function(d) {{
+            result[auName] = {};
+            au.querySelectorAll('Displacement').forEach(function(d) {
               var coord   = d.getAttribute('coord');
               var indices = d.getAttribute('coordIndex').trim()
                              .split(/\\s+/).map(Number);
@@ -649,104 +650,104 @@ def avatar_preview():
               var deltas  = [];
               for (var i = 0; i < vecs.length; i += 3)
                 deltas.push([vecs[i], vecs[i+1], vecs[i+2]]);
-              result[auName][coord] = {{indices: indices, deltas: deltas}};
-            }});
-          }});
+              result[auName][coord] = {indices: indices, deltas: deltas};
+            });
+          });
           _auData = result;
           document.getElementById('mo-status').textContent =
             'AU data loaded (' + Object.keys(result).length + ' AUs)';
           console.log('AU data loaded:', Object.keys(result).length, 'AUs');
-        }})
-        .catch(function(e) {{
+        })
+        .catch(function(e) {
           console.warn('AU data fetch failed:', e);
           document.getElementById('mo-status').textContent = 'AU data: fetch failed';
-        }});
-    }}
+        });
+    }
 
     // ── Apply morph: SEGMENT mode (Cindy) ────────────────────────────────
     // Write displacement directly to each named coord node.
-    function _applyMorphSegment() {{
-      var modified = {{}};
-      _faceCoordDefs.forEach(function(def) {{
+    function _applyMorphSegment() {
+      var modified = {};
+      _faceCoordDefs.forEach(function(def) {
         if (_restPose[def]) modified[def] = new Float32Array(_restPose[def]);
-      }});
-      Object.keys(_auWeights).forEach(function(au) {{
+      });
+      Object.keys(_auWeights).forEach(function(au) {
         var w = _auWeights[au]; if (!w || w <= 0) return;
         var auDef = _auData[au]; if (!auDef) return;
-        Object.keys(auDef).forEach(function(cd) {{
+        Object.keys(auDef).forEach(function(cd) {
           var e = auDef[cd];
           if (!e || !e.indices || !modified[cd]) return;
-          e.indices.forEach(function(vi, k) {{
+          e.indices.forEach(function(vi, k) {
             var d = e.deltas[k];
             modified[cd][vi*3]   += d[0] * w;
             modified[cd][vi*3+1] += d[1] * w;
             modified[cd][vi*3+2] += d[2] * w;
-          }});
-        }});
-      }});
+          });
+        });
+      });
       var written = 0;
-      Object.keys(modified).forEach(function(def) {{
-        try {{
+      Object.keys(modified).forEach(function(def) {
+        try {
           var node = _scene.getNamedNode(def); if (!node) return;
           var flat = modified[def], verts = [];
           for (var i = 0; i < flat.length / 3; i++)
             verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
           node.point = new X3D.MFVec3f(...verts);
           written++;
-        }} catch(ee) {{ console.warn('morph write failed', def, ee.message); }}
-      }});
+        } catch(ee) { console.warn('morph write failed', def, ee.message); }
+      });
       return written;
-    }}
+    }
 
     // ── Apply morph: GLOBAL mode (Jack) ──────────────────────────────────
     // Accumulate displacements into global skin mesh (_3), write it back.
     // Local-coord nodes (eyeballs) written directly as in segment mode.
-    function _applyMorphGlobal() {{
+    function _applyMorphGlobal() {
       if (!_restPose[_skinMeshDef]) return 0;
 
       // Working copy of global skin mesh
       var globalFlat = new Float32Array(_restPose[_skinMeshDef]);
 
       // Local-coord nodes (eyeballs): separate working copies
-      var localModified = {{}};
-      _faceCoordDefs.forEach(function(def) {{
+      var localModified = {};
+      _faceCoordDefs.forEach(function(def) {
         if (_globalIndices[def] === 'local' && _restPose[def])
           localModified[def] = new Float32Array(_restPose[def]);
-      }});
+      });
 
       // Accumulate all AU displacements
-      Object.keys(_auWeights).forEach(function(au) {{
+      Object.keys(_auWeights).forEach(function(au) {
         var w = _auWeights[au]; if (!w || w <= 0) return;
         var auDef = _auData[au]; if (!auDef) return;
 
-        Object.keys(auDef).forEach(function(coordName) {{
+        Object.keys(auDef).forEach(function(coordName) {
           var e = auDef[coordName];
           if (!e || !e.indices) return;
 
           var gi = _globalIndices[coordName];
 
-          if (gi === 'local') {{
+          if (gi === 'local') {
             // Eyeball: write to local coord node
             if (!localModified[coordName]) return;
-            e.indices.forEach(function(vi, k) {{
+            e.indices.forEach(function(vi, k) {
               var d = e.deltas[k];
               localModified[coordName][vi*3]   += d[0] * w;
               localModified[coordName][vi*3+1] += d[1] * w;
               localModified[coordName][vi*3+2] += d[2] * w;
-            }});
-          }} else if (gi && gi.length) {{
+            });
+          } else if (gi && gi.length) {
             // Global region: map local index -> global index, write into globalFlat
-            e.indices.forEach(function(localVi, k) {{
+            e.indices.forEach(function(localVi, k) {
               var globalVi = gi[localVi];
               if (globalVi === undefined) return;
               var d = e.deltas[k];
               globalFlat[globalVi*3]   += d[0] * w;
               globalFlat[globalVi*3+1] += d[1] * w;
               globalFlat[globalVi*3+2] += d[2] * w;
-            }});
-          }}
-        }});
-      }});
+            });
+          }
+        });
+      });
 
       // Write global skin mesh.
       // Use _skinCoordNode (the live node inside the rendered Shape) if available.
@@ -755,63 +756,63 @@ def avatar_preview():
       // will cause a visual update. _skinCoordNode was resolved at cache time
       // by navigating via HAnimHumanoid.skin rather than by DEF name.
       var written = 0;
-      try {{
+      try {
         var skinNode = _skinCoordNode || _scene.getNamedNode(_skinMeshDef);
-        if (skinNode) {{
+        if (skinNode) {
           var verts = [];
           for (var i = 0; i < globalFlat.length / 3; i++)
             verts.push(new X3D.SFVec3f(globalFlat[i*3], globalFlat[i*3+1], globalFlat[i*3+2]));
           skinNode.point = new X3D.MFVec3f(...verts);
           written++;
-        }}
-      }} catch(ee) {{ console.warn('global skin write failed:', ee.message); }}
+        }
+      } catch(ee) { console.warn('global skin write failed:', ee.message); }
 
       // Write local coord nodes (eyeballs)
-      Object.keys(localModified).forEach(function(def) {{
-        try {{
+      Object.keys(localModified).forEach(function(def) {
+        try {
           var node = _scene.getNamedNode(def); if (!node) return;
           var flat = localModified[def], verts = [];
           for (var i = 0; i < flat.length / 3; i++)
             verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
           node.point = new X3D.MFVec3f(...verts);
           written++;
-        }} catch(ee) {{ console.warn('local eyeball write failed', def, ee.message); }}
-      }});
+        } catch(ee) { console.warn('local eyeball write failed', def, ee.message); }
+      });
 
       return written;
-    }}
+    }
 
     // ── Dispatch to correct morph mode ────────────────────────────────────
-    function _applyMorph() {{
+    function _applyMorph() {
       if (!_morphReady) return;
       var written = _globalMode ? _applyMorphGlobal() : _applyMorphSegment();
       _updateOverlayAus();
       var modeLabel = _globalMode ? 'global' : 'segment';
       document.getElementById('mo-status').textContent =
         written + ' node(s) written [' + modeLabel + ']';
-    }}
+    }
 
-    function _updateOverlayAus() {{
+    function _updateOverlayAus() {
       var el = document.getElementById('mo-aus');
       var active = Object.entries(_auWeights)
-        .filter(function(kv) {{ return kv[1] > 0.01; }})
-        .sort(function(a, b) {{ return b[1] - a[1]; }});
-      if (!active.length) {{
+        .filter(function(kv) { return kv[1] > 0.01; })
+        .sort(function(a, b) { return b[1] - a[1]; });
+      if (!active.length) {
         el.innerHTML = '<div class="mo-au-zero">— no active AUs —</div>';
         return;
-      }}
-      el.innerHTML = active.map(function(kv) {{
+      }
+      el.innerHTML = active.map(function(kv) {
         var b = Math.round(kv[1] * 10);
         return '<div class="mo-au-active">' + kv[0].replace('Jin','') +
                ' ' + '█'.repeat(b) + '░'.repeat(10-b) +
                ' ' + kv[1].toFixed(2) + '</div>';
-      }}).join('');
-    }}
+      }).join('');
+    }
 
     // ── Scene load ────────────────────────────────────────────────────────
-    canvas.addEventListener('load', function() {{
+    canvas.addEventListener('load', function() {
       document.getElementById('err').style.display = 'none';
-      try {{
+      try {
         _browser = X3D.getBrowser(canvas);
         _scene   = _browser.currentScene;
         console.log('SAI ready — scene nodes:', _scene.rootNodes.length);
@@ -819,60 +820,159 @@ def avatar_preview():
         _discoverFaceCoords();
 
         // Fetch X3D to read globalIndices, then complete init
-        _fetchGlobalIndices('{x3d_src}', function() {{
+        _fetchGlobalIndices('__X3D_SRC__', function() {
           var allOk = _cacheRestPoses();
           _loadAuData();
           _morphReady = true;
           var modeLabel = _globalMode ? ' [global mesh]' : ' [segment]';
           document.getElementById('mo-status').textContent =
             (allOk ? 'morph driver ready' : 'some coords missing') + modeLabel;
-        }});
+        });
 
-      }} catch(e) {{
+      } catch(e) {
         console.warn('SAI init failed:', e.message);
         document.getElementById('mo-status').textContent = 'SAI init failed: ' + e.message;
-      }}
-    }});
+      }
+    });
 
-    canvas.addEventListener('error', function(e) {{
+    canvas.addEventListener('error', function(e) {
       var el = document.getElementById('err');
       el.style.display = 'block';
       el.textContent = 'X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e));
-    }});
+    });
 
     // ── postMessage interface (unchanged) ─────────────────────────────────
-    window.addEventListener('message', function(evt) {{
+    window.addEventListener('message', function(evt) {
       if (!_browser || !_scene) return;
       var msg = evt.data; if (!msg || !msg.type) return;
-      try {{
-        if (msg.type === 'setJointRotation') {{
-          var node = _scene.getNamedNode(msg.joint);
-          if (!node) {{ console.warn('SAI: joint not found:', msg.joint); return; }}
+      try {
+        if (msg.type === 'setJointRotation') {
           var r = msg.rotation || [0,0,1,0];
-          node.rotation = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
+          var sfr = new X3D.SFRotation(r[0], r[1], r[2], r[3]);
 
-        }} else if (msg.type === 'setDisplacerWeight') {{
+          // Sanitise joint DEF for WireInterp lookup — DEF names cannot contain
+          // colons (Mixamo: 'mixamorig:Hips' -> 'mixamorig_Hips') or hyphens.
+          var safeDef = msg.joint.replace(/:/g, '_').replace(/-/g, '_');
+
+          // Strategy 1: drive through WireInterp_<jointDEF> if it exists.
+          var interpDef = 'WireInterp_' + safeDef;
+          var interp = null;
+          try { interp = _scene.getNamedNode(interpDef); } catch(e) {}
+          if (interp) {
+            // Stop animation timers only if needed — they fight WireInterp writes.
+            // For Mixamo avatars Timer1 runs continuously and overwrites poses.
+            // For Cindy-style avatars the animation timers are already disabled
+            // during pose mode so we only stop what's actually running.
+            ['Timer1','DefaultTimer','WalkTimer','RunTimer','JumpTimer',
+             'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {
+              try {
+                var t = _scene.getNamedNode(def);
+                if (t && t.enabled) {
+                  t.enabled = false;
+                  if (_animTimersStopped.indexOf(def) === -1) _animTimersStopped.push(def);
+                }
+              } catch(e) {}
+            });
+            var kv = new X3D.MFRotation(sfr, sfr);
+            interp.keyValue = kv;
+            var timerDef = 'WireTimer_' + safeDef;
+            var wireTimer = null;
+            try { wireTimer = _scene.getNamedNode(timerDef); } catch(e) {}
+            if (wireTimer) {
+              wireTimer.enabled = false;
+              try {
+                var fracField = interp.getField('set_fraction');
+                if (fracField) fracField.setValue(0);
+              } catch(e) {}
+            }
+          } else {
+            // Strategy 2: direct rotation write
+            var node = _scene.getNamedNode(msg.joint);
+            if (!node) { console.warn('SAI: joint not found:', msg.joint); return; }
+            node.rotation = sfr;
+          }
+
+        } else if (msg.type === 'getJointRotation') {
+          // Round-trip: read live rotation from scene, post back to editor.
+          var jointNode = null;
+          try { jointNode = _scene.getNamedNode(msg.joint); } catch(e) {}
+          var rot = [0, 0, 1, 0];
+          if (jointNode) {
+            try {
+              var r = jointNode.rotation;
+              rot = [r.x, r.y, r.z, r.angle];
+            } catch(e) {}
+          }
+          evt.source.postMessage({
+            type:     'jointRotation',
+            joint:    msg.joint,
+            rotation: rot
+          }, '*');
+
+        } else if (msg.type === 'setDisplacerWeight') {
           var auName = msg.au;
           var weight = typeof msg.weight === 'number' ? msg.weight : 0;
           _auWeights[auName] = weight;
           if (_morphReady) _applyMorph();
           console.log('morph:', auName, weight.toFixed(3));
 
-        }} else if (msg.type === 'enableTimer') {{
-          var timer = _scene.getNamedNode(msg.timerDEF);
-          if (timer) timer.enabled = true;
+        } else if (msg.type === 'enableTimer') {
+          // Start animation — set enabled=true only. loop/cycleInterval are
+          // already set correctly in the X3D file. No startTime manipulation
+          // needed; X_ITE restarts correctly from enabled=false -> enabled=true.
+          _animTimersStopped = [];
+          try {
+            var timer = _scene.getNamedNode(msg.timerDEF);
+            if (timer) {
+              timer.enabled = true;
+            } else {
+              console.warn('enableTimer: node not found:', msg.timerDEF);
+            }
+          } catch(e) { console.warn('enableTimer error:', e.message); }
 
-        }} else if (msg.type === 'disableAllTimers') {{
-          ['DefaultTimer','WalkTimer','RunTimer','JumpTimer',
-           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {{
-            var t = _scene.getNamedNode(def); if (t) t.enabled = false;
-          }});
-        }}
-      }} catch(e) {{ console.warn('SAI write error:', e.message, msg); }}
-    }});
+        } else if (msg.type === 'disableAllTimers') {
+          // Disable all known animation timers (stop button)
+          _animTimersStopped = [];
+          ['Timer1','DefaultTimer','WalkTimer','RunTimer','JumpTimer',
+           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {
+            try { var t = _scene.getNamedNode(def); if (t) t.enabled = false; } catch(e) {}
+          });
+
+        } else if (msg.type === 'getCoordPositions') {
+          // Read current point values from a named Coordinate node.
+          // Used by face AU capture to snapshot rest or posed vertex positions.
+          // Returns { type:'coordPositions', region, points:[x,y,z,...] }
+          var coordDef = msg.coordDef;  // e.g. 'JackCoord_skull'
+          var region   = msg.region;    // e.g. 'skull'
+          var coordNode = null;
+          try { coordNode = _scene.getNamedNode(coordDef); } catch(e) {}
+          var pts = [];
+          if (coordNode) {
+            try {
+              var pf = coordNode.getField('point');
+              var n  = pf.length;
+              for (var i = 0; i < n; i++) {
+                var p = pf.getValue(i);
+                pts.push(p.x, p.y, p.z);
+              }
+            } catch(e) { console.warn('getCoordPositions error:', e.message); }
+          }
+          evt.source.postMessage({
+            type:   'coordPositions',
+            region: region,
+            coordDef: coordDef,
+            points: pts,
+            found:  coordNode !== null
+          }, '*');
+        }
+      } catch(e) { console.warn('SAI write error:', e.message, msg); }
+    });
   </script>
 </body>
 </html>"""
+    html = html.replace('__X3D_SRC__',          x3d_src)
+    html = html.replace('__EXPRESSIONS_URL__',  _expressions_url)
+
     return html, 200, {'Content-Type': 'text/html'}
 
 
@@ -1542,10 +1642,11 @@ _SPINE_JOINTS = {
 
 def _joint_region(name: str) -> str:
     """
-    Classify a bare H-Anim 2.0 joint name into a body region string.
+    Classify a joint name into a body region string.
+    Accepts HAnim 2.0 names (l_shoulder), Blender dot (shoulder.L),
+    Blender underscore (shoulder_L), and gltf_hyphen (shoulder-L).
+    Falls back to 'other' for IK/helper bones with no HAnim equivalent.
     """
-    if name in _SPINE_JOINTS:
-        return 'spine'
     _ARM_KW = ('shoulder','elbow','radiocarpal','ulnocarpal',
                'midcarpal','carpometacarpal','metacarpophalangeal',
                'interphalangeal','carpal','wrist')
@@ -1553,20 +1654,62 @@ def _joint_region(name: str) -> str:
                'cuneonavicular','calcaneocuboid','transversetarsal',
                'tarsometatarsal','metatarsophalangeal','tarsal',
                'ankle','subtalar')
+
+    # Try HAnim 2.0 classification first
+    if name in _SPINE_JOINTS:
+        return 'spine'
     if name.startswith('l_'):
         low = name[2:]
-        if any(k in low for k in _LEG_KW):
-            return 'left_leg'
-        if any(k in low for k in _ARM_KW):
-            return 'left_arm'
+        if any(k in low for k in _LEG_KW): return 'left_leg'
+        if any(k in low for k in _ARM_KW): return 'left_arm'
         return 'left_arm'
     if name.startswith('r_'):
         low = name[2:]
-        if any(k in low for k in _LEG_KW):
-            return 'right_leg'
-        if any(k in low for k in _ARM_KW):
-            return 'right_arm'
+        if any(k in low for k in _LEG_KW): return 'right_leg'
+        if any(k in low for k in _ARM_KW): return 'right_arm'
         return 'right_arm'
+
+    # Not HAnim — try translating via _BLENDER_TO_HANIM
+    import re as _re_region
+    # Normalise to Blender dot lowercase for lookup
+    nk = name.lower()
+    # gltf_hyphen: shoulder-L -> shoulder.l
+    nk = _re_region.sub(r'-([lr])$', lambda m: '.' + m.group(1), nk)
+    nk = _re_region.sub(r'-(\d{2,3})', r'.\1', nk)
+    nk = nk.replace('-', '_')
+    # blender_under: shoulder_L -> shoulder.l
+    nk = _re_region.sub(r'_([lr])$', lambda m: '.' + m.group(1), nk)
+
+    hanim = _BLENDER_TO_HANIM.get(nk)
+    if hanim:
+        return _joint_region(hanim)  # recurse with canonical name
+
+    # Mixamo names: mixamorig:RightArm etc.
+    if name.lower().startswith('mixamorig:'):
+        low = name[10:].lower()   # strip prefix
+        _MIXAMO_SPINE_KW = ('hips','spine','neck','head')
+        _MIXAMO_LEFT_ARM = ('leftshoulder','leftarm','leftforearm','lefthand',
+                            'lefthandthumb','lefthandindex','lefthandmiddle',
+                            'lefthandring','lefthandpinky')
+        _MIXAMO_RIGHT_ARM = ('rightshoulder','rightarm','rightforearm','righthand',
+                             'righthandthumb','righthandindex','righthandmiddle',
+                             'righthandring','righthandpinky')
+        _MIXAMO_LEFT_LEG = ('leftupleg','leftleg','leftfoot','lefttoebase')
+        _MIXAMO_RIGHT_LEG = ('rightupleg','rightleg','rightfoot','righttoebase')
+        if any(low.startswith(k) for k in _MIXAMO_SPINE_KW):   return 'spine'
+        if any(low.startswith(k) for k in _MIXAMO_LEFT_ARM):   return 'left_arm'
+        if any(low.startswith(k) for k in _MIXAMO_RIGHT_ARM):  return 'right_arm'
+        if any(low.startswith(k) for k in _MIXAMO_LEFT_LEG):   return 'left_leg'
+        if any(low.startswith(k) for k in _MIXAMO_RIGHT_LEG):  return 'right_leg'
+        return 'other'
+
+    # Spine keywords that appear in Blender names
+    _SPINE_KW = ('hips','spine','chest','upper_chest','neck','head',
+                 'breast','pelvis','torso')
+    low = name.lower()
+    if any(k in low for k in _SPINE_KW):
+        return 'spine'
+
     return 'other'
 
 
@@ -1587,53 +1730,52 @@ def _walk_joints(el, parent_name, joints: list) -> None:
     in depth-first order.
 
     el          — current XML element (any tag)
-    parent_name — bare H-Anim name of the enclosing HAnimJoint, or None
+    parent_name — DEF value of the enclosing HAnimJoint, or None
     joints      — accumulator list (mutated in place)
+
+    Returns one dict per joint:
+      name   — from the name= attribute (semantic, e.g. 'shoulder.L')
+               falls back to DEF with hanim_/HAnimJoint_/Joint_ prefix stripped
+      def    — exact DEF= attribute value (e.g. 'shoulder-L')
+               this is what WireInterp_ names are built from and what
+               _heJointMap keys on — must be preserved exactly
+      region — derived from name (Blender dot names classify correctly)
     """
     tag = el.tag.split('}')[-1]
 
     if tag != 'HAnimJoint':
-        # Non-joint wrapper (HAnimHumanoid, skeleton, Group, Transform, etc.)
-        # — descend without changing parent context
         for child in el:
             _walk_joints(child, parent_name, joints)
         return
 
-    # Skip USE references — <HAnimJoint USE="hanim_l_hip"/> is a back-reference
-    # to an already-visited DEF node.  ElementTree sees it as a real element
-    # with tag HAnimJoint but no name/DEF, only a USE attribute.
+    # Skip USE references
     if el.get('USE'):
         return
 
     def_val  = el.get('DEF', '')
     name_val = el.get('name', '')
 
-    # Derive bare H-Anim name from name attr first, then strip prefixes from DEF
-    bare_name = name_val
-    if not bare_name:
+    # name: prefer name= attr; fall back to DEF with common prefixes stripped
+    if name_val:
+        display_name = name_val
+    else:
+        display_name = def_val
         for prefix in ('hanim_', 'HAnimJoint_', 'Joint_'):
             if def_val.lower().startswith(prefix.lower()):
-                bare_name = def_val[len(prefix):]
+                display_name = def_val[len(prefix):]
                 break
-        if not bare_name:
-            bare_name = def_val
 
     joints.append({
-        'name':   bare_name,
-        'def':    def_val,
+        'name':   display_name,          # human-readable / name= attr
+        'def':    def_val,               # exact DEF value — joint map key
         'center': _parse_center(el.get('center', '0 0 0')),
         'parent': parent_name,
-        'region': _joint_region(bare_name),
+        'region': _joint_region(display_name),
     })
 
-    # Recurse into all children unconditionally.
-    # The non-joint wrapper branch at the top of this function handles any
-    # container elements (children, Group, Transform) transparently —
-    # they are descended without changing the parent context.
-    # Do NOT filter by tag here: filtering causes double-counting because
-    # both the container element AND its HAnimJoint contents would be visited.
+    # Recurse — pass DEF as parent context so parent field is consistent
     for child in el:
-        _walk_joints(child, bare_name, joints)
+        _walk_joints(child, def_val, joints)
 
 
 @app.route('/hanim/joints', methods=['GET'])
@@ -1705,6 +1847,7 @@ def hanim_joints():
         _walk_joints(root, None, joints)
 
     # ── Scan for TimeSensor nodes — playable clips ──────────────────────────
+    # Skip WireTimer_ nodes — those are pose infrastructure, not animation clips
     clips = []
     seen_defs = set()
     for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
@@ -1712,8 +1855,19 @@ def hanim_joints():
             def_val = el.get('DEF', '')
             if not def_val or def_val in seen_defs:
                 continue
+            if def_val.startswith('WireTimer_'):
+                continue
             seen_defs.add(def_val)
-            name = def_val.replace('Timer', '') or def_val
+            # Derive a human-readable name:
+            # Use description attr if present, else strip 'Timer' suffix,
+            # else use the DEF as-is. 'Timer1' → 'mixamo clip 1'.
+            desc = el.get('description', '').strip()
+            if desc:
+                name = desc
+            else:
+                name = def_val.replace('Timer', '').strip()
+                if not name or name.isdigit():
+                    name = f'clip {name}' if name.isdigit() else def_val
             try:
                 cycle = float(el.get('cycleInterval', 6.0))
             except (TypeError, ValueError):
@@ -1726,15 +1880,1473 @@ def hanim_joints():
                 'enabled':       el.get('enabled', 'false').lower() == 'true',
             })
 
+    # ── Load joint map from cultivar if one is linked ────────────────────
+    # Scan cultivars/ for a cultivar whose HAnimFigure src matches this avatar.
+    # If found, return the JointMap so the editor can resolve group presets
+    # without knowing the avatar's native joint naming convention.
+    joint_map = {}
+    cultivars_dir = os.path.join(_hanim_base_dir(), 'cultivars')
+    avatar_basename = os.path.basename(src).lower()
+    if os.path.isdir(cultivars_dir):
+        for fname in os.listdir(cultivars_dir):
+            if not fname.endswith('.xml'):
+                continue
+            cpath = os.path.join(cultivars_dir, fname)
+            jm = _read_cultivar_joint_map(cpath)
+            if jm:
+                # Verify this cultivar's HAnimFigure points to our avatar
+                try:
+                    import xml.etree.ElementTree as _ET_jm
+                    _root_jm = _ET_jm.parse(cpath).getroot()
+                    fig = _root_jm.find('HAnimFigure')
+                    if fig is not None and \
+                       fig.get('src', '').lower() == avatar_basename:
+                        joint_map = jm
+                        break
+                except Exception:
+                    pass
+
+    # ── Apply joint_map to get HAnim display names and correct regions ─────
+    # For Mixamo avatars, DEF is 'mixamorig:RightArm' but joint_map maps it
+    # to 'r_shoulder'. Apply that so the tree shows HAnim names and the
+    # region filter buttons (L ARM, R LEG etc) work correctly.
+    if joint_map:
+        for j in joints:
+            hanim_name = joint_map.get(j['def'])
+            if hanim_name:
+                j['name']   = hanim_name
+                j['region'] = _joint_region(hanim_name)
+
     return jsonify({
-        'joints': joints,
-        'count':  len(joints),
-        'clips':  clips,
-        'src':    os.path.basename(src),
+        'joints':    joints,
+        'count':     len(joints),
+        'clips':     clips,
+        'src':       os.path.basename(src),
+        'joint_map': joint_map,
+    })
+
+
+@app.route('/hanim/wire-joints', methods=['POST'])
+def hanim_wire_joints():
+    """
+    POST /hanim/wire-joints
+    Body: { hanim_src: str }
+
+    For avatars that have HAnimJoint nodes but no animation infrastructure
+    (no OrientationInterpolators, TimeSensors, or ROUTEs), this endpoint
+    generates stub nodes for every joint so the SAI setJointRotation
+    messages from the HAnim Editor have something to drive.
+
+    Each joint gets:
+      - OrientationInterpolator DEF="WireInterp_<jointDEF>"
+          key="0 1"  keyValue="0 0 1 0  0 0 1 0"   (identity at both ends)
+      - TimeSensor DEF="WireTimer_<jointDEF>"
+          cycleInterval="1"  loop="true"  enabled="false"
+      - ROUTE TimeSensor.fraction_changed → Interp.set_fraction
+      - ROUTE Interp.value_changed        → Joint.rotation
+
+    Joints that already have a wired interpolator (detected by scanning
+    existing ROUTEs toNode → jointDEF, toField=rotation) are skipped —
+    this is safe to call on a partially-wired file.
+
+    Atomic write: .tmp file + os.replace().  .bak created first.
+
+    Returns: { status, joints_wired, joints_skipped, hanim_path }
+    """
+    body      = request.get_json(silent=True) or {}
+    hanim_src = (body.get('hanim_src') or '').strip()
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+
+    filepath = _hanim_x3d_path(hanim_src)
+    if not os.path.exists(filepath):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+
+    try:
+        xml_decl, root = _parse_x3d_file(filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D parse failed: {exc}'}), 500
+
+    ns = _X3D_NS
+
+    # Collect all joint DEFs from the tree
+    joint_defs = []
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if el.get('USE'):
+                continue
+            def_val = el.get('DEF', '').strip()
+            if def_val:
+                joint_defs.append(def_val)
+
+    if not joint_defs:
+        return jsonify({'status': 'error',
+                        'error': 'No HAnimJoint DEF nodes found in file'}), 400
+
+    # Find existing ROUTEs that already drive joint rotation — skip those joints
+    already_wired = set()
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        for el in root.iter(tag):
+            if el.get('toField', '') == 'rotation':
+                already_wired.add(el.get('toNode', ''))
+
+    scene_el = _find_scene_el(root)
+    if scene_el is None:
+        return jsonify({'status': 'error',
+                        'error': 'No <Scene> element in X3D file'}), 500
+
+    # Strip existing ROUTEs (will be re-appended last per invariant)
+    existing_routes = _collect_routes(root)
+    _remove_routes(scene_el)
+
+    # Build a lookup: def → rotation attribute string from the joint element
+    joint_rot_map = {}
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if el.get('USE'):
+                continue
+            def_val = el.get('DEF', '').strip()
+            rot     = el.get('rotation', '').strip()
+            if def_val and rot:
+                joint_rot_map[def_val] = rot
+
+    new_routes = list(existing_routes)
+    joints_wired   = 0
+    joints_skipped = 0
+
+    for jdef in joint_defs:
+        if jdef in already_wired:
+            joints_skipped += 1
+            continue
+
+        timer_def  = f'WireTimer_{jdef}'
+        interp_def = f'WireInterp_{jdef}'
+
+        # TimeSensor stub — enabled=false, never fires on load
+        ts = _ET_hanim.SubElement(scene_el, f'{{{ns}}}TimeSensor')
+        ts.set('DEF',           timer_def)
+        ts.set('cycleInterval', '1')
+        ts.set('loop',          'true')
+        ts.set('enabled',       'false')
+
+        # OrientationInterpolator — keyValue = joint's rest rotation at both ends.
+        # Using rest rotation (not identity) means the stub is a no-op at fraction=0
+        # and preserves the skeleton's rest pose on scene load.
+        rest_rot = joint_rot_map.get(jdef, '0 0 1 0')
+        parts = rest_rot.split()
+        if len(parts) == 4:
+            kv = ' '.join(parts) + '  ' + ' '.join(parts)
+        else:
+            kv = '0 0 1 0  0 0 1 0'
+
+        interp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}OrientationInterpolator')
+        interp.set('DEF',      interp_def)
+        interp.set('key',      '0 1')
+        interp.set('keyValue', kv)
+
+        # ROUTEs
+        new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
+                            'toNode':   interp_def, 'toField':   'set_fraction'})
+        new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
+                            'toNode':   jdef,       'toField':   'rotation'})
+        joints_wired += 1
+
+    # Re-append all ROUTEs last — invariant
+    for r_attrib in new_routes:
+        re_el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}ROUTE')
+        for k, v in r_attrib.items():
+            re_el.set(k, v)
+
+    # Atomic write
+    try:
+        _hanim_backup(filepath)
+        out_text = _serialise_x3d(xml_decl, root)
+        tmp_path = filepath + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as fh:
+            fh.write(out_text)
+        os.replace(tmp_path, filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':        'ok',
+        'joints_wired':  joints_wired,
+        'joints_skipped': joints_skipped,
+        'hanim_path':    os.path.basename(filepath),
     })
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# POST /hanim/normalize-joints
+# Rewrite HAnimJoint DEF and name attributes to HAnim 2.0 standard names.
+# Run once on any Blender-exported avatar before using it in MCCF.
+# ---------------------------------------------------------------------------
+
+# Blender armature bone name → HAnim 2.0 joint name
+# Keys: Blender DEF or name values (lowercased for lookup)
+# Values: authoritative HAnim 2.0 name (ISO/IEC 19774 / X3D spec)
+_BLENDER_TO_HANIM = {
+    # ── Spine / torso ────────────────────────────────────────────────────
+    'hips':         'humanoid_root',
+    'spine':        'vl5',
+    'chest':        'vt12',
+    'upper_chest':  'vt6',
+    'neck':         'vc4',
+    'head':         'skullbase',
+
+    # ── Left leg ─────────────────────────────────────────────────────────
+    'thigh.l':      'l_hip',      'thigh_l':      'l_hip',
+    'shin.l':       'l_knee',     'shin_l':       'l_knee',
+    'foot.l':       'l_talocrural', 'foot_l':     'l_talocrural',
+    'toe.l':        'l_metatarsophalangeal_2', 'toe_l': 'l_metatarsophalangeal_2',
+
+    # ── Right leg ────────────────────────────────────────────────────────
+    'thigh.r':      'r_hip',      'thigh_r':      'r_hip',
+    'shin.r':       'r_knee',     'shin_r':       'r_knee',
+    'foot.r':       'r_talocrural', 'foot_r':     'r_talocrural',
+    'toe.r':        'r_metatarsophalangeal_2', 'toe_r': 'r_metatarsophalangeal_2',
+
+    # ── Left arm ─────────────────────────────────────────────────────────
+    'shoulder.l':   'l_sternoclavicular', 'shoulder_l':  'l_sternoclavicular',
+    'upper_arm.l':  'l_shoulder',         'upper_arm_l': 'l_shoulder',
+    'forearm.l':    'l_elbow',            'forearm_l':   'l_elbow',
+    'hand.l':       'l_radiocarpal',      'hand_l':      'l_radiocarpal',
+
+    # ── Right arm ────────────────────────────────────────────────────────
+    'shoulder.r':   'r_sternoclavicular', 'shoulder_r':  'r_sternoclavicular',
+    'upper_arm.r':  'r_shoulder',         'upper_arm_r': 'r_shoulder',
+    'forearm.r':    'r_elbow',            'forearm_r':   'r_elbow',
+    'hand.r':       'r_radiocarpal',      'hand_r':      'r_radiocarpal',
+
+    # ── Left hand ────────────────────────────────────────────────────────
+    'palm.01.l':    'l_carpometacarpal_1',
+    'palm.02.l':    'l_midcarpal_2',
+    'palm.03.l':    'l_midcarpal_3',
+    'palm.04.l':    'l_midcarpal_4_5',
+    'thumb.01.l':   'l_carpometacarpal_1',
+    'thumb.02.l':   'l_metacarpophalangeal_1',
+    'thumb.03.l':   'l_carpal_interphalangeal_1',
+    'f_index.01.l': 'l_metacarpophalangeal_2',
+    'f_index.02.l': 'l_carpal_proximal_interphalangeal_2',
+    'f_index.03.l': 'l_carpal_distal_interphalangeal_2',
+    'f_middle.01.l':'l_metacarpophalangeal_3',
+    'f_middle.02.l':'l_carpal_proximal_interphalangeal_3',
+    'f_middle.03.l':'l_carpal_distal_interphalangeal_3',
+    'f_ring.01.l':  'l_metacarpophalangeal_4',
+    'f_ring.02.l':  'l_carpal_proximal_interphalangeal_4',
+    'f_ring.03.l':  'l_carpal_distal_interphalangeal_4',
+    'f_pinky.01.l': 'l_metacarpophalangeal_5',
+    'f_pinky.02.l': 'l_carpal_proximal_interphalangeal_5',
+    'f_pinky.03.l': 'l_carpal_distal_interphalangeal_5',
+
+    # ── Right hand ───────────────────────────────────────────────────────
+    'palm.01.r':    'r_carpometacarpal_1',
+    'palm.02.r':    'r_midcarpal_2',
+    'palm.03.r':    'r_midcarpal_3',
+    'palm.04.r':    'r_midcarpal_4_5',
+    'thumb.01.r':   'r_carpometacarpal_1',
+    'thumb.02.r':   'r_metacarpophalangeal_1',
+    'thumb.03.r':   'r_carpal_interphalangeal_1',
+    'f_index.01.r': 'r_metacarpophalangeal_2',
+    'f_index.02.r': 'r_carpal_proximal_interphalangeal_2',
+    'f_index.03.r': 'r_carpal_distal_interphalangeal_2',
+    'f_middle.01.r':'r_metacarpophalangeal_3',
+    'f_middle.02.r':'r_carpal_proximal_interphalangeal_3',
+    'f_middle.03.r':'r_carpal_distal_interphalangeal_3',
+    'f_ring.01.r':  'r_metacarpophalangeal_4',
+    'f_ring.02.r':  'r_carpal_proximal_interphalangeal_4',
+    'f_ring.03.r':  'r_carpal_distal_interphalangeal_4',
+    'f_pinky.01.r': 'r_metacarpophalangeal_5',
+    'f_pinky.02.r': 'r_carpal_proximal_interphalangeal_5',
+    'f_pinky.03.r': 'r_carpal_distal_interphalangeal_5',
+}
+
+
+@app.route('/hanim/normalize-joints', methods=['POST'])
+def hanim_normalize_joints():
+    """
+    POST /hanim/normalize-joints
+    Body: { hanim_src: str }
+
+    Rewrite HAnimJoint DEF and name attributes from Blender/pipeline
+    naming to authoritative HAnim 2.0 standard names (ISO/IEC 19774).
+
+    Also rewrites ROUTE fromNode/toNode references that target renamed
+    joints so existing animation infrastructure stays valid.
+
+    Joints not in the mapping table are left unchanged and reported in
+    'unmapped' — typically IK/helper bones with no HAnim equivalent.
+
+    Atomic write: .tmp + os.replace(). .bak created first.
+
+    Returns:
+    {
+      status, hanim_path,
+      renamed:        [ {old_def, new_def} ],
+      unmapped:       [ def_value ],
+      routes_updated: int
+    }
+    """
+    import re as _re_norm
+
+    body      = request.get_json(silent=True) or {}
+    hanim_src = (body.get('hanim_src') or '').strip()
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+
+    filepath = _hanim_x3d_path(hanim_src)
+    if not os.path.exists(filepath):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+
+    try:
+        xml_decl, root = _parse_x3d_file(filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D parse failed: {exc}'}), 500
+
+    ns = _X3D_NS
+
+    # Build rename map: old_def → new_hanim_name
+    rename_map = {}
+    unmapped   = []
+
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if el.get('USE'):
+                continue
+            old_def  = el.get('DEF',  '').strip()
+            old_name = el.get('name', '').strip()
+            if not old_def:
+                continue
+
+            # Try name attr first (more semantic), then DEF attr
+            lookup = (old_name or old_def).lower()
+            new_name = _BLENDER_TO_HANIM.get(lookup) or _BLENDER_TO_HANIM.get(old_def.lower())
+
+            if new_name is None:
+                # Already a valid HAnim 2.0 name (lowercase + underscores + digits)?
+                if _re_norm.match(r'^[a-z][a-z0-9_]*$', old_def):
+                    continue   # looks like HAnim already — leave it
+                unmapped.append(old_def)
+                continue
+
+            if new_name == old_def and new_name == old_name:
+                continue   # already correct
+
+            rename_map[old_def] = new_name
+
+    # Apply renames to HAnimJoint DEF/name and USE references
+    renamed = []
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            use_val = el.get('USE', '')
+            if use_val:
+                if use_val in rename_map:
+                    el.set('USE', rename_map[use_val])
+                continue
+            old_def = el.get('DEF', '').strip()
+            if old_def in rename_map:
+                new_name = rename_map[old_def]
+                el.set('DEF',  new_name)
+                el.set('name', new_name)
+                renamed.append({'old_def': old_def, 'new_def': new_name})
+
+    # Update ROUTE fromNode/toNode references for renamed joints
+    routes_updated = 0
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        for el in root.iter(tag):
+            for attr in ('fromNode', 'toNode'):
+                val = el.get(attr, '')
+                if val in rename_map:
+                    el.set(attr, rename_map[val])
+                    routes_updated += 1
+
+    # Strip any stale WireTimer_* / WireInterp_* nodes and their ROUTEs.
+    # These were generated by a previous wire-joints run and reference the
+    # old (pre-normalize) joint names — they must be removed so wire-joints
+    # can re-run cleanly with the correct HAnim 2.0 names.
+    scene_el = _find_scene_el(root)
+    wire_stripped = 0
+    if scene_el is not None:
+        to_remove = []
+        for child in list(scene_el):
+            tag = child.tag.split('}')[-1]
+            def_val = child.get('DEF', '')
+            if tag in ('TimeSensor', 'OrientationInterpolator') and \
+               (def_val.startswith('WireTimer_') or def_val.startswith('WireInterp_')):
+                to_remove.append(child)
+            elif tag == 'ROUTE':
+                fn = child.get('fromNode', '')
+                tn = child.get('toNode', '')
+                if fn.startswith('WireTimer_') or fn.startswith('WireInterp_') or \
+                   tn.startswith('WireTimer_') or tn.startswith('WireInterp_'):
+                    to_remove.append(child)
+        for el in to_remove:
+            scene_el.remove(el)
+        wire_stripped = len(to_remove)
+
+    nothing_changed = (not renamed and wire_stripped == 0)
+    if nothing_changed:
+        return jsonify({
+            'status':         'ok',
+            'hanim_path':     os.path.basename(filepath),
+            'renamed':        [],
+            'unmapped':       unmapped,
+            'routes_updated': 0,
+            'wire_stripped':  0,
+            'note':           'No changes needed — file may already be normalized',
+        })
+
+    # Atomic write
+    try:
+        _hanim_backup(filepath)
+        out_text = _serialise_x3d(xml_decl, root)
+        tmp_path = filepath + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as fh:
+            fh.write(out_text)
+        os.replace(tmp_path, filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':          'ok',
+        'hanim_path':      os.path.basename(filepath),
+        'renamed':         renamed,
+        'unmapped':        unmapped,
+        'routes_updated':  routes_updated,
+        'wire_stripped':   wire_stripped,
+    })
+
+
+# ---------------------------------------------------------------------------
+# POST /hanim/ingest
+# Day 35 — 2026-06-02
+#
+# Avatar pipeline ingest: detect joint naming convention, build a joint→HAnim
+# 2.0 translation map, write it into the cultivar XML as <JointMap>, then wire
+# all joints (TimeSensor + OrientationInterpolator + ROUTEs with rest-rotation
+# keyValues).
+#
+# The X3D file is NEVER renamed.  The JointMap is a translation layer stored
+# in the cultivar, not surgery on the geometry file.  Skin weights remain valid
+# because the joint DEF names never change.
+#
+# Naming conventions detected:
+#   blender_dot   — Blender default: "thigh.L", "upper_arm.R", "f_index.01.L"
+#   blender_under — Blender with underscores: "thigh_L", "upper_arm_R"
+#   mixamo        — Mixamo: "mixamorig:LeftUpLeg", "mixamorig:RightArm"
+#   hanim         — Already HAnim 2.0: "l_hip", "r_shoulder"
+#   unknown       — None of the above
+#
+# Returns:
+# {
+#   status, hanim_path, cultivar_path,
+#   convention,           # detected naming convention string
+#   joints_mapped,        # count with a known HAnim 2.0 equivalent
+#   joints_unmapped,      # count with no known equivalent (IK/helper bones)
+#   joints_wired,         # new wire stubs added
+#   joints_skipped,       # joints already wired (skipped)
+#   joint_map             # { def: hanim_name, ... }  (full map written to cultivar)
+# }
+# ---------------------------------------------------------------------------
+
+def _detect_naming_convention(joint_defs: list) -> str:
+    """
+    Heuristic: inspect a sample of joint DEF values and return the most likely
+    naming convention.
+    """
+    dot_count   = sum(1 for d in joint_defs if '.' in d)
+    colon_count = sum(1 for d in joint_defs if ':' in d)
+    # gltf_hyphen: X_ITE saves glTF joints with hyphens and skeletalConfiguration='GLTF'
+    # Pattern: ends with -L or -R, or has -NN- numeric segments
+    import re as _re_detect
+    hyphen_count = sum(1 for d in joint_defs
+                       if _re_detect.search(r'-[LR]$|-\d{2}', d))
+    hanim_count = sum(1 for d in joint_defs
+                      if d.lower() in _HANIM_KNOWN_NAMES or
+                         any(d.lower().startswith(p) for p in ('l_','r_','humanoid_','skullbase')))
+    n = max(len(joint_defs), 1)
+    if colon_count / n > 0.3:
+        return 'mixamo'
+    if hyphen_count / n > 0.2:
+        return 'gltf_hyphen'
+    if dot_count / n > 0.2:
+        return 'blender_dot'
+    if hanim_count / n > 0.5:
+        return 'hanim'
+    # Check for underscore-suffix pattern: "thigh_L", "upper_arm_R"
+    under_suffix = sum(1 for d in joint_defs if d.endswith('_L') or d.endswith('_R'))
+    if under_suffix / n > 0.2:
+        return 'blender_under'
+    return 'unknown'
+
+
+# Known HAnim 2.0 names used by the convention detector
+_HANIM_KNOWN_NAMES = set(_SPINE_JOINTS) | {
+    'l_hip','r_hip','l_knee','r_knee','l_talocrural','r_talocrural',
+    'l_shoulder','r_shoulder','l_elbow','r_elbow','l_radiocarpal','r_radiocarpal',
+    'l_sternoclavicular','r_sternoclavicular',
+}
+
+
+def _build_joint_map(joint_defs: list, convention: str) -> dict:
+    """
+    Build a mapping { def_value: hanim_2_0_name } for all joints that have a
+    known HAnim equivalent.  Uses _BLENDER_TO_HANIM for Blender conventions and
+    a Mixamo table for Mixamo rigs.  Joints with no mapping are omitted.
+    """
+    _MIXAMO_TO_HANIM = {
+        'mixamorig:hips':               'humanoid_root',
+        'mixamorig:spine':              'vl5',
+        'mixamorig:spine1':             'vt12',
+        'mixamorig:spine2':             'vt6',
+        'mixamorig:neck':               'vc4',
+        'mixamorig:head':               'skullbase',
+        'mixamorig:leftupleg':          'l_hip',
+        'mixamorig:leftleg':            'l_knee',
+        'mixamorig:leftfoot':           'l_talocrural',
+        'mixamorig:lefttoebase':        'l_metatarsophalangeal_2',
+        'mixamorig:rightupleg':         'r_hip',
+        'mixamorig:rightleg':           'r_knee',
+        'mixamorig:rightfoot':          'r_talocrural',
+        'mixamorig:righttoebase':       'r_metatarsophalangeal_2',
+        'mixamorig:leftshoulder':       'l_sternoclavicular',
+        'mixamorig:leftarm':            'l_shoulder',
+        'mixamorig:leftforearm':        'l_elbow',
+        'mixamorig:lefthand':           'l_radiocarpal',
+        'mixamorig:rightshoulder':      'r_sternoclavicular',
+        'mixamorig:rightarm':           'r_shoulder',
+        'mixamorig:rightforearm':       'r_elbow',
+        'mixamorig:righthand':          'r_radiocarpal',
+        'mixamorig:lefthandthumb1':     'l_carpometacarpal_1',
+        'mixamorig:lefthandthumb2':     'l_metacarpophalangeal_1',
+        'mixamorig:lefthandthumb3':     'l_carpal_interphalangeal_1',
+        'mixamorig:lefthandindex1':     'l_metacarpophalangeal_2',
+        'mixamorig:lefthandindex2':     'l_carpal_proximal_interphalangeal_2',
+        'mixamorig:lefthandindex3':     'l_carpal_distal_interphalangeal_2',
+        'mixamorig:lefthandmiddle1':    'l_metacarpophalangeal_3',
+        'mixamorig:lefthandmiddle2':    'l_carpal_proximal_interphalangeal_3',
+        'mixamorig:lefthandmiddle3':    'l_carpal_distal_interphalangeal_3',
+        'mixamorig:lefthandring1':      'l_metacarpophalangeal_4',
+        'mixamorig:lefthandring2':      'l_carpal_proximal_interphalangeal_4',
+        'mixamorig:lefthandring3':      'l_carpal_distal_interphalangeal_4',
+        'mixamorig:lefthandpinky1':     'l_metacarpophalangeal_5',
+        'mixamorig:lefthandpinky2':     'l_carpal_proximal_interphalangeal_5',
+        'mixamorig:lefthandpinky3':     'l_carpal_distal_interphalangeal_5',
+        'mixamorig:righthandthumb1':    'r_carpometacarpal_1',
+        'mixamorig:righthandthumb2':    'r_metacarpophalangeal_1',
+        'mixamorig:righthandthumb3':    'r_carpal_interphalangeal_1',
+        'mixamorig:righthandindex1':    'r_metacarpophalangeal_2',
+        'mixamorig:righthandindex2':    'r_carpal_proximal_interphalangeal_2',
+        'mixamorig:righthandindex3':    'r_carpal_distal_interphalangeal_2',
+        'mixamorig:righthandmiddle1':   'r_metacarpophalangeal_3',
+        'mixamorig:righthandmiddle2':   'r_carpal_proximal_interphalangeal_3',
+        'mixamorig:righthandmiddle3':   'r_carpal_distal_interphalangeal_3',
+        'mixamorig:righthandring1':     'r_metacarpophalangeal_4',
+        'mixamorig:righthandring2':     'r_carpal_proximal_interphalangeal_4',
+        'mixamorig:righthandring3':     'r_carpal_distal_interphalangeal_4',
+        'mixamorig:righthandpinky1':    'r_metacarpophalangeal_5',
+        'mixamorig:righthandpinky2':    'r_carpal_proximal_interphalangeal_5',
+        'mixamorig:righthandpinky3':    'r_carpal_distal_interphalangeal_5',
+    }
+
+    result = {}
+    for def_val in joint_defs:
+        key = def_val.lower()
+        if convention == 'mixamo':
+            hanim_name = _MIXAMO_TO_HANIM.get(key)
+        elif convention == 'gltf_hyphen':
+            # X_ITE glTF→X3D save uses hyphens: 'upper-arm-L', 'f-index-01-L'
+            # Normalize to Blender dot notation for lookup: 'upper_arm.l', 'f_index.01.l'
+            import re as _re_gh
+            nk = key
+            nk = _re_gh.sub(r'-([lr])$', lambda m: '.' + m.group(1), nk)  # -L/-R suffix
+            nk = _re_gh.sub(r'-(\d{2,3})', r'.\1', nk)  # -01 -02 -> .01 .02
+            nk = nk.replace('-', '_')                    # remaining hyphens -> underscores
+            hanim_name = _BLENDER_TO_HANIM.get(nk)
+        elif convention in ('blender_dot', 'blender_under', 'unknown'):
+            hanim_name = _BLENDER_TO_HANIM.get(key)
+        elif convention == 'hanim':
+            # Already HAnim — map def to itself (strip hanim_ prefix if present)
+            if key.startswith('hanim_'):
+                hanim_name = key[6:]
+            elif key in _HANIM_KNOWN_NAMES or key in _SPINE_JOINTS:
+                hanim_name = key
+            else:
+                hanim_name = None
+        else:
+            hanim_name = _BLENDER_TO_HANIM.get(key)
+
+        if hanim_name:
+            result[def_val] = hanim_name
+
+    return result
+
+
+def _read_cultivar_joint_map(cultivar_path: str) -> dict:
+    """
+    Read <JointMap> from a cultivar XML file and return { def: hanim_name }.
+    Returns empty dict if file missing, JointMap absent, or any parse error.
+    """
+    if not os.path.exists(cultivar_path):
+        return {}
+    try:
+        import xml.etree.ElementTree as _ET
+        tree = _ET.parse(cultivar_path)
+        root = tree.getroot()
+        jm_el = root.find('JointMap')
+        if jm_el is None:
+            return {}
+        result = {}
+        for j in jm_el.findall('Joint'):
+            def_val  = j.get('def', '').strip()
+            hanim    = j.get('hanim', '').strip()
+            if def_val and hanim:
+                result[def_val] = hanim
+        return result
+    except Exception:
+        return {}
+
+
+def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
+                               hanim_src: str, convention: str) -> None:
+    """
+    Upsert <JointMap convention="..."> and <HAnimFigure src="..."> into a
+    cultivar XML file.  Atomic write via .tmp + os.replace().
+
+    Preserves all other elements in the file.  If JointMap already exists
+    it is replaced entirely.  HAnimFigure src attribute is updated.
+    """
+    import xml.etree.ElementTree as _ET
+
+    tree = _ET.parse(cultivar_path)
+    root = tree.getroot()
+
+    # Remove stale JointMap if present
+    old_jm = root.find('JointMap')
+    if old_jm is not None:
+        root.remove(old_jm)
+
+    # Build new JointMap element
+    jm_el = _ET.Element('JointMap')
+    jm_el.set('convention', convention)
+    for def_val, hanim_name in sorted(joint_map.items()):
+        j = _ET.SubElement(jm_el, 'Joint')
+        j.set('def',   def_val)
+        j.set('hanim', hanim_name)
+
+    # Upsert HAnimFigure — update src if exists, else create
+    fig_el = root.find('HAnimFigure')
+    if fig_el is None:
+        fig_el = _ET.Element('HAnimFigure')
+        root.append(fig_el)
+    fig_el.set('src', os.path.basename(hanim_src))
+
+    # Append JointMap after HAnimFigure
+    root.append(jm_el)
+
+    _ET.indent(root, space='  ')
+    xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + \
+               _ET.tostring(root, encoding='unicode')
+
+    tmp = cultivar_path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        fh.write(xml_text)
+    os.replace(tmp, cultivar_path)
+
+
+@app.route('/hanim/fix-face-coords', methods=['POST'])
+def hanim_fix_face_coords():
+    """
+    POST /hanim/fix-face-coords
+    Body: { hanim_src: str }
+
+    Fix Blender X3D export bug: named Coordinate nodes used as morph-target
+    data holders (e.g. JackCoord_skull) sit inside a Group and have no
+    containerField attribute.  X_ITE infers containerField='coord' by default,
+    then rejects them because Group has no coord field.
+
+    Fix: scan every <Coordinate .../> tag across its FULL extent (point data
+    can be thousands of chars before the DEF attribute appears).  For any tag
+    that has a DEF attribute but lacks containerField, inject
+    containerField="point" right after <Coordinate.
+
+    Anonymous geometry Coordinate nodes (no DEF attribute) are left strictly
+    alone — they live inside IndexedTriangleSets where the default 'coord'
+    containerField is correct.  skinCoord nodes already have containerField
+    and are skipped by the 'already has containerField' check.
+
+    containerField="point" is harmless for SAI DEF lookup — the morph driver
+    reads these nodes by name, not via the scene graph hierarchy.
+
+    Safe to run on any avatar; returns fixed=0 if no changes needed.
+    Atomic write: .tmp + os.replace(). .bak created first.
+
+    Returns: { status, fixed, hanim_path }
+    """
+    import re as _re_ffc
+
+    body      = request.get_json(silent=True) or {}
+    hanim_src = (body.get('hanim_src') or '').strip()
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+
+    filepath = _hanim_x3d_path(hanim_src)
+    if not os.path.exists(filepath):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+
+    with open(filepath, 'r', encoding='utf-8') as fh:
+        content = fh.read()
+
+    # Scan every <Coordinate .../> across its FULL tag extent.
+    # A regex that stops at '>' would miss DEF attributes buried after
+    # thousands of chars of point data, so we find the closing '/>' explicitly.
+    inserts = []  # list of (char_position, text_to_insert)
+
+    for m in _re_ffc.finditer(r'<Coordinate ', content):
+        tag_start = m.start()
+        tag_end   = content.find('/>', tag_start)
+        if tag_end == -1:
+            continue
+        full_tag = content[tag_start:tag_end + 2]
+
+        # Skip if already has containerField (includes skinCoord nodes)
+        if 'containerField' in full_tag:
+            continue
+
+        # Skip anonymous geometry nodes — only fix named (DEF) nodes
+        if not _re_ffc.search(r'DEF=["\']', full_tag):
+            continue
+
+        # Named Coordinate without containerField — inject "point"
+        inserts.append((tag_start + len('<Coordinate '), 'containerField="point" '))
+
+    if not inserts:
+        return jsonify({'status': 'ok', 'fixed': 0,
+                        'hanim_path': os.path.basename(filepath),
+                        'note': 'No named Coordinate nodes without containerField found'})
+
+    # Apply in reverse order so earlier positions stay valid
+    for pos, text in sorted(inserts, reverse=True):
+        content = content[:pos] + text + content[pos:]
+
+    try:
+        _hanim_backup(filepath)
+        tmp = filepath + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            fh.write(content)
+        os.replace(tmp, filepath)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':     'ok',
+        'fixed':      len(inserts),
+        'hanim_path': os.path.basename(filepath),
+    })
+
+
+@app.route('/hanim/save-face-morph', methods=['POST'])
+def hanim_save_face_morph():
+    """
+    POST /hanim/save-face-morph
+    Body: { cultivar, region, pose, coord_def, points: [x,y,z,...] }
+
+    Store captured coordinate positions for one face region in the cultivar XML.
+    pose is either 'rest' or 'morph'.
+    coord_def is the DEF name of the Coordinate node (e.g. 'JackCoord_skull').
+
+    Cultivar XML structure added:
+      <FaceMorphs>
+        <Region name="skull" coord_def="JackCoord_skull">
+          <Pose name="rest"  points="x y z x y z ..." />
+          <Pose name="morph" points="x y z x y z ..." />
+        </Region>
+        ...
+      </FaceMorphs>
+
+    Returns: { status, cultivar, region, pose, point_count }
+    """
+    import xml.etree.ElementTree as _ET_fm
+
+    body      = request.get_json(silent=True) or {}
+    cultivar  = (body.get('cultivar')   or '').strip()
+    region    = (body.get('region')     or '').strip()
+    pose      = (body.get('pose')       or '').strip()   # 'rest' or 'morph'
+    coord_def = (body.get('coord_def')  or '').strip()
+    points    = body.get('points', [])
+
+    if not all([cultivar, region, pose, coord_def]):
+        return jsonify({'status': 'error',
+                        'error': 'cultivar, region, pose, coord_def required'}), 400
+    if pose not in ('rest', 'morph'):
+        return jsonify({'status': 'error',
+                        'error': 'pose must be "rest" or "morph"'}), 400
+    if not points or len(points) % 3 != 0:
+        return jsonify({'status': 'error',
+                        'error': f'points must be non-empty multiple of 3 (got {len(points)})'}), 400
+
+    cultivar_path = _cultivar_xml_path(cultivar)
+    if not os.path.exists(cultivar_path):
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar not found: {cultivar}'}), 404
+
+    tree = _ET_fm.parse(cultivar_path)
+    root = tree.getroot()
+
+    # Get or create FaceMorphs element
+    fm_el = root.find('FaceMorphs')
+    if fm_el is None:
+        fm_el = _ET_fm.SubElement(root, 'FaceMorphs')
+
+    # Get or create Region element
+    reg_el = None
+    for r in fm_el.findall('Region'):
+        if r.get('name') == region:
+            reg_el = r
+            break
+    if reg_el is None:
+        reg_el = _ET_fm.SubElement(fm_el, 'Region')
+        reg_el.set('name', region)
+    reg_el.set('coord_def', coord_def)
+
+    # Remove existing Pose with same name
+    for p in reg_el.findall('Pose'):
+        if p.get('name') == pose:
+            reg_el.remove(p)
+
+    # Add new Pose
+    pose_el = _ET_fm.SubElement(reg_el, 'Pose')
+    pose_el.set('name', pose)
+    pose_el.set('points', ' '.join(f'{v:.6f}' for v in points))
+
+    # Write back
+    _ET_fm.indent(root, space='  ')
+    xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + \
+               _ET_fm.tostring(root, encoding='unicode')
+    tmp = cultivar_path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        fh.write(xml_text)
+    os.replace(tmp, cultivar_path)
+
+    return jsonify({
+        'status':      'ok',
+        'cultivar':    cultivar,
+        'region':      region,
+        'pose':        pose,
+        'point_count': len(points) // 3,
+    })
+
+
+@app.route('/hanim/inject-face-aus', methods=['POST'])
+def hanim_inject_face_aus():
+    """
+    POST /hanim/inject-face-aus
+    Body: { hanim_src, cultivar }
+
+    Read FaceMorphs data from cultivar XML and inject AnimationAdapter
+    CoordinateInterpolator nodes into the target X3D file.
+
+    For each Region that has both 'rest' and 'morph' poses:
+      1. Inject <CoordinateInterpolator DEF="AnimationAdapter_{region}"
+                  key="0 1" keyValue="{rest_points} {morph_points}" />
+      2. Inject <ROUTE fromNode="AnimationAdapter_{region}"
+                        fromField="value_changed"
+                        toNode="{coord_def}" toField="point" />
+
+    Idempotent: strips existing AnimationAdapter_{region} nodes first.
+    FaceController Script already in X3D handles the au_name/au_weight
+    → set_fraction routing at runtime.
+
+    Returns: { status, injected, skipped, regions }
+    """
+    import re as _re_fau
+    import xml.etree.ElementTree as _ET_fau
+
+    body      = request.get_json(silent=True) or {}
+    hanim_src = (body.get('hanim_src') or '').strip()
+    cultivar  = (body.get('cultivar')  or '').strip()
+
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+    if not cultivar:
+        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
+
+    target_path   = _hanim_x3d_path(hanim_src)
+    cultivar_path = _cultivar_xml_path(cultivar)
+
+    for path, label in [(target_path, 'Target X3D'), (cultivar_path, 'Cultivar XML')]:
+        if not os.path.exists(path):
+            return jsonify({'status': 'error',
+                            'error': f'{label} not found: {os.path.basename(path)}'}), 404
+
+    # Read FaceMorphs from cultivar
+    tree = _ET_fau.parse(cultivar_path)
+    root = tree.getroot()
+    fm_el = root.find('FaceMorphs')
+    if fm_el is None:
+        return jsonify({'status': 'error',
+                        'error': 'No FaceMorphs in cultivar — capture rest+morph poses first'}), 400
+
+    # Collect complete regions (must have both rest and morph)
+    regions = []
+    skipped = []
+    for reg in fm_el.findall('Region'):
+        name      = reg.get('name', '').strip()
+        coord_def = reg.get('coord_def', '').strip()
+        poses = {p.get('name'): p.get('points', '') for p in reg.findall('Pose')}
+        if 'rest' in poses and 'morph' in poses and name and coord_def:
+            regions.append({
+                'name':      name,
+                'coord_def': coord_def,
+                'rest':      poses['rest'],
+                'morph':     poses['morph'],
+            })
+        else:
+            skipped.append(name or '(unnamed)')
+
+    if not regions:
+        return jsonify({'status': 'error',
+                        'error': 'No complete regions (need both rest and morph captured)',
+                        'skipped': skipped}), 400
+
+    # Read target X3D
+    with open(target_path, 'r', encoding='utf-8') as fh:
+        target_text = fh.read()
+
+    # Strip existing AnimationAdapter nodes (idempotent)
+    region_names = [r['name'] for r in regions]
+    for name in region_names:
+        # CoordinateInterpolator
+        target_text = _re_fau.sub(
+            rf'<CoordinateInterpolator\s+DEF="AnimationAdapter_{re.escape(name)}"[^/]*/>\s*',
+            '', target_text)
+        # ROUTE from AnimationAdapter
+        target_text = _re_fau.sub(
+            rf'<ROUTE\s+fromNode="AnimationAdapter_{re.escape(name)}"[^/]*/>\s*',
+            '', target_text)
+
+    # Build injection XML
+    parts = []
+    for r in regions:
+        interp_def = f'AnimationAdapter_{r["name"]}'
+        key_value  = r['rest'] + ' ' + r['morph']
+        parts.append(
+            f'<CoordinateInterpolator DEF="{interp_def}" key="0 1" keyValue="{key_value}" />'
+        )
+        parts.append(
+            f'<ROUTE fromNode="{interp_def}" fromField="value_changed" '
+            f'toNode="{r["coord_def"]}" toField="point" />'
+        )
+
+    if '</Scene>' not in target_text:
+        return jsonify({'status': 'error',
+                        'error': 'No </Scene> tag in target X3D'}), 500
+
+    target_text = target_text.replace(
+        '</Scene>',
+        '\n'.join(parts) + '\n</Scene>',
+        1
+    )
+
+    try:
+        _hanim_backup(target_path)
+        tmp = target_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            fh.write(target_text)
+        os.replace(tmp, target_path)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':   'ok',
+        'injected': len(regions),
+        'skipped':  skipped,
+        'regions':  [r['name'] for r in regions],
+        'hanim_path': os.path.basename(target_path),
+    })
+
+
+@app.route('/hanim/get-face-morph-status', methods=['POST'])
+def hanim_get_face_morph_status():
+    """
+    POST /hanim/get-face-morph-status
+    Body: { cultivar }
+
+    Returns which regions have rest/morph poses captured in the cultivar.
+    Used by the editor to show capture progress.
+
+    Returns: { status, regions: { skull: {rest:bool, morph:bool, coord_def:str}, ... } }
+    """
+    import xml.etree.ElementTree as _ET_gfm
+
+    body     = request.get_json(silent=True) or {}
+    cultivar = (body.get('cultivar') or '').strip()
+    if not cultivar:
+        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
+
+    cultivar_path = _cultivar_xml_path(cultivar)
+    if not os.path.exists(cultivar_path):
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar not found: {cultivar}'}), 404
+
+    try:
+        tree = _ET_gfm.parse(cultivar_path)
+        root = tree.getroot()
+        fm_el = root.find('FaceMorphs')
+    except Exception:
+        fm_el = None
+
+    result = {}
+    if fm_el is not None:
+        for reg in fm_el.findall('Region'):
+            name      = reg.get('name', '').strip()
+            coord_def = reg.get('coord_def', '').strip()
+            poses     = {p.get('name') for p in reg.findall('Pose')}
+            if name:
+                result[name] = {
+                    'rest':      'rest'  in poses,
+                    'morph':     'morph' in poses,
+                    'coord_def': coord_def,
+                }
+
+    return jsonify({'status': 'ok', 'regions': result})
+
+
+@app.route('/hanim/ingest', methods=['POST'])
+def hanim_ingest():
+    """
+    POST /hanim/ingest
+    Body: { hanim_src: str, cultivar: str }
+
+    Avatar pipeline ingest — single button replaces the old normalize→wire
+    two-step.  The X3D is never renamed; the joint map is stored in the
+    cultivar.
+
+    Steps:
+      1. Parse joint DEFs from X3D
+      2. Detect naming convention
+      3. Build joint_map { def: hanim_2_0_name }
+      4. Write JointMap + HAnimFigure into cultivar XML (atomic)
+      5. Wire all un-wired joints with rest-rotation keyValues (atomic)
+
+    Returns: { status, convention, joints_mapped, joints_unmapped,
+               joints_wired, joints_skipped, joint_map, hanim_path,
+               cultivar_path }
+    """
+    body      = request.get_json(silent=True) or {}
+    hanim_src = (body.get('hanim_src') or '').strip()
+    cultivar  = (body.get('cultivar')  or '').strip()
+
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+    if not cultivar:
+        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
+
+    x3d_path      = _hanim_x3d_path(hanim_src)
+    cultivar_path = _cultivar_xml_path(cultivar)
+
+    if not os.path.exists(x3d_path):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+    if not os.path.exists(cultivar_path):
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar XML not found for: {cultivar}'}), 404
+
+    # ── 1. Parse joint DEFs ──────────────────────────────────────────────
+    try:
+        xml_decl, root = _parse_x3d_file(x3d_path)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D parse failed: {exc}'}), 500
+
+    ns = _X3D_NS
+    joint_defs = []
+    joint_rot_map = {}
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if el.get('USE'):
+                continue
+            def_val = el.get('DEF', '').strip()
+            if def_val:
+                joint_defs.append(def_val)
+                rot = el.get('rotation', '').strip()
+                if rot:
+                    joint_rot_map[def_val] = rot
+
+    if not joint_defs:
+        return jsonify({'status': 'error',
+                        'error': 'No HAnimJoint DEF nodes found in file'}), 400
+
+    # ── 2. Detect convention ─────────────────────────────────────────────
+    convention = _detect_naming_convention(joint_defs)
+
+    # ── 3. Build joint map ───────────────────────────────────────────────
+    joint_map = _build_joint_map(joint_defs, convention)
+
+    joints_mapped   = len(joint_map)
+    joints_unmapped = len(joint_defs) - joints_mapped
+
+    # ── 4. Write JointMap into cultivar XML ──────────────────────────────
+    try:
+        _hanim_backup(cultivar_path)
+        _write_cultivar_joint_map(cultivar_path, joint_map, hanim_src, convention)
+    except Exception as exc:
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar write failed: {exc}'}), 500
+
+    # ── 5. Wire joints (rest-rotation keyValues) ─────────────────────────
+    # Find joints that already have a rotation ROUTE so we skip them
+    already_wired = set()
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        for el in root.iter(tag):
+            if el.get('toField', '') == 'rotation':
+                already_wired.add(el.get('toNode', ''))
+
+    scene_el = _find_scene_el(root)
+    if scene_el is None:
+        return jsonify({'status': 'error',
+                        'error': 'No <Scene> element in X3D file'}), 500
+
+    existing_routes = _collect_routes(root)
+    _remove_routes(scene_el)
+
+    new_routes     = list(existing_routes)
+    joints_wired   = 0
+    joints_skipped = 0
+
+    for jdef in joint_defs:
+        if jdef in already_wired:
+            joints_skipped += 1
+            continue
+
+        timer_def  = f'WireTimer_{jdef}'
+        interp_def = f'WireInterp_{jdef}'
+
+        ts = _ET_hanim.SubElement(scene_el, f'{{{ns}}}TimeSensor')
+        ts.set('DEF',           timer_def)
+        ts.set('cycleInterval', '1')
+        ts.set('loop',          'true')
+        ts.set('enabled',       'false')
+
+        rest_rot = joint_rot_map.get(jdef, '0 0 1 0')
+        parts = rest_rot.split()
+        kv = (' '.join(parts) + '  ' + ' '.join(parts)) if len(parts) == 4 \
+             else '0 0 1 0  0 0 1 0'
+
+        interp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}OrientationInterpolator')
+        interp.set('DEF',      interp_def)
+        interp.set('key',      '0 1')
+        interp.set('keyValue', kv)
+
+        new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
+                            'toNode':   interp_def, 'toField':   'set_fraction'})
+        new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
+                            'toNode':   jdef,       'toField':   'rotation'})
+        joints_wired += 1
+
+    # Re-append all ROUTEs last — invariant
+    for r_attrib in new_routes:
+        re_el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}ROUTE')
+        for k, v in r_attrib.items():
+            re_el.set(k, v)
+
+    # Atomic X3D write
+    try:
+        _hanim_backup(x3d_path)
+        out_text = _serialise_x3d(xml_decl, root)
+        tmp_path = x3d_path + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as fh:
+            fh.write(out_text)
+        os.replace(tmp_path, x3d_path)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':          'ok',
+        'convention':      convention,
+        'joints_mapped':   joints_mapped,
+        'joints_unmapped': joints_unmapped,
+        'joints_wired':    joints_wired,
+        'joints_skipped':  joints_skipped,
+        'joint_map':       joint_map,
+        'hanim_path':      os.path.basename(x3d_path),
+        'cultivar_path':   os.path.basename(cultivar_path),
+    })
+
+
+
+@app.route('/hanim/ingest-mixamo', methods=['POST'])
+def hanim_ingest_mixamo():
+    """
+    POST /hanim/ingest-mixamo
+    Body: { hanim_src: str, cultivar: str, animation_name: str (optional) }
+
+    Mixamo-specific ingest that:
+      1. Runs the standard ingest pipeline (joint_map, WireInterps)
+      2. Preserves the existing TimeSensor + all Interpolator/ROUTE animation
+         data that X_ITE wrote during GLTF->X3D conversion — these are the
+         Mixamo animation keyframes and must not be replaced with WireInterps.
+      3. Renames the TimeSensor and adds animation_name metadata to cultivar
+         so the editor can show/control the clip.
+      4. Stores animation clip info { name, cycleInterval, bone_count } in
+         cultivar XML under <Animations><Clip>.
+
+    Key difference from /hanim/ingest:
+      Standard ingest replaces all existing ROUTEs with WireInterps.
+      This endpoint KEEPS the Mixamo animation ROUTEs and adds WireInterps
+      only for joints that have NO existing animation ROUTE — effectively
+      allowing both the Mixamo animation and manual pose overrides to coexist.
+
+    Returns: { status, convention, joints_mapped, joints_unmapped,
+               joints_wired, animation_preserved, clip_name,
+               cycle_interval, hanim_path, cultivar_path }
+    """
+    import xml.etree.ElementTree as _ET_mix
+    body          = request.get_json(silent=True) or {}
+    hanim_src     = (body.get('hanim_src')       or '').strip()
+    cultivar      = (body.get('cultivar')        or '').strip()
+    animation_name = (body.get('animation_name') or 'mixamo_anim').strip()
+
+    if not hanim_src:
+        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+    if not cultivar:
+        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
+
+    x3d_path      = _hanim_x3d_path(hanim_src)
+    cultivar_path = _cultivar_xml_path(cultivar)
+
+    if not os.path.exists(x3d_path):
+        return jsonify({'status': 'error',
+                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+    if not os.path.exists(cultivar_path):
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar XML not found for: {cultivar}'}), 404
+
+    # ── Parse X3D ──────────────────────────────────────────────────────────
+    try:
+        xml_decl, root = _parse_x3d_file(x3d_path)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D parse failed: {exc}'}), 500
+
+    ns = _X3D_NS
+
+    # ── Ensure Scripting component declared (needed for FaceController) ───
+    head_el = root.find('head')
+    if head_el is None:
+        head_el = root.find(f'{{{ns}}}head')
+    if head_el is not None:
+        existing_comps = {el.get('name', '') for el in head_el
+                         if el.tag in ('component', f'{{{ns}}}component')}
+        if 'Scripting' not in existing_comps:
+            comp = _ET_mix.SubElement(head_el, 'component')
+            comp.set('name', 'Scripting')
+            comp.set('level', '1')
+
+    # ── Collect joint DEFs ─────────────────────────────────────────────────
+    joint_defs    = []
+    joint_rot_map = {}
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if el.get('USE'):
+                continue
+            def_val = el.get('DEF', '').strip()
+            if def_val:
+                joint_defs.append(def_val)
+                rot = el.get('rotation', '').strip()
+                if rot:
+                    joint_rot_map[def_val] = rot
+
+    if not joint_defs:
+        return jsonify({'status': 'error',
+                        'error': 'No HAnimJoint DEF nodes found'}), 400
+
+    # ── Detect convention and build joint map ──────────────────────────────
+    convention = _detect_naming_convention(joint_defs)
+    joint_map  = _build_joint_map(joint_defs, convention)
+
+    # ── Snapshot existing animation data before any modification ──────────
+    # Collect: TimeSensor details, all interpolators, all existing ROUTEs
+    anim_timer_el    = None
+    cycle_interval   = None
+    anim_route_nodes = set()   # toNode values that already have animation ROUTEs
+    existing_routes  = []
+
+    for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
+        for el in root.iter(tag):
+            anim_timer_el  = el
+            cycle_interval = el.get('cycleInterval')
+            break
+
+    for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
+        for el in root.iter(tag):
+            attribs = {k: v for k, v in el.attrib.items()}
+            existing_routes.append(attribs)
+            # Track which joints already have animation ROUTEs targeting them
+            to_node  = el.get('toNode', '')
+            to_field = el.get('toField', '')
+            if to_field in ('set_rotation', 'rotation', 'set_translation',
+                            'translation', 'set_scale', 'scale'):
+                anim_route_nodes.add(to_node)
+
+    animation_preserved = anim_timer_el is not None
+    bone_count = len(anim_route_nodes)
+
+    # Keep the TimeSensor DEF exactly as-is — renaming requires patching every
+    # ROUTE that references it, which is fragile across nested groups.
+    # The timer DEF is stored in the cultivar clip record so the playback
+    # panel can find it by its original name.
+
+    # ── Move TimeSensor to Scene root so SAI getNamedNode() can find it ───
+    # X_ITE's getNamedNode only searches the flat Scene namespace.
+    # Timer1 lives inside Group[Animations]>Group[mixamo-com] in the Mixamo
+    # export, so SAI can't find it and play/stop never work.
+    # Solution: remove it from the nested group and re-insert at Scene root.
+    # The ROUTEs that reference it by DEF name are unaffected.
+    if anim_timer_el is not None:
+        scene_el_early = _find_scene_el(root)
+        if scene_el_early is not None:
+            # Find and remove from its current parent
+            timer_def_val = anim_timer_el.get('DEF', '')
+            for el in root.iter():
+                children = list(el)
+                for child in children:
+                    ctag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                    if ctag == 'TimeSensor' and child.get('DEF') == timer_def_val:
+                        if el is not scene_el_early:  # not already at root
+                            el.remove(child)
+                            # Insert before first ROUTE at scene root
+                            insert_pos = 0
+                            for i, sc in enumerate(list(scene_el_early)):
+                                stag = sc.tag.split('}')[-1] if '}' in sc.tag else sc.tag
+                                if stag == 'ROUTE':
+                                    insert_pos = i
+                                    break
+                            scene_el_early.insert(insert_pos, child)
+                        # Ensure correct defaults regardless of where it was:
+                        # loop=true so animation cycles, enabled=false so it
+                        # waits for the play button rather than auto-playing.
+                        child.set('loop',    'true')
+                        child.set('enabled', 'false')
+                        break
+    # ── Remove EXPORT nodes — they re-export nested DEFs into scene namespace
+    # and override the Timer1 we moved to Scene root with the original nested
+    # version (which lacks loop/enabled attributes).
+    if scene_el_early is not None:
+        for tag in ('EXPORT', f'{{{ns}}}EXPORT'):
+            to_remove = [c for c in scene_el_early if c.tag == tag]
+            for c in to_remove:
+                scene_el_early.remove(c)
+
+    safe_anim_name = animation_name.replace(' ', '_').replace('-', '_')
+    timer_new_def  = anim_timer_el.get('DEF', 'Timer1') if anim_timer_el else f'{safe_anim_name}_Timer'
+
+    # ── Write joint map to cultivar ────────────────────────────────────────
+    try:
+        _hanim_backup(cultivar_path)
+        _write_cultivar_joint_map(cultivar_path, joint_map, hanim_src, convention)
+    except Exception as exc:
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar write failed: {exc}'}), 500
+
+    # ── Write animation clip metadata to cultivar ──────────────────────────
+    try:
+        cv_tree = _ET_mix.parse(cultivar_path)
+        cv_root = cv_tree.getroot()
+        anims_el = cv_root.find('Animations')
+        if anims_el is None:
+            anims_el = _ET_mix.SubElement(cv_root, 'Animations')
+        # Remove existing clip with same name if re-ingesting
+        for old in anims_el.findall('Clip'):
+            if old.get('name') == animation_name:
+                anims_el.remove(old)
+        clip_el = _ET_mix.SubElement(anims_el, 'Clip')
+        clip_el.set('name',          animation_name)
+        clip_el.set('timer_def',     timer_new_def)
+        clip_el.set('cycleInterval', cycle_interval or '0')
+        clip_el.set('bone_count',    str(bone_count))
+        cv_tree.write(cultivar_path, encoding='unicode', xml_declaration=False)
+    except Exception as exc:
+        return jsonify({'status': 'error',
+                        'error': f'Cultivar animation write failed: {exc}'}), 500
+
+    # ── Add WireInterps for ALL joints so pose sliders work ───────────────
+    # Use bare tag names (no namespace prefix) to match the Mixamo file format.
+    # WireInterps start disabled so animation plays freely; sliders enable them.
+    scene_el = _find_scene_el(root)
+    if scene_el is None:
+        return jsonify({'status': 'error',
+                        'error': 'No <Scene> element in X3D file'}), 500
+
+    _remove_routes(scene_el)
+
+    new_routes   = list(existing_routes)   # keep all original animation routes
+    joints_wired = 0
+
+    for jdef in joint_defs:
+        # DEF names must be valid XML NCNames — colons are illegal (reserved for
+        # namespace prefixes). Mixamo DEFs like 'mixamorig:Hips' must be sanitised.
+        safe_def   = jdef.replace(':', '_').replace('-', '_')
+        timer_def  = f'WireTimer_{safe_def}'
+        interp_def = f'WireInterp_{safe_def}'
+
+        ts = _ET_mix.SubElement(scene_el, 'TimeSensor')
+        ts.set('DEF',           timer_def)
+        ts.set('cycleInterval', '1')
+        ts.set('loop',          'true')
+        ts.set('enabled',       'false')
+
+        rest_rot = joint_rot_map.get(jdef, '0 0 1 0')
+        parts    = rest_rot.split()
+        kv = (' '.join(parts) + '  ' + ' '.join(parts)) if len(parts) == 4 \
+             else '0 0 1 0  0 0 1 0'
+
+        interp = _ET_mix.SubElement(scene_el, 'OrientationInterpolator')
+        interp.set('DEF',      interp_def)
+        interp.set('key',      '0 1')
+        interp.set('keyValue', kv)
+
+        new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
+                           'toNode':   interp_def, 'toField':   'set_fraction'})
+        new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
+                           'toNode':   jdef,       'toField':   'rotation'})
+        joints_wired += 1
+
+    # Re-append all ROUTEs — bare tag name matches no-namespace source file
+    for r_attrib in new_routes:
+        re_el = _ET_mix.SubElement(scene_el, 'ROUTE')
+        for k, v in r_attrib.items():
+            re_el.set(k, v)
+
+    # ── Atomic X3D write ───────────────────────────────────────────────────
+    try:
+        _hanim_backup(x3d_path)
+        out_text = _serialise_x3d(xml_decl, root)
+        tmp_path = x3d_path + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as fh:
+            fh.write(out_text)
+        os.replace(tmp_path, x3d_path)
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': f'X3D write failed: {exc}'}), 500
+
+    return jsonify({
+        'status':               'ok',
+        'convention':           convention,
+        'joints_mapped':        len(joint_map),
+        'joints_unmapped':      len(joint_defs) - len(joint_map),
+        'joints_wired':         joints_wired,
+        'animation_preserved':  animation_preserved,
+        'clip_name':            animation_name,
+        'timer_def':            timer_new_def,
+        'cycle_interval':       cycle_interval,
+        'animated_bones':       bone_count,
+        'hanim_path':           os.path.basename(x3d_path),
+        'cultivar_path':        os.path.basename(cultivar_path),
+    })
+
+
 # End HAnim Editor Export Endpoints
 # ---------------------------------------------------------------------------
 
