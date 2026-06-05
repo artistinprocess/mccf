@@ -833,6 +833,7 @@
     font-family: var(--mono);
   }
   .he-rot-btn:hover { border-color: var(--accent3); color: var(--text); }
+  .he-rot-btn.active { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
 
   /* Clip management */
   .he-clip-panel {
@@ -1075,6 +1076,19 @@
   }
   .he-export-btn:hover { opacity: 0.85; }
   .he-export-btn:disabled { opacity: 0.4; cursor: default; }
+  .he-wire-btn {
+    margin-left: 6px;
+    background: transparent;
+    border: 1px solid var(--accent2, #e8a020);
+    border-radius: var(--radius);
+    color: var(--accent2, #e8a020);
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .he-wire-btn:hover { opacity: 0.8; }
+  .he-wire-btn:disabled { opacity: 0.4; cursor: default; }
 
   /* Open HAnim Editor button in center panel */
   .open-he-btn {
@@ -1526,11 +1540,12 @@
                 <div class="he-rot-row">
                   <span class="he-rot-label">∠</span>
                   <input type="range" class="he-rot-slider" id="he-rot-a"
-                         min="-180" max="180" value="0"
+                         min="-180" max="180" value="0" step="0.5"
                          oninput="hePoseRotChanged()">
                   <span class="he-rot-val" id="he-rot-a-val">0°</span>
                 </div>
                 <div class="he-rot-btns">
+                  <button class="he-rot-btn" id="he-fine-btn" onclick="hePoseToggleFine()" title="Toggle fine mode: ±30° instead of ±180°">fine</button>
                   <button class="he-rot-btn" onclick="hePoseMirror()" title="Copy to contralateral joint">mirror ↔</button>
                   <button class="he-rot-btn" onclick="hePoseResetJoint()" title="Reset to rest pose">reset</button>
                   <button class="he-rot-btn" style="flex:2;border-color:var(--accent);color:var(--accent);"
@@ -1640,6 +1655,44 @@
                style="margin-top:4px;font-size:10px;color:var(--muted);min-height:14px;"></div>
         </div>
 
+        <!-- ── Face AU morph capture ─────────────────────────────── -->
+        <div class="he-section" id="he-face-capture-section">
+          <div class="he-sec-label" style="display:flex;align-items:center;justify-content:space-between;">
+            morph target capture
+            <button class="he-preset-btn" onclick="heFaceCapturePoll()"
+                    style="font-size:9px;padding:2px 8px;">↺ refresh</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.5;">
+            For each region: pose avatar → capture morph, then reset → capture rest.
+            When all regions have both, click Inject AUs.
+          </div>
+          <div id="he-face-capture-grid" style="display:grid;grid-template-columns:1fr auto auto;gap:3px 6px;align-items:center;font-size:10px;font-family:var(--mono);"></div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn" onclick="heFaceCaptureRegion('rest')"
+                    id="he-capture-rest-btn" title="Capture current pose as REST for selected region">capture rest</button>
+            <button class="btn" onclick="heFaceCaptureRegion('morph')"
+                    id="he-capture-morph-btn" title="Pose face then capture as MORPH for selected region">capture morph</button>
+            <button class="btn primary" onclick="heFaceInjectAUs()"
+                    id="he-inject-aus-btn" title="Write AnimationAdapter nodes to X3D">inject AUs →</button>
+          </div>
+          <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+            <span style="font-size:10px;color:var(--muted);">region:</span>
+            <select id="he-face-capture-region" class="input"
+                    style="font-family:var(--mono);font-size:10px;flex:1;">
+              <option value="skull">skull</option>
+              <option value="jaw">jaw</option>
+              <option value="l_eyelid">l_eyelid</option>
+              <option value="r_eyelid">r_eyelid</option>
+              <option value="l_eyeball">l_eyeball</option>
+              <option value="r_eyeball">r_eyeball</option>
+              <option value="l_eyebrow">l_eyebrow</option>
+              <option value="r_eyebrow">r_eyebrow</option>
+            </select>
+          </div>
+          <div id="he-face-capture-status"
+               style="margin-top:4px;font-size:10px;color:var(--muted);min-height:14px;"></div>
+        </div>
+
         <div class="he-section">
           <div class="he-sec-label">facs action units · weight (0–1)</div>
           <div id="he-au-list"></div>
@@ -1700,6 +1753,14 @@
     <div class="he-status-dot"></div>
     <span id="he-status-text">ready</span>
     <span class="he-dirty" id="he-dirty-label" style="display:none">● unsaved changes</span>
+    <button class="he-wire-btn" id="he-normalize-btn" onclick="heNormalizeJoints()"
+            style="display:none" title="Legacy: renames joint DEFs — disabled, use ingest instead">⚙ normalize</button>
+    <button class="he-wire-btn" id="he-wire-btn" onclick="heWireJoints()"
+            style="display:none" title="Legacy: wire joints only — disabled, use ingest instead">⚡ wire joints</button>
+    <button class="he-wire-btn" id="he-ingest-btn" onclick="heIngestAvatar()"
+            style="display:none" title="Detect joint convention, build translation map, wire joints — X3D never renamed">⚡ ingest</button>
+    <button class="he-wire-btn" id="he-ingest-mixamo-btn" onclick="heIngestMixamo()"
+            style="display:none" title="Ingest Mixamo avatar — preserves embedded animation keyframes, adds pose sliders alongside">⚡ ingest mixamo</button>
     <button class="he-export-btn" id="he-export-btn" onclick="heExport()">export →</button>
   </div>
 
@@ -1724,6 +1785,7 @@ let _isDirty      = false;      // unsaved changes
 let _hanimPath    = '';         // H-Anim figure path
 let _hanimLoa     = 4;          // LOA level from upload response
 let _pendingVoice = null;       // { name, lang } waiting for voice list to load
+let _heJointMap   = {};         // { def: hanim_2_0_name } — from cultivar JointMap
 
 // ── API helpers ────────────────────────────────────────────────────────
 async function apiGet(path) {
@@ -2027,8 +2089,9 @@ function _previewClip(clipName) {
 }
 
 function clearHAnim() {
-  _hanimPath = '';
-  _hanimLoa  = 4;
+  _hanimPath    = '';
+  _hanimLoa     = 4;
+  _hePoseJoints = [];   // force joints reload on next load
   document.getElementById('hanim-file-display').style.display = 'none';
   document.getElementById('hanim-status').style.display       = 'none';
   document.getElementById('hanim-clips').style.display        = 'none';
@@ -2192,8 +2255,9 @@ function loadForm(c) {
   renderPhrases(c.phrases || []);
 
   // H-Anim
-  _hanimPath = c.hanim_src  || '';
-  _hanimLoa  = c.hanim_loa  || 4;
+  _hanimPath    = c.hanim_src  || '';
+  _hanimLoa     = c.hanim_loa  || 4;
+  _hePoseJoints = [];   // force joints reload — new avatar may have different skeleton
 
   // Load clips from cultivar into pose tab
   if (c.behavior_clips && c.behavior_clips.length) {
@@ -2283,6 +2347,7 @@ function newCharacter() {
   _selectedName = null;
   _hanimPath    = '';
   _hanimLoa     = 4;
+  _hePoseJoints = [];   // force joints reload on next load
   document.getElementById('hanim-file-display').style.display = 'none';
   document.getElementById('hanim-status').style.display       = 'none';
   document.getElementById('hanim-clips').style.display        = 'none';
@@ -3024,6 +3089,7 @@ loadForm = function(c) {
 var _hePoseJoints   = [];
 var _hePoseSelected = null;
 var _hePoseTouched  = new Set();
+var _heFineMode     = false;   // fine mode: angle slider ±30° instead of ±180°
 var _heClips        = [];
 var _heClipIdx      = 0;
 var _heTlT          = 0.0;
@@ -3117,7 +3183,27 @@ var _HE_GROUP_PRESETS = {
   },
 };
 
-var _heActiveGroup = null;   // region key string or null
+// Resolve a preset HAnim 2.0 name against the loaded joint list.
+// Primary path: exact match on j.name or j.def (works for HAnim-native avatars).
+// Fallback path: consult _heJointMap — if the avatar's DEF maps to the preset
+// HAnim name, that joint is the match.  This makes group presets work for
+// Blender/Mixamo avatars without renaming the X3D file.
+function _heResolveJoint(presetName) {
+  // Direct match first (HAnim-native or already normalized)
+  var direct = _hePoseJoints.find(function(j) {
+    return j.name === presetName || j.def === presetName;
+  });
+  if (direct) return direct;
+
+  // Translation map lookup: find a joint whose DEF maps to this HAnim name
+  if (_heJointMap && Object.keys(_heJointMap).length > 0) {
+    return _hePoseJoints.find(function(j) {
+      return _heJointMap[j.def] === presetName;
+    }) || null;
+  }
+
+  return null;
+}
 
 // ── Region group preset functions ─────────────────────────────────────────
 
@@ -3154,12 +3240,18 @@ function heRegionSelect(region) {
   var bar = document.getElementById('he-face-group-bar');
   if (bar) bar.style.display = 'none';
 
-  // Select primary joint in tree
-  hePoseSelectJoint(preset.primary);
+  // Reset sliders to identity before selecting primary joint —
+  // ensures clean state whether or not the joint resolves in this avatar
+  _hePoseSetSliders([0, 0, 1, 0]);
+
+  // Select primary joint in tree — resolve against loaded avatar
+  var primaryJoint = _heResolveJoint(preset.primary);
+  var primaryName  = primaryJoint ? primaryJoint.name : preset.primary;
+  hePoseSelectJoint(primaryName);
 
   // Expand the region in the tree so the primary joint is visible
   var regionForJoint = null;
-  var j = _hePoseJoints.find(function(jj) { return jj.name === preset.primary; });
+  var j = _hePoseJoints.find(function(jj) { return jj.name === primaryName; });
   if (j) regionForJoint = j.region || 'other';
   if (regionForJoint && _REGION_COLLAPSED[regionForJoint]) {
     _REGION_COLLAPSED[regionForJoint] = false;
@@ -3194,7 +3286,7 @@ function _hePoseSendCoupled(ax, ay, az, angleRad) {
   if (!preset) return;
 
   preset.coupled.forEach(function(c) {
-    var joint = _hePoseJoints.find(function(j) { return j.name === c.name; });
+    var joint = _heResolveJoint(c.name);
     if (!joint) return;   // joint not present in this model — skip silently
 
     var scaledAngle = angleRad * Math.abs(c.ratio);
@@ -3214,30 +3306,26 @@ function hePoseInit() {
   if (tree && !tree._delegated) {
     tree._delegated = true;
     tree.addEventListener('click', function(e) {
-      // Joint item click
       var item = e.target.closest('.he-joint-item');
-      if (item && item.dataset.jname) {
-        hePoseSelectJoint(item.dataset.jname);
-        return;
-      }
-      // Region header click
+      if (item && item.dataset.jname) { hePoseSelectJoint(item.dataset.jname); return; }
       var header = e.target.closest('.he-region-header');
-      if (header && header.dataset.region) {
-        hePoseToggleRegion(header.dataset.region);
-      }
+      if (header && header.dataset.region) { hePoseToggleRegion(header.dataset.region); }
     });
   }
 
-  // Only load joints once per editor open
+  // Only load joints once per editor open — heLoadJoints clears this to force reload
   if (_hePoseJoints.length > 0) {
     hePoseRenderTree(_hePoseJoints);
     _heRenderPlaybackClips(_hePlaybackClips);
     return;
   }
 
-  var src = _hanimPath;
+  heLoadJoints(_hanimPath);
+}
+
+// ── heLoadJoints — fetch and render joint tree (also called post-ingest) ──
+function heLoadJoints(src) {
   if (!src) { toast('No HAnim figure loaded', true); return; }
-  // Use basename only
   var basename = src.split('/').pop();
 
   fetch(API_URL + '/hanim/joints?src=' + encodeURIComponent(basename))
@@ -3245,10 +3333,21 @@ function hePoseInit() {
     .then(function(d) {
       if (d.error) { toast('Joints load failed: ' + d.error, true); return; }
       _hePoseJoints = d.joints || [];
+      _heJointMap   = d.joint_map || {};
       hePoseRenderTree(_hePoseJoints);
-      // Populate playback panel from X3D TimeSensors
       _heRenderPlaybackClips(d.clips || []);
-      // Ensure at least one default authoring clip exists
+      var wireBtn         = document.getElementById('he-wire-btn');
+      var normBtn         = document.getElementById('he-normalize-btn');
+      var ingestBtn       = document.getElementById('he-ingest-btn');
+      var mixamoIngestBtn = document.getElementById('he-ingest-mixamo-btn');
+      var unwired   = (d.clips && d.clips.length === 0);
+      var mixamoRaw = !unwired && (d.clips || []).every(function(c) {
+        return !c.timerDEF.endsWith('_Timer');
+      });
+      if (wireBtn)         wireBtn.style.display         = 'none';
+      if (normBtn)         normBtn.style.display         = 'none';
+      if (ingestBtn)       ingestBtn.style.display       = unwired   ? '' : 'none';
+      if (mixamoIngestBtn) mixamoIngestBtn.style.display = mixamoRaw ? '' : 'none';
       if (_heClips.length === 0) {
         _heClips.push(_heNewClipObj('Default', 6.0, true, 0));
         _heClipIdx = 0;
@@ -3345,14 +3444,24 @@ function hePoseSelectJoint(name) {
 
   if (!_hePoseSelected) return;
 
-  // Load current keyframe rotation for this joint at current t if available
+  // If a keyframe exists for this joint at the current timeline position,
+  // use it — the scene already reflects it and it's the authoritative value.
   var clip = hePoseCurrentClip();
-  var rot = [0, 0, 1, 0];  // identity
+  var kfRot = null;
   if (clip) {
     var kf = _hePoseNearestKeyframe(clip, _heTlT);
-    if (kf && kf.joints[name]) rot = kf.joints[name];
+    if (kf && kf.joints[name]) kfRot = kf.joints[name];
   }
-  _hePoseSetSliders(rot);
+
+  if (kfRot) {
+    // Known keyframe value — set immediately, no round-trip needed
+    _hePoseSetSliders(kfRot);
+  } else {
+    // No keyframe — request live rotation from X3D scene (true rest pose)
+    _hePoseSetSliders([0, 0, 1, 0]);   // blank to identity while waiting
+    hePoseSendSAI({ type: 'getJointRotation', joint: _hePoseSelected.def });
+    // Response arrives via window.addEventListener('message') → jointRotation
+  }
 }
 
 function _hePoseSetSliders(rot) {
@@ -3362,11 +3471,11 @@ function _hePoseSetSliders(rot) {
   document.getElementById('he-rot-x').value    = Math.round(ax * 100);
   document.getElementById('he-rot-y').value    = Math.round(ay * 100);
   document.getElementById('he-rot-z').value    = Math.round(az * 100);
-  document.getElementById('he-rot-a').value    = Math.round(angleDeg);
+  document.getElementById('he-rot-a').value    = angleDeg.toFixed(1);
   document.getElementById('he-rot-x-val').textContent = ax.toFixed(2);
   document.getElementById('he-rot-y-val').textContent = ay.toFixed(2);
   document.getElementById('he-rot-z-val').textContent = az.toFixed(2);
-  document.getElementById('he-rot-a-val').textContent = Math.round(angleDeg) + '°';
+  document.getElementById('he-rot-a-val').textContent = angleDeg.toFixed(1) + '°';
 }
 
 // ── Rotation slider change → SAI write ───────────────────────────────────
@@ -3375,13 +3484,13 @@ function hePoseRotChanged() {
   var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
   var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
   var az = parseInt(document.getElementById('he-rot-z').value) / 100;
-  var angleDeg = parseInt(document.getElementById('he-rot-a').value);
+  var angleDeg = parseFloat(document.getElementById('he-rot-a').value);
   var angleRad = angleDeg * Math.PI / 180;
 
   document.getElementById('he-rot-x-val').textContent = ax.toFixed(2);
   document.getElementById('he-rot-y-val').textContent = ay.toFixed(2);
   document.getElementById('he-rot-z-val').textContent = az.toFixed(2);
-  document.getElementById('he-rot-a-val').textContent = angleDeg + '°';
+  document.getElementById('he-rot-a-val').textContent = angleDeg.toFixed(1) + '°';
 
   if (!_hePoseSelected) return;
 
@@ -3409,6 +3518,18 @@ function hePoseSendSAI(msg) {
   }
 }
 
+// ── Fine mode toggle ──────────────────────────────────────────────────────
+
+function hePoseToggleFine() {
+  _heFineMode = !_heFineMode;
+  var btn = document.getElementById('he-fine-btn');
+  if (btn) btn.classList.toggle('active', _heFineMode);
+
+  // Change step only — range stays at ±180°, fine gives smaller increments
+  var aSlider = document.getElementById('he-rot-a');
+  aSlider.step = _heFineMode ? '0.1' : '0.5';
+}
+
 // ── Mirror ────────────────────────────────────────────────────────────────
 
 function hePoseMirror() {
@@ -3425,7 +3546,7 @@ function hePoseMirror() {
   var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
   var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
   var az = parseInt(document.getElementById('he-rot-z').value) / 100;
-  var angleRad = parseInt(document.getElementById('he-rot-a').value) * Math.PI / 180;
+  var angleRad = parseFloat(document.getElementById('he-rot-a').value) * Math.PI / 180;
 
   // Negate Z axis for bilateral mirror
   hePoseSendSAI({
@@ -3482,7 +3603,7 @@ function hePoseAddKeyframe() {
   var ax = parseInt(document.getElementById('he-rot-x').value) / 100;
   var ay = parseInt(document.getElementById('he-rot-y').value) / 100;
   var az = parseInt(document.getElementById('he-rot-z').value) / 100;
-  var angleRad = parseInt(document.getElementById('he-rot-a').value) * Math.PI / 180;
+  var angleRad = parseFloat(document.getElementById('he-rot-a').value) * Math.PI / 180;
 
   if (_hePoseSelected) {
     existing.joints[_hePoseSelected.name] = [ax, ay, az, angleRad];
@@ -3647,6 +3768,365 @@ function heStopAllClips() {
   heSetStatus('stopped');
 }
 
+// ── Normalize joint names to HAnim 2.0 standard ───────────────────────────
+
+async function heNormalizeJoints() {
+  var btn = document.getElementById('he-normalize-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⚙ normalizing…'; }
+
+  if (!_hanimPath) {
+    toast('No avatar loaded', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚙ normalize'; }
+    return;
+  }
+  var src = _hanimPath.split('/').pop();
+
+  try {
+    var resp = await fetch(API_URL + '/hanim/normalize-joints', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ hanim_src: src })
+    });
+    var d = await resp.json();
+    if (d.status === 'ok') {
+      var msg;
+      if (d.note) {
+        msg = d.note;
+      } else {
+        msg = '✓ Normalized ' + (d.renamed ? d.renamed.length : 0) + ' joints to HAnim 2.0';
+        if (d.wire_stripped) msg += ' · cleared ' + d.wire_stripped + ' stale wire nodes';
+        if (d.unmapped && d.unmapped.length) msg += ' · ' + d.unmapped.length + ' unmapped (IK bones)';
+      }
+      toast(msg);
+      // Re-show wire-joints button — normalize always precedes wiring
+      var wireBtn = document.getElementById('he-wire-btn');
+      if (wireBtn) wireBtn.style.display = '';
+      if (btn) btn.disabled = false;
+    } else {
+      toast('Normalize failed: ' + (d.error || 'unknown error'), true);
+      if (btn) { btn.disabled = false; btn.textContent = '⚙ normalize'; }
+    }
+  } catch (e) {
+    toast('Normalize error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚙ normalize'; }
+  }
+}
+
+// ── Wire Joints — generate stub animation infrastructure ─────────────────
+
+async function heWireJoints() {
+  var btn = document.getElementById('he-wire-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⚡ wiring…'; }
+
+  if (!_hanimPath) {
+    toast('No avatar loaded', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ wire joints'; }
+    return;
+  }
+  var src = _hanimPath.split('/').pop();
+
+  try {
+    var resp = await fetch(API_URL + '/hanim/wire-joints', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ hanim_src: src })
+    });
+    var d = await resp.json();
+    if (d.status === 'ok') {
+      toast('✓ Wired ' + d.joints_wired + ' joints' +
+            (d.joints_skipped ? ' (' + d.joints_skipped + ' already wired)' : '') +
+            ' — reload avatar to activate');
+      if (btn) btn.style.display = 'none';
+    } else {
+      toast('Wire failed: ' + (d.error || 'unknown error'), true);
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ wire joints'; }
+    }
+  } catch (e) {
+    toast('Wire error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ wire joints'; }
+  }
+}
+
+// ── Ingest Avatar — pipeline: detect convention, map joints, wire ────────
+// Replaces the old normalize → wire two-step.
+// The X3D is never renamed; the joint map goes into the cultivar.
+
+async function heIngestAvatar() {
+  var btn = document.getElementById('he-ingest-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⚡ ingesting…'; }
+
+  if (!_hanimPath) {
+    toast('No avatar loaded', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest'; }
+    return;
+  }
+  if (!_selectedName) {
+    toast('Select a cultivar first — ingest writes the joint map into it', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest'; }
+    return;
+  }
+
+  var src = _hanimPath.split('/').pop();
+
+  try {
+    var resp = await fetch(API_URL + '/hanim/ingest', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ hanim_src: src, cultivar: _selectedName })
+    });
+    var d = await resp.json();
+
+    if (d.status === 'ok') {
+      // Store the returned map so group presets work immediately
+      _heJointMap = d.joint_map || {};
+
+      var msg = '✓ Ingest complete — convention: ' + d.convention +
+                ' | mapped: ' + d.joints_mapped +
+                ' | wired: '  + d.joints_wired;
+      if (d.joints_unmapped > 0)
+        msg += ' | unmapped (IK/helpers): ' + d.joints_unmapped;
+      toast(msg);
+
+      // Hide button — avatar is now ingested
+      if (btn) btn.style.display = 'none';
+
+      // Force joints reload on next pose tab open so tree reflects wired state
+      _hePoseJoints = [];
+
+    } else {
+      toast('Ingest failed: ' + (d.error || 'unknown error'), true);
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest'; }
+    }
+  } catch (e) {
+    toast('Ingest error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest'; }
+  }
+}
+
+// ── Ingest Mixamo Avatar — preserves animation keyframes ─────────────────
+// Like heIngestAvatar but calls /hanim/ingest-mixamo which keeps the
+// Mixamo TimeSensor + interpolator ROUTEs intact and only adds WireInterps
+// for joints not already driven by animation.
+
+async function heIngestMixamo() {
+  var btn = document.getElementById('he-ingest-mixamo-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⚡ ingesting…'; }
+
+  if (!_hanimPath) {
+    toast('No avatar loaded', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest mixamo'; }
+    return;
+  }
+  if (!_selectedName) {
+    toast('Select a cultivar first — ingest writes the joint map into it', true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest mixamo'; }
+    return;
+  }
+
+  var src = _hanimPath.split('/').pop();
+  // Derive a clip name from the filename: mixamo1.x3d -> mixamo1
+  var clipName = src.replace(/\.x3d$/i, '').replace(/_hanim$/i, '') || 'mixamo_anim';
+
+  try {
+    var resp = await fetch(API_URL + '/hanim/ingest-mixamo', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        hanim_src:      src,
+        cultivar:       _selectedName,
+        animation_name: clipName
+      })
+    });
+    var d = await resp.json();
+
+    if (d.status === 'ok') {
+      _heJointMap = d.joint_map || {};
+
+      var msg = '✓ Mixamo ingest complete'
+              + ' | convention: ' + d.convention
+              + ' | mapped: '     + d.joints_mapped
+              + ' | animated bones preserved: ' + (d.animated_bones || 0)
+              + ' | pose sliders wired: ' + d.joints_wired;
+      if (d.joints_unmapped > 0)
+        msg += ' | unmapped: ' + d.joints_unmapped;
+      if (!d.animation_preserved)
+        msg += ' ⚠ no animation found in file';
+      toast(msg);
+
+      // Hide button — avatar is now ingested
+      if (btn) btn.style.display = 'none';
+
+      // Force joints reload so tree reflects new state, and playback
+      // panel will now show the renamed clip timer
+      _hePoseJoints = [];
+      heLoadJoints(_hanimPath);
+
+    } else {
+      toast('Mixamo ingest failed: ' + (d.error || 'unknown error'), true);
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest mixamo'; }
+    }
+  } catch (e) {
+    toast('Mixamo ingest error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ ingest mixamo'; }
+  }
+}
+
+
+
+// Known face regions and their Coordinate node DEF names
+// coord_def is avatar-prefixed; we try both JackCoord_ and CindyCoord_ patterns
+// at capture time by asking the API for the face morph status first.
+var _faceRegions = ['skull','jaw','l_eyelid','r_eyelid','l_eyeball','r_eyeball','l_eyebrow','r_eyebrow'];
+var _faceCaptureStatus = {};   // { region: { rest:bool, morph:bool, coord_def:str } }
+var _faceCaptureResolve = null; // pending coordPositions promise resolver
+
+// Refresh capture status from API and redraw grid
+async function heFaceCapturePoll() {
+  if (!_selectedName) return;
+  try {
+    var resp = await fetch(API_URL + '/hanim/get-face-morph-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cultivar: _selectedName })
+    });
+    var d = await resp.json();
+    if (d.status === 'ok') {
+      _faceCaptureStatus = d.regions || {};
+      _heFaceRenderGrid();
+    }
+  } catch(e) {}
+}
+
+function _heFaceRenderGrid() {
+  var grid = document.getElementById('he-face-capture-grid');
+  if (!grid) return;
+  var html = '';
+  _faceRegions.forEach(function(r) {
+    var st = _faceCaptureStatus[r] || {};
+    var restDot  = st.rest  ? '<span style="color:#4f4;font-size:12px;">●</span>' : '<span style="color:#444;font-size:12px;">○</span>';
+    var morphDot = st.morph ? '<span style="color:#4af;font-size:12px;">●</span>' : '<span style="color:#444;font-size:12px;">○</span>';
+    html += '<span>' + r + '</span><span title="rest captured">' + restDot + ' rest</span><span title="morph captured">' + morphDot + ' morph</span>';
+  });
+  grid.innerHTML = html;
+}
+
+// Capture current coordinate positions for selected region + pose
+async function heFaceCaptureRegion(pose) {
+  var region = (document.getElementById('he-face-capture-region') || {}).value;
+  if (!region) { toast('Select a region first', true); return; }
+  if (!_selectedName) { toast('Select a cultivar first', true); return; }
+  if (!_hanimPath)    { toast('No avatar loaded', true);        return; }
+
+  var statusEl = document.getElementById('he-face-capture-status');
+  if (statusEl) statusEl.textContent = 'Reading ' + region + ' coordinates…';
+
+  // Determine coord_def — try existing status first, then fall back to avatar-prefixed patterns
+  var st = _faceCaptureStatus[region] || {};
+  var coordDef = st.coord_def || '';
+
+  if (!coordDef) {
+    // Try common patterns: {AvatarName}Coord_{region}
+    var src = (_hanimPath || '').split('/').pop().replace('_hanim.x3d','').replace('.x3d','');
+    var cap = src.charAt(0).toUpperCase() + src.slice(1);
+    coordDef = cap + 'Coord_' + region;  // e.g. JackCoord_skull, FinalCoord_skull
+  }
+
+  // Request coords from X_ITE via SAI
+  var points = await _heFaceReadCoords(coordDef, region);
+
+  if (!points || points.length === 0) {
+    if (statusEl) statusEl.textContent = '✗ ' + coordDef + ' not found in scene';
+    toast('Coord node not found: ' + coordDef, true);
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = 'Saving ' + region + ' ' + pose + ' (' + (points.length/3) + ' pts)…';
+
+  // Save to cultivar
+  try {
+    var resp = await fetch(API_URL + '/hanim/save-face-morph', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cultivar:  _selectedName,
+        region:    region,
+        pose:      pose,
+        coord_def: coordDef,
+        points:    points
+      })
+    });
+    var d = await resp.json();
+    if (d.status === 'ok') {
+      toast('✓ ' + region + ' ' + pose + ' captured (' + d.point_count + ' pts)');
+      if (statusEl) statusEl.textContent = '✓ ' + region + ' ' + pose + ' saved';
+      await heFaceCapturePoll();
+    } else {
+      toast('Save failed: ' + (d.error || '?'), true);
+      if (statusEl) statusEl.textContent = '✗ ' + (d.error || 'save failed');
+    }
+  } catch(e) {
+    toast('Capture error: ' + e.message, true);
+    if (statusEl) statusEl.textContent = '✗ ' + e.message;
+  }
+}
+
+// SAI round-trip: ask preview frame for coordinate positions, wait for response
+function _heFaceReadCoords(coordDef, region) {
+  return new Promise(function(resolve) {
+    var timeout = setTimeout(function() {
+      window.removeEventListener('message', handler);
+      resolve([]);
+    }, 3000);
+
+    function handler(evt) {
+      var msg = evt.data;
+      if (!msg || msg.type !== 'coordPositions') return;
+      if (msg.region !== region) return;
+      clearTimeout(timeout);
+      window.removeEventListener('message', handler);
+      resolve(msg.found ? (msg.points || []) : []);
+    }
+
+    window.addEventListener('message', handler);
+    hePoseSendSAI({ type: 'getCoordPositions', coordDef: coordDef, region: region });
+  });
+}
+
+// Inject AnimationAdapter nodes into X3D from cultivar FaceMorphs data
+async function heFaceInjectAUs() {
+  if (!_selectedName) { toast('Select a cultivar first', true); return; }
+  if (!_hanimPath)    { toast('No avatar loaded', true);        return; }
+
+  var btn = document.getElementById('he-inject-aus-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'injecting…'; }
+
+  var src = _hanimPath.split('/').pop();
+  try {
+    var resp = await fetch(API_URL + '/hanim/inject-face-aus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hanim_src: src, cultivar: _selectedName })
+    });
+    var d = await resp.json();
+    if (d.status === 'ok') {
+      var msg = '✓ Injected AUs: ' + (d.regions || []).join(', ');
+      if (d.skipped && d.skipped.length) msg += ' | skipped: ' + d.skipped.join(', ');
+      toast(msg);
+      if (btn) { btn.disabled = false; btn.textContent = 'inject AUs ✓'; }
+      // Reload iframe so new AnimationAdapter nodes are live
+      var iframe = document.getElementById('he-xite-frame') || document.querySelector('iframe');
+      if (iframe) iframe.src = iframe.src;
+    } else {
+      toast('Inject AUs failed: ' + (d.error || '?'), true);
+      if (btn) { btn.disabled = false; btn.textContent = 'inject AUs →'; }
+    }
+  } catch(e) {
+    toast('Inject AUs error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = 'inject AUs →'; }
+  }
+}
+
+
 // ── Clip list management ──────────────────────────────────────────────────
 
 function hePoseRenderClipList() {
@@ -3715,6 +4195,7 @@ var _orig_heShowTab = heShowTab;
 heShowTab = function(t) {
   _orig_heShowTab(t);
   if (t === 'pose') hePoseInit();
+  if (t === 'face') heFaceCapturePoll();
 };
 
 // ── heExport hook — populate clips[] from pose state ─────────────────────
@@ -3802,6 +4283,17 @@ heExport = async function() {
 // This is handled by the avatar/preview endpoint — see mccf_api.py heVpPlay note.
 // For now, we send the message; the preview page will pick it up once the
 // SAI listener is added to the preview HTML (next step).
+
+// ── jointRotation round-trip response handler ─────────────────────────────
+// Receives live rotation from preview iframe after getJointRotation request.
+window.addEventListener('message', function(evt) {
+  var msg = evt.data;
+  if (!msg || msg.type !== 'jointRotation') return;
+  // Only handle if it matches the currently selected joint
+  if (_hePoseSelected && msg.joint === _hePoseSelected.def) {
+    _hePoseSetSliders(msg.rotation || [0, 0, 1, 0]);
+  }
+});
 </script>
 </body>
 </html>
