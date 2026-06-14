@@ -2521,13 +2521,24 @@ def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
     """
     import xml.etree.ElementTree as _ET
 
+    _CULTIVAR_NS = 'http://mccf.artistinprocess.com/cultivar/v3'
+    _ET.register_namespace('', _CULTIVAR_NS)  # suppress ns0: prefixes on serialize
+
     tree = _ET.parse(cultivar_path)
     root = tree.getroot()
 
-    # Remove stale JointMap if present
-    old_jm = root.find('JointMap')
-    if old_jm is not None:
-        root.remove(old_jm)
+    # Detect namespace prefix for find() — works with or without xmlns
+    _ns_tag = lambda tag: (
+        f'{{{_CULTIVAR_NS}}}{tag}'
+        if root.tag.startswith('{') else tag
+    )
+
+    # Remove stale JointMap if present (with or without namespace)
+    for _jm_tag in (_ns_tag('JointMap'), 'JointMap'):
+        old_jm = root.find(_jm_tag)
+        if old_jm is not None:
+            root.remove(old_jm)
+            break
 
     # Build new JointMap element
     jm_el = _ET.Element('JointMap')
@@ -2538,11 +2549,12 @@ def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
         j.set('hanim', hanim_name)
 
     # Upsert HAnimFigure — update src if exists, else create
-    fig_el = root.find('HAnimFigure')
+    # Search with and without namespace to avoid creating duplicates
+    fig_el = root.find(_ns_tag('HAnimFigure')) or root.find('HAnimFigure')
     if fig_el is None:
         fig_el = _ET.Element('HAnimFigure')
         root.append(fig_el)
-    fig_el.set('src', os.path.basename(hanim_src))
+    fig_el.set('src', 'avatars/' + os.path.basename(hanim_src))
 
     # Append JointMap after HAnimFigure
     root.append(jm_el)
@@ -3174,21 +3186,38 @@ def hanim_ingest_mixamo():
     anim_route_nodes = set()   # toNode values that already have animation ROUTEs
     existing_routes  = []
 
+    # Collect ALL animation TimeSensors (not WireTimers) — multi-clip files
+    # have one TimeSensor per clip (Timer1, Timer2, ... TimerN).
+    all_anim_timers = []
     for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
         for el in root.iter(tag):
-            anim_timer_el  = el
-            cycle_interval = el.get('cycleInterval')
-            break
+            if not el.get('DEF', '').startswith('WireTimer'):
+                all_anim_timers.append(el)
+    if all_anim_timers:
+        anim_timer_el  = all_anim_timers[0]
+        cycle_interval = anim_timer_el.get('cycleInterval')
 
     for tag in (f'{{{ns}}}ROUTE', 'ROUTE'):
         for el in root.iter(tag):
             attribs = {k: v for k, v in el.attrib.items()}
-            existing_routes.append(attribs)
-            # Track which joints already have animation ROUTEs targeting them
             to_node  = el.get('toNode', '')
             to_field = el.get('toField', '')
+            # Drop scale and translation interpolator ROUTEs entirely.
+            # X_ITE exports scale tracks as PositionInterpolator nodes with DEF
+            # names starting with "ScaleInterpolator" — causes bone elongation.
+            # Translation tracks are also dropped: bone positions are defined by
+            # the rest `translation` attribute on each HAnimJoint; animated
+            # set_translation from multiple simultaneous clips fighting over the
+            # same bone causes severe distortion. Rotation-only animation is
+            # correct for character rigs.
+            if to_field in ('set_scale', 'scale', 'set_translation', 'translation') or \
+               to_node.startswith('ScaleInterpolator') or \
+               to_node.startswith('TranslationInterpolator'):
+                continue
+            existing_routes.append(attribs)
+            # Track which joints already have animation ROUTEs targeting them
             if to_field in ('set_rotation', 'rotation', 'set_translation',
-                            'translation', 'set_scale', 'scale'):
+                            'translation'):
                 anim_route_nodes.add(to_node)
 
     animation_preserved = anim_timer_el is not None
@@ -3199,49 +3228,79 @@ def hanim_ingest_mixamo():
     # The timer DEF is stored in the cultivar clip record so the playback
     # panel can find it by its original name.
 
-    # ── Move TimeSensor to Scene root so SAI getNamedNode() can find it ───
-    # X_ITE's getNamedNode only searches the flat Scene namespace.
-    # Timer1 lives inside Group[Animations]>Group[mixamo-com] in the Mixamo
-    # export, so SAI can't find it and play/stop never work.
-    # Solution: remove it from the nested group and re-insert at Scene root.
-    # The ROUTEs that reference it by DEF name are unaffected.
-    if anim_timer_el is not None:
-        scene_el_early = _find_scene_el(root)
-        if scene_el_early is not None:
-            # Find and remove from its current parent
-            timer_def_val = anim_timer_el.get('DEF', '')
-            for el in root.iter():
-                children = list(el)
-                for child in children:
-                    ctag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
-                    if ctag == 'TimeSensor' and child.get('DEF') == timer_def_val:
-                        if el is not scene_el_early:  # not already at root
-                            el.remove(child)
-                            # Insert before first ROUTE at scene root
-                            insert_pos = 0
-                            for i, sc in enumerate(list(scene_el_early)):
-                                stag = sc.tag.split('}')[-1] if '}' in sc.tag else sc.tag
-                                if stag == 'ROUTE':
-                                    insert_pos = i
-                                    break
-                            scene_el_early.insert(insert_pos, child)
-                        # Ensure correct defaults regardless of where it was:
-                        # loop=true so animation cycles, enabled=false so it
-                        # waits for the play button rather than auto-playing.
-                        child.set('loop',    'true')
-                        child.set('enabled', 'false')
-                        break
+    # ── Move ALL TimeSensors to Scene root so SAI getNamedNode() finds them ─
+    # X_ITE's getNamedNode only searches the flat Scene namespace, not nested
+    # groups. Multi-clip Mixamo files have one TimeSensor per animation, all
+    # inside nested Groups. Move every non-WireTimer TimeSensor to Scene root.
+    scene_el_early = _find_scene_el(root)
+    if scene_el_early is not None:
+        # Find insert position: just before the first ROUTE
+        insert_pos = len(list(scene_el_early))
+        for i, sc in enumerate(list(scene_el_early)):
+            stag = sc.tag.split('}')[-1] if '}' in sc.tag else sc.tag
+            if stag == 'ROUTE':
+                insert_pos = i
+                break
+
+        # Collect all TimeSensors not already at Scene root and not WireTimers
+        scene_direct = set(id(c) for c in scene_el_early)
+        timers_to_move = []
+        for el in root.iter():
+            for child in list(el):
+                ctag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                if ctag != 'TimeSensor':
+                    continue
+                def_val = child.get('DEF', '')
+                if def_val.startswith('WireTimer_'):
+                    continue
+                if id(child) in scene_direct:
+                    continue  # already at root
+                timers_to_move.append((el, child))
+
+        for parent_el, timer_el in timers_to_move:
+            parent_el.remove(timer_el)
+            timer_el.set('loop',    'true')
+            timer_el.set('enabled', 'false')
+            scene_el_early.insert(insert_pos, timer_el)
+            insert_pos += 1  # maintain order
+
     # ── Remove EXPORT nodes — they re-export nested DEFs into scene namespace
-    # and override the Timer1 we moved to Scene root with the original nested
-    # version (which lacks loop/enabled attributes).
+    # and can override the moved TimeSensors with the original nested versions.
     if scene_el_early is not None:
         for tag in ('EXPORT', f'{{{ns}}}EXPORT'):
             to_remove = [c for c in scene_el_early if c.tag == tag]
             for c in to_remove:
                 scene_el_early.remove(c)
 
+    # ── Strip scale attribute from all HAnimJoint nodes ─────────────────
+    # Mixamo exports near-identity scale values (e.g. 0.9999999) on joints.
+    # X_ITE compounds these down the joint chain — 4 finger joints each with
+    # 0.9999999 scale produce visible elongation. Strip all joint scale attrs.
+    for tag in (f'{{{ns}}}HAnimJoint', 'HAnimJoint'):
+        for el in root.iter(tag):
+            if 'scale' in el.attrib:
+                del el.attrib['scale']
+
+    # ── Remove ScaleInterpolator and TranslationInterpolator nodes ────────
+    # X_ITE exports scale tracks as PositionInterpolator nodes with DEF names
+    # starting with "ScaleInterpolator", and translation tracks as
+    # PositionInterpolator nodes with DEF names starting with
+    # "TranslationInterpolator". Both are dropped:
+    # - Scale compounds through joint chains causing elongation artifacts.
+    # - Translation from multiple simultaneous clips conflicts on the same
+    #   bones; rest pose translation on HAnimJoint defines bone length.
+    # Their ROUTEs were already excluded from existing_routes above.
+    for el in root.iter():
+        to_remove = [
+            child for child in list(el)
+            if child.get('DEF', '').startswith('ScaleInterpolator')
+            or child.get('DEF', '').startswith('TranslationInterpolator')
+        ]
+        for child in to_remove:
+            el.remove(child)
+
     safe_anim_name = animation_name.replace(' ', '_').replace('-', '_')
-    timer_new_def  = anim_timer_el.get('DEF', 'Timer1') if anim_timer_el else f'{safe_anim_name}_Timer'
+    timer_new_def  = anim_timer_el.get('DEF', 'Timer1') if anim_timer_el is not None else f'{safe_anim_name}_Timer'
 
     # ── Write joint map to cultivar ────────────────────────────────────────
     try:
@@ -3258,15 +3317,30 @@ def hanim_ingest_mixamo():
         anims_el = cv_root.find('Animations')
         if anims_el is None:
             anims_el = _ET_mix.SubElement(cv_root, 'Animations')
-        # Remove existing clip with same name if re-ingesting
-        for old in anims_el.findall('Clip'):
-            if old.get('name') == animation_name:
-                anims_el.remove(old)
-        clip_el = _ET_mix.SubElement(anims_el, 'Clip')
-        clip_el.set('name',          animation_name)
-        clip_el.set('timer_def',     timer_new_def)
-        clip_el.set('cycleInterval', cycle_interval or '0')
-        clip_el.set('bone_count',    str(bone_count))
+
+        # Build name lookup from existing clips (keyed by timerDEF) so that
+        # re-ingest preserves names the user already has in the cultivar.
+        existing_clip_names = {
+            c.get('timerDEF'): c.get('name')
+            for c in anims_el.findall('Clip')
+            if c.get('timerDEF') and c.get('name')
+        }
+        # Clear all existing clips — we'll rewrite from the file's timer list
+        for old_clip in anims_el.findall('Clip'):
+            anims_el.remove(old_clip)
+
+        # Register every animation TimeSensor as a clip
+        for timer_el in all_anim_timers:
+            t_def  = timer_el.get('DEF', 'Timer1')
+            t_ci   = timer_el.get('cycleInterval', '0')
+            # Use existing cultivar name if present, else fall back to timer DEF
+            t_name = existing_clip_names.get(t_def, t_def)
+            c_el = _ET_mix.SubElement(anims_el, 'Clip')
+            c_el.set('name',          t_name)
+            c_el.set('timerDEF',      t_def)
+            c_el.set('cycleInterval', t_ci)
+            c_el.set('bone_count',    str(bone_count))
+
         cv_tree.write(cultivar_path, encoding='unicode', xml_declaration=False)
     except Exception as exc:
         return jsonify({'status': 'error',
@@ -3319,6 +3393,39 @@ def hanim_ingest_mixamo():
         re_el = _ET_mix.SubElement(scene_el, 'ROUTE')
         for k, v in r_attrib.items():
             re_el.set(k, v)
+
+    # ── Inject standard camera viewpoints ─────────────────────────────────
+    # Remove any existing SceneViewpoints group first (idempotent re-ingest)
+    for child in list(scene_el):
+        ctag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+        if ctag == 'Group' and child.get('DEF') == 'SceneViewpoints':
+            scene_el.remove(child)
+
+    n = cultivar  # avatar name for viewpoint descriptions
+    vp_group = _ET_mix.SubElement(scene_el, 'Group')
+    vp_group.set('DEF', 'SceneViewpoints')
+
+    _VIEWPOINTS = [
+        {'description': f'{n}',                 'position': '0 1 3',      'centerOfRotation': '0 1 0'},
+        {'description': f'{n} Front',            'position': '0 0.4 4',    'centerOfRotation': '0 0.9149 0.0016'},
+        {'description': f'{n} Front Close',      'position': '0 0.8 2',    'centerOfRotation': '0 0.9149 0.0016'},
+        {'description': f'{n} Front Closer',     'position': '0 1.2 1',    'centerOfRotation': '0 0.9149 0.0016'},
+        {'description': f'{n} Front Face',       'position': '0 1.63 1',   'centerOfRotation': '0 1.5 0.0016'},
+        {'description': f'{n} Right Side',       'position': '2.6 0.8 0',  'centerOfRotation': '0 0.9149 0.0016',
+         'orientation': '0 1 0 1.5708'},
+        {'description': f'{n} Right Side Close', 'position': '1 0.8 0.5',  'centerOfRotation': '0 0.9149 0.0016',
+         'orientation': '0 1 0 1.2'},
+        {'description': f'{n} Left Side Close',  'position': '-1 0.8 0.5', 'centerOfRotation': '0 0.9149 0.0016',
+         'orientation': '0 1 0 -1.2'},
+        {'description': f'{n} Left Side',        'position': '-2.6 0.8 0', 'centerOfRotation': '0 0.9149 0.0016',
+         'orientation': '0 1 0 -1.5708'},
+        {'description': f'{n} Top',              'position': '0 3.5 0',    'centerOfRotation': '0 0.9149 0.0016',
+         'orientation': '1 0 0 -1.5708'},
+    ]
+    for vp in _VIEWPOINTS:
+        vp_el = _ET_mix.SubElement(vp_group, 'Viewpoint')
+        for k, v in vp.items():
+            vp_el.set(k, v)
 
     # ── Atomic X3D write ───────────────────────────────────────────────────
     try:

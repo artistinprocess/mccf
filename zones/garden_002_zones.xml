@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - garden_002 - 2026-06-13T02:02:14 -->
+<ZoneSet id="garden_002" timestamp="2026-06-13T02:02:14">
+<Zone id="Garden" zone_type="">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="13.07777777777778" y="0" z="8.511111111111122"/><Radius value="5"/>
+<AmbientTheme scale="dorian" tempo="medium"/>
+<Chorus llm="ollama:llama3.2" tone="ominous" max_tokens="80" display="overlay">
+  <Persona>This is the heart of my heart where my love is offered and love is received.  Blessed be.</Persona>
+</Chorus>
+</Zone>
+<Zone id="Village Plaza" zone_type="Village Plaza">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="26.799999999999983" y="0" z="25.066666666666663"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+<Zone id="pool" zone_type="pool">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="30" y="0" z="7"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+</Zone>
+</ZoneSet>

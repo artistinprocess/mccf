@@ -1,0 +1,84 @@
+<CultivarDefinition xmlns="http://mccf.artistinprocess.com/cultivar/v3" name="Salida" version="1.0" role="agent" color="#c8a840">
+  <Weights E="0.3287" B="0.2308" P="0.1818" S="0.2587" />
+  <Regulation value="0.82" />
+  <ShadowContext lambda="0.7" note="moderate memory — uncertainty without over-accumulation" />
+  <Description>A fierce Cherokee warrior and archer. With a PhD in quantum physics from Oxford. Recruited by Anna into the SSSH on graduation.</Description>
+  <SignaturePhrases>
+    <Phrase>You must have your power.</Phrase>
+    <Phrase>Hell Yeah!</Phrase>
+    <Phrase>I trust you.</Phrase>
+  </SignaturePhrases>
+  <FailureMode>Self confident. Can be reckless.</FailureMode>
+  <Voice name="Microsoft Zira - English (United States)" lang="en-US" rate="1.0" pitch="1.0" />
+  <Alias>Cindy Jenkins</Alias>
+  <HAnimFigure src="avatars/SalidaAnimations_repaired_test.x3d" loa="4" />
+  <Animations>
+    <Clip name="mixamo.com" timerDEF="Timer1" cycleInterval="0.0666666701436043" bone_count="65" />
+    <Clip name="Salida Capoeira" timerDEF="Timer2" cycleInterval="3.46666669845581" bone_count="65" />
+    <Clip name="Salida Defeated" timerDEF="Timer3" cycleInterval="6.76666688919067" bone_count="65" />
+    <Clip name="Salida Fight" timerDEF="Timer4" cycleInterval="1.23333334922791" bone_count="65" />
+    <Clip name="Salida FistFight" timerDEF="Timer5" cycleInterval="4.69999980926514" bone_count="65" />
+    <Clip name="Salida JumpPushUp" timerDEF="Timer6" cycleInterval="1.20000004768372" bone_count="65" />
+    <Clip name="Salida MMAKick" timerDEF="Timer7" cycleInterval="1.63333332538605" bone_count="65" />
+    <Clip name="Salida Praying" timerDEF="Timer8" cycleInterval="6.90000009536743" bone_count="65" />
+    <Clip name="Salida RhumbaDance" timerDEF="Timer9" cycleInterval="2.40000009536743" bone_count="65" />
+    <Clip name="Salida ShovedReactionWithSpin" timerDEF="Timer10" cycleInterval="4.56666660308838" bone_count="65" />
+    <Clip name="Salida StandingWalkRight" timerDEF="Timer11" cycleInterval="1.23333334922791" bone_count="65" />
+    <Clip name="Salida Taunt" timerDEF="Timer12" cycleInterval="2.86666655540466" bone_count="65" />
+  </Animations>
+  <HAnimFigure src="avatars/SalidaAnimations_repaired_test.x3d" />
+  <JointMap convention="mixamo">
+    <Joint def="mixamorig:Head" hanim="skullbase" />
+    <Joint def="mixamorig:Hips" hanim="humanoid_root" />
+    <Joint def="mixamorig:LeftArm" hanim="l_shoulder" />
+    <Joint def="mixamorig:LeftFoot" hanim="l_talocrural" />
+    <Joint def="mixamorig:LeftForeArm" hanim="l_elbow" />
+    <Joint def="mixamorig:LeftHand" hanim="l_radiocarpal" />
+    <Joint def="mixamorig:LeftHandIndex1" hanim="l_metacarpophalangeal_2" />
+    <Joint def="mixamorig:LeftHandIndex2" hanim="l_carpal_proximal_interphalangeal_2" />
+    <Joint def="mixamorig:LeftHandIndex3" hanim="l_carpal_distal_interphalangeal_2" />
+    <Joint def="mixamorig:LeftHandMiddle1" hanim="l_metacarpophalangeal_3" />
+    <Joint def="mixamorig:LeftHandMiddle2" hanim="l_carpal_proximal_interphalangeal_3" />
+    <Joint def="mixamorig:LeftHandMiddle3" hanim="l_carpal_distal_interphalangeal_3" />
+    <Joint def="mixamorig:LeftHandPinky1" hanim="l_metacarpophalangeal_5" />
+    <Joint def="mixamorig:LeftHandPinky2" hanim="l_carpal_proximal_interphalangeal_5" />
+    <Joint def="mixamorig:LeftHandPinky3" hanim="l_carpal_distal_interphalangeal_5" />
+    <Joint def="mixamorig:LeftHandRing1" hanim="l_metacarpophalangeal_4" />
+    <Joint def="mixamorig:LeftHandRing2" hanim="l_carpal_proximal_interphalangeal_4" />
+    <Joint def="mixamorig:LeftHandRing3" hanim="l_carpal_distal_interphalangeal_4" />
+    <Joint def="mixamorig:LeftHandThumb1" hanim="l_carpometacarpal_1" />
+    <Joint def="mixamorig:LeftHandThumb2" hanim="l_metacarpophalangeal_1" />
+    <Joint def="mixamorig:LeftHandThumb3" hanim="l_carpal_interphalangeal_1" />
+    <Joint def="mixamorig:LeftLeg" hanim="l_knee" />
+    <Joint def="mixamorig:LeftShoulder" hanim="l_sternoclavicular" />
+    <Joint def="mixamorig:LeftToeBase" hanim="l_metatarsophalangeal_2" />
+    <Joint def="mixamorig:LeftUpLeg" hanim="l_hip" />
+    <Joint def="mixamorig:Neck" hanim="vc4" />
+    <Joint def="mixamorig:RightArm" hanim="r_shoulder" />
+    <Joint def="mixamorig:RightFoot" hanim="r_talocrural" />
+    <Joint def="mixamorig:RightForeArm" hanim="r_elbow" />
+    <Joint def="mixamorig:RightHand" hanim="r_radiocarpal" />
+    <Joint def="mixamorig:RightHandIndex1" hanim="r_metacarpophalangeal_2" />
+    <Joint def="mixamorig:RightHandIndex2" hanim="r_carpal_proximal_interphalangeal_2" />
+    <Joint def="mixamorig:RightHandIndex3" hanim="r_carpal_distal_interphalangeal_2" />
+    <Joint def="mixamorig:RightHandMiddle1" hanim="r_metacarpophalangeal_3" />
+    <Joint def="mixamorig:RightHandMiddle2" hanim="r_carpal_proximal_interphalangeal_3" />
+    <Joint def="mixamorig:RightHandMiddle3" hanim="r_carpal_distal_interphalangeal_3" />
+    <Joint def="mixamorig:RightHandPinky1" hanim="r_metacarpophalangeal_5" />
+    <Joint def="mixamorig:RightHandPinky2" hanim="r_carpal_proximal_interphalangeal_5" />
+    <Joint def="mixamorig:RightHandPinky3" hanim="r_carpal_distal_interphalangeal_5" />
+    <Joint def="mixamorig:RightHandRing1" hanim="r_metacarpophalangeal_4" />
+    <Joint def="mixamorig:RightHandRing2" hanim="r_carpal_proximal_interphalangeal_4" />
+    <Joint def="mixamorig:RightHandRing3" hanim="r_carpal_distal_interphalangeal_4" />
+    <Joint def="mixamorig:RightHandThumb1" hanim="r_carpometacarpal_1" />
+    <Joint def="mixamorig:RightHandThumb2" hanim="r_metacarpophalangeal_1" />
+    <Joint def="mixamorig:RightHandThumb3" hanim="r_carpal_interphalangeal_1" />
+    <Joint def="mixamorig:RightLeg" hanim="r_knee" />
+    <Joint def="mixamorig:RightShoulder" hanim="r_sternoclavicular" />
+    <Joint def="mixamorig:RightToeBase" hanim="r_metatarsophalangeal_2" />
+    <Joint def="mixamorig:RightUpLeg" hanim="r_hip" />
+    <Joint def="mixamorig:Spine" hanim="vl5" />
+    <Joint def="mixamorig:Spine1" hanim="vt12" />
+    <Joint def="mixamorig:Spine2" hanim="vt6" />
+  </JointMap>
+<Animations><Clip name="Timer1" timerDEF="Timer1" cycleInterval="0.0666666701436043" bone_count="66" /><Clip name="Timer2" timerDEF="Timer2" cycleInterval="3.46666669845581" bone_count="66" /><Clip name="Timer3" timerDEF="Timer3" cycleInterval="6.76666688919067" bone_count="66" /><Clip name="Timer4" timerDEF="Timer4" cycleInterval="1.23333334922791" bone_count="66" /><Clip name="Timer5" timerDEF="Timer5" cycleInterval="4.69999980926514" bone_count="66" /><Clip name="Timer6" timerDEF="Timer6" cycleInterval="1.20000004768372" bone_count="66" /><Clip name="Timer7" timerDEF="Timer7" cycleInterval="1.63333332538605" bone_count="66" /><Clip name="Timer8" timerDEF="Timer8" cycleInterval="6.90000009536743" bone_count="66" /><Clip name="Timer9" timerDEF="Timer9" cycleInterval="2.40000009536743" bone_count="66" /><Clip name="Timer10" timerDEF="Timer10" cycleInterval="4.56666660308838" bone_count="66" /><Clip name="Timer11" timerDEF="Timer11" cycleInterval="1.23333334922791" bone_count="66" /><Clip name="Timer12" timerDEF="Timer12" cycleInterval="2.86666655540466" bone_count="66" /></Animations></CultivarDefinition>

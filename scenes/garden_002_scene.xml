@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - garden_002 - 2026-06-13T02:02:18 -->
+<Scene id="garden_002" timestamp="2026-06-13T02:02:18" zone_set="garden_002" mode="improvisation" width="40" depth="40">
+<Zones>
+  <Zone id="Garden" zone_type="">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="13.07777777777778" y="0" z="8.511111111111122"/><Radius value="5"/>
+    <AmbientTheme scale="dorian" tempo="medium"/>
+    <Chorus llm="ollama:llama3.2" tone="ominous" max_tokens="80" display="overlay">
+      <Persona>This is the heart of my heart where my love is offered and love is received.  Blessed be.</Persona>
+    </Chorus>
+  </Zone>
+  <Zone id="Village Plaza" zone_type="Village Plaza">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="26.799999999999983" y="0" z="25.066666666666663"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium"/>
+  </Zone>
+  <Zone id="pool" zone_type="pool">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="30" y="0" z="7"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium"/>
+  </Zone>
+</Zones>
+<EmotionalArc cultivar="Jack" actor="ollama" voice="Microsoft Connor Online (Natural) - English (Ireland)"><StartPosition x="31.2" y="0" z="5.2"/></EmotionalArc>
+<EmotionalArc cultivar="Salida" actor="ollama" voice="Microsoft Molly Online (Natural) - English (New Zealand)"><StartPosition x="28.633333333333308" y="0" z="23.577777777777776"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="Garden" label="Garden" zone="Garden" pos_x="12.79" pos_y="0.00" pos_z="10.51" dwell="2" pace="1.4">
+    <Question speaker="Salida">Are you ready for the cermnony.</Question>
+  </Waypoint>
+  <Waypoint name="Pool" label="Pool" zone="pool" pos_x="30.00" pos_y="0.00" pos_z="7.00" dwell="2" pace="1.4">
+    <Statement speaker="Jack">I enjoy this pool, but I must go meet Salida.</Statement>
+  </Waypoint>
+  <Waypoint name="plaza" label="Plaza" zone="Village Plaza" pos_x="26.40" pos_y="0.00" pos_z="24.92" dwell="5.5" pace="1.1">
+    <Statement speaker="Salida">I've shopped now I must go to the garden and meet Jack.</Statement>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="Jack Path" agent="Jack" waypointOrder="2">
+    <PathWaypoint ref="Pool"/>
+    <PathWaypoint ref="Garden"/>
+  </Path>
+  <Path name="Salida" agent="Salida" waypointOrder="2">
+    <PathWaypoint ref="plaza"/>
+    <PathWaypoint ref="Garden"/>
+  </Path>
+</Paths>
+<Network>
+  <Link from="Salida" to="Jack" strength="0.60" type="power"/>
+  <Link from="Jack" to="Salida" strength="0.80" type="empathic"/>
+  <Link from="Salida" to="Jack" strength="0.80" type="full"/>
+  <Link from="Jack" to="Salida" strength="0.80" type="full"/>
+</Network>
+</Scene>

@@ -499,15 +499,16 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="ad-disp" style="font-size:18px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:18px;color:var(--accent)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar File</div>
-      <div id="ad-hanim" style="font-size:12px;color:var(--dim);word-break:break-all;margin-bottom:4px"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar</div>
+      <div id="ad-hanim" style="font-size:12px;color:var(--dim);word-break:break-all;margin-bottom:4px">(placeholder — assign in Character Creator)</div>
       <select id="ad-hanim-select" style="display:none;margin-bottom:4px">
         <option value="">(none — cylinder placeholder)</option>
       </select>
       <div class="btn-row" style="margin:0">
-        <button class="btn cool" style="font-size:11px" onclick="toggleHanimEdit()">Edit Avatar</button>
-        <button class="btn pri" style="font-size:11px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Save</button>
+        <button class="btn cool" style="font-size:11px" onclick="toggleHanimEdit()">Swap Avatar</button>
+        <button class="btn pri" style="font-size:11px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Apply</button>
       </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">To assign a new H-Anim figure, use Character Creator.</div>
     </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
@@ -1113,9 +1114,9 @@ function showAD(name){
   var pos=a.position||[0,0,0];
   document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
-  // Avatar file
+  // Avatar — shows hanim_src path as set by Character Creator; placeholder if none
   var hEl=document.getElementById('ad-hanim');
-  if(hEl)hEl.textContent=a.hanim_src||'(placeholder — no avatar file assigned)';
+  if(hEl)hEl.textContent=a.hanim_src||'(placeholder — assign in Character Creator)';
   // Reset inline edit state
   var sel=document.getElementById('ad-hanim-select');
   var sav=document.getElementById('ad-hanim-save');
@@ -1143,27 +1144,35 @@ function toggleHanimEdit(){
   } else {
     var name=document.getElementById('ad-name').textContent;
     var a=placedAgents[name]||agents[name];
-    var currentVal=(a&&a.hanim_src)||'';
-    // Populate dropdown from /avatar/list, then pre-select current value
-    apiGet('/avatar/list').then(function(data){
+    var currentSrc=(a&&a.hanim_src)||'';
+    // Populate dropdown from /cultivars/xml — only MCCF cultivars that have an
+    // assigned H-Anim figure. Scene Composer never reaches into raw avatar files;
+    // that is Character Creator's domain. The author picks a cultivar here, not
+    // a filename — the hanim_src is resolved from the cultivar definition.
+    apiGet('/cultivars/xml').then(function(data){
       while(sel.options.length>1)sel.remove(1);
-      (data.avatars||[]).forEach(function(f){
+      var cultivarsWithHanim=(data.cultivars||[]).filter(function(c){return c.hanim_src;});
+      if(!cultivarsWithHanim.length){
         var opt=document.createElement('option');
-        opt.value='avatars/'+f;
-        opt.textContent=f;
+        opt.value='';opt.textContent='— no MCCF avatars available —';
         sel.appendChild(opt);
-      });
-      // Pre-select current value (from Character Creator or previous save)
-      if(currentVal){
-        var match=Array.from(sel.options).find(function(o){
-          return o.value===currentVal||o.value.split('/').pop()===currentVal.split('/').pop();
+      } else {
+        cultivarsWithHanim.forEach(function(c){
+          var opt=document.createElement('option');
+          // value carries the hanim_src path; display shows the cultivar name
+          opt.value=c.hanim_src;
+          opt.textContent=c.agentname+(c.hanim_src?' ('+c.hanim_src.split('/').pop()+')':'');
+          sel.appendChild(opt);
         });
+      }
+      // Pre-select current assignment
+      if(currentSrc){
+        var match=Array.from(sel.options).find(function(o){return o.value===currentSrc;});
         if(match) sel.value=match.value;
       }
       sel.style.display='block';
       if(sav)sav.style.display='block';
     }).catch(function(){
-      // Fallback: show with whatever options exist
       sel.style.display='block';
       if(sav)sav.style.display='block';
     });
@@ -1173,17 +1182,18 @@ function saveHanimSrc(){
   var name=document.getElementById('ad-name').textContent;
   var sel=document.getElementById('ad-hanim-select');
   if(!name||!sel)return;
+  // val is the hanim_src path stored in the cultivar definition —
+  // set by Character Creator via /avatar/upload, never a raw filename chosen here.
   var val=sel.value.trim();
-  // Normalise: strip leading slash or static/
-  val=val.replace(/^\/?static\//,'');
+  if(!val){toast('No MCCF avatar selected — create one in Character Creator first',true);return;}
   if(placedAgents[name])placedAgents[name].hanim_src=val;
   if(agents[name])agents[name].hanim_src=val;
   var hEl=document.getElementById('ad-hanim');
-  if(hEl)hEl.textContent=val||'(placeholder — no avatar file assigned)';
+  if(hEl)hEl.textContent=val;
   sel.style.display='none';
   var sav=document.getElementById('ad-hanim-save');
   if(sav)sav.style.display='none';
-  toast('Avatar file updated for '+name+' — re-export scene to apply');
+  toast('Avatar swapped for '+name+' — re-export scene to apply');
 }
 function showWD(name){
   var wp=waypoints[name];if(!wp)return;
@@ -1567,17 +1577,25 @@ function buildAX3D(a){
   s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
 
   if(a.hanim_src){
-    // H-Anim figure — inline the stripped file
-    // MCCF-owned ProximitySensor travels with the avatar inside this Transform
+    // H-Anim figure via Inline + IMPORT.
+    // Loader uses X_ITE addImportedNode/getImportedNode API (confirmed working Day 24
+    // via Holger Seelig — X3DExecutionContext.addImportedNode is the correct path,
+    // not getNamedNode which does not resolve IMPORT'd nodes in X_ITE 11.6.x+).
     s+='  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->\n';
     s+='  <ProximitySensor DEF="Prox_'+sn+'" size="2 2.2 2" enabled="true"/>\n';
-    // hanim_src is stored as "avatars/foo.x3d" (relative to static/).
-    // Scene files live in static/x3d/ so path must step up one level.
-    var hanimUrl = a.hanim_src.replace(/^\/?static\//,'');
+    var hanimUrl=a.hanim_src.replace(/^\/?static\//,'');
     if(hanimUrl.indexOf('../')<0) hanimUrl='../'+hanimUrl;
     s+='  <Inline DEF="HAnim_'+sn+'" url=\'&quot;'+xe(hanimUrl)+'&quot;\'/>\n';
+    // IMPORT behavior TimeSensors from Inline scope into parent scene.
+    // HAnim file must have matching EXPORT statements (added by mccf_api.py upload_avatar).
+    // AS = TimerBase_AgentSafeName for multi-agent collision safety.
+    var _bhTimers=['DefaultTimer','PitchTimer','YawTimer','RollTimer',
+                   'WalkTimer','RunTimer','JumpTimer','KickTimer'];
+    _bhTimers.forEach(function(base){
+      s+='  <IMPORT inlineDEF="HAnim_'+sn+'" exportedDEF="'+base+'" AS="'+base+'_'+sn+'"/>\n';
+    });
   } else {
-    // Cylinder placeholder — used when no H-Anim figure assigned
+    // Cylinder placeholder — used when no H-Anim figure assigned via Character Creator
     s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
     s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
     s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
@@ -1652,7 +1670,7 @@ function buildInterpNodes(path){
   out+='  function startFromLoader(val,time){\n';
   out+='    if(val<=0)return;\n';
   out+='    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);\n';
-  out+='      if(t){t.startTime=val;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_1 fired at "+val);}\n';
+  out+='      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_1 fired at "+(time+0.1));}\n';
   out+='    }catch(e){Browser.println("Arrival_'+sa+' startFromLoader err: "+e);}\n';
   out+='  }\n';
   out+='  function arrived(val,time){\n';

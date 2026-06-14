@@ -43,3 +43,5 @@ static/*.py
 
 # Temp exports — comment out if you want exports tracked
 # exports/
+static/media/
+*.bak
