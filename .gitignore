@@ -45,3 +45,7 @@ static/*.py
 # exports/
 static/media/
 *.bak
+static/avatars/*.zip
+static/test/
+static/avatars/SalidaAnimations.x3d
+static/avatars/mixamo1.x3d
