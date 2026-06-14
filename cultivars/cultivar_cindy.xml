@@ -13,11 +13,25 @@
   <!-- Character Studio slider range: 0.05 – 1.0 -->
   <ShadowContext lambda="0.7" note="moderate memory — uncertainty without over-accumulation"/>
 
-  <Description>A young American Indian who was raised by a ccountry western star in Tennesse.</Description>
+  <Description>A young American Indian who was raised by a country western star in Tennessee.</Description>
 
-  <Voice name="Microsoft Ava Online (Natural) - English (United States)" lang="en-US" rate="1.0" pitch="1.0"/>
+  <SignaturePhrases>
+    <Phrase>Hell yeah!</Phrase>
+  </SignaturePhrases>
+
+  <Voice name="Microsoft Zira - English (United States)" lang="en-US" rate="1.0" pitch="1.0"/>
 
   <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->
   <Alias>Salida</Alias>
+
+  <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
+  <HAnimFigure src="avatars/cindy_hanim.x3d" loa="4"/>
+
+  <!-- HAnim behavior clip selection table -->
+  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
+  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->
+  <Behaviors default="Default">
+    <Clip name="Default" timerDEF="DefaultTimer" loop="true" priority="0"/>
+  </Behaviors>
 
 </CultivarDefinition>

@@ -1,64 +1,83 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-05-16T19:13:56 -->
-<Scene id="garden_001" timestamp="2026-05-16T19:13:56" zone_set="garden_001" mode="improvisation" width="40" depth="40">
+<!-- MCCF V3 Scene Wrapper - garden_001 - 2026-06-11T23:47:39 -->
+<Scene id="garden_001" timestamp="2026-06-11T23:47:39" zone_set="garden_001" mode="improvisation" width="40" depth="40">
 <Zones>
-  <Zone id="pool" zone_type="sacred_memorial">
-    <Descriptor>A still pool at the edge of the garden. Those who stand here tend to become quiet.</Descriptor>
-    <Weights E="0.30" B="0.20" P="0.25" S="0.25"/>
-    <Position x="29.2" y="0" z="22.4"/><Radius value="4"/>
+  <Zone id="Mountain" zone_type="Mountain">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="11.3" y="0" z="30.1"/><Radius value="4"/>
     <AmbientTheme scale="major" tempo="medium"/>
-    <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
-    </Chorus>
-    <Commands>
-      <OnEnter cultivar="*" command="reflect"/>
-      <OnDwell cultivar="Cindy" duration="5" command="confess"/>
-      <OnExit cultivar="*" command="release"/>
-    </Commands>
-    <Memory capacity="5"/>
   </Zone>
-  <Zone id="temple" zone_type="authority_throne">
-    <Descriptor>The temple entrance. The Steward keeps watch here. The space demands honesty.</Descriptor>
-    <Weights E="0.20" B="0.35" P="0.25" S="0.20"/>
-    <Position x="14.8" y="0" z="8"/><Radius value="4"/>
+  <Zone id="Temple" zone_type="Temple">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="10.8" y="0" z="9.8"/><Radius value="4"/>
     <AmbientTheme scale="major" tempo="medium"/>
-    <Chorus llm="stub" tone="ominous" max_tokens="80" display="overlay">
+  </Zone>
+  <Zone id="pool" zone_type="pool">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="24.8" y="0" z="16.8"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium"/>
+    <Chorus llm="ollama:llama3.2" tone="ominous" max_tokens="80" display="overlay">
     </Chorus>
-    <Commands>
-      <OnEnter cultivar="*" command="attend"/>
-      <OnEnter cultivar="Cindy" command="greet"/>
-      <OnDwell cultivar="The Steward" duration="10" command="warn"/>
-    </Commands>
-    <Memory capacity="5"/>
   </Zone>
 </Zones>
-<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft Annette Online (Natural) - English (Australia)"><StartPosition x="28.5" y="0" z="24.2"/></EmotionalArc>
-<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Darren Online (Natural) - English (Australia)"><StartPosition x="15" y="0" z="5.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Gardener" actor="ollama" voice="Microsoft Luke Online (Natural) - English (South Africa)"><StartPosition x="7.6" y="0" z="29.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice="Microsoft Duncan Online (Natural) - English (Australia)"><StartPosition x="24.3" y="0" z="14.4"/></EmotionalArc>
+<EmotionalArc cultivar="Salida" actor="ollama" voice=""><StartPosition x="11.1" y="0" z="12.9"/></EmotionalArc>
+<EmotionalArc cultivar="Cindy" actor="ollama" voice="Microsoft David - English (United States)"><StartPosition x="9.3" y="0" z="8.1"/></EmotionalArc>
 <Waypoints>
-  <Waypoint name="wppool" label="Pool" zone="pool" pos_x="29.20" pos_y="0.00" pos_z="22.40" dwell="2" pace="1.4">
-    <Statement speaker="Cindy">The pool is refreshing.</Statement>
+  <Waypoint name="wpMountain" label="CindyAtMountain" zone="Mountain" pos_x="11.30" pos_y="0.00" pos_z="30.10" dwell="2" pace="1.4">
+    <Question speaker="The Gardener">Welcome, Little Fire Squirrel!  Do you seek solace or meditation?</Question>
+    <Response speaker="Cindy">I must meditate.</Response>
+    <Statement speaker="The Gardener">I shall leave you to your peace.</Statement>
   </Waypoint>
-  <Waypoint name="wptemple" label="Temple" zone="temple" pos_x="14.80" pos_y="0.00" pos_z="8.00" dwell="2" pace="1.4">
-    <Question>Hello Cindy.</Question>
+  <Waypoint name="wpMountain2" label="GardenerAtMountain" zone="Mountain" pos_x="8.70" pos_y="0.00" pos_z="28.00" dwell="2" pace="1.4">
+    <Statement speaker="The Gardener">I shall go to the Temple.</Statement>
+  </Waypoint>
+  <Waypoint name="wpPool" label="CindyAtPool" zone="pool" pos_x="24.80" pos_y="0.00" pos_z="16.80" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Hello Cindy.</Statement>
     <Response speaker="The Steward">Hello Steward.</Response>
-    <Question speaker="The Steward">Have you come to pray?</Question>
-    <Response speaker="Cindy">I have come seeking the Librarian.</Response>
+  </Waypoint>
+  <Waypoint name="wpTemple" label="CindyAtTemple" zone="Temple" pos_x="10.80" pos_y="0.00" pos_z="9.80" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Oh Mother Innana, let me live simply and serve you always.</Statement>
+  </Waypoint>
+  <Waypoint name="wpTemple2" label="GardenerAtTemple" zone="Temple" pos_x="8.50" pos_y="0.00" pos_z="12.40" dwell="2" pace="1.4">
+    <Statement speaker="The Gardener">I seek the Librarian.</Statement>
+  </Waypoint>
+  <Waypoint name="SALIDA1" label="sALIDA1" zone="Temple" pos_x="13.00" pos_y="0.00" pos_z="12.60" dwell="2" pace="1.4">
+    <Statement speaker="Salida">Cindy, I am going to the pool.</Statement>
+  </Waypoint>
+  <Waypoint name="SALIDA2" label="sALIDA2" zone="Mountain" pos_x="10.80" pos_y="0.00" pos_z="32.00" dwell="3" pace="1.7">
+    <Question speaker="Salida">IS the water warm, Anna?</Question>
+    <Response speaker="The Gardener">Yes.  The water is wonderful</Response>
+  </Waypoint>
+  <Waypoint name="SALIDA3" label="sALIDA3" zone="Mountain" pos_x="24.30" pos_y="0.00" pos_z="20.00" dwell="3" pace="1.7">
+    <Question speaker="Salida">Hello.  Have you waited for me?</Question>
+    <Response speaker="The Steward">Yes.  Cindy was here.</Response>
+    <Statement speaker="Salida">I saw her earlier at the temple.</Statement>
   </Waypoint>
 </Waypoints>
 <Paths>
-  <Path name="StewardToTemple" agent="The Steward">
-    <PathWaypoint ref="wptemple"/>
+  <Path name="path_Cindy" agent="Cindy" waypointOrder="1">
+    <PathWaypoint ref="wpTemple"/>
+    <PathWaypoint ref="wpPool"/>
+    <PathWaypoint ref="wpMountain"/>
   </Path>
-  <Path name="Walktotemple" agent="Cindy">
-    <PathWaypoint ref="wppool"/>
-    <PathWaypoint ref="wptemple"/>
+  <Path name="path_Gardener" agent="The Gardener" waypointOrder="2">
+    <PathWaypoint ref="wpMountain2"/>
+    <PathWaypoint ref="wpTemple2"/>
   </Path>
-  <Path name="pathToPool" agent="The Steward">
-    <PathWaypoint ref="wptemple"/>
-    <PathWaypoint ref="wppool"/>
+  <Path name="Path Salida" agent="Cindy" waypointOrder="3">
+    <PathWaypoint ref="SALIDA1"/>
+    <PathWaypoint ref="SALIDA2"/>
+    <PathWaypoint ref="SALIDA3"/>
   </Path>
 </Paths>
 <Network>
-  <Link from="Cindy" to="The Steward" strength="0.60" type="empathic"/>
-  <Link from="The Steward" to="Cindy" strength="0.60" type="empathic"/>
+  <Link from="Cindy" to="The Gardener" strength="0.70" type="empathic"/>
+  <Link from="The Gardener" to="Cindy" strength="0.70" type="empathic"/>
+  <Link from="Cindy" to="Salida" strength="0.60" type="empathic"/>
 </Network>
 </Scene>

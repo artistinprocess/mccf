@@ -26,71 +26,138 @@
 <Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>
 <Transform translation="20 15 20"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="48"/></Transform>
 <Viewpoint DEF="VP_Overview" description="Overview" position="20 28 20" orientation="1 0 0 -0.8"/>
-<Viewpoint DEF="VP_pool" description="Pool" position="29.2 3 14.399999999999999" orientation="0 0 0 0"/>
-<Viewpoint DEF="VP_temple" description="Temple" position="14.8 3 0" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_Mountain" description="CindyAtMountain" position="11.3 3 22.1" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_Temple" description="CindyAtTemple" position="10.8 3 1.8000000000000007" orientation="0 0 0 0"/>
+<Viewpoint DEF="VP_pool" description="CindyAtPool" position="24.8 3 8.8" orientation="0 0 0 0"/>
 <Transform translation="20 -0.05 20"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="40 0.08 40"/></Shape></Transform>
 <Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance><IndexedLineSet coordIndex="0 1 -1 2 3 -1 4 5 -1 6 7 -1 8 9 -1 10 11 -1 12 13 -1 14 15 -1 16 17 -1 18 19 -1"><Coordinate point="0 0.02 0 0 0.02 40 10 0.02 0 10 0.02 40 20 0.02 0 20 0.02 40 30 0.02 0 30 0.02 40 40 0.02 0 40 0.02 40 0 0.02 0 40 0.02 0 0 0.02 10 40 0.02 10 0 0.02 20 40 0.02 20 0 0.02 30 40 0.02 30 0 0.02 40 40 0.02 40"/></IndexedLineSet></Shape>
-<!-- Zone: Pool -->
-<Transform DEF="Zone_pool" translation="29.2 0 22.4">
+<!-- Zone: CindyAtMountain -->
+<Transform DEF="Zone_Mountain" translation="11.3 0 30.1">
 <Shape><Appearance><Material diffuseColor="0.533 0.533 0.533" transparency="0.55" emissiveColor="0.533 0.533 0.533"/></Appearance><Cylinder height="0.5" radius="4"/></Shape>
 <Transform translation="0 3.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.533 0.533 0.533"/></Appearance>
-<Text string='"Pool"' ><FontStyle size="0.28" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<Text string='"CindyAtMountain"' ><FontStyle size="0.28" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<ProximitySensor DEF="Prox_Mountain" size="8 4 8" enabled="true"/>
+<Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_Mountain" url="" loop="true" stopTime="1"/></Sound>
+</Transform>
+<!-- Zone: CindyAtTemple -->
+<Transform DEF="Zone_Temple" translation="10.8 0 9.8">
+<Shape><Appearance><Material diffuseColor="0.533 0.533 0.533" transparency="0.55" emissiveColor="0.533 0.533 0.533"/></Appearance><Cylinder height="0.5" radius="4"/></Shape>
+<Transform translation="0 3.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.533 0.533 0.533"/></Appearance>
+<Text string='"CindyAtTemple"' ><FontStyle size="0.28" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<ProximitySensor DEF="Prox_Temple" size="8 4 8" enabled="true"/>
+<Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_Temple" url="" loop="true" stopTime="1"/></Sound>
+</Transform>
+<!-- Zone: CindyAtPool -->
+<Transform DEF="Zone_pool" translation="24.8 0 16.8">
+<Shape><Appearance><Material diffuseColor="0.533 0.533 0.533" transparency="0.55" emissiveColor="0.533 0.533 0.533"/></Appearance><Cylinder height="0.5" radius="4"/></Shape>
+<Transform translation="0 3.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.533 0.533 0.533"/></Appearance>
+<Text string='"CindyAtPool"' ><FontStyle size="0.28" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
 <ProximitySensor DEF="Prox_pool" size="8 4 8" enabled="true"/>
 <Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_pool" url="" loop="true" stopTime="1"/></Sound>
 </Transform>
-<!-- Zone: Temple -->
-<Transform DEF="Zone_temple" translation="14.8 0 8">
-<Shape><Appearance><Material diffuseColor="0.533 0.533 0.533" transparency="0.55" emissiveColor="0.533 0.533 0.533"/></Appearance><Cylinder height="0.5" radius="4"/></Shape>
-<Transform translation="0 3.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.533 0.533 0.533"/></Appearance>
-<Text string='"Temple"' ><FontStyle size="0.28" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
-<ProximitySensor DEF="Prox_temple" size="8 4 8" enabled="true"/>
-<Sound location="0 0 0" maxBack="4" maxFront="4" spatialize="true" enabled="false"><AudioClip DEF="Sound_temple" url="" loop="true" stopTime="1"/></Sound>
-</Transform>
-<!-- Agent: Cindy -->
-<Transform DEF="Avatar_Cindy" translation="28.5 0 24.2">
-<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.376 0.659 0.941" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
-<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_Cindy" diffuseColor="0.376 0.659 0.941" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
+<!-- Agent: The Gardener -->
+<Transform DEF="Avatar_The_Gardener" translation="7.6 0 29.8">
+<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.290 0.941 0.659" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
+<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Gardener" diffuseColor="0.290 0.941 0.659" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
 <Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
 <Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
-<Text DEF="NameText_Cindy" string='"Cindy"' ><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
-<Viewpoint DEF="VP_Cindy_Eye" description="Cindy Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>
-<Viewpoint DEF="VP_Cindy_Side" description="Cindy Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>
+<Text DEF="NameText_The_Gardener" string='"The Gardener"' ><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<Viewpoint DEF="VP_The_Gardener_Eye" description="The Gardener Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>
+<Viewpoint DEF="VP_The_Gardener_Side" description="The Gardener Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>
 </Transform>
 <!-- Agent: The Steward -->
-<Transform DEF="Avatar_The_Steward" translation="15 0 5.8">
-<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.290 0.941 0.659" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
-<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Steward" diffuseColor="0.290 0.941 0.659" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
+<Transform DEF="Avatar_The_Steward" translation="24.3 0 14.4">
+<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.941 0.753 0.376" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
+<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_The_Steward" diffuseColor="0.941 0.753 0.376" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
 <Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
 <Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
 <Text DEF="NameText_The_Steward" string='"The Steward"' ><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
 <Viewpoint DEF="VP_The_Steward_Eye" description="The Steward Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>
 <Viewpoint DEF="VP_The_Steward_Side" description="The Steward Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>
 </Transform>
+<!-- Agent: Salida -->
+<Transform DEF="Avatar_Salida" translation="11.1 0 12.9">
+  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->
+  <ProximitySensor DEF="Prox_Salida" size="2 2.2 2" enabled="true"/>
+  <Inline DEF="HAnim_Salida" url='&quot;../avatars/SalidaAnimations.x3d&quot;'/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="DefaultTimer" AS="DefaultTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="PitchTimer" AS="PitchTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="YawTimer" AS="YawTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="RollTimer" AS="RollTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="WalkTimer" AS="WalkTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="RunTimer" AS="RunTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="JumpTimer" AS="JumpTimer_Salida"/>
+  <IMPORT inlineDEF="HAnim_Salida" exportedDEF="KickTimer" AS="KickTimer_Salida"/>
+<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+<Text DEF="NameText_Salida" string='"Salida"' ><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<Viewpoint DEF="VP_Salida_Eye" description="Salida Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>
+<Viewpoint DEF="VP_Salida_Side" description="Salida Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>
+</Transform>
+<!-- Agent: Cindy -->
+<Transform DEF="Avatar_Cindy" translation="9.3 0 8.1">
+  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->
+  <ProximitySensor DEF="Prox_Cindy" size="2 2.2 2" enabled="true"/>
+  <Inline DEF="HAnim_Cindy" url='&quot;../cindy_hanim.x3d&quot;'/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="DefaultTimer" AS="DefaultTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="PitchTimer" AS="PitchTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="YawTimer" AS="YawTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="RollTimer" AS="RollTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="WalkTimer" AS="WalkTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="RunTimer" AS="RunTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="JumpTimer" AS="JumpTimer_Cindy"/>
+  <IMPORT inlineDEF="HAnim_Cindy" exportedDEF="KickTimer" AS="KickTimer_Cindy"/>
+<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+<Text DEF="NameText_Cindy" string='"Cindy"' ><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+<Viewpoint DEF="VP_Cindy_Eye" description="Cindy Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>
+<Viewpoint DEF="VP_Cindy_Side" description="Cindy Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>
+</Transform>
+<!-- Animation nodes: path_Cindy agent=Cindy segments=2 waypointOrder=1 -->
 
-<!-- Animation nodes: Walktotemple agent=Cindy segments=1 -->
-
-<!-- Segment 1: wppool -> wptemple dist=20.4m pace=1.4m/s travel=14.55s dwell=2.0s -->
-<PositionInterpolator DEF="Interp_Cindy_1" key="0 1" keyValue="29.2 0 22.4 14.8 0 8"/>
-<TimeSensor DEF="Timer_Cindy_1" cycleInterval="14.55" loop="false" enabled="false"/>
+<!-- Segment 1: wpTemple -> wpPool dist=15.7m pace=1.4m/s travel=11.18s dwell=2.0s -->
+<PositionInterpolator DEF="Interp_Cindy_1" key="0 1" keyValue="10.8 0 9.8 24.8 0 16.8"/>
+<TimeSensor DEF="Timer_Cindy_1" cycleInterval="11.18" loop="false" enabled="false"/>
 <TimeSensor DEF="Dwell_Cindy_1" cycleInterval="2.0" loop="false" enabled="false"/>
 
+<!-- Segment 2: wpPool -> wpMountain dist=19.0m pace=1.4m/s travel=13.54s dwell=2.0s -->
+<PositionInterpolator DEF="Interp_Cindy_2" key="0 1" keyValue="24.8 0 16.8 11.3 0 30.1"/>
+<TimeSensor DEF="Timer_Cindy_2" cycleInterval="13.54" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_Cindy_2" cycleInterval="2.0" loop="false" enabled="false"/>
+
 <Script DEF="Arrival_Cindy" directOutput="true" mustEvaluate="true">
-  <field name="arrived" type="SFBool" accessType="inputOnly"/>
-  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>
-  <field name="resetSeg" type="SFBool" accessType="inputOnly"/>
-  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>
+  <field name="waypointOrder"   type="SFInt32" accessType="initializeOnly" value="1"/>
+  <field name="startFromLoader" type="SFTime"  accessType="inputOnly"/>
+  <field name="arrived"         type="SFBool"  accessType="inputOnly"/>
+  <field name="releaseDwell"    type="SFBool"  accessType="inputOnly"/>
+  <field name="advanceSeg"      type="SFInt32" accessType="inputOnly"/>
+  <field name="resetSeg"        type="SFBool"  accessType="inputOnly"/>
+  <field name="segmentArrived"  type="SFInt32" accessType="outputOnly"/>
   <![CDATA[ecmascript:
   var _seg=0;
-  function resetSeg(val,time){ if(val) _seg=0; _wasActive=false; }
-  var _dwellIds=['Dwell_Cindy_1'];
   var _wasActive=false;
+  var _timerIds=['Timer_Cindy_1','Timer_Cindy_2'];
+  var _dwellIds=['Dwell_Cindy_1','Dwell_Cindy_2'];
+  var _maxSeg=2;
+  function initialize(){ Browser.println("Arrival_Cindy: ready maxSeg="+_maxSeg+" order=1"); }
+  function resetSeg(val,time){ if(!val)return; _seg=0; _wasActive=false; }
+  function startFromLoader(val,time){
+    if(val<=0)return;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);
+      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_Cindy: Timer_1 fired at "+(time+0.1));}
+    }catch(e){Browser.println("Arrival_Cindy startFromLoader err: "+e);}
+  }
   function arrived(val,time){
     if(val){ _wasActive=true; return; }
     if(!_wasActive) return;
-    _wasActive=false;
-    _seg++;
-    segmentArrived=_seg;
+    _wasActive=false; _seg++; segmentArrived=_seg;
     Browser.println("Arrival_Cindy: arrived seg "+_seg);
+  }
+  function advanceSeg(completedSeg,time){
+    var nextIdx=completedSeg;
+    if(nextIdx>=_maxSeg){ Browser.println("Arrival_Cindy: arc complete"); return; }
+    var tNow=(time&&time>0)?time:Browser.currentTime;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[nextIdx]);
+      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_Cindy: Timer_"+(nextIdx+1)+" at "+tNow);}
+    }catch(e){Browser.println("Arrival_Cindy advanceSeg err: "+e);}
   }
   function releaseDwell(val,time){
     if(!val||_seg<1)return;
@@ -110,8 +177,8 @@
   <field name="killAll" type="SFBool" accessType="inputOnly"/>
   <field name="resetPos" type="SFBool" accessType="inputOnly"/>
   <![CDATA[ecmascript:
-  var timerIds=['Timer_Cindy_1','Dwell_Cindy_1'];
-  var startX=29.2, startY=0, startZ=22.4;
+  var timerIds=['Timer_Cindy_1','Dwell_Cindy_1','Timer_Cindy_2','Dwell_Cindy_2'];
+  var startX=10.8, startY=0, startZ=9.8;
   function killAll(val,time){
     if(!val)return;
     for(var i=0;i<timerIds.length;i++){
@@ -131,30 +198,48 @@
   }
   ]]>
 </Script>
-<!-- Animation nodes: pathToPool agent=The Steward segments=1 -->
+<!-- Animation nodes: path_Gardener agent=The Gardener segments=1 waypointOrder=2 -->
 
-<!-- Segment 1: wptemple -> wppool dist=20.4m pace=1.4m/s travel=14.55s dwell=2.0s -->
-<PositionInterpolator DEF="Interp_The_Steward_1" key="0 1" keyValue="14.8 0 8 29.2 0 22.4"/>
-<TimeSensor DEF="Timer_The_Steward_1" cycleInterval="14.55" loop="false" enabled="false"/>
-<TimeSensor DEF="Dwell_The_Steward_1" cycleInterval="2.0" loop="false" enabled="false"/>
+<!-- Segment 1: wpMountain2 -> wpTemple2 dist=15.6m pace=1.4m/s travel=11.14s dwell=2.0s -->
+<PositionInterpolator DEF="Interp_The_Gardener_1" key="0 1" keyValue="8.7 0 28 8.5 0 12.4"/>
+<TimeSensor DEF="Timer_The_Gardener_1" cycleInterval="11.14" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_The_Gardener_1" cycleInterval="2.0" loop="false" enabled="false"/>
 
-<Script DEF="Arrival_The_Steward" directOutput="true" mustEvaluate="true">
-  <field name="arrived" type="SFBool" accessType="inputOnly"/>
-  <field name="releaseDwell" type="SFBool" accessType="inputOnly"/>
-  <field name="resetSeg" type="SFBool" accessType="inputOnly"/>
-  <field name="segmentArrived" type="SFInt32" accessType="outputOnly"/>
+<Script DEF="Arrival_The_Gardener" directOutput="true" mustEvaluate="true">
+  <field name="waypointOrder"   type="SFInt32" accessType="initializeOnly" value="2"/>
+  <field name="startFromLoader" type="SFTime"  accessType="inputOnly"/>
+  <field name="arrived"         type="SFBool"  accessType="inputOnly"/>
+  <field name="releaseDwell"    type="SFBool"  accessType="inputOnly"/>
+  <field name="advanceSeg"      type="SFInt32" accessType="inputOnly"/>
+  <field name="resetSeg"        type="SFBool"  accessType="inputOnly"/>
+  <field name="segmentArrived"  type="SFInt32" accessType="outputOnly"/>
   <![CDATA[ecmascript:
   var _seg=0;
-  function resetSeg(val,time){ if(val) _seg=0; _wasActive=false; }
-  var _dwellIds=['Dwell_The_Steward_1'];
   var _wasActive=false;
+  var _timerIds=['Timer_The_Gardener_1'];
+  var _dwellIds=['Dwell_The_Gardener_1'];
+  var _maxSeg=1;
+  function initialize(){ Browser.println("Arrival_The_Gardener: ready maxSeg="+_maxSeg+" order=2"); }
+  function resetSeg(val,time){ if(!val)return; _seg=0; _wasActive=false; }
+  function startFromLoader(val,time){
+    if(val<=0)return;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);
+      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_The_Gardener: Timer_1 fired at "+(time+0.1));}
+    }catch(e){Browser.println("Arrival_The_Gardener startFromLoader err: "+e);}
+  }
   function arrived(val,time){
     if(val){ _wasActive=true; return; }
     if(!_wasActive) return;
-    _wasActive=false;
-    _seg++;
-    segmentArrived=_seg;
-    Browser.println("Arrival_The_Steward: arrived seg "+_seg);
+    _wasActive=false; _seg++; segmentArrived=_seg;
+    Browser.println("Arrival_The_Gardener: arrived seg "+_seg);
+  }
+  function advanceSeg(completedSeg,time){
+    var nextIdx=completedSeg;
+    if(nextIdx>=_maxSeg){ Browser.println("Arrival_The_Gardener: arc complete"); return; }
+    var tNow=(time&&time>0)?time:Browser.currentTime;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[nextIdx]);
+      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_The_Gardener: Timer_"+(nextIdx+1)+" at "+tNow);}
+    }catch(e){Browser.println("Arrival_The_Gardener advanceSeg err: "+e);}
   }
   function releaseDwell(val,time){
     if(!val||_seg<1)return;
@@ -164,18 +249,18 @@
       var dw=Browser.currentScene.getNamedNode(dwId);
       dw.enabled=true;
       dw.startTime=Browser.currentTime;
-      Browser.println("Arrival_The_Steward: released dwell "+dwId);
-    }catch(e){Browser.println("Arrival_The_Steward releaseDwell error: "+e);}
+      Browser.println("Arrival_The_Gardener: released dwell "+dwId);
+    }catch(e){Browser.println("Arrival_The_Gardener releaseDwell error: "+e);}
   }
   ]]>
 </Script>
 
-<Script DEF="Kill_The_Steward" directOutput="true" mustEvaluate="true">
+<Script DEF="Kill_The_Gardener" directOutput="true" mustEvaluate="true">
   <field name="killAll" type="SFBool" accessType="inputOnly"/>
   <field name="resetPos" type="SFBool" accessType="inputOnly"/>
   <![CDATA[ecmascript:
-  var timerIds=['Timer_The_Steward_1','Dwell_The_Steward_1'];
-  var startX=14.8, startY=0, startZ=8;
+  var timerIds=['Timer_The_Gardener_1','Dwell_The_Gardener_1'];
+  var startX=8.7, startY=0, startZ=28;
   function killAll(val,time){
     if(!val)return;
     for(var i=0;i<timerIds.length;i++){
@@ -186,11 +271,98 @@
     if(!val)return;
     killAll(true,time);
     try{
-      var av=Browser.currentScene.getNamedNode("Avatar_The_Steward");
+      var av=Browser.currentScene.getNamedNode("Avatar_The_Gardener");
       av.translation=new SFVec3f(startX,startY,startZ);
-    }catch(e){Browser.println("Kill_The_Steward resetPos error: "+e);}
+    }catch(e){Browser.println("Kill_The_Gardener resetPos error: "+e);}
     try{
-      Browser.currentScene.getNamedNode("Arrival_The_Steward").resetSeg=true;
+      Browser.currentScene.getNamedNode("Arrival_The_Gardener").resetSeg=true;
+    }catch(e){}
+  }
+  ]]>
+</Script>
+<!-- Animation nodes: Path Salida agent=Cindy segments=2 waypointOrder=3 -->
+
+<!-- Segment 1: SALIDA1 -> SALIDA2 dist=19.5m pace=1.7m/s travel=11.48s dwell=3.0s -->
+<PositionInterpolator DEF="Interp_Cindy_1" key="0 1" keyValue="13 0 12.6 10.8 0 32"/>
+<TimeSensor DEF="Timer_Cindy_1" cycleInterval="11.48" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_Cindy_1" cycleInterval="3.0" loop="false" enabled="false"/>
+
+<!-- Segment 2: SALIDA2 -> SALIDA3 dist=18.1m pace=1.7m/s travel=10.62s dwell=3.0s -->
+<PositionInterpolator DEF="Interp_Cindy_2" key="0 1" keyValue="10.8 0 32 24.3 0 20"/>
+<TimeSensor DEF="Timer_Cindy_2" cycleInterval="10.62" loop="false" enabled="false"/>
+<TimeSensor DEF="Dwell_Cindy_2" cycleInterval="3.0" loop="false" enabled="false"/>
+
+<Script DEF="Arrival_Cindy" directOutput="true" mustEvaluate="true">
+  <field name="waypointOrder"   type="SFInt32" accessType="initializeOnly" value="3"/>
+  <field name="startFromLoader" type="SFTime"  accessType="inputOnly"/>
+  <field name="arrived"         type="SFBool"  accessType="inputOnly"/>
+  <field name="releaseDwell"    type="SFBool"  accessType="inputOnly"/>
+  <field name="advanceSeg"      type="SFInt32" accessType="inputOnly"/>
+  <field name="resetSeg"        type="SFBool"  accessType="inputOnly"/>
+  <field name="segmentArrived"  type="SFInt32" accessType="outputOnly"/>
+  <![CDATA[ecmascript:
+  var _seg=0;
+  var _wasActive=false;
+  var _timerIds=['Timer_Cindy_1','Timer_Cindy_2'];
+  var _dwellIds=['Dwell_Cindy_1','Dwell_Cindy_2'];
+  var _maxSeg=2;
+  function initialize(){ Browser.println("Arrival_Cindy: ready maxSeg="+_maxSeg+" order=3"); }
+  function resetSeg(val,time){ if(!val)return; _seg=0; _wasActive=false; }
+  function startFromLoader(val,time){
+    if(val<=0)return;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);
+      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_Cindy: Timer_1 fired at "+(time+0.1));}
+    }catch(e){Browser.println("Arrival_Cindy startFromLoader err: "+e);}
+  }
+  function arrived(val,time){
+    if(val){ _wasActive=true; return; }
+    if(!_wasActive) return;
+    _wasActive=false; _seg++; segmentArrived=_seg;
+    Browser.println("Arrival_Cindy: arrived seg "+_seg);
+  }
+  function advanceSeg(completedSeg,time){
+    var nextIdx=completedSeg;
+    if(nextIdx>=_maxSeg){ Browser.println("Arrival_Cindy: arc complete"); return; }
+    var tNow=(time&&time>0)?time:Browser.currentTime;
+    try{ var t=Browser.currentScene.getNamedNode(_timerIds[nextIdx]);
+      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_Cindy: Timer_"+(nextIdx+1)+" at "+tNow);}
+    }catch(e){Browser.println("Arrival_Cindy advanceSeg err: "+e);}
+  }
+  function releaseDwell(val,time){
+    if(!val||_seg<1)return;
+    if(_seg>_dwellIds.length)return;
+    var dwId=_dwellIds[_seg-1];
+    try{
+      var dw=Browser.currentScene.getNamedNode(dwId);
+      dw.enabled=true;
+      dw.startTime=Browser.currentTime;
+      Browser.println("Arrival_Cindy: released dwell "+dwId);
+    }catch(e){Browser.println("Arrival_Cindy releaseDwell error: "+e);}
+  }
+  ]]>
+</Script>
+
+<Script DEF="Kill_Cindy" directOutput="true" mustEvaluate="true">
+  <field name="killAll" type="SFBool" accessType="inputOnly"/>
+  <field name="resetPos" type="SFBool" accessType="inputOnly"/>
+  <![CDATA[ecmascript:
+  var timerIds=['Timer_Cindy_1','Dwell_Cindy_1','Timer_Cindy_2','Dwell_Cindy_2'];
+  var startX=13, startY=0, startZ=12.6;
+  function killAll(val,time){
+    if(!val)return;
+    for(var i=0;i<timerIds.length;i++){
+      try{Browser.currentScene.getNamedNode(timerIds[i]).enabled=false;}catch(e){}
+    }
+  }
+  function resetPos(val,time){
+    if(!val)return;
+    killAll(true,time);
+    try{
+      var av=Browser.currentScene.getNamedNode("Avatar_Cindy");
+      av.translation=new SFVec3f(startX,startY,startZ);
+    }catch(e){Browser.println("Kill_Cindy resetPos error: "+e);}
+    try{
+      Browser.currentScene.getNamedNode("Arrival_Cindy").resetSeg=true;
     }catch(e){}
   }
   ]]>
@@ -200,12 +372,17 @@
 <field accessType="inputOnly" type="SFString" name="startAgent"/>
 <field accessType="inputOnly" type="SFString" name="releaseDwellAgent"/>
 <field accessType="inputOnly" type="SFString" name="startNextTimer"/>
-<field accessType="inputOnly" type="SFVec3f" name="pos_Cindy"/>
-<field accessType="outputOnly" type="SFFloat" name="arousal_Cindy"/>
+<field accessType="inputOnly" type="SFVec3f" name="pos_The_Gardener"/>
+<field accessType="outputOnly" type="SFFloat" name="arousal_The_Gardener"/>
 <field accessType="inputOnly" type="SFVec3f" name="pos_The_Steward"/>
 <field accessType="outputOnly" type="SFFloat" name="arousal_The_Steward"/>
+<field accessType="inputOnly" type="SFVec3f" name="pos_Salida"/>
+<field accessType="outputOnly" type="SFFloat" name="arousal_Salida"/>
+<field accessType="inputOnly" type="SFVec3f" name="pos_Cindy"/>
+<field accessType="outputOnly" type="SFFloat" name="arousal_Cindy"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_Mountain"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_Temple"/>
 <field accessType="inputOnly" type="SFBool" name="zoneActive_pool"/>
-<field accessType="inputOnly" type="SFBool" name="zoneActive_temple"/>
 <![CDATA[ecmascript:
 var _sceneNow=0;
 function _getSceneNow(agent,seg){var t=Browser.currentScene.getNamedNode("Timer_"+agent+"_"+seg);if(t&&t.time!==undefined&&t.time>0)return t.time;if(t&&t.startTime!==undefined&&t.cycleTime!==undefined&&(t.startTime+t.cycleTime)>0)return t.startTime+t.cycleTime;return _sceneNow;}
@@ -233,14 +410,23 @@ function releaseDwellAgent(agentColonSeg,time){
 ]]>
 </Script>
 <!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->
-
 <!-- ROUTEs: Cindy -->
 <ROUTE fromNode="Timer_Cindy_1" fromField="fraction_changed" toNode="Interp_Cindy_1" toField="set_fraction"/>
 <ROUTE fromNode="Interp_Cindy_1" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
 <ROUTE fromNode="Timer_Cindy_1" fromField="isActive" toNode="Arrival_Cindy" toField="arrived"/>
-<!-- ROUTEs: The Steward -->
-<ROUTE fromNode="Timer_The_Steward_1" fromField="fraction_changed" toNode="Interp_The_Steward_1" toField="set_fraction"/>
-<ROUTE fromNode="Interp_The_Steward_1" fromField="value_changed" toNode="Avatar_The_Steward" toField="translation"/>
-<ROUTE fromNode="Timer_The_Steward_1" fromField="isActive" toNode="Arrival_The_Steward" toField="arrived"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="fraction_changed" toNode="Interp_Cindy_2" toField="set_fraction"/>
+<ROUTE fromNode="Interp_Cindy_2" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="isActive" toNode="Arrival_Cindy" toField="arrived"/>
+<!-- ROUTEs: The Gardener -->
+<ROUTE fromNode="Timer_The_Gardener_1" fromField="fraction_changed" toNode="Interp_The_Gardener_1" toField="set_fraction"/>
+<ROUTE fromNode="Interp_The_Gardener_1" fromField="value_changed" toNode="Avatar_The_Gardener" toField="translation"/>
+<ROUTE fromNode="Timer_The_Gardener_1" fromField="isActive" toNode="Arrival_The_Gardener" toField="arrived"/>
+<!-- ROUTEs: Cindy -->
+<ROUTE fromNode="Timer_Cindy_1" fromField="fraction_changed" toNode="Interp_Cindy_1" toField="set_fraction"/>
+<ROUTE fromNode="Interp_Cindy_1" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<ROUTE fromNode="Timer_Cindy_1" fromField="isActive" toNode="Arrival_Cindy" toField="arrived"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="fraction_changed" toNode="Interp_Cindy_2" toField="set_fraction"/>
+<ROUTE fromNode="Interp_Cindy_2" fromField="value_changed" toNode="Avatar_Cindy" toField="translation"/>
+<ROUTE fromNode="Timer_Cindy_2" fromField="isActive" toNode="Arrival_Cindy" toField="arrived"/>
 </Scene>
 </X3D>

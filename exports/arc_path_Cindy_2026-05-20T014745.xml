@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_Cindy_2026-05-20T014745" scene="garden_001">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_Cindy_2026-05-20T014745" agentname="Cindy" path_name="path_Cindy">
+    <Timestamp date="2026-05-20" time="01:47:45"/>
+    <Waypoint id="CINDYATTEMPLE" stepno="1" name="CindyAtTemple" E="0.2641" B="0.2074" P="0.1644" S="0.1614" Mode="scene" Coherence="0.1125" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="10.80" pos_y="0.00" pos_z="9.80">
+      <Statement speaker="Cindy">Oh Mother Innana, let me live simply and serve you always.</Statement>
+    </Waypoint>
+    <Waypoint id="CINDYATPOOL" stepno="2" name="CindyAtPool" E="0.3020" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.1179" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="24.80" pos_y="0.00" pos_z="16.80">
+      <Statement speaker="Cindy">Hello Cindy.</Statement>
+      <Response speaker="Cindy">Hello Steward.</Response>
+    </Waypoint>
+    <Waypoint id="CINDYATMOUNTAIN" stepno="3" name="CindyAtMountain" E="0.2563" B="0.1914" P="0.1764" S="0.1614" Mode="scene" Coherence="0.1151" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="11.30" pos_y="0.00" pos_z="30.10">
+      <Question speaker="The Gardener">Welcome, Little Fire Squirrel!  Do you seek solace or meditation?</Question>
+      <Response speaker="Cindy">I must meditate.</Response>
+      <Statement speaker="The Gardener">I shall leave you to your peace.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

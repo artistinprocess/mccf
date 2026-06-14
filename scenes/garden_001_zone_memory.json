@@ -1,0 +1,17 @@
+{
+  "Temple": [
+    {
+      "cultivar": "Cindy",
+      "event": "OnEnter",
+      "command": "reflect",
+      "step": 1,
+      "timestamp": 1781221732.873599,
+      "observed_cv": {
+        "E": 0.511,
+        "B": 0.411,
+        "P": 0.324,
+        "S": 0.318
+      }
+    }
+  ]
+}

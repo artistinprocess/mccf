@@ -174,6 +174,60 @@ button.active { background: #4af0a8; color: #111; }
 #pb-channels span { font-size:11px; }
 .pc-E { color:#f07060; } .pc-B { color:#60a8f0; }
 .pc-P { color:#f0c060; } .pc-S { color:#60f0a8; }
+/* ── Sound Panel ──────────────────────────────── */
+#soundPanel {
+  margin-top:6px; border-top:1px solid #2a3a4a; padding-top:6px;
+}
+#soundPanel .sp-title {
+  font-size:10px; font-weight:700; letter-spacing:0.08em;
+  color:#7ab8d4; text-transform:uppercase; margin-bottom:4px;
+}
+.sp-global {
+  display:flex; gap:6px; align-items:center; margin-bottom:5px; flex-wrap:wrap;
+}
+.sp-global label { font-size:10px; color:#8a9aaa; white-space:nowrap; }
+.sp-global input[type=range] { width:64px; accent-color:#7ab8d4; }
+.sp-global input[type=number] {
+  width:36px; background:#111a22; border:1px solid #2a3a4a;
+  color:#c8d8e8; font-size:10px; padding:1px 3px; border-radius:3px;
+}
+.sp-fade-row {
+  display:flex; gap:4px; align-items:center; margin-bottom:3px; flex-wrap:nowrap;
+}
+.sp-fade-row label { font-size:10px; color:#8a9aaa; white-space:nowrap; width:22px; }
+.sp-fade-row input[type=number] {
+  width:38px; background:#111a22; border:1px solid #2a3a4a;
+  color:#c8d8e8; font-size:10px; padding:1px 3px; border-radius:3px;
+}
+.sp-fade-row span { font-size:10px; color:#607080; }
+.sp-zone {
+  background:#0d1820; border:1px solid #1e2e3e;
+  border-radius:4px; padding:4px 6px; margin-bottom:4px;
+}
+.sp-zone-name {
+  font-size:10px; font-weight:700; color:#a0c8e0;
+  margin-bottom:3px; letter-spacing:0.05em;
+}
+.sp-row {
+  display:flex; align-items:center; gap:4px; margin-bottom:2px; flex-wrap:wrap;
+}
+.sp-tag { font-size:9px; color:#607080; width:36px; flex-shrink:0; }
+.sp-file-btn {
+  font-size:9px; background:#162430; border:1px solid #2a4060;
+  color:#90b8d0; padding:2px 5px; border-radius:3px; cursor:pointer;
+  white-space:nowrap; max-width:118px; overflow:hidden; text-overflow:ellipsis;
+}
+.sp-file-btn:hover { background:#1e3448; }
+.sp-file-btn.loaded { border-color:#3a8060; color:#60c890; }
+.sp-vol { width:56px; accent-color:#5a9ab0; }
+.sp-vol-dwell { accent-color:#9a70b0; }
+.sp-val { font-size:9px; color:#607080; width:24px; text-align:right; }
+.sp-clear {
+  font-size:9px; background:none; border:none;
+  color:#604040; cursor:pointer; padding:0 2px;
+}
+.sp-clear:hover { color:#c04040; }
+.sp-file-input { display:none; }
 </style>
 </head>
 <body>
@@ -256,6 +310,27 @@ button.active { background: #4af0a8; color: #111; }
     <div id="pb-question"></div>
     <div id="pb-response"></div>
   </div>
+  <!-- ── Sound Panel ── -->
+  <div id="soundPanel">
+    <div class="sp-title">&#9836; Zone Audio</div>
+    <div class="sp-global">
+      <label>Master</label>
+      <input type="range" id="sp_master" min="0" max="1" step="0.01" value="1.0"
+        oninput="spSetFader('masterVolume',parseFloat(this.value));document.getElementById('sp_master_val').textContent=Math.round(this.value*100)+'%'"/>
+      <span class="sp-val" id="sp_master_val">100%</span>
+    </div>
+    <div class="sp-fade-row">
+      <label>In</label>
+      <input type="number" id="sp_fadein"  value="1.5" min="0.1" max="10" step="0.1"
+        onchange="spSetFader('fadeInDuration',parseFloat(this.value))"/>
+      <span>s</span>
+      <label style="width:28px;">Out</label>
+      <input type="number" id="sp_fadeout" value="2.5" min="0.1" max="10" step="0.1"
+        onchange="spSetFader('fadeOutDuration',parseFloat(this.value))"/>
+      <span>s</span>
+    </div>
+    <div id="sp_zones"></div>
+  </div>
 </div>
 
 <!-- Greek Chorus overlay — text injected by displayChorus() -->
@@ -337,8 +412,9 @@ function buildVPButtons() {
 canvas.addEventListener('load', () => {
   setStatus('Scene loaded');
   buildVPButtons();
-  setTimeout(() => gotoVP('VP_Overview'), 400);
   startPolling();
+  spInit();
+  _resumeAudioContext();
   try {
     const arcChannel = new BroadcastChannel('mccf_arc');
     arcChannel.onmessage = (e) => {
@@ -3365,6 +3441,7 @@ function pbUpdateDisplayFinal(state, fireChorus) {
       }).catch(function(e) {
         console.warn('chorus/fire fetch error:', e.message);
       });
+      _chorusLastTimestamp = Date.now() / 1000;  // anchor to now — reject any cached prior-arc response
       startChorusPoll();
     } else {
       console.log('pbUpdateDisplayFinal: no transcript — Chorus skipped');
@@ -3655,6 +3732,326 @@ function dismissChorus() {
   clearTimeout(window._chorusAutoDismiss);
   // Clear server state so stale text doesn't re-appear on next arc
   fetch(API + '/chorus/clear', {method: 'POST'}).catch(function() {});
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SOUND PANEL
+// Zones are discovered from the loaded X3D scene at spInit() time.
+// Each zone: ambient loop (Prox-triggered fade) + dwell one-shot.
+// All scalar writes go to SoundFader node in the X3D scene via SAI.
+// Files served from /static/media/ — mp3, wav, mid/midi.
+// ═══════════════════════════════════════════════════════════════════
+
+var _spZones        = [];   // [{key, label}] — populated by spDiscoverZones()
+var _spPickTarget   = null; // {key, layer} — set when file picker opens
+
+// Called from canvas 'load' event — discover zones then build rows
+function spInit() {
+  _spZones = spDiscoverZones();
+  spBuildZoneRows();
+  spBuildZoneTable();
+  spStartZonePoll();
+  // Push initial scalars to SoundFader
+  spSetFader('masterVolume',    parseFloat(document.getElementById('sp_master').value  || 1.0));
+  spSetFader('fadeInDuration',  parseFloat(document.getElementById('sp_fadein').value  || 1.5));
+  spSetFader('fadeOutDuration', parseFloat(document.getElementById('sp_fadeout').value || 2.5));
+  console.log('spInit: sound panel ready —', _spZones.length, 'zones, zone poll started');
+}
+
+// Discover zones by scanning scene for Prox_ named nodes.
+// Falls back to hard-coded list if SAI enumeration is unavailable.
+function spDiscoverZones() {
+  var found = [];
+  try {
+    var scene = canvas.browser.currentScene;
+    if (scene && scene.namedNodes) {
+      Object.keys(scene.namedNodes).forEach(function(n) {
+        if (n.startsWith('Prox_') && !n.startsWith('Prox_Jack') && !n.startsWith('Prox_Salida')) {
+          var key   = n.replace(/^Prox_/, '');
+          var label = key.replace(/_/g, ' ');
+          found.push({ key: key, label: label });
+        }
+      });
+    }
+  } catch(e) {}
+  // Fallback: well-known zones in garden_002
+  if (!found.length) {
+    found = [
+      { key: 'Garden',        label: 'Garden' },
+      { key: 'Village_Plaza', label: 'Village Plaza' },
+      { key: 'pool',          label: 'Pool' }
+    ];
+  }
+  return found;
+}
+
+function spBuildZoneRows() {
+  var container = document.getElementById('sp_zones');
+  if (!container) return;
+  container.innerHTML = '';
+
+  _spZones.forEach(function(z) {
+    var html =
+      '<div class="sp-zone">' +
+        '<div class="sp-zone-name">' + z.label + '</div>' +
+        // Ambient row
+        '<div class="sp-row">' +
+          '<span class="sp-tag">Ambient</span>' +
+          '<button class="sp-file-btn" id="sp_btn_'+z.key+'" onclick="spPickFile(\''+z.key+'\',\'ambient\')">Choose&hellip;</button>' +
+          '<button class="sp-clear" onclick="spClearFile(\''+z.key+'\',\'ambient\')" title="Clear">&#x2715;</button>' +
+          '<input type="range" class="sp-vol" id="sp_vol_'+z.key+'" min="0" max="1" step="0.01" value="0.8"' +
+            ' oninput="spSetVol(\''+z.key+'\',\'ambient\',this.value)"/>' +
+          '<span class="sp-val" id="sp_volval_'+z.key+'">80%</span>' +
+        '</div>' +
+        // Dwell row
+        '<div class="sp-row">' +
+          '<span class="sp-tag">Dwell</span>' +
+          '<button class="sp-file-btn" id="sp_btn_'+z.key+'_dwell" onclick="spPickFile(\''+z.key+'\',\'dwell\')">Choose&hellip;</button>' +
+          '<button class="sp-clear" onclick="spClearFile(\''+z.key+'\',\'dwell\')" title="Clear">&#x2715;</button>' +
+          '<input type="range" class="sp-vol sp-vol-dwell" id="sp_vol_'+z.key+'_dwell" min="0" max="1" step="0.01" value="0.9"' +
+            ' oninput="spSetVol(\''+z.key+'\',\'dwell\',this.value)"/>' +
+          '<span class="sp-val" id="sp_volval_'+z.key+'_dwell">90%</span>' +
+        '</div>' +
+      '</div>';
+    container.insertAdjacentHTML('beforeend', html);
+  });
+
+  // One shared hidden file input, created once
+  if (!document.getElementById('sp_hidden_file')) {
+    var fi = document.createElement('input');
+    fi.type = 'file';
+    fi.id   = 'sp_hidden_file';
+    fi.className = 'sp-file-input';
+    fi.accept = '.mp3,.wav,.mid,.midi';
+    fi.addEventListener('change', spOnFileChosen);
+    document.body.appendChild(fi);
+  }
+}
+
+function spPickFile(zoneKey, layer) {
+  _spPickTarget = { key: zoneKey, layer: layer };
+  var fi = document.getElementById('sp_hidden_file');
+  fi.value = '';
+  fi.click();
+}
+
+function spOnFileChosen(evt) {
+  var file = evt.target.files[0];
+  if (!file || !_spPickTarget) return;
+  var t       = _spPickTarget;
+  var isDwell = (t.layer === 'dwell');
+  var path    = '../media/' + file.name;
+  var btnId   = isDwell ? ('sp_btn_'+t.key+'_dwell') : ('sp_btn_'+t.key);
+  var clipId  = isDwell ? ('Sound_'+t.key+'_Dwell')  : ('Sound_'+t.key);
+
+  var btn = document.getElementById(btnId);
+  if (btn) { btn.textContent = file.name; btn.classList.add('loaded'); }
+
+  spSetClipUrl(clipId, path);
+  console.log('Sound: ' + clipId + ' → ' + path);
+  _spPickTarget = null;
+}
+
+function spClearFile(zoneKey, layer) {
+  var isDwell = (layer === 'dwell');
+  var btnId  = isDwell ? ('sp_btn_'+zoneKey+'_dwell') : ('sp_btn_'+zoneKey);
+  var clipId = isDwell ? ('Sound_'+zoneKey+'_Dwell')  : ('Sound_'+zoneKey);
+  var btn = document.getElementById(btnId);
+  if (btn) { btn.textContent = 'Choose\u2026'; btn.classList.remove('loaded'); }
+  spSetClipUrl(clipId, '');
+}
+
+function spSetVol(zoneKey, layer, rawVal) {
+  var v       = parseFloat(rawVal);
+  var isDwell = (layer === 'dwell');
+  var valId   = isDwell ? ('sp_volval_'+zoneKey+'_dwell') : ('sp_volval_'+zoneKey);
+  var field   = isDwell ? ('vol_'+zoneKey+'_Dwell') : ('vol_'+zoneKey);
+  var el = document.getElementById(valId);
+  if (el) el.textContent = Math.round(v * 100) + '%';
+  spSetFader(field, v);
+}
+
+// Write SFFloat to SoundFader node via SAI
+function spSetFader(field, value) {
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var node = scene.getNamedNode('SoundFader');
+    if (node) node[field] = value;
+  } catch(e) { /* SoundFader may not exist in all scenes — silent */ }
+}
+
+// Write url to AudioClip node via SAI
+function spSetClipUrl(clipNodeId, urlStr) {
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var node = scene.getNamedNode(clipNodeId);
+    if (node) {
+      node.url = urlStr ? [urlStr] : [];
+      if (urlStr) {
+        // Clear any prior stopTime that would block playback, then set startTime
+        try { node.stopTime  = -1; } catch(e) {}
+        try { node.startTime = canvas.browser.currentTime || (performance.now()/1000); } catch(e) {}
+      } else {
+        // Empty url — stop immediately
+        try { node.stopTime = canvas.browser.currentTime || (performance.now()/1000); } catch(e) {}
+      }
+    }
+  } catch(e) { console.warn('spSetClipUrl:', clipNodeId, e.message); }
+}
+
+// Push all current panel values to SoundFader — call after scene reload
+function spPushAll() {
+  spSetFader('masterVolume',    parseFloat((document.getElementById('sp_master') ||{}).value || 1.0));
+  spSetFader('fadeInDuration',  parseFloat((document.getElementById('sp_fadein') ||{}).value || 1.5));
+  spSetFader('fadeOutDuration', parseFloat((document.getElementById('sp_fadeout')||{}).value || 2.5));
+  _spZones.forEach(function(z) {
+    var av = parseFloat((document.getElementById('sp_vol_'+z.key)            ||{}).value || 0.8);
+    var dv = parseFloat((document.getElementById('sp_vol_'+z.key+'_dwell')   ||{}).value || 0.9);
+    spSetFader('vol_'+z.key, av);
+    spSetFader('vol_'+z.key+'_Dwell', dv);
+  });
+}
+
+// ── AudioContext resume ───────────────────────────────────────────────────
+// Chrome/Edge block AudioContext until a user gesture. X_ITE creates its
+// AudioContext internally — we just need to resume it on the first click
+// anywhere on the page. One-shot: listener removes itself after firing.
+function _resumeAudioContext() {
+  function _doResume() {
+    try {
+      // X_ITE exposes its AudioContext via the browser's internal sound engine.
+      // Try the most common paths; fall back to enumerating window AudioContexts.
+      var ctx = null;
+      try { ctx = canvas.browser._soundEngine && canvas.browser._soundEngine.context; } catch(e) {}
+      try { if(!ctx) ctx = canvas.browser.getAudioContext && canvas.browser.getAudioContext(); } catch(e) {}
+      if(ctx && ctx.state === 'suspended') {
+        ctx.resume().then(function() {
+          console.log('[audio] AudioContext resumed — sound active');
+        });
+      } else {
+        // Fallback: resume ALL suspended AudioContexts on the page
+        if(window.AudioContext || window.webkitAudioContext) {
+          // X_ITE stores its context on the global sound manager
+          // Try direct construction to force browser unlock
+          var unlock = new (window.AudioContext || window.webkitAudioContext)();
+          var buf = unlock.createBuffer(1,1,22050);
+          var src = unlock.createBufferSource();
+          src.buffer = buf;
+          src.connect(unlock.destination);
+          src.start(0);
+          unlock.close();
+          console.log('[audio] AudioContext unlocked via gesture');
+        }
+      }
+    } catch(e) {
+      console.warn('[audio] resume error:', e);
+    }
+    document.removeEventListener('click', _doResume);
+    document.removeEventListener('keydown', _doResume);
+  }
+  document.addEventListener('click',   _doResume, { once: true });
+  document.addEventListener('keydown', _doResume, { once: true });
+  console.log('[audio] Waiting for user gesture to resume AudioContext...');
+}
+
+// ── Avatar zone detection ─────────────────────────────────────────────────
+// ProximitySensors detect the viewer camera, not avatars.
+// This watcher reads avatar world positions from the interpolators each frame
+// and fires SoundFader.prox_* when an avatar enters or exits a zone radius.
+//
+// Zone table: populated from _spZones + scene geometry at spInit() time.
+// Each entry: { key, cx, cz, radius }
+// Avatar positions: polled from Avatar_* node translations at ZONE_POLL_MS.
+
+var _spZoneTable   = [];   // [{key, cx, cz, radius}]
+var _spAvatarZones = {};   // {avatarSafeName: {zoneKey: bool}} — current in/out state
+var _spZonePollId  = null;
+var ZONE_POLL_MS   = 150;
+
+// Hard-coded zone geometry matching garden_002.x3d
+// Scene Composer should write these into cultivar/scene XML eventually.
+var _SP_ZONE_GEOMETRY = {
+  'Garden':        { cx: 13.078, cz:  8.511, radius: 5.0 },
+  'Village_Plaza': { cx: 26.800, cz: 25.067, radius: 4.0 },
+  'pool':          { cx: 30.000, cz:  7.000, radius: 4.0 }
+};
+
+function spBuildZoneTable() {
+  _spZoneTable = [];
+  _spZones.forEach(function(z) {
+    var g = _SP_ZONE_GEOMETRY[z.key];
+    if(g) _spZoneTable.push({ key: z.key, cx: g.cx, cz: g.cz, radius: g.radius });
+  });
+}
+
+function spStartZonePoll() {
+  if(_spZonePollId) clearInterval(_spZonePollId);
+  _spZonePollId = setInterval(spPollAvatarZones, ZONE_POLL_MS);
+}
+
+function spStopZonePoll() {
+  if(_spZonePollId) { clearInterval(_spZonePollId); _spZonePollId = null; }
+}
+
+function spPollAvatarZones() {
+  if(!_spZoneTable.length) return;
+  try {
+    var scene = canvas.browser.currentScene;
+    if(!scene) return;
+    var avatarNames = window._avatarNodeNames || [];
+    if(!avatarNames.length) return;
+    avatarNames.forEach(function(nodeName) {
+      var safeName = nodeName.replace(/^Avatar_/, '');
+      try {
+        var ax = null, az = null;
+        // Primary: read translation directly from Avatar Transform node
+        try {
+          var node = scene.getNamedNode(nodeName);
+          if(node && node.translation) {
+            ax = node.translation.x;
+            az = node.translation.z;
+          }
+        } catch(e) {}
+        // Fallback: read from PositionInterpolator value_changed output
+        if(ax === null) {
+          try {
+            var interp = scene.getNamedNode('Interp_' + safeName + '_1');
+            if(interp && interp.value_changed) {
+              ax = interp.value_changed.x;
+              az = interp.value_changed.z;
+            }
+          } catch(e) {}
+        }
+        if(ax === null) return;
+        if(!_spAvatarZones[safeName]) _spAvatarZones[safeName] = {};
+        _spZoneTable.forEach(function(zone) {
+          var dx = ax - zone.cx, dz = az - zone.cz;
+          var inside = (Math.sqrt(dx*dx + dz*dz) <= zone.radius);
+          var wasInside = !!_spAvatarZones[safeName][zone.key];
+          if(inside !== wasInside) {
+            _spAvatarZones[safeName][zone.key] = inside;
+            spTriggerZone(zone.key, inside);
+          }
+        });
+      } catch(e) {}
+    });
+  } catch(e) {}
+}
+
+// Called when any avatar crosses a zone boundary
+function spTriggerZone(zoneKey, entering) {
+  spSetFader('prox_' + zoneKey, entering ? 1.0 : 0.0);
+  console.log('spTriggerZone:', zoneKey, entering ? 'ENTER' : 'EXIT');
+}
+
+// Trigger a dwell sound event for a zone from the loader
+// Call this when a Dwell timer fires for an agent at a known zone.
+function spTriggerDwell(zoneKey) {
+  spSetFader('dwell_' + zoneKey, 1.0);
+  // Brief pulse — SoundFader only acts on true
+  setTimeout(function() { spSetFader('dwell_' + zoneKey, 0.0); }, 200);
 }
 
 </script>
