@@ -313,6 +313,18 @@ button.active { background: #4af0a8; color: #111; }
   <!-- ── Sound Panel ── -->
   <div id="soundPanel">
     <div class="sp-title">&#9836; Zone Audio</div>
+    <!-- Session C: Scene-level track display — populated by spLoadSceneSound() -->
+    <div style="background:#0a1420;border:1px solid #1a2a3a;border-radius:3px;padding:4px 6px;margin-bottom:5px;">
+      <div style="font-size:9px;color:#4a7090;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:3px;">Scene Tracks (baked in X3D)</div>
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:2px;">
+        <span style="font-size:9px;color:#7ab8d4;width:36px;flex-shrink:0;">Music</span>
+        <span style="font-size:9px;color:#a0c8e0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="sp_music_label">—</span>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <span style="font-size:9px;color:#7ab8d4;width:36px;flex-shrink:0;">Bed</span>
+        <span style="font-size:9px;color:#a0c8e0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="sp_bed_label">—</span>
+      </div>
+    </div>
     <div class="sp-global">
       <label>Master</label>
       <input type="range" id="sp_master" min="0" max="1" step="0.01" value="1.0"
@@ -410,6 +422,13 @@ function buildVPButtons() {
 }
 
 canvas.addEventListener('load', () => {
+  // Guard — ignore the initial empty canvas load before any X3D file is selected
+  var _sel = document.getElementById('x3d-file');
+  if (!_sel || !_sel.value) {
+    setStatus('Ready — select a scene');
+    _resumeAudioContext();
+    return;
+  }
   setStatus('Scene loaded');
   buildVPButtons();
   startPolling();
@@ -2232,7 +2251,7 @@ async function pbPlay() {
           speechSynthesis.speak(_wu);
         } catch(e) {}
       }
-      _pbCbGeneration++;
+      spStartSceneTracks();  // Day 47: start Music + Bed on Play (Play is performance)
       pbActivateX3DTimers(cultivars, null);
       console.log('pbPlay: after pbActivateX3DTimers — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
       pbUpdateDisplay(stateData);
@@ -2532,8 +2551,7 @@ async function _pbPlayAllInner() {
         speechSynthesis.speak(_warmUp2);
       } catch(e) {}
     }
-
-    // ── V4: validate waypointOrder and build order groups ──────────────────
+    spStartSceneTracks();  // Day 47: start Music + Bed on Play (Play is performance)
     // Parse _scene.xml to get waypointOrder per path.
     // _parseSceneZoneData already loaded it — re-fetch the same doc.
     var xSel2 = document.getElementById('x3d-file');
@@ -3131,6 +3149,7 @@ async function pbStop() {
   _agentZone = {};  // reset zone tracking on stop
   pbStopPolling();
   pbStopX3DTimers();
+  spStopAll();  // Session C: stop all audio clips on Stop
   try { const r=await fetch(API+'/arc/playback/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); pbUpdateDisplay(await r.json()); } catch(e) {}
 }
 async function pbReset() {
@@ -3451,7 +3470,8 @@ function pbUpdateDisplayFinal(state, fireChorus) {
 
 // Fetch and cache the scene XML when the X3D scene loads
 canvas.addEventListener('load', function() {
-  var src = canvas.getAttribute('src') || 'mccf_scene.x3d';
+  var src = canvas.getAttribute('src');
+  if (!src) return;  // skip empty canvas load before any scene is selected
   fetch(src)
     .then(function(r){ if(r.ok) return r.text(); throw new Error('fetch failed'); })
     .then(function(txt){ window._loadedSceneXml = txt; _pbSceneVoiceMap = null; })
@@ -3648,13 +3668,36 @@ function x3dFileChanged() {
     .catch(function(){});
   // Parse zone commands and actor types from scene XML after scene loads
   setTimeout(_parseSceneZoneData, 500);
+  // Day 47: reload SceneSound labels for the new scene on scene switch.
+  // Delay lets the X3D scene initialize before SAI. No auto-start —
+  // tracks start only from Play button.
+  setTimeout(spLoadSceneSound, 1800);
 }
 
 window.addEventListener('load', function() {
-  setTimeout(function() {
-    x3dLoadFiles();
-    pbLoadFiles();
-  }, 800);
+  // Retry on startup — Flask may not be ready immediately after restart.
+  // Poll every 1s until file list loads (max 15 attempts).
+  var _startAttempts = 0;
+  var _startMax = 15;
+  function _tryStartup() {
+    _startAttempts++;
+    fetch(API + '/scene/x3d/list', {signal: AbortSignal.timeout(2000)})
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(data) {
+        if (data.files && data.files.length > 0) {
+          x3dLoadFiles();
+          pbLoadFiles();
+          console.log('startup: Flask ready after', _startAttempts, 'attempt(s)');
+        } else if (_startAttempts < _startMax) {
+          setTimeout(_tryStartup, 1000);
+        }
+      })
+      .catch(function() {
+        if (_startAttempts < _startMax) setTimeout(_tryStartup, 1000);
+        else console.warn('startup: Flask not reachable after', _startMax, 'attempts');
+      });
+  }
+  setTimeout(_tryStartup, 500);
 });
 
 // ─────────────────────────────────────────────
@@ -3756,6 +3799,83 @@ function spInit() {
   spSetFader('fadeInDuration',  parseFloat(document.getElementById('sp_fadein').value  || 1.5));
   spSetFader('fadeOutDuration', parseFloat(document.getElementById('sp_fadeout').value || 2.5));
   console.log('spInit: sound panel ready —', _spZones.length, 'zones, zone poll started');
+  // Day 47: load SceneSound from scene XML — hydrates panel labels only.
+  // No auto-start. Music + Bed start on Play button via spStartSceneTracks().
+  spLoadSceneSound();
+}
+
+// Day 47: fetch _scene.xml, parse <SceneSound>, hydrate panel labels.
+// Does NOT start tracks — Play is performance. spStartSceneTracks() is called
+// from pbPlay/pbPlayAll inside the user-gesture click handler only.
+function spLoadSceneSound() {
+  var xSel = document.getElementById('x3d-file');
+  var fname = xSel ? xSel.value : '';
+  var sceneName = fname.replace(/\.x3d$/i, '');
+  if (!sceneName) {
+    console.log('spLoadSceneSound: no scene selected — skipping');
+    return;
+  }
+  fetch(API + '/scene/load/scene/raw?filename=' + encodeURIComponent(sceneName + '_scene.xml'))
+    .then(function(r) { return r.ok ? r.text() : Promise.reject('fetch failed ' + r.status); })
+    .then(function(xmlText) {
+      try {
+        var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+        var ss  = doc.querySelector('SceneSound');
+        if (!ss) { console.log('spLoadSceneSound: no <SceneSound> in scene XML'); return; }
+
+        var musicTrack = ss.querySelector('Track[id="music"]');
+        var bedTrack   = ss.querySelector('Track[id="bed"]');
+
+        // Hydrate panel labels so operator sees what's baked into the X3D
+        if (musicTrack) {
+          var mUrl = musicTrack.getAttribute('url') || '';
+          var mLbl = document.getElementById('sp_music_label');
+          if (mLbl) mLbl.textContent = mUrl ? mUrl.replace(/^media\//,'') : '—';
+        }
+        if (bedTrack) {
+          var bUrl = bedTrack.getAttribute('url') || '';
+          var bLbl = document.getElementById('sp_bed_label');
+          if (bLbl) bLbl.textContent = bUrl ? bUrl.replace(/^media\//,'') : '—';
+        }
+
+        // Store parsed SceneSound track data for spStartSceneTracks() to use on Play.
+        // No auto-start here — Play is performance. AudioContext may not even be
+        // unlocked yet at this point. Tracks start only when Play button is pressed.
+        window._spSceneMusicTrack = musicTrack;
+        window._spSceneBedTrack   = bedTrack;
+        console.log('[sound] spLoadSceneSound: cached — music=', musicTrack ? musicTrack.getAttribute('url') : 'none',
+                    'bed=', bedTrack ? bedTrack.getAttribute('url') : 'none');
+
+        // Also populate dynamic zone geometry from scene XML for avatar zone detection
+        spBuildZoneGeometryFromXml(doc);
+
+      } catch(e) { console.warn('spLoadSceneSound: parse error:', e); }
+    })
+    .catch(function(e) { console.warn('spLoadSceneSound: fetch error:', e); });
+}
+
+// Session C: build zone geometry table from scene XML <Zone> elements
+// Replaces the hardcoded _SP_ZONE_GEOMETRY so new scenes work automatically
+function spBuildZoneGeometryFromXml(doc) {
+  if (!doc) return;
+  // Clear first — do not merge, replace entirely so stale zones from other scenes don't persist
+  _SP_ZONE_GEOMETRY = {};
+  var built = 0;
+  doc.querySelectorAll('Zone').forEach(function(zEl) {
+    var id = zEl.getAttribute('id');
+    var posEl = zEl.querySelector('Position');
+    var radEl = zEl.querySelector('Radius');
+    if (!id || !posEl) return;
+    var cx = parseFloat(posEl.getAttribute('x') || 0);
+    var cz = parseFloat(posEl.getAttribute('z') || 0);
+    var radius = radEl ? parseFloat(radEl.getAttribute('value') || 4) : 4;
+    _SP_ZONE_GEOMETRY[id] = { cx: cx, cz: cz, radius: radius };
+    built++;
+  });
+  if (built > 0) {
+    console.log('spBuildZoneGeometryFromXml:', built, 'zones —', JSON.stringify(_SP_ZONE_GEOMETRY));
+    spBuildZoneTable();
+  }
 }
 
 // Discover zones by scanning scene for Prox_ named nodes.
@@ -3774,14 +3894,9 @@ function spDiscoverZones() {
       });
     }
   } catch(e) {}
-  // Fallback: well-known zones in garden_002
-  if (!found.length) {
-    found = [
-      { key: 'Garden',        label: 'Garden' },
-      { key: 'Village_Plaza', label: 'Village Plaza' },
-      { key: 'pool',          label: 'Pool' }
-    ];
-  }
+  // No fallback to hardcoded zone list — if SAI enumeration misses zones,
+  // return empty and let spBuildZoneGeometryFromXml populate geometry when scene XML loads.
+  // Stale garden_002 zone names must not appear for other scenes.
   return found;
 }
 
@@ -3842,7 +3957,8 @@ function spOnFileChosen(evt) {
   var isDwell = (t.layer === 'dwell');
   var path    = '../media/' + file.name;
   var btnId   = isDwell ? ('sp_btn_'+t.key+'_dwell') : ('sp_btn_'+t.key);
-  var clipId  = isDwell ? ('Sound_'+t.key+'_Dwell')  : ('Sound_'+t.key);
+  // Session C fix: use correct DEF naming convention (Clip_X_Ambient / Clip_X_Dwell)
+  var clipId  = isDwell ? ('Clip_'+t.key+'_Dwell')  : ('Clip_'+t.key+'_Ambient');
 
   var btn = document.getElementById(btnId);
   if (btn) { btn.textContent = file.name; btn.classList.add('loaded'); }
@@ -3855,7 +3971,8 @@ function spOnFileChosen(evt) {
 function spClearFile(zoneKey, layer) {
   var isDwell = (layer === 'dwell');
   var btnId  = isDwell ? ('sp_btn_'+zoneKey+'_dwell') : ('sp_btn_'+zoneKey);
-  var clipId = isDwell ? ('Sound_'+zoneKey+'_Dwell')  : ('Sound_'+zoneKey);
+  // Session C fix: use correct DEF naming convention
+  var clipId = isDwell ? ('Clip_'+zoneKey+'_Dwell')  : ('Clip_'+zoneKey+'_Ambient');
   var btn = document.getElementById(btnId);
   if (btn) { btn.textContent = 'Choose\u2026'; btn.classList.remove('loaded'); }
   spSetClipUrl(clipId, '');
@@ -3865,9 +3982,18 @@ function spSetVol(zoneKey, layer, rawVal) {
   var v       = parseFloat(rawVal);
   var isDwell = (layer === 'dwell');
   var valId   = isDwell ? ('sp_volval_'+zoneKey+'_dwell') : ('sp_volval_'+zoneKey);
-  var field   = isDwell ? ('vol_'+zoneKey+'_Dwell') : ('vol_'+zoneKey);
   var el = document.getElementById(valId);
   if (el) el.textContent = Math.round(v * 100) + '%';
+  // Session C fix: write gain directly to AudioClip node, not SoundFader SFFloat field
+  var clipId = isDwell ? ('Clip_'+zoneKey+'_Dwell') : ('Clip_'+zoneKey+'_Ambient');
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var clip = scene.getNamedNode(clipId);
+    if (clip) clip.gain = v;
+  } catch(e) { /* clip may not exist — silent */ }
+  // Also write to SoundFader for legacy compat if the node exists
+  var field = isDwell ? ('vol_'+zoneKey+'_Dwell') : ('vol_'+zoneKey);
   spSetFader(field, v);
 }
 
@@ -3879,6 +4005,88 @@ function spSetFader(field, value) {
     var node = scene.getNamedNode('SoundFader');
     if (node) node[field] = value;
   } catch(e) { /* SoundFader may not exist in all scenes — silent */ }
+}
+
+// Session C: stop all known AudioClips (Music, Bed, all zone Ambients + Dwells)
+function spStopAll() {
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+      ? canvas.browser.currentTime : (performance.now() / 1000);
+    // Global tracks
+    ['Clip_Music', 'Clip_Bed'].forEach(function(id) {
+      try { var n = scene.getNamedNode(id); if (n) n.stopTime = tNow; } catch(e) {}
+    });
+    // Zone clips
+    _spZones.forEach(function(z) {
+      ['Clip_'+z.key+'_Ambient', 'Clip_'+z.key+'_Dwell'].forEach(function(id) {
+        try { var n = scene.getNamedNode(id); if (n) n.stopTime = tNow; } catch(e) {}
+      });
+    });
+    console.log('[sound] spStopAll: stopped all clips at t=', tNow);
+  } catch(e) { console.warn('spStopAll error:', e); }
+}
+
+// Day 47: Start Music + Bed on Play. Both clips are started via SAI so they
+// fire together with animation on Play, not at scene load.
+//
+// REQUIRES: Composer must emit startTime="-1" stopTime="-2" on BOTH Clip_Music
+// and Clip_Bed so AudioDestination does not auto-fire them at time=0.
+// This function is the one and only place that starts global scene tracks.
+// Called from pbPlay and pbPlayAll, never from _resumeAudioContext.
+function spStartSceneTracks() {
+  var musicTrack = window._spSceneMusicTrack;
+  var bedTrack   = window._spSceneBedTrack;
+  console.log('[sound] spStartSceneTracks: music=', !!musicTrack, 'bed=', !!bedTrack);
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+      ? canvas.browser.currentTime : (performance.now() / 1000);
+
+    // Start Music clip via SAI — clears any prior stopTime guard first
+    try {
+      var mClip = scene.getNamedNode('Clip_Music');
+      if (mClip) {
+        mClip.stopTime  = tNow - 0.01;   // clear guard (startTime=-1 stopTime=-2 set by composer)
+        mClip.startTime = tNow + 0.05;
+        console.log('[sound] Clip_Music started via SAI at t=', tNow.toFixed(2),
+                    'loop=', mClip.loop);
+      } else {
+        console.log('[sound] Clip_Music not found in scene');
+      }
+    } catch(e) { console.warn('[sound] Clip_Music start error:', e); }
+
+    // Start Bed clip via SAI — same guard-clear pattern.
+    // Do NOT rely on AudioDestination auto-fire for Bed even though loop=true;
+    // the guard (startTime=-1 stopTime=-2) prevents it from firing at load time.
+    try {
+      var bClip = scene.getNamedNode('Clip_Bed');
+      if (bClip) {
+        bClip.stopTime  = tNow - 0.01;   // clear guard
+        bClip.startTime = tNow + 0.05;
+        console.log('[sound] Clip_Bed started via SAI at t=', tNow.toFixed(2),
+                    'loop=', bClip.loop);
+      } else {
+        console.log('[sound] Clip_Bed not found in scene');
+      }
+    } catch(e) { console.warn('[sound] Clip_Bed start error:', e); }
+
+  } catch(e) { console.warn('spStartSceneTracks error:', e); }
+}
+
+// Session C: stop a single named track (Music or Bed)
+function spStopTrack(trackName) {
+  try {
+    var scene = canvas.browser.currentScene;
+    if (!scene) return;
+    var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+      ? canvas.browser.currentTime : (performance.now() / 1000);
+    var clip = scene.getNamedNode('Clip_' + trackName);
+    if (clip) clip.stopTime = tNow;
+    console.log('[sound] spStopTrack:', trackName);
+  } catch(e) { console.warn('spStopTrack error:', e); }
 }
 
 // Write url to AudioClip node via SAI
@@ -3916,44 +4124,74 @@ function spPushAll() {
 
 // ── AudioContext resume ───────────────────────────────────────────────────
 // Chrome/Edge block AudioContext until a user gesture. X_ITE creates its
-// AudioContext internally — we just need to resume it on the first click
-// anywhere on the page. One-shot: listener removes itself after firing.
+// AudioContext internally — we just need to resume it on the first click.
+//
+// PLAY IS PERFORMANCE: _resumeAudioContext only unlocks the AudioContext.
+// It does NOT start Music or Bed. Tracks start only from pbPlay/pbPlayAll.
+// ── AudioContext resume ───────────────────────────────────────────────────
 function _resumeAudioContext() {
   function _doResume() {
+    var contexts = [];
+    // Path 1: X_ITE official API (11.x)
+    try { var c = canvas.browser.getAudioContext(); if(c) contexts.push(c); } catch(e) {}
+    // Path 2: internal sound engine
+    try { var c2 = canvas.browser._soundEngine && canvas.browser._soundEngine.context; if(c2) contexts.push(c2); } catch(e) {}
+    // Path 3: scan browser object properties for AudioContext instances
     try {
-      // X_ITE exposes its AudioContext via the browser's internal sound engine.
-      // Try the most common paths; fall back to enumerating window AudioContexts.
-      var ctx = null;
-      try { ctx = canvas.browser._soundEngine && canvas.browser._soundEngine.context; } catch(e) {}
-      try { if(!ctx) ctx = canvas.browser.getAudioContext && canvas.browser.getAudioContext(); } catch(e) {}
-      if(ctx && ctx.state === 'suspended') {
+      Object.values(canvas.browser).forEach(function(v) {
+        try { if(v && v.constructor && v.constructor.name === 'AudioContext' && contexts.indexOf(v)<0) contexts.push(v); } catch(e) {}
+      });
+    } catch(e) {}
+
+    var acted = false;
+    contexts.forEach(function(ctx) {
+      if(!ctx) return;
+      if(ctx.state === 'suspended') {
         ctx.resume().then(function() {
-          console.log('[audio] AudioContext resumed — sound active');
-        });
+          console.log('[audio] AudioContext unlocked — state:', ctx.state, '— awaiting Play button');
+        }).catch(function(e){ console.warn('[audio] resume failed:', e); });
+        acted = true;
       } else {
-        // Fallback: resume ALL suspended AudioContexts on the page
-        if(window.AudioContext || window.webkitAudioContext) {
-          // X_ITE stores its context on the global sound manager
-          // Try direct construction to force browser unlock
-          var unlock = new (window.AudioContext || window.webkitAudioContext)();
-          var buf = unlock.createBuffer(1,1,22050);
-          var src = unlock.createBufferSource();
-          src.buffer = buf;
-          src.connect(unlock.destination);
-          src.start(0);
-          unlock.close();
-          console.log('[audio] AudioContext unlocked via gesture');
-        }
+        console.log('[audio] AudioContext already running — state:', ctx.state, '— awaiting Play button');
+        acted = true;
       }
-    } catch(e) {
-      console.warn('[audio] resume error:', e);
+    });
+
+    if(!acted) {
+      // No X_ITE context found — unlock with silent buffer then retry
+      console.log('[audio] No X_ITE AudioContext found — unlocking and retrying');
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if(AC) {
+          var unlock = new AC();
+          var buf = unlock.createBuffer(1,1,22050);
+          var s = unlock.createBufferSource();
+          s.buffer = buf; s.connect(unlock.destination); s.start(0);
+          setTimeout(function(){ unlock.close(); }, 100);
+        }
+      } catch(e) {}
+      // Retry after 300ms — X_ITE may now allow context creation
+      setTimeout(function() {
+        try {
+          var ctx3 = canvas.browser.getAudioContext();
+          if(ctx3) {
+            ctx3.resume().then(function(){
+              console.log('[audio] AudioContext unlocked on retry — state:', ctx3.state, '— awaiting Play button');
+            });
+          } else {
+            console.log('[audio] still no context after retry — awaiting Play button');
+          }
+        } catch(e) { console.warn('[audio] AudioContext retry error:', e); }
+      }, 300);
     }
-    document.removeEventListener('click', _doResume);
+
+    document.removeEventListener('click',   _doResume);
     document.removeEventListener('keydown', _doResume);
+    console.log('[audio] gesture handler complete — contexts found:', contexts.length);
   }
   document.addEventListener('click',   _doResume, { once: true });
   document.addEventListener('keydown', _doResume, { once: true });
-  console.log('[audio] Waiting for user gesture to resume AudioContext...');
+  console.log('[audio] Waiting for user gesture to unlock AudioContext...');
 }
 
 // ── Avatar zone detection ─────────────────────────────────────────────────
