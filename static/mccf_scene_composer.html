@@ -168,6 +168,38 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
       <label>Description</label>
       <textarea id="sc-desc" rows="2" placeholder="Garden of the Goddess"></textarea>
+      <div class="sh" style="margin-top:12px">Scene Sound (Track 1 + Track 3)</div>
+      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:4px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+          <button class="btn cool" onclick="refreshMediaList()" style="padding:2px 8px;font-size:11px" title="Reload media/ directory">↺ media/</button>
+        </div>
+        <label style="margin-top:0">Music <span style="color:var(--dim);font-size:11px">(Track 1 — global)</span></label>
+        <select id="sc-music-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+          <option value="">— select file —</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="sc-music-loop" style="width:auto;margin:0" checked>
+            <span style="font-size:12px;color:var(--dim)">loop</span>
+          </label>
+          <label style="margin:0;flex:1">Gain <span id="sc-music-gain-val" style="color:var(--warm)">0.70</span></label>
+        </div>
+        <input type="range" id="sc-music-gain" min="0" max="1" step="0.01" value="0.70"
+          oninput="document.getElementById('sc-music-gain-val').textContent=parseFloat(this.value).toFixed(2)">
+        <label style="margin-top:8px">Bed <span style="color:var(--dim);font-size:11px">(Track 3 — atmosphere)</span></label>
+        <select id="sc-bed-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+          <option value="">— select file —</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="sc-bed-loop" style="width:auto;margin:0" checked>
+            <span style="font-size:12px;color:var(--dim)">loop</span>
+          </label>
+          <label style="margin:0;flex:1">Gain <span id="sc-bed-gain-val" style="color:var(--warm)">0.50</span></label>
+        </div>
+        <input type="range" id="sc-bed-gain" min="0" max="1" step="0.01" value="0.50"
+          oninput="document.getElementById('sc-bed-gain-val').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
       <div class="btn-row" style="margin-top:8px">
         <button class="btn pri full" onclick="applyScene()">Apply Grid</button>
       </div>
@@ -267,6 +299,48 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Rules that trigger Ollama when cultivars enter, dwell, or exit this zone.</div>
         <div id="z-commands-list" style="margin-bottom:6px"></div>
         <button class="btn" style="font-size:12px;width:100%" onclick="addZoneCommand()">+ Add Command Rule</button>
+      </div>
+      <div class="sh" style="margin-top:12px">Zone Sound (Track 2 — Ambient)</div>
+      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:0">
+          <input type="checkbox" id="z-sound-enabled" style="width:auto;margin:0" onchange="toggleZoneSoundForm()">
+          <span style="font-size:14px;color:var(--text)">Enable ambient sound for this zone</span>
+        </label>
+        <div id="z-sound-form" style="display:none;margin-top:8px">
+          <label style="margin-top:0">Ambient <span style="color:var(--dim);font-size:11px">(Track 2 — loop on zone enter)</span></label>
+          <select id="z-sound-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+            <option value="">— select file —</option>
+          </select>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="z-sound-loop" style="width:auto;margin:0" checked>
+              <span style="font-size:12px;color:var(--dim)">loop</span>
+            </label>
+            <label style="margin:0;flex:1">Gain <span id="z-sound-gain-val" style="color:var(--warm)">0.80</span></label>
+          </div>
+          <input type="range" id="z-sound-gain" min="0" max="1" step="0.01" value="0.80"
+            oninput="document.getElementById('z-sound-gain-val').textContent=parseFloat(this.value).toFixed(2)">
+          <label style="margin-top:8px">Low-pass Filter</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+            <input type="checkbox" id="z-sound-filter" style="width:auto;margin:0" onchange="toggleZoneSoundFilter()">
+            <span style="font-size:13px;color:var(--text)">Apply BiquadFilter (lowpass)</span>
+          </label>
+          <div id="z-sound-filter-form" style="display:none;margin-top:6px">
+            <label>Frequency (Hz) <span id="z-sound-freq-val" style="color:var(--cool)">900</span></label>
+            <input type="range" id="z-sound-freq" min="100" max="8000" step="100" value="900"
+              oninput="document.getElementById('z-sound-freq-val').textContent=this.value">
+            <label>Q Factor <span id="z-sound-q-val" style="color:var(--cool)">1.0</span></label>
+            <input type="range" id="z-sound-q" min="0.1" max="10" step="0.1" value="1.0"
+              oninput="document.getElementById('z-sound-q-val').textContent=parseFloat(this.value).toFixed(1)">
+          </div>
+          <label style="margin-top:8px">Dwell <span style="color:var(--dim);font-size:11px">(Track 4 — one-shot on dwell, optional)</span></label>
+          <select id="z-sound-dwell-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+            <option value="">— none —</option>
+          </select>
+          <label>Dwell Gain <span id="z-sound-dwell-gain-val" style="color:var(--warm)">0.85</span></label>
+          <input type="range" id="z-sound-dwell-gain" min="0" max="1" step="0.01" value="0.85"
+            oninput="document.getElementById('z-sound-dwell-gain-val').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
       </div>
       <div class="btn-row">
         <button class="btn pri" onclick="confirmZone()">Place on Map</button>
@@ -482,6 +556,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="dsect" id="zd-commands-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Zone Commands</div>
       <div id="zd-commands" style="font-size:13px;color:var(--cool)"></div>
+    </div>
+    <div class="dsect" id="zd-sound-sect" style="display:none">
+      <div class="sh" style="margin:0 0 4px">Zone Sound</div>
+      <div id="zd-sound" style="font-size:13px;color:var(--accent)"></div>
     </div>
     <div class="btn-row">
       <button class="btn cool" onclick="editZone(selectedId)">Edit</button>
@@ -717,7 +795,7 @@ function clamp(wx,wz){return{wx:Math.max(0,Math.min(sceneConfig.width,wx)),wz:Ma
 function setApi(url){API=url.trim();ping();}
 function ping(){
   fetch(API+'/ping',{signal:AbortSignal.timeout(2500)})
-    .then(function(r){if(r.ok){setStatus('on');loadAll();}else setStatus('off');})
+    .then(function(r){if(r.ok){setStatus('on');loadAll();refreshMediaList();}else setStatus('off');})
     .catch(function(){setStatus('off');});
 }
 function setStatus(s){
@@ -729,7 +807,14 @@ function apiPost(p,b){return fetch(API+p,{method:'POST',headers:{'Content-Type':
 function loadAll(){
   Promise.all([apiGet('/zone'),apiGet('/waypoint'),apiGet('/path'),apiGet('/field')])
     .then(function(res){
-      zones=res[0]||{};waypoints=res[1]||{};paths=res[2]||{};
+      // Day 47: If a scene XML was loaded via loadSceneFromDropdown, do NOT overwrite
+      // zones/waypoints/paths with server state — the server's in-memory endpoints
+      // may hold stale data from a previous session and would clobber the XML restore.
+      // _sceneXmlLoaded is set true by _restoreChorusFromXml after XML load completes.
+      if (!window._sceneXmlLoaded) {
+        zones=res[0]||{};waypoints=res[1]||{};paths=res[2]||{};
+        _normalizeWaypointPositions(waypoints);  // Day 47: server returns pos_x/pos_z, not position array
+      }
       var fa=(res[3]||{}).agents||{};
       Object.keys(fa).forEach(function(n){
         if(!agents[n])agents[n]={name:n,weights:fa[n].weights||{E:0.25,B:0.25,P:0.25,S:0.25},
@@ -833,6 +918,14 @@ function sceneChanged(){
 }
 function applyScene(){
   sceneChanged();sceneConfig.description=document.getElementById('sc-desc').value;
+  sceneConfig.sound = {
+    musicUrl:  document.getElementById('sc-music-url').value.trim(),
+    musicGain: parseFloat(document.getElementById('sc-music-gain').value),
+    bedUrl:    document.getElementById('sc-bed-url').value.trim(),
+    bedGain:   parseFloat(document.getElementById('sc-bed-gain').value)
+  };
+  // Day 47: clear XML-load guard so loadAll can update server state freely on fresh sessions
+  window._sceneXmlLoaded = false;
   computeScale();drawScene();updateSummary();toast('Grid: '+sceneConfig.width+'x'+sceneConfig.depth+'m');
 }
 function updateSummary(){
@@ -1100,6 +1193,20 @@ function showZD(id){
     cmdsSect.style.display = 'none';
     cmdsEl.textContent = '';
   }
+  // Sound detail
+  var soundSect = document.getElementById('zd-sound-sect');
+  var soundEl   = document.getElementById('zd-sound');
+  if (z.sound && z.sound.url) {
+    soundSect.style.display = 'block';
+    soundEl.innerHTML =
+      '<div>ambient: <span style="color:var(--accent)">' + xe(z.sound.url) + '</span></div>' +
+      '<div>gain: <span style="color:var(--text)">' + (z.sound.gain||0.8).toFixed(2) + '</span></div>' +
+      (z.sound.filter ? '<div>filter: <span style="color:var(--cool)">lowpass ' + (z.sound.filterFreq||900) + 'Hz Q=' + (z.sound.filterQ||1.0).toFixed(1) + '</span></div>' : '') +
+      (z.sound.dwellUrl ? '<div>dwell: <span style="color:var(--warm)">' + xe(z.sound.dwellUrl) + '</span></div>' : '');
+  } else {
+    soundSect.style.display = 'none';
+    soundEl.textContent = '';
+  }
   // Pre-load commands into form buffer so editing an existing zone preserves them
   _loadZoneCommandsIntoForm(z.commands || []);
 }
@@ -1272,6 +1379,60 @@ function toggleChorusForm() {
   var enabled = document.getElementById('z-chorus-enabled').checked;
   document.getElementById('z-chorus-form').style.display = enabled ? 'block' : 'none';
 }
+function toggleZoneSoundForm() {
+  var enabled = document.getElementById('z-sound-enabled').checked;
+  document.getElementById('z-sound-form').style.display = enabled ? 'block' : 'none';
+}
+function toggleZoneSoundFilter() {
+  var enabled = document.getElementById('z-sound-filter').checked;
+  document.getElementById('z-sound-filter-form').style.display = enabled ? 'block' : 'none';
+}
+
+// ─────────────────────────────────────────────
+// Media directory listing — populates all sound pickers
+// ─────────────────────────────────────────────
+var _mediaFiles = [];  // cached from last fetch
+
+function refreshMediaList() {
+  fetch(API + '/media/list')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _mediaFiles = (data.files || []).filter(function(f) {
+        return /\.(mp3|wav|ogg|flac|aac|m4a|mid|midi)$/i.test(f);
+      });
+      _populateAllMediaSelects();
+      toast('Media: ' + _mediaFiles.length + ' files');
+    })
+    .catch(function(e) {
+      // Endpoint may not exist yet — leave selects with whatever they have
+      console.warn('refreshMediaList: /media/list not available (' + e.message + ')');
+    });
+}
+
+function _populateMediaSelect(sel, currentVal, allowEmpty) {
+  if (!sel) return;
+  var prev = currentVal !== undefined ? currentVal : sel.value;
+  sel.innerHTML = allowEmpty
+    ? '<option value="">— none —</option>'
+    : '<option value="">— select file —</option>';
+  _mediaFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'media/' + f;
+    var isMidi = /\.(mid|midi)$/i.test(f);
+    opt.textContent = f + (isMidi ? '  [MIDI→Reaper]' : '');
+    if (isMidi) opt.style.color = 'var(--purple)';
+    sel.appendChild(opt);
+  });
+  // Restore previously selected value if it's in the list; otherwise keep placeholder
+  if (prev) sel.value = prev;
+}
+
+function _populateAllMediaSelects() {
+  _populateMediaSelect(document.getElementById('sc-music-url'));
+  _populateMediaSelect(document.getElementById('sc-bed-url'));
+  _populateMediaSelect(document.getElementById('z-sound-url'));
+  _populateMediaSelect(document.getElementById('z-sound-dwell-url'), undefined, true);
+}
 
 // ── Zone Commands ─────────────────────────────
 var _zoneCommandRules = [];  // [{event, cultivar, command}] — buffer while zone form is open
@@ -1343,9 +1504,27 @@ function confirmZone(){
       persona:   document.getElementById('z-chorus-persona').value.trim()
     };
   }
+  // Sound config
+  var soundEnabled = document.getElementById('z-sound-enabled').checked;
+  var sound = null;
+  if (soundEnabled) {
+    var soundUrl = document.getElementById('z-sound-url').value.trim();
+    var soundGain = parseFloat(document.getElementById('z-sound-gain').value);
+    var soundLoop = document.getElementById('z-sound-loop').checked;
+    var soundFilter = document.getElementById('z-sound-filter').checked;
+    var soundFreq = parseInt(document.getElementById('z-sound-freq').value);
+    var soundQ = parseFloat(document.getElementById('z-sound-q').value);
+    var dwellUrl = document.getElementById('z-sound-dwell-url').value.trim();
+    var dwellGain = parseFloat(document.getElementById('z-sound-dwell-gain').value);
+    sound = {
+      url: soundUrl, gain: soundGain, loop: soundLoop,
+      filter: soundFilter, filterFreq: soundFreq, filterQ: soundQ,
+      dwellUrl: dwellUrl, dwellGain: dwellGain
+    };
+  }
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
     descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus,
-    commands:_zoneCommandRules.slice()};
+    commands:_zoneCommandRules.slice(),sound:sound};
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
     channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
   placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';
@@ -1355,6 +1534,13 @@ function confirmZone(){
   document.getElementById('z-chorus-persona').value = '';
   _zoneCommandRules = [];
   renderZoneCommandsForm();
+  // Reset sound form
+  document.getElementById('z-sound-enabled').checked = false;
+  document.getElementById('z-sound-form').style.display = 'none';
+  document.getElementById('z-sound-url').value = '';
+  document.getElementById('z-sound-dwell-url').value = '';
+  document.getElementById('z-sound-filter').checked = false;
+  document.getElementById('z-sound-filter-form').style.display = 'none';
   hideHint();renderAll();toast('Zone: '+(name||id));
 }
 function editZone(id){
@@ -1386,6 +1572,27 @@ function editZone(id){
   // Zone commands
   _zoneCommandRules=(z.commands||[]).slice();
   renderZoneCommandsForm();
+  // Sound
+  var snd = z.sound || null;
+  document.getElementById('z-sound-enabled').checked = !!snd;
+  document.getElementById('z-sound-form').style.display = snd ? 'block' : 'none';
+  if (snd) {
+    _populateMediaSelect(document.getElementById('z-sound-url'), snd.url || '');
+    document.getElementById('z-sound-loop').checked = snd.loop !== false;
+    var zsg = document.getElementById('z-sound-gain');
+    var zsgv = document.getElementById('z-sound-gain-val');
+    if(zsg){ zsg.value = snd.gain !== undefined ? snd.gain : 0.80; zsgv.textContent = (snd.gain !== undefined ? snd.gain : 0.80).toFixed(2); }
+    document.getElementById('z-sound-filter').checked = !!snd.filter;
+    document.getElementById('z-sound-filter-form').style.display = snd.filter ? 'block' : 'none';
+    document.getElementById('z-sound-freq').value = snd.filterFreq || 900;
+    document.getElementById('z-sound-freq-val').textContent = snd.filterFreq || 900;
+    document.getElementById('z-sound-q').value = snd.filterQ !== undefined ? snd.filterQ : 1.0;
+    document.getElementById('z-sound-q-val').textContent = (snd.filterQ !== undefined ? snd.filterQ : 1.0).toFixed(1);
+    _populateMediaSelect(document.getElementById('z-sound-dwell-url'), snd.dwellUrl || '', true);
+    var zdg = document.getElementById('z-sound-dwell-gain');
+    var zdgv = document.getElementById('z-sound-dwell-gain-val');
+    if(zdg){ zdg.value = snd.dwellGain !== undefined ? snd.dwellGain : 0.85; zdgv.textContent = (snd.dwellGain !== undefined ? snd.dwellGain : 0.85).toFixed(2); }
+  }
   // Set pendingPos so confirmZone doesn't reject — use existing zone location
   pendingPos=(z.location||[0,0]).slice();
   // Switch to zones mode and show form
@@ -1503,6 +1710,36 @@ function exportX3D(){
   if(iP){x+=buildAP();x+=buildZP();}
   x+='<NavigationInfo headlight="true" type=\'"EXAMINE" "WALK" "FLY" "ANY"\' visibilityLimit="300"/>\n';
   x+='<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>\n\n';
+  // Track 1: Music — scene root, global, spatialize=false
+  // Track 3: Bed  — scene root, global, spatialize=false
+  var _exSnd = {
+    musicUrl:  document.getElementById('sc-music-url').value || '',
+    musicGain: parseFloat(document.getElementById('sc-music-gain').value) || 0.70,
+    musicLoop: document.getElementById('sc-music-loop').checked,
+    bedUrl:    document.getElementById('sc-bed-url').value || '',
+    bedGain:   parseFloat(document.getElementById('sc-bed-gain').value) || 0.50,
+    bedLoop:   document.getElementById('sc-bed-loop').checked
+  };
+  if(iS && _exSnd.musicUrl){
+    x+='<!-- Track 1: Music — X3Dv4 AudioDestination graph -->\n';
+    x+='<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->\n';
+    x+='<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->\n';
+    x+='<AudioDestination DEF="SoundNode_Music" gain="'+_exSnd.musicGain.toFixed(2)+'">\n';
+    x+='  <AudioClip DEF="Clip_Music" containerField="children"';
+    x+=' url=\'"'+xe(_exSnd.musicUrl)+'"\'  loop="'+(_exSnd.musicLoop?'true':'false')+'" gain="1.0"';
+    x+=' startTime="-1" stopTime="-2"/>\n';
+    x+='</AudioDestination>\n\n';
+  }
+  if(iS && _exSnd.bedUrl){
+    x+='<!-- Track 3: Bed — X3Dv4 AudioDestination graph -->\n';
+    x+='<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->\n';
+    x+='<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->\n';
+    x+='<AudioDestination DEF="SoundNode_Bed" gain="'+_exSnd.bedGain.toFixed(2)+'">\n';
+    x+='  <AudioClip DEF="Clip_Bed" containerField="children"';
+    x+=' url=\'"'+xe(_exSnd.bedUrl)+'"\'  loop="'+(_exSnd.bedLoop?'true':'false')+'" gain="1.0"';
+    x+=' startTime="-1" stopTime="-2"/>\n';
+    x+='</AudioDestination>\n\n';
+  }
   x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>\n';
   x+='<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>\n\n';
   x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>\n';
@@ -1524,6 +1761,17 @@ function exportX3D(){
     Object.values(paths).forEach(function(p){x+=buildInterpNodes(p);});
     x+='\n<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->\n';
     Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
+    // Session C: SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
+    if(iS){
+      Object.values(zones).forEach(function(z){
+        var snd=z.sound;
+        if(snd && snd.url){
+          var sid=safeId(z.id);
+          x+='<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
+            +' toNode="SoundFader_'+sid+'" toField="isActive"/>\n';
+        }
+      });
+    }
     x+='\n';
   }
   if(iSc)x+=buildMS();
@@ -1568,7 +1816,63 @@ function buildZX3D(z,iS){
   s+='<Text string=\'"'+nm+'"\' ><FontStyle size="0.28" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
   s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
-  if(iS)s+='<Sound location="0 0 0" maxBack="'+r+'" maxFront="'+r+'" spatialize="true" enabled="false"><AudioClip DEF="Sound_'+sid+'" url="" loop="true" stopTime="1"/></Sound>\n';
+  if(iS){
+    var snd=z.sound;
+    if(snd && snd.url){
+      // Track 2: Zone Ambient — X3Dv4 AudioDestination graph
+      // gain=0 on destination = silent until SoundFader activates it
+      if(snd.filter){
+        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
+        s+='  <BiquadFilter containerField="children" type="lowpass"'
+          +' frequency="'+(snd.filterFreq||900)+'" qualityFactor="'+(snd.filterQ||1.0).toFixed(1)+'">\n';
+        s+='    <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
+          +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
+          +' startTime="-1" stopTime="-2"/>\n';
+        s+='  </BiquadFilter>\n';
+        s+='</AudioDestination>\n';
+      } else {
+        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
+        s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
+          +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
+          +' startTime="-1" stopTime="-2"/>\n';
+        s+='</AudioDestination>\n';
+      }
+      // SoundFader script: ProximitySensor isActive → start/stop clip + fade destination gain
+      var ambientGain=(snd.gain||0.8).toFixed(2);
+      s+='<Script DEF="SoundFader_'+sid+'" directOutput="true" mustEvaluate="true">\n';
+      s+='  <field name="isActive" type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <![CDATA[ecmascript:\n';
+      s+='  function isActive(val, time) {\n';
+      s+='    var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient");\n';
+      s+='    var dest = Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");\n';
+      s+='    if (val) {\n';
+      s+='      if (dest)  dest.gain = '+ambientGain+';\n';
+      s+='      if (clip) { clip.stopTime = -2; clip.startTime = Browser.currentTime; }\n';
+      s+='      Browser.println("SoundFader_'+sid+': ENTER");\n';
+      s+='    } else {\n';
+      s+='      if (clip) clip.stopTime = Browser.currentTime;\n';
+      s+='      if (dest)  dest.gain = 0;\n';
+      s+='      Browser.println("SoundFader_'+sid+': EXIT");\n';
+      s+='    }\n';
+      s+='  }\n';
+      s+='  ]]' + '>\n';
+      s+='</' + 'Script>\n';
+      // Track 4: Dwell one-shot (optional)
+      if(snd.dwellUrl){
+        s+='<AudioDestination DEF="SoundNode_'+sid+'_Dwell" gain="'+(snd.dwellGain||0.85).toFixed(2)+'">\n';
+        s+='  <AudioClip DEF="Clip_'+sid+'_Dwell" containerField="children"'
+          +' url=\'"'+xe(snd.dwellUrl)+'"\'  loop="false" gain="1.0"'
+          +' startTime="-1" stopTime="-2"/>\n';
+        s+='</AudioDestination>\n';
+      }
+    } else {
+      // No sound assigned — stub so loader panel can assign at runtime
+      s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
+      s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
+        +' url="" loop="true" gain="1.0" startTime="-1" stopTime="-2"/>\n';
+      s+='</AudioDestination>\n';
+    }
+  }
   s+='</Transform>\n\n';return s;
 }
 function buildAX3D(a){
@@ -1833,6 +2137,37 @@ function buildX3DString(){
   if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
   lines.push('<NavigationInfo headlight="true" type=\'"EXAMINE" "ANY"\' visibilityLimit="300"/>');
   lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>');
+  // Track 1: Music — scene root, global, spatialize=false
+  // Track 3: Bed  — scene root, global, spatialize=false
+  // Read from DOM directly so Apply Grid is not required
+  var _scSnd = {
+    musicUrl:  document.getElementById('sc-music-url').value || '',
+    musicGain: parseFloat(document.getElementById('sc-music-gain').value) || 0.70,
+    musicLoop: document.getElementById('sc-music-loop').checked,
+    bedUrl:    document.getElementById('sc-bed-url').value || '',
+    bedGain:   parseFloat(document.getElementById('sc-bed-gain').value) || 0.50,
+    bedLoop:   document.getElementById('sc-bed-loop').checked
+  };
+  if(iS && _scSnd.musicUrl){
+    lines.push('<!-- Track 1: Music — X3Dv4 AudioDestination graph -->');
+    lines.push('<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->');
+    lines.push('<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->');
+    lines.push('<AudioDestination DEF="SoundNode_Music" gain="'+_scSnd.musicGain.toFixed(2)+'">');
+    lines.push('  <AudioClip DEF="Clip_Music" containerField="children"');
+    lines.push('             url=\'"'+xe(_scSnd.musicUrl)+'"\'  loop="'+(_scSnd.musicLoop?'true':'false')+'" gain="1.0"');
+    lines.push('             startTime="-1" stopTime="-2"/>');
+    lines.push('</AudioDestination>');
+  }
+  if(iS && _scSnd.bedUrl){
+    lines.push('<!-- Track 3: Bed — X3Dv4 AudioDestination graph -->');
+    lines.push('<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->');
+    lines.push('<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->');
+    lines.push('<AudioDestination DEF="SoundNode_Bed" gain="'+_scSnd.bedGain.toFixed(2)+'">');
+    lines.push('  <AudioClip DEF="Clip_Bed" containerField="children"');
+    lines.push('             url=\'"'+xe(_scSnd.bedUrl)+'"\'  loop="'+(_scSnd.bedLoop?'true':'false')+'" gain="1.0"');
+    lines.push('             startTime="-1" stopTime="-2"/>');
+    lines.push('</AudioDestination>');
+  }
   lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
   lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>');
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
@@ -1847,6 +2182,17 @@ function buildX3DString(){
   if(iI&&Object.keys(paths).length>0){
     lines.push('<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->');
     Object.values(paths).forEach(function(p){lines.push(buildInterpRoutes(p).trim());});
+    // Session C: SoundFader ROUTEs
+    if(iS){
+      Object.values(zones).forEach(function(z){
+        var snd=z.sound;
+        if(snd && snd.url){
+          var sid=safeId(z.id);
+          lines.push('<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
+            +' toNode="SoundFader_'+sid+'" toField="isActive"/>');
+        }
+      });
+    }
   }
   lines.push('</Scene>');
   lines.push('</X3D>');
@@ -1874,6 +2220,15 @@ function exportZoneXML(){
         x+='  <'+xe(r.event||'OnEnter')+' cultivar="'+xe(r.cultivar||'*')+'" command="'+xe(r.command||'reflect')+'/>\n';
       });
       x+='</Commands>\n';
+    }
+    if(z.sound && z.sound.url){
+      x+='<SoundDesign>\n';
+      x+='  <Track id="ambient" url="'+xe(z.sound.url)+'" loop="'+(z.sound.loop!==false?'true':'false')+'" gain="'+(z.sound.gain||0.8).toFixed(2)+'"'
+        +' spatialize="false" maxFront="60"'
+        +(z.sound.filter?' filter="lowpass" filterFreq="'+(z.sound.filterFreq||900)+'" filterQ="'+(z.sound.filterQ||1.0).toFixed(1)+'"':'')+'/>\n';
+      if(z.sound.dwellUrl)
+        x+='  <Track id="dwell" url="'+xe(z.sound.dwellUrl)+'" loop="false" gain="'+(z.sound.dwellGain||0.85).toFixed(2)+'"/>\n';
+      x+='</SoundDesign>\n';
     }
     x+='</Zone>\n';
   });
@@ -1977,6 +2332,23 @@ function exportSceneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
+  // Scene-level sound (Music + Bed) — read from DOM directly, no Apply Grid required
+  var snd = {
+    musicUrl:  document.getElementById('sc-music-url').value || '',
+    musicGain: parseFloat(document.getElementById('sc-music-gain').value) || 0.70,
+    musicLoop: document.getElementById('sc-music-loop').checked,
+    bedUrl:    document.getElementById('sc-bed-url').value || '',
+    bedGain:   parseFloat(document.getElementById('sc-bed-gain').value) || 0.50,
+    bedLoop:   document.getElementById('sc-bed-loop').checked
+  };
+  // Also sync into sceneConfig so subsequent exports are consistent
+  sceneConfig.sound = snd;
+  if(snd.musicUrl || snd.bedUrl){
+    x+='<SceneSound>\n';
+    if(snd.musicUrl) x+='  <Track id="music" url="'+xe(snd.musicUrl)+'" loop="'+(snd.musicLoop!==false?'true':'false')+'" gain="'+(snd.musicGain||0.70).toFixed(2)+'"/>\n';
+    if(snd.bedUrl)   x+='  <Track id="bed"   url="'+xe(snd.bedUrl)+'"   loop="'+(snd.bedLoop!==false?'true':'false')+'" gain="'+(snd.bedGain||0.50).toFixed(2)+'"/>\n';
+    x+='</SceneSound>\n';
+  }
   var exportActor=(document.getElementById('run-adapter')||{}).value||'ollama';
   // Zones block — needed by ChorusManager and scene reload
   var zoneKeys=Object.keys(zones);
@@ -1997,6 +2369,15 @@ function exportSceneXML(){
           '" max_tokens="'+z.chorus.max_tokens+'" display="'+xe(z.chorus.display)+'">\n';
         if(z.chorus.persona) x+='      <Persona>'+xe(z.chorus.persona)+'</Persona>\n';
         x+='    </Chorus>\n';
+      }
+      if(z.sound && z.sound.url){
+        x+='    <SoundDesign>\n';
+        x+='      <Track id="ambient" url="'+xe(z.sound.url)+'" loop="'+(z.sound.loop!==false?'true':'false')+'" gain="'+(z.sound.gain||0.8).toFixed(2)+'"'
+          +' spatialize="false" maxFront="60"'
+          +(z.sound.filter?' filter="lowpass" filterFreq="'+(z.sound.filterFreq||900)+'" filterQ="'+(z.sound.filterQ||1.0).toFixed(1)+'"':'')+'/>\n';
+        if(z.sound.dwellUrl)
+          x+='      <Track id="dwell" url="'+xe(z.sound.dwellUrl)+'" loop="false" gain="'+(z.sound.dwellGain||0.85).toFixed(2)+'"/>\n';
+        x+='    </SoundDesign>\n';
       }
       x+='  </Zone>\n';
     });
@@ -2114,37 +2495,188 @@ function loadSceneFromDropdown() {
 }
 
 function _restoreChorusFromXml(xml) {
+  // Day 47: This function is the authoritative restore path for everything the
+  // server's /scene/load/scene JSON endpoint does not return: zones (geometry,
+  // chorus, commands, sound), waypoints, paths, networks, scene sound, scene name.
+  //
+  // The server returns only placedAgents. Everything else must be rebuilt from
+  // the raw scene XML. The old code assumed zones already existed in zones{} and
+  // silently skipped any zone not already present — causing zones, waypoints, and
+  // paths to vanish after load. This version builds them unconditionally from XML.
   try {
     var doc = new DOMParser().parseFromString(xml, 'text/xml');
-    doc.querySelectorAll('Zone').forEach(function(zEl) {
-      var zid = zEl.getAttribute('id');
-      if (!zid || !zones[zid]) return;
+
+    // ── 1. Restore scene name ──────────────────────────────────────────────
+    var sceneEl = doc.querySelector('Scene');
+    if (sceneEl) {
+      var loadedId = sceneEl.getAttribute('id');
+      if (loadedId) {
+        sceneConfig.name = loadedId;
+        var nameEl = document.getElementById('sc-name');
+        if (nameEl) nameEl.value = loadedId;
+      }
+      var loadedW = parseFloat(sceneEl.getAttribute('width'));
+      var loadedD = parseFloat(sceneEl.getAttribute('depth'));
+      if (loadedW > 0) { sceneConfig.width  = loadedW; var wEl = document.getElementById('sc-width');  if(wEl) wEl.value = loadedW; }
+      if (loadedD > 0) { sceneConfig.depth  = loadedD; var dEl = document.getElementById('sc-depth');  if(dEl) dEl.value = loadedD; }
+    }
+
+    // ── 2. Restore zones from <Zones><Zone> ────────────────────────────────
+    // Build each zone object from XML, including geometry, chorus, commands, sound.
+    // Does NOT require zones{} to be pre-populated — replaces existing entries.
+    doc.querySelectorAll('Zones > Zone').forEach(function(zEl) {
+      var zid      = zEl.getAttribute('id');
+      var ztype    = zEl.getAttribute('zone_type') || 'neutral';
+      if (!zid) return;
+
+      var posEl    = zEl.querySelector('Position');
+      var radEl    = zEl.querySelector('Radius');
+      var wEl2     = zEl.querySelector('Weights');
+      var descEl   = zEl.querySelector('Descriptor');
+      var atEl     = zEl.querySelector('AmbientTheme');
+
+      var px = posEl ? parseFloat(posEl.getAttribute('x') || '0') : 0;
+      var pz = posEl ? parseFloat(posEl.getAttribute('z') || '0') : 0;
+      var radius   = radEl  ? parseFloat(radEl.getAttribute('value') || '4') : 4;
+      var weights  = wEl2   ? { E: parseFloat(wEl2.getAttribute('E')||'0.25'),
+                                B: parseFloat(wEl2.getAttribute('B')||'0.25'),
+                                P: parseFloat(wEl2.getAttribute('P')||'0.25'),
+                                S: parseFloat(wEl2.getAttribute('S')||'0.25') }
+                            : { E:0.25, B:0.25, P:0.25, S:0.25 };
+      var descriptor    = descEl ? (descEl.textContent || '').trim() : '';
+      var ambient_theme = atEl   ? { scale: atEl.getAttribute('scale')||'major',
+                                     tempo: atEl.getAttribute('tempo')||'medium' }
+                                 : { scale:'major', tempo:'medium' };
+
+      // Chorus
+      var chorus = null;
       var cEl = zEl.querySelector('Chorus');
-      if (!cEl) return;
-      var personaEl = cEl.querySelector('Persona');
-      zones[zid].chorus = {
-        llm:       cEl.getAttribute('llm') || 'stub',
-        tone:      cEl.getAttribute('tone') || 'oracular',
-        max_tokens:parseInt(cEl.getAttribute('max_tokens')) || 80,
-        display:   cEl.getAttribute('display') || 'overlay',
-        persona:   personaEl ? (personaEl.textContent || '').trim() : ''
-      };
-    });
-    // Restore zone commands
-    doc.querySelectorAll('Zone').forEach(function(zEl2) {
-      var zid2 = zEl2.getAttribute('id');
-      if (!zid2 || !zones[zid2]) return;
-      var cmdsEl = zEl2.querySelector('Commands');
-      if (!cmdsEl) return;
-      var rules = [];
-      ['OnEnter','OnExit','OnDwell'].forEach(function(evt) {
-        cmdsEl.querySelectorAll(evt).forEach(function(el) {
-          rules.push({event: evt, cultivar: el.getAttribute('cultivar')||'*', command: el.getAttribute('command')||'reflect'});
+      if (cEl) {
+        var personaEl = cEl.querySelector('Persona');
+        chorus = {
+          llm:        cEl.getAttribute('llm') || 'stub',
+          tone:       cEl.getAttribute('tone') || 'oracular',
+          max_tokens: parseInt(cEl.getAttribute('max_tokens')) || 80,
+          display:    cEl.getAttribute('display') || 'overlay',
+          persona:    personaEl ? (personaEl.textContent || '').trim() : ''
+        };
+      }
+
+      // Commands
+      var commands = [];
+      var cmdsEl = zEl.querySelector('Commands');
+      if (cmdsEl) {
+        ['OnEnter','OnExit','OnDwell'].forEach(function(evt) {
+          cmdsEl.querySelectorAll(evt).forEach(function(el) {
+            commands.push({ event: evt,
+                            cultivar: el.getAttribute('cultivar') || '*',
+                            command:  el.getAttribute('command')  || 'reflect' });
+          });
         });
+      }
+
+      // Sound
+      var sound = null;
+      var sdEl = zEl.querySelector('SoundDesign');
+      if (sdEl) {
+        var ambEl = sdEl.querySelector('Track[id="ambient"]');
+        var dwEl  = sdEl.querySelector('Track[id="dwell"]');
+        if (ambEl) {
+          var filterAttr = ambEl.getAttribute('filter');
+          sound = {
+            url:        ambEl.getAttribute('url') || '',
+            gain:       parseFloat(ambEl.getAttribute('gain')       || '0.8'),
+            loop:       ambEl.getAttribute('loop') !== 'false',
+            filter:     !!filterAttr,
+            filterFreq: parseInt(ambEl.getAttribute('filterFreq')   || '900'),
+            filterQ:    parseFloat(ambEl.getAttribute('filterQ')    || '1.0'),
+            dwellUrl:   dwEl ? (dwEl.getAttribute('url')            || '') : '',
+            dwellGain:  dwEl ? parseFloat(dwEl.getAttribute('gain') || '0.85') : 0.85
+          };
+        }
+      }
+
+      // Build or merge zone object
+      if (!zones[zid]) zones[zid] = {};
+      Object.assign(zones[zid], {
+        id: zid, name: zones[zid].name || zid,
+        zone_type: ztype,
+        location: [px, 0, pz],
+        radius: radius,
+        weights: weights,
+        descriptor: descriptor,
+        noise_coefficient: zones[zid].noise_coefficient || 0,
+        ambient_theme: ambient_theme,
+        chorus: chorus || zones[zid].chorus || null,
+        commands: commands.length ? commands : (zones[zid].commands || []),
+        sound: sound || zones[zid].sound || null
       });
-      if (rules.length) zones[zid2].commands = rules;
     });
-    // Restore network links
+
+    // ── 3. Restore waypoints from <Waypoints><Waypoint> ───────────────────
+    if (!Object.keys(waypoints).length) {
+      doc.querySelectorAll('Waypoints > Waypoint').forEach(function(wpEl) {
+        var wpName = wpEl.getAttribute('name');
+        if (!wpName) return;
+        var px2 = parseFloat(wpEl.getAttribute('pos_x') || '0');
+        var pz2 = parseFloat(wpEl.getAttribute('pos_z') || '0');
+        var label   = wpEl.getAttribute('label') || '';
+        var zone    = wpEl.getAttribute('zone')  || '';
+        var dwell   = parseFloat(wpEl.getAttribute('dwell') || '2');
+        var pace    = parseFloat(wpEl.getAttribute('pace')  || '1.4');
+        var qaLines = [];
+        wpEl.querySelectorAll('Statement, Question, Response').forEach(function(lineEl) {
+          qaLines.push({
+            type:    lineEl.tagName,
+            speaker: lineEl.getAttribute('speaker') || '',
+            text:    lineEl.textContent || ''
+          });
+        });
+        var firstQ = '';
+        qaLines.forEach(function(l) { if (!firstQ && l.type === 'Question' && l.text) firstQ = l.text; });
+        waypoints[wpName] = {
+          name: wpName, label: label, zone: zone,
+          dwell: dwell, pace: pace,
+          position: [px2, 0, pz2],
+          question: firstQ,
+          qaLines: qaLines
+        };
+      });
+    }
+
+    // ── 4. Restore paths from <Paths><Path> ───────────────────────────────
+    if (!Object.keys(paths).length) {
+      doc.querySelectorAll('Paths > Path').forEach(function(pEl) {
+        var pname = pEl.getAttribute('name');
+        var agent = pEl.getAttribute('agent') || '';
+        if (!pname) return;
+        var orderRaw = pEl.getAttribute('waypointOrder');
+        var orderInt = parseInt(orderRaw, 10);
+        var wpRefs = [];
+        pEl.querySelectorAll('PathWaypoint').forEach(function(r) {
+          var ref = r.getAttribute('ref');
+          if (ref) wpRefs.push(ref);
+        });
+        paths[pname] = {
+          name: pname,
+          agent: agent,
+          waypoints: wpRefs,
+          waypointOrder: (!isNaN(orderInt) && orderInt > 0) ? orderInt : 1
+        };
+      });
+    } else {
+      // Paths exist from server — just patch waypointOrder from XML
+      doc.querySelectorAll('Paths > Path').forEach(function(pEl) {
+        var pname    = pEl.getAttribute('name');
+        var orderRaw = pEl.getAttribute('waypointOrder');
+        if (pname && paths[pname] && orderRaw && orderRaw !== 'MISSING') {
+          var orderInt = parseInt(orderRaw, 10);
+          if (!isNaN(orderInt) && orderInt > 0) paths[pname].waypointOrder = orderInt;
+        }
+      });
+    }
+
+    // ── 5. Restore network links ───────────────────────────────────────────
     var netEl = doc.querySelector('Network');
     if (netEl) {
       networks = [];
@@ -2156,17 +2688,86 @@ function _restoreChorusFromXml(xml) {
         if (from && to) networks.push({ from: from, to: to, strength: strength, type: type });
       });
     }
-    // Restore waypointOrder on paths from <Path waypointOrder="N"> in scene XML
-    doc.querySelectorAll('Path').forEach(function(pEl) {
-      var pname = pEl.getAttribute('name');
-      var orderRaw = pEl.getAttribute('waypointOrder');
-      if (pname && paths[pname] && orderRaw && orderRaw !== 'MISSING') {
-        var orderInt = parseInt(orderRaw, 10);
-        if (!isNaN(orderInt) && orderInt > 0) paths[pname].waypointOrder = orderInt;
+
+    // ── 6. Restore scene-level sound from <SceneSound> ────────────────────
+    var sndEl = doc.querySelector('SceneSound');
+    if (sndEl) {
+      var muEl = sndEl.querySelector('Track[id="music"]');
+      var bdEl = sndEl.querySelector('Track[id="bed"]');
+      sceneConfig.sound = sceneConfig.sound || {};
+      if (muEl) {
+        sceneConfig.sound.musicUrl  = muEl.getAttribute('url')  || '';
+        sceneConfig.sound.musicGain = parseFloat(muEl.getAttribute('gain') || '0.70');
+        sceneConfig.sound.musicLoop = muEl.getAttribute('loop') !== 'false';
       }
-    });
+      if (bdEl) {
+        sceneConfig.sound.bedUrl    = bdEl.getAttribute('url')  || '';
+        sceneConfig.sound.bedGain   = parseFloat(bdEl.getAttribute('gain') || '0.50');
+        sceneConfig.sound.bedLoop   = bdEl.getAttribute('loop') !== 'false';
+      }
+      var muUrl2    = document.getElementById('sc-music-url');
+      var muLoop2   = document.getElementById('sc-music-loop');
+      var muGain2   = document.getElementById('sc-music-gain');
+      var muGainVal2= document.getElementById('sc-music-gain-val');
+      var bdUrl2    = document.getElementById('sc-bed-url');
+      var bdLoop2   = document.getElementById('sc-bed-loop');
+      var bdGain2   = document.getElementById('sc-bed-gain');
+      var bdGainVal2= document.getElementById('sc-bed-gain-val');
+      _populateMediaSelect(muUrl2, sceneConfig.sound.musicUrl || '');
+      if (muLoop2)   muLoop2.checked    = sceneConfig.sound.musicLoop !== false;
+      if (muGain2)   muGain2.value      = sceneConfig.sound.musicGain !== undefined ? sceneConfig.sound.musicGain : 0.70;
+      if (muGainVal2)muGainVal2.textContent = (sceneConfig.sound.musicGain || 0.70).toFixed(2);
+      _populateMediaSelect(bdUrl2, sceneConfig.sound.bedUrl || '');
+      if (bdLoop2)   bdLoop2.checked    = sceneConfig.sound.bedLoop !== false;
+      if (bdGain2)   bdGain2.value      = sceneConfig.sound.bedGain !== undefined ? sceneConfig.sound.bedGain : 0.50;
+      if (bdGainVal2)bdGainVal2.textContent = (sceneConfig.sound.bedGain || 0.50).toFixed(2);
+    }
+
+    // ── 7. Restore placedAgents from <EmotionalArc> if server didn't return them ──
+    if (!Object.keys(placedAgents).length) {
+      doc.querySelectorAll('EmotionalArc').forEach(function(ea) {
+        var name  = ea.getAttribute('cultivar');
+        var voice = ea.getAttribute('voice') || '';
+        var spEl  = ea.querySelector('StartPosition');
+        var px3   = spEl ? parseFloat(spEl.getAttribute('x') || '0') : 0;
+        var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
+        if (!name) return;
+        var ag = agents[name] || {};
+        placedAgents[name] = {
+          name: name, position: [px3, 0, pz3],
+          color:       ag.color       || agentColor(name),
+          weights:     ag.weights     || {E:0.25,B:0.25,P:0.25,S:0.25},
+          regulation:  ag.regulation  || 0.7,
+          disposition: ag.disposition || '',
+          voice:       voice,
+          hanim_src:   ag.hanim_src   || '',
+          hanim_loa:   ag.hanim_loa   || 4
+        };
+      });
+    }
+
+    computeScale();
     renderAll();
+    updateSummary();
+    window._sceneXmlLoaded = true;  // Day 47: block loadAll from overwriting XML-restored state
+    console.log('[restore] zones:', Object.keys(zones).length,
+                'waypoints:', Object.keys(waypoints).length,
+                'paths:', Object.keys(paths).length,
+                'networks:', networks.length);
   } catch(e) { console.warn('_restoreChorusFromXml:', e); }
+}
+
+// Day 47: normalize waypoints from any source (server API, scene load JSON, XML restore)
+// Server /waypoint endpoint returns flat pos_x/pos_z fields; drawWP expects position:[x,0,z].
+// Always call after loading waypoints from any source.
+function _normalizeWaypointPositions(wps) {
+  Object.values(wps).forEach(function(wp) {
+    if (!Array.isArray(wp.position)) {
+      var x = parseFloat(wp.pos_x !== undefined ? wp.pos_x : (wp.position && wp.position[0]) || 0);
+      var z = parseFloat(wp.pos_z !== undefined ? wp.pos_z : (wp.position && wp.position[2]) || 0);
+      wp.position = [x, 0, z];
+    }
+  });
 }
 
 function _applyLoadedScene(data) {
@@ -2177,6 +2778,20 @@ function _applyLoadedScene(data) {
   if(data.waypoints)    { waypoints={};    Object.assign(waypoints,    data.waypoints);    }
   if(data.paths)        { paths={};        Object.assign(paths,        data.paths);        }
   if(data.networks)     { networks = data.networks.slice(); }
+  // Day 47: normalize waypoint positions — server may return flat pos_x/pos_z instead
+  // of the position:[x,0,z] array that drawWP expects. Without this, all waypoints
+  // render at scene center (the fallback default) and are invisible.
+  _normalizeWaypointPositions(waypoints);
+  // Restore scene-level sound fields into UI
+  var snd = sceneConfig.sound || {};
+  var muGain = document.getElementById('sc-music-gain');
+  var muGainVal = document.getElementById('sc-music-gain-val');
+  var bdGain = document.getElementById('sc-bed-gain');
+  var bdGainVal = document.getElementById('sc-bed-gain-val');
+  _populateMediaSelect(document.getElementById('sc-music-url'), snd.musicUrl || '');
+  if(muGain){ muGain.value = snd.musicGain !== undefined ? snd.musicGain : 0.70; muGainVal.textContent = (snd.musicGain !== undefined ? snd.musicGain : 0.70).toFixed(2); }
+  _populateMediaSelect(document.getElementById('sc-bed-url'), snd.bedUrl || '');
+  if(bdGain){ bdGain.value = snd.bedGain !== undefined ? snd.bedGain : 0.50; bdGainVal.textContent = (snd.bedGain !== undefined ? snd.bedGain : 0.50).toFixed(2); }
   computeScale(); updateSummary(); renderAll(); drawScene();
 }
 
