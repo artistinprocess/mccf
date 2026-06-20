@@ -1122,6 +1122,7 @@ var _agentLastLoopClip   = {};   // tracks last looping clip for oneshot return
 var _agentWalkStartTime  = {};   // {safeName: Date.now()} — wall ms when WalkTimer last started
 var _agentArrivalTimeout = {};   // {safeName: timeoutId} — pending DefaultTimer switch at segment end
 var _agentWaypointCache  = {};   // {safeName: {stepNo: {pos_x,pos_z}}} — built from pbUpdateDisplay
+var _agentSegZoneMap     = {};   // {safeName: {segNo: zoneId}} — built from scene XML at play-start
 
 // Known behavior TimeSensor base DEF names in JinLOA4Animated.x3d
 var BEHAVIOR_TIMER_BASES = [
@@ -1578,6 +1579,32 @@ function pbReleaseDwell(agentSafeName) {
     } catch(e) {
       console.warn('pbReleaseDwell: could not start dwell node:', e);
     }
+
+    // Fire dwell sound clip for this zone (Track 4: one-shot, loop=false).
+    // Clip_<ZoneId>_Dwell node must exist in X3D with a non-empty url to be audible.
+    try {
+      var _segZones = _agentSegZoneMap[agentSafeName] || {};
+      var _dwZoneId = _segZones[seg] || '';
+      if (_dwZoneId) {
+        var _dwClipName = 'Clip_' + _dwZoneId + '_Dwell';
+        var _dwScene = canvas.browser.currentScene;
+        var _dwClip = null;
+        try { _dwClip = _dwScene.getNamedNode(_dwClipName); } catch(e2) {}
+        if (_dwClip && _dwClip.url && _dwClip.url.length > 0 && _dwClip.url[0]) {
+          var _dwNow = _x3dNow(agentSafeName) || (performance.now() / 1000);
+          _dwClip.stopTime  = _dwNow - 0.01;
+          _dwClip.startTime = _dwNow + 0.05;
+          console.log('pbReleaseDwell: fired dwell sound', _dwClipName, 'for zone', _dwZoneId);
+        } else {
+          console.log('pbReleaseDwell: no dwell url for zone', _dwZoneId, '— silent dwell');
+        }
+      } else {
+        console.log('pbReleaseDwell: no zone mapped for', agentSafeName, 'seg', seg, '— no dwell sound');
+      }
+    } catch(e) {
+      console.warn('pbReleaseDwell: dwell sound error:', e);
+    }
+
     // DefaultTimer fires when Timer_N fraction_changed>=0.99 — handled by _wirePathTimerBehavior.
     // pbReleaseDwell owns dwell timing only, not behavior switching.
 
@@ -1731,12 +1758,25 @@ function _buildPivotCacheFromSceneXml(doc) {
     var refs = pathEl.querySelectorAll('PathWaypoint');
     if (!refs.length) return;
 
-    var cache = {};
+    var cache    = {};
+    var zoneMap  = {};   // seg# -> zoneId: seg N arrives AT the Nth PathWaypoint,
+                         // so w2 (stepNo=2) is destination of seg 1: store at stepNo-1.
+                         // stepNo=1 (start waypoint) has no incoming segment -- skipped.
     var stepNo = 1;
     refs.forEach(function(ref) {
       var wpName = ref.getAttribute('ref');
       if (wpName && posMap[wpName]) {
         cache[stepNo] = posMap[wpName];
+        // Zone for waypoint (from _waypointZoneMap if already populated, or doc fallback)
+        var zid = _waypointZoneMap[wpName] || _waypointZoneMap[wpName.toUpperCase()] || '';
+        if (!zid) {
+          // fallback: scan Waypoint elements in this doc for zone attribute
+          var wpEl = doc.querySelector('Waypoint[name="' + wpName + '"]');
+          if (wpEl) zid = wpEl.getAttribute('zone') || '';
+        }
+        // stepNo-1 = segment index that arrives AT this waypoint (w2=seg1, w3=seg2, ...)
+        // stepNo=1 is the start waypoint -- no incoming segment, skip.
+        if (zid && stepNo > 1) zoneMap[stepNo - 1] = zid;
         stepNo++;
       }
     });
@@ -1748,6 +1788,10 @@ function _buildPivotCacheFromSceneXml(doc) {
         Object.values(cache).map(function(p){
           return '(' + p.pos_x + ',' + p.pos_z + ')';
         }).join(' → '));
+    }
+    if (Object.keys(zoneMap).length > 0) {
+      _agentSegZoneMap[safeName] = zoneMap;
+      console.log('_buildPivotCacheFromSceneXml: segZoneMap for', safeName, JSON.stringify(zoneMap));
     }
   });
 }
@@ -3185,7 +3229,13 @@ async function pbReset() {
   _agentCurrentClip   = {};
   _agentLastLoopClip  = {};
   _agentWalkStartTime = {};
-  _agentWaypointCache  = {};
+  // _agentWaypointCache and _agentSegZoneMap are built from scene XML
+  // which does not change between plays — preserve across reset so
+  // pivot and dwell zone lookups work on replay without waiting for
+  // another async _parseSceneZoneData fetch to complete.
+  // These are cleared only in x3dFileChanged when a new scene loads.
+  // _agentWaypointCache  = {};   // preserved
+  // _agentSegZoneMap     = {};   // preserved
   // Cancel all pending arrival timeouts on reset
   Object.keys(_agentArrivalTimeout).forEach(function(k) {
     if (_agentArrivalTimeout[k]) clearTimeout(_agentArrivalTimeout[k]);
@@ -3657,6 +3707,11 @@ function x3dFileChanged() {
   if (!canvas) return;
   canvas.src = API + '/static/x3d/' + fname;
   console.log('x3dFileChanged: loaded', fname);
+  // New scene — clear per-scene caches so stale data from previous scene
+  // doesn't bleed into pivot and dwell zone lookups.
+  _agentWaypointCache = {};
+  _agentSegZoneMap    = {};
+  _waypointZoneMap    = {};
   // Notify server so ChorusManager can load config from matching scene XML.
   var sceneName = fname.replace(/\.x3d$/i, '');
   fetch(API + '/chorus/load', {
@@ -3790,18 +3845,29 @@ var _spPickTarget   = null; // {key, layer} — set when file picker opens
 
 // Called from canvas 'load' event — discover zones then build rows
 function spInit() {
-  _spZones = spDiscoverZones();
-  spBuildZoneRows();
-  spBuildZoneTable();
-  spStartZonePoll();
-  // Push initial scalars to SoundFader
-  spSetFader('masterVolume',    parseFloat(document.getElementById('sp_master').value  || 1.0));
-  spSetFader('fadeInDuration',  parseFloat(document.getElementById('sp_fadein').value  || 1.5));
-  spSetFader('fadeOutDuration', parseFloat(document.getElementById('sp_fadeout').value || 2.5));
-  console.log('spInit: sound panel ready —', _spZones.length, 'zones, zone poll started');
-  // Day 47: load SceneSound from scene XML — hydrates panel labels only.
-  // No auto-start. Music + Bed start on Play button via spStartSceneTracks().
-  spLoadSceneSound();
+  // canvas 'load' fires before X_ITE SAI populates scene.namedNodes.
+  // Retry discovery until zones appear (max ~3s), then build UI and start poll.
+  var _spInitAttempts = 0;
+  function _spTryDiscover() {
+    _spInitAttempts++;
+    _spZones = spDiscoverZones();
+    if (_spZones.length === 0 && _spInitAttempts < 30) {
+      setTimeout(_spTryDiscover, 100);
+      return;
+    }
+    console.log('spInit: discovered', _spZones.length, 'zones after', _spInitAttempts, 'attempt(s)');
+    spBuildZoneRows();
+    spBuildZoneTable();
+    spStartZonePoll();
+    spSetFader('masterVolume',    parseFloat(document.getElementById('sp_master').value  || 1.0));
+    spSetFader('fadeInDuration',  parseFloat(document.getElementById('sp_fadein').value  || 1.5));
+    spSetFader('fadeOutDuration', parseFloat(document.getElementById('sp_fadeout').value || 2.5));
+    console.log('spInit: sound panel ready —', _spZones.length, 'zones, zone poll started');
+    // Day 47: load SceneSound from scene XML — hydrates panel labels only.
+    // No auto-start. Music + Bed start on Play button via spStartSceneTracks().
+    spLoadSceneSound();
+  }
+  _spTryDiscover();
 }
 
 // Day 47: fetch _scene.xml, parse <SceneSound>, hydrate panel labels.
@@ -3884,19 +3950,23 @@ function spDiscoverZones() {
   var found = [];
   try {
     var scene = canvas.browser.currentScene;
-    if (scene && scene.namedNodes) {
-      Object.keys(scene.namedNodes).forEach(function(n) {
-        if (n.startsWith('Prox_') && !n.startsWith('Prox_Jack') && !n.startsWith('Prox_Salida')) {
-          var key   = n.replace(/^Prox_/, '');
-          var label = key.replace(/_/g, ' ');
-          found.push({ key: key, label: label });
+    if (!scene) return found;
+
+    // X_ITE namedNodes Proxy is not enumerable via Object.keys — always returns {}.
+    // Instead derive zone keys from _waypointZoneMap (already parsed from scene XML)
+    // and confirm each Prox_ node exists via getNamedNode before adding.
+    var seenKeys = {};
+    Object.values(_waypointZoneMap).forEach(function(zoneKey) {
+      if (!zoneKey || seenKeys[zoneKey]) return;
+      seenKeys[zoneKey] = true;
+      try {
+        var prox = scene.getNamedNode('Prox_' + zoneKey);
+        if (prox) {
+          found.push({ key: zoneKey, label: zoneKey.replace(/_/g, ' ') });
         }
-      });
-    }
+      } catch(e) {}
+    });
   } catch(e) {}
-  // No fallback to hardcoded zone list — if SAI enumeration misses zones,
-  // return empty and let spBuildZoneGeometryFromXml populate geometry when scene XML loads.
-  // Stale garden_002 zone names must not appear for other scenes.
   return found;
 }
 
@@ -3997,14 +4067,52 @@ function spSetVol(zoneKey, layer, rawVal) {
   spSetFader(field, v);
 }
 
-// Write SFFloat to SoundFader node via SAI
+// Master volume and fade scalars — loader-side state, not SAI fields
+var _spMasterVolume   = 1.0;
+var _spFadeInDuration  = 1.5;
+var _spFadeOutDuration = 2.5;
+
+// Write control values to sound engine.
+// 'masterVolume'    → scale AudioDestination gain for all zone Ambient + Dwell nodes
+// 'fadeInDuration'  → store in _spFadeInDuration (used by SoundFader ramp — future)
+// 'fadeOutDuration' → store in _spFadeOutDuration
+// 'playing'         → send via getField/setValue to SoundFader Script (gate open/close)
+// All other fields  → ignored (SoundFader Script only declares isActive + playing)
 function spSetFader(field, value) {
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
-    var node = scene.getNamedNode('SoundFader');
-    if (node) node[field] = value;
-  } catch(e) { /* SoundFader may not exist in all scenes — silent */ }
+
+    if (field === 'masterVolume') {
+      _spMasterVolume = value;
+      // Scale AudioDestination gain for all zones.
+      // SoundFader ramps SoundNode gain 0→0.8 on enter — master scales that ceiling.
+      // Direct gain write here overrides current ramp target; SoundFader will re-ramp
+      // on next zone entry using the updated master.
+      (_spZones || []).forEach(function(z) {
+        try {
+          var ambDest = scene.getNamedNode('SoundNode_' + z.key + '_Ambient');
+          if (ambDest) ambDest.gain = _spMasterVolume;
+        } catch(e) {}
+        try {
+          var dwDest = scene.getNamedNode('SoundNode_' + z.key + '_Dwell');
+          if (dwDest) dwDest.gain = _spMasterVolume * 0.98;  // preserve relative dwell gain
+        } catch(e) {}
+      });
+      return;
+    }
+
+    if (field === 'fadeInDuration')  { _spFadeInDuration  = value; return; }
+    if (field === 'fadeOutDuration') { _spFadeOutDuration = value; return; }
+
+    // 'playing' and any other SoundFader Script fields — send via getField/setValue
+    (_spZones || []).forEach(function(z) {
+      try {
+        var node = scene.getNamedNode('SoundFader_' + z.key);
+        if (node) node.getField(field).setValue(value);
+      } catch(e) {}
+    });
+  } catch(e) { /* silent */ }
 }
 
 // Session C: stop all known AudioClips (Music, Bed, all zone Ambients + Dwells)
@@ -4014,10 +4122,22 @@ function spStopAll() {
     if (!scene) return;
     var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
       ? canvas.browser.currentTime : (performance.now() / 1000);
+
+    // Gate closed — SoundFader Scripts ignore ProxSensor events until next Play.
+    _spPlaybackLive = false;
+    (_spZones || []).forEach(function(z) {
+      try {
+        var sf = scene.getNamedNode('SoundFader_' + z.key);
+        if (sf) { try { sf.getField('playing').setValue(false); } catch(e2) {} }
+      } catch(e) {}
+    });
     // Global tracks
     ['Clip_Music', 'Clip_Bed'].forEach(function(id) {
       try { var n = scene.getNamedNode(id); if (n) n.stopTime = tNow; } catch(e) {}
     });
+    // Re-disable Clip_Bed — X_ITE re-fires loop=true clips on AudioDestination re-init
+    // if enabled is left true. This restores the load-time block for Stop/Reset cycles.
+    try { var bClip = scene.getNamedNode('Clip_Bed'); if (bClip) bClip.enabled = false; } catch(e) {}
     // Zone clips
     _spZones.forEach(function(z) {
       ['Clip_'+z.key+'_Ambient', 'Clip_'+z.key+'_Dwell'].forEach(function(id) {
@@ -4045,6 +4165,16 @@ function spStartSceneTracks() {
     var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
       ? canvas.browser.currentTime : (performance.now() / 1000);
 
+    // Gate open — tell all SoundFader Scripts that playback is now live.
+    // This prevents ProximitySensor events before Play from triggering audio.
+    _spPlaybackLive = true;
+    (_spZones || []).forEach(function(z) {
+      try {
+        var sf = scene.getNamedNode('SoundFader_' + z.key);
+        if (sf) { try { sf.getField('playing').setValue(true); console.log('[sound] gate open:', 'SoundFader_' + z.key); } catch(e2) { console.warn('[sound] gate open failed:', z.key, e2); } }
+      } catch(e) {}
+    });
+
     // Start Music clip via SAI — clears any prior stopTime guard first
     try {
       var mClip = scene.getNamedNode('Clip_Music');
@@ -4058,13 +4188,13 @@ function spStartSceneTracks() {
       }
     } catch(e) { console.warn('[sound] Clip_Music start error:', e); }
 
-    // Start Bed clip via SAI — same guard-clear pattern.
-    // Do NOT rely on AudioDestination auto-fire for Bed even though loop=true;
-    // the guard (startTime=-1 stopTime=-2) prevents it from firing at load time.
+    // Start Bed clip via SAI — enable first (X_ITE ignores startTime guard on loop=true
+    // clips at AudioDestination init time; enabled=false in X3D is the reliable block).
     try {
       var bClip = scene.getNamedNode('Clip_Bed');
       if (bClip) {
-        bClip.stopTime  = tNow - 0.01;   // clear guard
+        bClip.enabled   = true;           // lift the enabled=false load-time block
+        bClip.stopTime  = tNow - 0.01;   // clear startTime=-1 stopTime=-2 guard
         bClip.startTime = tNow + 0.05;
         console.log('[sound] Clip_Bed started via SAI at t=', tNow.toFixed(2),
                     'loop=', bClip.loop);
@@ -4219,9 +4349,16 @@ var _SP_ZONE_GEOMETRY = {
 function spBuildZoneTable() {
   _spZoneTable = [];
   _spZones.forEach(function(z) {
+    // Prefer dynamically-built geometry from scene XML (spBuildZoneGeometryFromXml)
+    // Fall back to legacy hardcoded table (garden_002 etc.)
     var g = _SP_ZONE_GEOMETRY[z.key];
-    if(g) _spZoneTable.push({ key: z.key, cx: g.cx, cz: g.cz, radius: g.radius });
+    if (g) {
+      _spZoneTable.push({ key: z.key, cx: g.cx, cz: g.cz, radius: g.radius });
+    } else {
+      console.warn('spBuildZoneTable: no geometry for zone', z.key, '— will be added when scene XML loads');
+    }
   });
+  console.log('spBuildZoneTable: built', _spZoneTable.length, 'of', _spZones.length, 'zones');
 }
 
 function spStartZonePoll() {
@@ -4278,8 +4415,16 @@ function spPollAvatarZones() {
   } catch(e) {}
 }
 
-// Called when any avatar crosses a zone boundary
+// Called when any avatar crosses a zone boundary.
+// Gated by _spPlaybackLive — zone audio only fires after Play, not on scene load
+// or camera/Viewpoint binding (which fires ProximitySensors before performance starts).
+var _spPlaybackLive = false;   // set true by spStartSceneTracks, false by spStopAll
+
 function spTriggerZone(zoneKey, entering) {
+  if (!_spPlaybackLive) {
+    console.log('spTriggerZone: GATED (not playing) —', zoneKey, entering ? 'ENTER' : 'EXIT');
+    return;
+  }
   spSetFader('prox_' + zoneKey, entering ? 1.0 : 0.0);
   console.log('spTriggerZone:', zoneKey, entering ? 'ENTER' : 'EXIT');
 }

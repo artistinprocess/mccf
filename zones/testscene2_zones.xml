@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - testscene2 - 2026-06-17T19:53:59 -->
+<ZoneSet id="testscene2" timestamp="2026-06-17T19:53:59">
+<Zone id="ambientZone" zone_type="intimate">
+<Descriptor></Descriptor>
+<Weights E="0.4" B="0.1" P="0.2" S="0.3"/>
+<Position x="18.4" y="0" z="18.3"/><Radius value="4"/>
+<AmbientTheme scale="major" tempo="medium"/>
+<SoundDesign>
+  <Track id="ambient" url="media/Lament1.mp3" loop="true" gain="0.80" spatialize="false" maxFront="60"/>
+</SoundDesign>
+</Zone>
+</ZoneSet>

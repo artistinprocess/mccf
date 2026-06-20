@@ -49,3 +49,7 @@ static/avatars/*.zip
 static/test/
 static/avatars/SalidaAnimations.x3d
 static/avatars/mixamo1.x3d
+static/x3d/media/convolver/*.zip
+static/x3d/media/convolver/ForestScaleModel.zip
+static/x3d/media/convolver/IMreverbs.zip
+static/x3d/media/convolver/jack-lyons-concert-hall-university-york.zip

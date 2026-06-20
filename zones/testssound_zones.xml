@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Zone Definitions - testssound - 2026-06-20T19:01:58 -->
+<ZoneSet id="testssound" timestamp="2026-06-20T19:01:58">
+<Zone id="soundtestzonw" zone_type="neutral">
+<Descriptor></Descriptor>
+<Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+<Position x="18.8" y="0" z="19.1"/><Radius value="4"/>
+<AmbientTheme scale="dorian" tempo="medium"/>
+<Chorus llm="ollama:llama3.2" tone="ominous" max_tokens="80" display="overlay">
+</Chorus>
+<SoundDesign>
+  <Track id="ambient" url="media/piano1.mp3" loop="false" gain="0.80" spatialize="false" maxFront="60"/>
+  <Track id="dwell" url="media/soundeffects/Thunder1.mp3" loop="false" gain="0.98"/>
+</SoundDesign>
+</Zone>
+</ZoneSet>

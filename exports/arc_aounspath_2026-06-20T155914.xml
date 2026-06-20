@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="aounspath_2026-06-20T155914" scene="testssound">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="aounspath_2026-06-20T155914" agentname="Cindy" path_name="aounspath">
+    <Timestamp date="2026-06-20" time="15:59:14"/>
+    <Waypoint id="WP1" stepno="1" name="WP1" E="0.2559" B="0.1874" P="0.1489" S="0.2000" Mode="scene" Coherence="0.0707" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="13.60" pos_y="0.00" pos_z="12.40">
+    </Waypoint>
+    <Waypoint id="WP2" stepno="2" name="WP2" E="0.2171" B="0.1794" P="0.1549" S="0.2000" Mode="scene" Coherence="0.0685" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="18.90" pos_y="0.00" pos_z="19.10">
+    </Waypoint>
+    <Waypoint id="WP3" stepno="3" name="WP3" E="0.2692" B="0.1714" P="0.1609" S="0.2000" Mode="scene" Coherence="0.0675" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="24.80" pos_y="0.00" pos_z="25.60">
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

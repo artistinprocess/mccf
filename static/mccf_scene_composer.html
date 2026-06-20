@@ -340,6 +340,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
           <label>Dwell Gain <span id="z-sound-dwell-gain-val" style="color:var(--warm)">0.85</span></label>
           <input type="range" id="z-sound-dwell-gain" min="0" max="1" step="0.01" value="0.85"
             oninput="document.getElementById('z-sound-dwell-gain-val').textContent=parseFloat(this.value).toFixed(2)">
+          <label style="margin-top:8px">Convolver IR <span style="color:var(--dim);font-size:11px">(reverb impulse response, optional)</span></label>
+          <select id="z-sound-convolver-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+            <option value="">— none —</option>
+          </select>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+            <input type="checkbox" id="z-sound-convolver-normalize" style="width:auto;margin:0" checked>
+            <span style="font-size:12px;color:var(--dim)">Normalize IR (recommended)</span>
+          </div>
         </div>
       </div>
       <div class="btn-row">
@@ -1202,7 +1210,8 @@ function showZD(id){
       '<div>ambient: <span style="color:var(--accent)">' + xe(z.sound.url) + '</span></div>' +
       '<div>gain: <span style="color:var(--text)">' + (z.sound.gain||0.8).toFixed(2) + '</span></div>' +
       (z.sound.filter ? '<div>filter: <span style="color:var(--cool)">lowpass ' + (z.sound.filterFreq||900) + 'Hz Q=' + (z.sound.filterQ||1.0).toFixed(1) + '</span></div>' : '') +
-      (z.sound.dwellUrl ? '<div>dwell: <span style="color:var(--warm)">' + xe(z.sound.dwellUrl) + '</span></div>' : '');
+      (z.sound.dwellUrl ? '<div>dwell: <span style="color:var(--warm)">' + xe(z.sound.dwellUrl) + '</span></div>' : '') +
+      (z.sound.convolverUrl ? '<div>reverb: <span style="color:var(--purple)">' + xe(z.sound.convolverUrl) + '</span></div>' : '');
   } else {
     soundSect.style.display = 'none';
     soundEl.textContent = '';
@@ -1394,6 +1403,8 @@ function toggleZoneSoundFilter() {
 var _mediaFiles = [];  // cached from last fetch
 
 function refreshMediaList() {
+  refreshConvolverList();
+  refreshSoundEffectsList();
   fetch(API + '/media/list')
     .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function(data) {
@@ -1431,7 +1442,63 @@ function _populateAllMediaSelects() {
   _populateMediaSelect(document.getElementById('sc-music-url'));
   _populateMediaSelect(document.getElementById('sc-bed-url'));
   _populateMediaSelect(document.getElementById('z-sound-url'));
-  _populateMediaSelect(document.getElementById('z-sound-dwell-url'), undefined, true);
+  _populateSoundEffectsSelect(document.getElementById('z-sound-dwell-url'));
+  _populateConvolverSelect(document.getElementById('z-sound-convolver-url'));
+}
+
+// Fetch media/convolver/ WAVs from API and populate the IR dropdown.
+// Separate from _populateMediaSelect because it hits a different endpoint
+// and only shows WAVs from the convolver subdirectory.
+var _convolverFiles = [];
+function refreshConvolverList(callback) {
+  fetch(API + '/media/list?subdir=convolver&ext=wav')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _convolverFiles = data.files || [];
+      _populateConvolverSelect(document.getElementById('z-sound-convolver-url'));
+      if (callback) callback();
+    })
+    .catch(function(e) {
+      console.warn('refreshConvolverList: /media/list?subdir=convolver not available (' + e.message + ')');
+    });
+}
+function _populateConvolverSelect(sel, currentVal) {
+  if (!sel) return;
+  var prev = currentVal !== undefined ? currentVal : sel.value;
+  sel.innerHTML = '<option value="">— none —</option>';
+  _convolverFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'media/' + f;
+    opt.textContent = f.replace('convolver/', '');
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+
+var _soundEffectsFiles = [];
+function refreshSoundEffectsList(callback) {
+  fetch(API + '/media/list?subdir=soundeffects')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _soundEffectsFiles = data.files || [];
+      _populateSoundEffectsSelect(document.getElementById('z-sound-dwell-url'));
+      if (callback) callback();
+    })
+    .catch(function(e) {
+      console.warn('refreshSoundEffectsList: /media/list?subdir=soundeffects not available (' + e.message + ')');
+    });
+}
+function _populateSoundEffectsSelect(sel, currentVal) {
+  if (!sel) return;
+  var prev = currentVal !== undefined ? currentVal : sel.value;
+  sel.innerHTML = '<option value="">— none —</option>';
+  _soundEffectsFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'media/' + f;
+    opt.textContent = f.replace('soundeffects/', '');
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
 }
 
 // ── Zone Commands ─────────────────────────────
@@ -1516,10 +1583,13 @@ function confirmZone(){
     var soundQ = parseFloat(document.getElementById('z-sound-q').value);
     var dwellUrl = document.getElementById('z-sound-dwell-url').value.trim();
     var dwellGain = parseFloat(document.getElementById('z-sound-dwell-gain').value);
+    var convolverUrl = document.getElementById('z-sound-convolver-url').value.trim();
+    var convolverNormalize = document.getElementById('z-sound-convolver-normalize').checked;
     sound = {
       url: soundUrl, gain: soundGain, loop: soundLoop,
       filter: soundFilter, filterFreq: soundFreq, filterQ: soundQ,
-      dwellUrl: dwellUrl, dwellGain: dwellGain
+      dwellUrl: dwellUrl, dwellGain: dwellGain,
+      convolverUrl: convolverUrl, convolverNormalize: convolverNormalize
     };
   }
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
@@ -1539,6 +1609,8 @@ function confirmZone(){
   document.getElementById('z-sound-form').style.display = 'none';
   document.getElementById('z-sound-url').value = '';
   document.getElementById('z-sound-dwell-url').value = '';
+  document.getElementById('z-sound-convolver-url').value = '';
+  document.getElementById('z-sound-convolver-normalize').checked = true;
   document.getElementById('z-sound-filter').checked = false;
   document.getElementById('z-sound-filter-form').style.display = 'none';
   hideHint();renderAll();toast('Zone: '+(name||id));
@@ -1588,10 +1660,13 @@ function editZone(id){
     document.getElementById('z-sound-freq-val').textContent = snd.filterFreq || 900;
     document.getElementById('z-sound-q').value = snd.filterQ !== undefined ? snd.filterQ : 1.0;
     document.getElementById('z-sound-q-val').textContent = (snd.filterQ !== undefined ? snd.filterQ : 1.0).toFixed(1);
-    _populateMediaSelect(document.getElementById('z-sound-dwell-url'), snd.dwellUrl || '', true);
+    _populateSoundEffectsSelect(document.getElementById('z-sound-dwell-url'), snd.dwellUrl || '');
     var zdg = document.getElementById('z-sound-dwell-gain');
     var zdgv = document.getElementById('z-sound-dwell-gain-val');
     if(zdg){ zdg.value = snd.dwellGain !== undefined ? snd.dwellGain : 0.85; zdgv.textContent = (snd.dwellGain !== undefined ? snd.dwellGain : 0.85).toFixed(2); }
+    _populateConvolverSelect(document.getElementById('z-sound-convolver-url'), snd.convolverUrl || '');
+    var zcn = document.getElementById('z-sound-convolver-normalize');
+    if(zcn) zcn.checked = snd.convolverNormalize !== false;
   }
   // Set pendingPos so confirmZone doesn't reject — use existing zone location
   pendingPos=(z.location||[0,0]).slice();
@@ -1653,7 +1728,14 @@ function renderWPPicker(){
     return '<div style="padding:2px 4px;cursor:pointer;font-size:14px;color:var(--cool)" onclick="addToPath(\''+n+'\')">'+n+'</div>';}).join('');
   renderPathSeq();
 }
-function addToPath(n){pathSeq.push(n);renderPathSeq();}
+function addToPath(n){
+  // Block consecutive duplicates (double-click artifact). Non-consecutive repeats allowed.
+  if(pathSeq.length>0 && pathSeq[pathSeq.length-1]===n){
+    toast("Waypoint "+n+" already last in sequence - click a different waypoint first",true);
+    return;
+  }
+  pathSeq.push(n);renderPathSeq();
+}
 function clearPathSeq(){pathSeq=[];renderPathSeq();}
 function renderPathSeq(){
   document.getElementById('p-seq').innerHTML=pathSeq.map(function(n,i){
@@ -1732,12 +1814,12 @@ function exportX3D(){
   }
   if(iS && _exSnd.bedUrl){
     x+='<!-- Track 3: Bed — X3Dv4 AudioDestination graph -->\n';
-    x+='<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->\n';
-    x+='<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->\n';
+    x+='<!-- startTime=-1 stopTime=-2 + enabled=false: belt-and-suspenders block against auto-fire at load. -->\n';
+    x+='<!-- Loader SAI sets enabled=true + startTime on Play. (Day 47: Play is performance) -->\n';
     x+='<AudioDestination DEF="SoundNode_Bed" gain="'+_exSnd.bedGain.toFixed(2)+'">\n';
     x+='  <AudioClip DEF="Clip_Bed" containerField="children"';
     x+=' url=\'"'+xe(_exSnd.bedUrl)+'"\'  loop="'+(_exSnd.bedLoop?'true':'false')+'" gain="1.0"';
-    x+=' startTime="-1" stopTime="-2"/>\n';
+    x+=' startTime="-1" stopTime="-2" enabled="false"/>\n';
     x+='</AudioDestination>\n\n';
   }
   x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>\n';
@@ -1763,13 +1845,11 @@ function exportX3D(){
     Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
     // Session C: SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
     if(iS){
+      // Always emit ROUTE for every zone — SoundFader now always present (url check is inside Script)
       Object.values(zones).forEach(function(z){
-        var snd=z.sound;
-        if(snd && snd.url){
-          var sid=safeId(z.id);
-          x+='<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
-            +' toNode="SoundFader_'+sid+'" toField="isActive"/>\n';
-        }
+        var sid=safeId(z.id);
+        x+='<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
+          +' toNode="SoundFader_'+sid+'" toField="isActive"/>\n';
       });
     }
     x+='\n';
@@ -1821,55 +1901,138 @@ function buildZX3D(z,iS){
     if(snd && snd.url){
       // Track 2: Zone Ambient — X3Dv4 AudioDestination graph
       // gain=0 on destination = silent until SoundFader activates it
+      // Convolver (reverb) wraps the inner chain when an IR url is assigned
+      var _cvUrl = snd.convolverUrl || '';
+      var _cvNorm = snd.convolverNormalize !== false ? 'true' : 'false';
       if(snd.filter){
         s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
+        if(_cvUrl){ s+='  <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
         s+='  <BiquadFilter containerField="children" type="lowpass"'
           +' frequency="'+(snd.filterFreq||900)+'" qualityFactor="'+(snd.filterQ||1.0).toFixed(1)+'">\n';
         s+='    <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
           +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
           +' startTime="-1" stopTime="-2"/>\n';
         s+='  </BiquadFilter>\n';
+        if(_cvUrl){ s+='  </Convolver>\n'; }
         s+='</AudioDestination>\n';
       } else {
         s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
+        if(_cvUrl){ s+='  <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
         s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
           +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
           +' startTime="-1" stopTime="-2"/>\n';
+        if(_cvUrl){ s+='  </Convolver>\n'; }
         s+='</AudioDestination>\n';
       }
       // SoundFader script: ProximitySensor isActive → start/stop clip + fade destination gain
       var ambientGain=(snd.gain||0.8).toFixed(2);
+      // SoundFader with 300ms gain ramp — always emitted even when no ambient assigned at export
       s+='<Script DEF="SoundFader_'+sid+'" directOutput="true" mustEvaluate="true">\n';
       s+='  <field name="isActive" type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <field name="playing"  type="SFBool" accessType="inputOnly"/>\n';
       s+='  <![CDATA[ecmascript:\n';
+      s+='  var _fadeTimer=null; var _targetGain=0; var _curGain=0;\n';
+      s+='  var _playing=false;\n';
+      s+='  var FADE_MS=300; var STEPS=15;\n';
+      s+='  function _ramp(from,to){\n';
+      s+='    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}\n';
+      s+='    _curGain=from; _targetGain=to;\n';
+      s+='    var step=(to-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
+      s+='    _fadeTimer=setInterval(function(){\n';
+      s+='      _curGain+=step;\n';
+      s+='      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);\n';
+      s+='      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}\n';
+      s+='      try{var d=Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");if(d)d.gain=_curGain;}catch(e){}\n';
+      s+='    },interval);\n';
+      s+='  }\n';
+      s+='  function playing(val, time) {\n';
+      s+='    _playing = val;\n';
+      s+='    Browser.println("SoundFader_'+sid+': playing=" + val);\n';
+      s+='    if (!val) {\n';
+      s+='      _ramp(_curGain, 0);\n';
+      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.stopTime = Browser.currentTime + (FADE_MS/1000); } catch(e) {}\n';
+      s+='    }\n';
+      s+='  }\n';
       s+='  function isActive(val, time) {\n';
+      s+='    if (!_playing) { Browser.println("SoundFader_'+sid+': GATED isActive="+val); return; }\n';
       s+='    var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient");\n';
-      s+='    var dest = Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");\n';
       s+='    if (val) {\n';
-      s+='      if (dest)  dest.gain = '+ambientGain+';\n';
-      s+='      if (clip) { clip.stopTime = -2; clip.startTime = Browser.currentTime; }\n';
+      s+='      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {\n';
+      s+='        if(clip){clip.stopTime=-2;clip.startTime=Browser.currentTime;}\n';
+      s+='        _ramp(0, '+ambientGain+');\n';
+      s+='      }\n';
       s+='      Browser.println("SoundFader_'+sid+': ENTER");\n';
       s+='    } else {\n';
-      s+='      if (clip) clip.stopTime = Browser.currentTime;\n';
-      s+='      if (dest)  dest.gain = 0;\n';
+      s+='      _ramp(_curGain, 0);\n';
+      s+='      if(clip) clip.stopTime=Browser.currentTime+(FADE_MS/1000);\n';
       s+='      Browser.println("SoundFader_'+sid+': EXIT");\n';
       s+='    }\n';
       s+='  }\n';
       s+='  ]]' + '>\n';
       s+='</' + 'Script>\n';
-      // Track 4: Dwell one-shot (optional)
-      if(snd.dwellUrl){
-        s+='<AudioDestination DEF="SoundNode_'+sid+'_Dwell" gain="'+(snd.dwellGain||0.85).toFixed(2)+'">\n';
-        s+='  <AudioClip DEF="Clip_'+sid+'_Dwell" containerField="children"'
-          +' url=\'"'+xe(snd.dwellUrl)+'"\'  loop="false" gain="1.0"'
-          +' startTime="-1" stopTime="-2"/>\n';
-        s+='</AudioDestination>\n';
-      }
+      // Track 4: Dwell one-shot — always emit (url='' if not assigned, loader panel fills it)
+      var _dwellUrl  = snd.dwellUrl  || '';
+      var _dwellGain = (snd.dwellGain||0.85).toFixed(2);
+      s+='<!-- Track 4: Dwell one-shot \u2014 fired by loader SAI on dwell expiry -->\n';
+      s+='<AudioDestination DEF="SoundNode_'+sid+'_Dwell" gain="'+_dwellGain+'">\n';
+      s+='  <AudioClip DEF="Clip_'+sid+'_Dwell" containerField="children"'
+        +' url=\''+(_dwellUrl ? '"'+xe(_dwellUrl)+'"' : '')+'\' loop="false" gain="1.0" startTime="-1" stopTime="-2"/>\n';
+      s+='</AudioDestination>\n';
     } else {
       // No sound assigned — stub so loader panel can assign at runtime
       s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
       s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
         +' url="" loop="true" gain="1.0" startTime="-1" stopTime="-2"/>\n';
+      s+='</AudioDestination>\n';
+      // SoundFader stub — always present; clip.url check inside script means it silently no-ops if no url assigned
+      s+='<Script DEF="SoundFader_'+sid+'" directOutput="true" mustEvaluate="true">\n';
+      s+='  <field name="isActive" type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <field name="playing"  type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <![CDATA[ecmascript:\n';
+      s+='  var _fadeTimer=null; var _targetGain=0; var _curGain=0;\n';
+      s+='  var _playing=false;\n';
+      s+='  var FADE_MS=300; var STEPS=15;\n';
+      s+='  function _ramp(from,to){\n';
+      s+='    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}\n';
+      s+='    _curGain=from; _targetGain=to;\n';
+      s+='    var step=(to-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
+      s+='    _fadeTimer=setInterval(function(){\n';
+      s+='      _curGain+=step;\n';
+      s+='      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);\n';
+      s+='      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}\n';
+      s+='      try{var d=Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");if(d)d.gain=_curGain;}catch(e){}\n';
+      s+='    },interval);\n';
+      s+='  }\n';
+      s+='  function playing(val, time) {\n';
+      s+='    _playing = val;\n';
+      s+='    Browser.println("SoundFader_'+sid+': playing=" + val);\n';
+      s+='    if (!val) {\n';
+      s+='      _ramp(_curGain, 0);\n';
+      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.stopTime = Browser.currentTime + (FADE_MS/1000); } catch(e) {}\n';
+      s+='    }\n';
+      s+='  }\n';
+      s+='  function isActive(val, time) {\n';
+      s+='    if (!_playing) { Browser.println("SoundFader_'+sid+': GATED isActive="+val); return; }\n';
+      s+='    var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient");\n';
+      s+='    if (val) {\n';
+      s+='      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {\n';
+      s+='        if(clip){clip.stopTime=-2;clip.startTime=Browser.currentTime;}\n';
+      s+='        _ramp(0, 0.80);\n';
+      s+='      }\n';
+      s+='      Browser.println("SoundFader_'+sid+': ENTER");\n';
+      s+='    } else {\n';
+      s+='      _ramp(_curGain, 0);\n';
+      s+='      if(clip) clip.stopTime=Browser.currentTime+(FADE_MS/1000);\n';
+      s+='      Browser.println("SoundFader_'+sid+': EXIT");\n';
+      s+='    }\n';
+      s+='  }\n';
+      s+='  ]]' + '>\n';
+      s+='</' + 'Script>\n';
+      // Track 4: Dwell one-shot stub — always present so loader can fire it
+      s+='<!-- Track 4: Dwell one-shot \u2014 fired by loader SAI on dwell expiry -->\n';
+      s+='<AudioDestination DEF="SoundNode_'+sid+'_Dwell" gain="0.85">\n';
+      s+='  <AudioClip DEF="Clip_'+sid+'_Dwell" containerField="children"'
+        +' url="" loop="false" gain="1.0" startTime="-1" stopTime="-2"/>\n';
       s+='</AudioDestination>\n';
     }
   }
@@ -2165,7 +2328,7 @@ function buildX3DString(){
     lines.push('<AudioDestination DEF="SoundNode_Bed" gain="'+_scSnd.bedGain.toFixed(2)+'">');
     lines.push('  <AudioClip DEF="Clip_Bed" containerField="children"');
     lines.push('             url=\'"'+xe(_scSnd.bedUrl)+'"\'  loop="'+(_scSnd.bedLoop?'true':'false')+'" gain="1.0"');
-    lines.push('             startTime="-1" stopTime="-2"/>');
+    lines.push('             startTime="-1" stopTime="-2" enabled="false"/>');
     lines.push('</AudioDestination>');
   }
   lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
@@ -2410,8 +2573,13 @@ function exportSceneXML(){
     x+='<Paths>\n';
     Object.values(paths).forEach(function(p){
       x+='  <Path name="'+xe(p.name)+'" agent="'+xe(p.agent)+'" waypointOrder="'+(parseInt(p.waypointOrder)||'MISSING')+'">\n';
+      // Guard: skip consecutive duplicates (double-click artifact).
+      // Non-consecutive repeats (e.g. WP1→WP2→WP1) are valid choreography and kept.
+      var _prevWp = null;
       (p.waypoints||[]).forEach(function(wpName){
+        if(wpName === _prevWp){ console.warn('[exportSceneXML] skipping consecutive duplicate waypoint: '+wpName); return; }
         x+='    <PathWaypoint ref="'+xe(wpName)+'"/>'+'\n';
+        _prevWp = wpName;
       });
       x+='  </Path>'+'\n';
     });

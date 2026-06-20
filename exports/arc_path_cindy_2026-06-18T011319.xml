@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_cindy_2026-06-18T011319" scene="testscene3">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_cindy_2026-06-18T011319" agentname="Cindy" path_name="path_cindy">
+    <Timestamp date="2026-06-18" time="01:13:19"/>
+    <Waypoint id="WAYPT1" stepno="1" name="Waypt1" E="0.3597" B="0.2074" P="0.1644" S="0.2000" Mode="scene" Coherence="0.1445" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="7.80" pos_y="0.00" pos_z="7.60">
+      <Question speaker="Cindy">Why must I linger here?</Question>
+      <Response speaker="Cindy">I suppose it&apos;s because we&apos;re still trying to figure things out. We haven&apos;t quite reached a point where we can move on or make any sense of what&apos;s happening. The silence is... comfortable, in a way. It&apos;s as if the only sound that matters is the one inside our own heads.</Response>
+    </Waypoint>
+    <Waypoint id="WAYPT2" stepno="2" name="Waypt2" E="0.3069" B="0.2075" P="0.1704" S="0.1614" Mode="scene" Coherence="0.1375" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="16.20" pos_y="0.00" pos_z="17.40">
+      <Statement speaker="Cindy">Why do the birds keep on singing?</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>
