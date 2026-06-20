@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_cindy_2026-06-18T202121" scene="testscene3">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_cindy_2026-06-18T202121" agentname="Cindy" path_name="path_cindy">
+    <Timestamp date="2026-06-18" time="20:21:21"/>
+    <Waypoint id="WAYPT1" stepno="1" name="Waypt1" E="0.3674" B="0.2155" P="0.1644" S="0.1695" Mode="scene" Coherence="0.1440" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="7.80" pos_y="0.00" pos_z="7.60">
+      <Question speaker="Cindy">Why must I linger here?</Question>
+      <Response speaker="Cindy">I&apos;m not sure why you feel the need to linger, but it&apos;s possible that staying a bit longer could provide some clarity on what&apos;s holding you back from leaving. Perhaps there&apos;s something here that&apos;s still resonating with you, or maybe you&apos;re just not ready to let go of whatever it is that brought you here in the first place. I&apos;m not trying to hold you back, though - if you feel like it&apos;s time to move on, then I think we can figure out a way to wrap things up and get you where you need to be.</Response>
+    </Waypoint>
+    <Waypoint id="WAYPT2" stepno="2" name="Waypt2" E="0.3177" B="0.2075" P="0.1704" S="0.1614" Mode="scene" Coherence="0.1383" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="16.20" pos_y="0.00" pos_z="17.40">
+      <Statement speaker="Cindy">Why do the birds keep on singing?</Statement>
+    </Waypoint>
+    <Waypoint id="WAYPT3" stepno="3" name="Waypt3" E="0.2714" B="0.1995" P="0.1764" S="0.1614" Mode="scene" Coherence="0.0961" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.60" pos_y="0.00" pos_z="26.90">
+      <Question>Don&apos;t they know, it&apos;s the end of the world?</Question>
+      <Response speaker="Cindy">I&apos;m aware that some individuals may perceive the current situation as catastrophic, but I&apos;m trying not to jump to conclusions or make assumptions about what others are thinking or feeling. Can you tell me more about what you mean by &quot;the end of the world&quot;? What specific concerns or fears do you have?</Response>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

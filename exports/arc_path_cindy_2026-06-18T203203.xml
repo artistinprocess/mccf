@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_cindy_2026-06-18T203203" scene="testscene3">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_cindy_2026-06-18T203203" agentname="Cindy" path_name="path_cindy">
+    <Timestamp date="2026-06-18" time="20:32:03"/>
+    <Waypoint id="WAYPT1" stepno="1" name="Waypt1" E="0.4497" B="0.2155" P="0.1644" S="0.2000" Mode="scene" Coherence="0.0656" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="7.80" pos_y="0.00" pos_z="7.60">
+      <Question speaker="Cindy">Why must I linger here?</Question>
+      <Response speaker="Cindy">(pausing for a moment) I must linger here because I&apos;m trying to make sense of my surroundings and the people around me. (pausing again) To be honest, I&apos;m feeling quite uncomfortable about being here, but I&apos;m not entirely sure why or what&apos;s causing it. (taking a deep breath) I&apos;ve been observing my emotions and thoughts, and I&apos;m not getting any clear answers from them. It&apos;s like there&apos;s a... a disconnect between what I feel and what I think is true. (pausing once more) Can you help me understand what&apos;s going on? Or should we start by clarifying things for ourselves before proceeding?</Response>
+    </Waypoint>
+    <Waypoint id="WAYPT2" stepno="2" name="Waypt2" E="0.2787" B="0.2075" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0632" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="16.20" pos_y="0.00" pos_z="17.40">
+      <Statement speaker="Cindy">Why do the birds keep on singing?</Statement>
+    </Waypoint>
+    <Waypoint id="WAYPT3" stepno="3" name="Waypt3" E="0.3315" B="0.1914" P="0.1845" S="0.2000" Mode="scene" Coherence="0.0622" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="23.60" pos_y="0.00" pos_z="26.90">
+      <Question>Don&apos;t they know, it&apos;s the end of the world?</Question>
+      <Response speaker="Cindy">(My voice is laced with a hint of skepticism) I&apos;m not sure that&apos;s necessarily true. We&apos;ve been standing here for a while now, and we haven&apos;t seen any signs of widespread destruction or chaos. (pausing to consider the possibility) It&apos;s possible that... whatever this place is... might not be as dire as it seems. (my tone remains cautious, my eyes scanning the surroundings) But at the same time, I have to admit that I&apos;m feeling a bit uneasy about our situation. (my words are measured, my emotional intensity still hovering around 0.08) Can you tell me more about what&apos;s going on and why you feel like it&apos;s the end of the world?</Response>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

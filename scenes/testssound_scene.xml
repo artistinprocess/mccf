@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - testssound - 2026-06-20T19:02:00 -->
+<Scene id="testssound" timestamp="2026-06-20T19:02:00" zone_set="testssound" mode="improvisation" width="40" depth="40">
+<SceneSound>
+  <Track id="music" url="media/TempleOfInana.mp3" loop="true" gain="0.70"/>
+  <Track id="bed"   url="media/wind.mp3"   loop="true" gain="0.50"/>
+</SceneSound>
+<Zones>
+  <Zone id="soundtestzonw" zone_type="neutral">
+    <Descriptor></Descriptor>
+    <Weights E="0.25" B="0.25" P="0.25" S="0.25"/>
+    <Position x="18.8" y="0" z="19.1"/><Radius value="4"/>
+    <AmbientTheme scale="dorian" tempo="medium"/>
+    <Chorus llm="ollama:llama3.2" tone="ominous" max_tokens="80" display="overlay">
+    </Chorus>
+    <SoundDesign>
+      <Track id="ambient" url="media/piano1.mp3" loop="false" gain="0.80" spatialize="false" maxFront="60"/>
+      <Track id="dwell" url="media/soundeffects/Thunder1.mp3" loop="false" gain="0.98"/>
+    </SoundDesign>
+  </Zone>
+</Zones>
+<EmotionalArc cultivar="Cindy" actor="ollama" voice=""><StartPosition x="11.8" y="0" z="10"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice=""><StartPosition x="26.6" y="0" z="24.6"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice=""><StartPosition x="21.1" y="0" z="18"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="w1" label="WP1" zone="" pos_x="13.60" pos_y="0.00" pos_z="12.40" dwell="2" pace="1.4"/>
+  <Waypoint name="w2" label="WP2" zone="soundtestzonw" pos_x="18.90" pos_y="0.00" pos_z="19.10" dwell="2" pace="1.4"/>
+  <Waypoint name="w3" label="WP3" zone="" pos_x="24.80" pos_y="0.00" pos_z="25.60" dwell="2" pace="1.4"/>
+</Waypoints>
+<Paths>
+  <Path name="aounspath" agent="Cindy" waypointOrder="1">
+    <PathWaypoint ref="w1"/>
+    <PathWaypoint ref="w2"/>
+    <PathWaypoint ref="w3"/>
+  </Path>
+</Paths>
+</Scene>

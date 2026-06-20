@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - testscene3 - 2026-06-19T02:07:50 -->
+<Scene id="testscene3" timestamp="2026-06-19T02:07:50" zone_set="testscene3" mode="improvisation" width="40" depth="40">
+<SceneSound>
+  <Track id="bed"   url="media/wind.mp3"   loop="true" gain="0.50"/>
+</SceneSound>
+<Zones>
+  <Zone id="Zone1" zone_type="library">
+    <Descriptor></Descriptor>
+    <Weights E="0.1" B="0.15" P="0.4" S="0.15"/>
+    <Position x="7.9" y="0" z="7.5"/><Radius value="4"/>
+    <AmbientTheme scale="dorian" tempo="medium"/>
+  </Zone>
+  <Zone id="Zone2" zone_type="library">
+    <Descriptor></Descriptor>
+    <Weights E="0.1" B="0.15" P="0.4" S="0.15"/>
+    <Position x="16" y="0" z="17.5"/><Radius value="4"/>
+    <AmbientTheme scale="dorian" tempo="medium"/>
+    <SoundDesign>
+      <Track id="ambient" url="media/Lament1.mp3" loop="true" gain="0.80" spatialize="false" maxFront="60" filter="lowpass" filterFreq="900" filterQ="2.6"/>
+    </SoundDesign>
+  </Zone>
+  <Zone id="Zone3" zone_type="forum">
+    <Descriptor></Descriptor>
+    <Weights E="0.15" B="0.25" P="0.15" S="0.35"/>
+    <Position x="24.4" y="0" z="28.2"/><Radius value="4"/>
+    <AmbientTheme scale="mixolydian" tempo="medium"/>
+    <Chorus llm="ollama:llama3.2" tone="oracular" max_tokens="80" display="overlay">
+    </Chorus>
+  </Zone>
+</Zones>
+<EmotionalArc cultivar="Cindy" actor="ollama" voice=""><StartPosition x="7.2" y="0" z="6.6"/></EmotionalArc>
+<EmotionalArc cultivar="The Steward" actor="ollama" voice=""><StartPosition x="26.6" y="0" z="27.8"/></EmotionalArc>
+<EmotionalArc cultivar="The Witness" actor="ollama" voice=""><StartPosition x="16.5" y="0" z="15.8"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="wp1" label="Waypt1" zone="Zone1" pos_x="7.80" pos_y="0.00" pos_z="7.60" dwell="2" pace="1.4">
+    <Question speaker="Cindy">Why must I linger here?</Question>
+  </Waypoint>
+  <Waypoint name="wp2" label="Waypt2" zone="Zone2" pos_x="16.20" pos_y="0.00" pos_z="17.40" dwell="2" pace="1.4">
+    <Statement speaker="Cindy">Why do the birds keep on singing?</Statement>
+  </Waypoint>
+  <Waypoint name="wp3" label="Waypt3" zone="Zone3" pos_x="23.60" pos_y="0.00" pos_z="26.90" dwell="2" pace="1.4">
+    <Question>Don't they know, it's the end of the world?</Question>
+  </Waypoint>
+</Waypoints>
+<Paths>
+  <Path name="path_cindy" agent="Cindy" waypointOrder="1">
+    <PathWaypoint ref="wp1"/>
+    <PathWaypoint ref="wp2"/>
+    <PathWaypoint ref="wp3"/>
+  </Path>
+  <Path name="path_cindy2" agent="Cindy" waypointOrder="1">
+    <PathWaypoint ref="wp1"/>
+    <PathWaypoint ref="wp2"/>
+    <PathWaypoint ref="wp3"/>
+  </Path>
+</Paths>
+<Network>
+  <Link from="Cindy" to="The Steward" strength="0.60" type="empathic"/>
+  <Link from="Cindy" to="The Witness" strength="0.60" type="behavioral"/>
+</Network>
+</Scene>

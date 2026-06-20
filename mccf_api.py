@@ -3570,6 +3570,41 @@ def list_scenes_for_composer():
     return jsonify({'files': files, 'scenes_dir': scenes_dir})
 
 
+@app.route('/media/list', methods=['GET'])
+def list_media_files():
+    """
+    List audio files in static/media/ directory.
+    Used by Scene Composer sound pickers (GET /media/list).
+    Returns { files: ["garden_theme.mp3", ...] } sorted alphabetically.
+    Same directory the X3D Loader references as media/filename.
+
+    Optional query params:
+      subdir=convolver  — scan static/media/convolver/ and prefix filenames
+                          with "convolver/" so the composer builds the
+                          correct url: media/convolver/file.wav
+      ext=wav           — filter to a single extension (wav only, etc.)
+    """
+    media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'media')
+    subdir = request.args.get('subdir', '').strip().strip('/')
+    ext_filter = request.args.get('ext', '').strip().lower()
+
+    scan_dir = os.path.join(media_dir, subdir) if subdir else media_dir
+    if not os.path.isdir(scan_dir):
+        return jsonify({'files': [], 'media_dir': scan_dir})
+
+    AUDIO_EXTS = {'.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.mid', '.midi'}
+    allowed = {'.' + ext_filter} if ext_filter else AUDIO_EXTS
+
+    files = sorted([
+        (subdir + '/' + f if subdir else f)
+        for f in os.listdir(scan_dir)
+        if os.path.isfile(os.path.join(scan_dir, f))
+        and os.path.splitext(f)[1].lower() in allowed
+        and not f.startswith('.')
+    ])
+    return jsonify({'files': files, 'media_dir': scan_dir})
+
+
 @app.route('/scene/load/scene/raw', methods=['GET'])
 def get_scene_xml_raw():
     """
