@@ -117,10 +117,27 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .net-arrow { color: var(--dim); }
 .net-to   { color: var(--accent); font-weight: 600; }
 .net-str  { color: var(--warm); margin-left: auto; }
-.net-type { color: var(--purple); font-size: 12px; }
+.net-couplers { color: var(--purple); font-size: 12px; letter-spacing: 0.05em; }
 .net-del  { background: none; border: 1px solid var(--border); border-radius: 3px;
   color: var(--danger); cursor: pointer; padding: 1px 6px; font-size: 12px; }
 .net-del:hover { border-color: var(--danger); }
+.cpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
+.cpl-row  { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.cpl-row:hover { border-color: var(--dim); }
+.cpl-row input[type=checkbox] { accent-color: var(--accent); width:14px; height:14px; cursor:pointer; }
+.cpl-label { font-size: 13px; color: var(--text); flex: 1; }
+.cpl-key   { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 24px; }
+.cpl-params { background: var(--s3); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 8px; margin: 2px 0 6px; display: none; }
+.cpl-params.open { display: block; }
+.cpl-param-row { display: grid; grid-template-columns: 80px 1fr 36px; align-items: center;
+  gap: 6px; margin-bottom: 4px; font-size: 12px; color: var(--dim); }
+.cpl-param-row input[type=range] { width: 100%; accent-color: var(--warm); }
+.cpl-param-row input[type=text]  { background: var(--s2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 2px 5px; width: 100%; outline: none; }
+.cpl-param-val { color: var(--warm); text-align: right; font-size: 12px; }
 /* waypointOrder badge on path list items */
 .order-badge {
   display: inline-flex; align-items: center; justify-content: center;
@@ -491,18 +508,80 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <select id="net-from" style="margin-bottom:6px"></select>
       <label>To Agent</label>
       <select id="net-to" style="margin-bottom:6px"></select>
-      <label>Type</label>
-      <select id="net-type" style="margin-bottom:6px">
-        <option value="empathic">empathic — E channel lead</option>
-        <option value="behavioral">behavioral — B channel lead</option>
-        <option value="power">power — P channel lead</option>
-        <option value="social">social — S channel lead</option>
-        <option value="full">full — all channels coupled</option>
-      </select>
       <label>Strength <span id="net-str-val" style="color:var(--warm)">0.60</span></label>
       <input type="range" id="net-strength" min="0" max="1" step="0.05" value="0.60"
         oninput="document.getElementById('net-str-val').textContent=parseFloat(this.value).toFixed(2)">
-      <div class="btn-row" style="margin-top:8px">
+
+      <div class="sh" style="margin-top:10px">Couplers</div>
+
+      <div class="cpl-row" onclick="toggleCoupler('R',event)">
+        <input type="checkbox" id="cpl-R" onclick="event.stopPropagation();toggleCoupler('R',event)"> <span class="cpl-key">R</span>
+        <span class="cpl-label">Resonance — align &amp; amplify shared dims</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-R">
+        <div class="cpl-param-row"><span>gain</span><input type="range" id="cpl-R-gain" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('cpl-R-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-R-gain-v">0.50</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-R-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+        <div class="cpl-param-row"><span>lambda</span><input type="range" id="cpl-R-lambda" min="0" max="3" step="0.1" value="1.0" oninput="document.getElementById('cpl-R-lambda-v').textContent=parseFloat(this.value).toFixed(1)"><span class="cpl-param-val" id="cpl-R-lambda-v">1.0</span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('D',event)">
+        <input type="checkbox" id="cpl-D" onclick="event.stopPropagation();toggleCoupler('D',event)"> <span class="cpl-key">D</span>
+        <span class="cpl-label">Damping — pull ε toward baseline</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-D">
+        <div class="cpl-param-row"><span>gain</span><input type="range" id="cpl-D-gain" min="0" max="1" step="0.05" value="0.4" oninput="document.getElementById('cpl-D-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-D-gain-v">0.40</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-D-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('I',event)">
+        <input type="checkbox" id="cpl-I" onclick="event.stopPropagation();toggleCoupler('I',event)"> <span class="cpl-key">I</span>
+        <span class="cpl-label">Inversion — counterbalance / conflict</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-I">
+        <div class="cpl-param-row"><span>gain</span><input type="range" id="cpl-I-gain" min="0" max="1" step="0.05" value="0.3" oninput="document.getElementById('cpl-I-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-I-gain-v">0.30</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-I-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('G',event)">
+        <input type="checkbox" id="cpl-G" onclick="event.stopPropagation();toggleCoupler('G',event)"> <span class="cpl-key">G</span>
+        <span class="cpl-label">Gated — conditional inner coupler</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-G">
+        <div class="cpl-param-row"><span>threshold</span><input type="text" id="cpl-G-threshold" value="S>0.5" placeholder="S>0.5"><span></span></div>
+        <div class="cpl-param-row"><span>inner</span><input type="text" id="cpl-G-inner" value="R" placeholder="R"><span></span></div>
+        <div class="cpl-param-row"><span>inner gain</span><input type="range" id="cpl-G-inner-gain" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('cpl-G-inner-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-G-inner-gain-v">0.50</span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('T',event)">
+        <input type="checkbox" id="cpl-T" onclick="event.stopPropagation();toggleCoupler('T',event)"> <span class="cpl-key">T</span>
+        <span class="cpl-label">Threshold — nonlinear phase transition</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-T">
+        <div class="cpl-param-row"><span>trigger</span><input type="text" id="cpl-T-trigger" value="E>0.7" placeholder="E>0.7"><span></span></div>
+        <div class="cpl-param-row"><span>gain</span><input type="range" id="cpl-T-gain" min="0" max="2" step="0.05" value="1.2" oninput="document.getElementById('cpl-T-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-T-gain-v">1.20</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-T-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('L',event)">
+        <input type="checkbox" id="cpl-L" onclick="event.stopPropagation();toggleCoupler('L',event)"> <span class="cpl-key">L</span>
+        <span class="cpl-label">Delay — time-shifted response / lag</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-L">
+        <div class="cpl-param-row"><span>lag (ticks)</span><input type="range" id="cpl-L-lag" min="1" max="10" step="1" value="2" oninput="document.getElementById('cpl-L-lag-v').textContent=this.value"><span class="cpl-param-val" id="cpl-L-lag-v">2</span></div>
+        <div class="cpl-param-row"><span>gain</span><input type="range" id="cpl-L-gain" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('cpl-L-gain-v').textContent=parseFloat(this.value).toFixed(2)"><span class="cpl-param-val" id="cpl-L-gain-v">0.50</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-L-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+      </div>
+
+      <div class="cpl-row" onclick="toggleCoupler('Int',event)">
+        <input type="checkbox" id="cpl-Int" onclick="event.stopPropagation();toggleCoupler('Int',event)"> <span class="cpl-key">∫</span>
+        <span class="cpl-label">Integration — slow bonding / habituation</span>
+      </div>
+      <div class="cpl-params" id="cpl-params-Int">
+        <div class="cpl-param-row"><span>rate</span><input type="range" id="cpl-Int-rate" min="0" max="0.2" step="0.005" value="0.05" oninput="document.getElementById('cpl-Int-rate-v').textContent=parseFloat(this.value).toFixed(3)"><span class="cpl-param-val" id="cpl-Int-rate-v">0.050</span></div>
+        <div class="cpl-param-row"><span>filter</span><input type="text" id="cpl-Int-filter" value="E,B,P,S" placeholder="E,B,P,S"><span></span></div>
+      </div>
+
+      <div class="btn-row" style="margin-top:10px">
         <button class="btn pri" onclick="addNetLink()">Add Link</button>
         <button class="btn" onclick="addNetLinkBidi()">Add Bidirectional</button>
       </div>
@@ -595,6 +674,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <button class="btn pri" style="font-size:11px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Apply</button>
       </div>
       <div style="font-size:11px;color:var(--dim);margin-top:4px">To assign a new H-Anim figure, use Character Creator.</div>
+    </div>
+    <div class="dsect" id="ad-couplers-sect" style="display:none">
+      <div class="sh" style="margin:0 0 6px">Couplers Affecting This Agent</div>
+      <div id="ad-couplers" style="font-size:12px"></div>
+    </div>
+    <div class="dsect" id="ad-couplers-sect" style="display:none">
+      <div class="sh" style="margin:0 0 6px">Couplers Affecting This Agent</div>
+      <div id="ad-couplers" style="font-size:12px"></div>
     </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
@@ -1233,6 +1320,33 @@ function showAD(name){
   // Avatar — shows hanim_src path as set by Character Creator; placeholder if none
   var hEl=document.getElementById('ad-hanim');
   if(hEl)hEl.textContent=a.hanim_src||'(placeholder — assign in Character Creator)';
+  // Coupler status — show all Network links that affect this agent
+  var cplSect = document.getElementById('ad-couplers-sect');
+  var cplEl   = document.getElementById('ad-couplers');
+  var agentLinks = networks.filter(function(lk){ return lk.to === name; });
+  if (cplSect && cplEl) {
+    if (!agentLinks.length) {
+      cplSect.style.display = 'none';
+    } else {
+      cplSect.style.display = 'block';
+      cplEl.innerHTML = agentLinks.map(function(lk) {
+        var clist = (lk.couplers && lk.couplers.length) ? lk.couplers : [];
+        var cp    = lk.coupler_params || {};
+        var rows  = clist.map(function(key) {
+          var p = cp[key] || {};
+          var details = Object.entries(p).map(function(kv){ return kv[0]+':'+kv[1]; }).join(' ');
+          return '<div style="display:flex;gap:6px;align-items:baseline;padding:2px 0;border-bottom:1px solid var(--border)">'
+            + '<span style="color:var(--accent);font-weight:700;min-width:24px">'+key+'</span>'
+            + '<span style="color:var(--dim);font-size:11px;flex:1">'+details+'</span>'
+            + '</div>';
+        }).join('');
+        return '<div style="margin-bottom:6px">'
+          + '<div style="color:var(--cool);font-size:12px;margin-bottom:2px">← from <b>'+lk.from+'</b>'
+          + ' <span style="color:var(--warm)">str '+parseFloat(lk.strength).toFixed(2)+'</span></div>'
+          + rows + '</div>';
+      }).join('');
+    }
+  }
   // Reset inline edit state
   var sel=document.getElementById('ad-hanim-select');
   var sav=document.getElementById('ad-hanim-save');
@@ -2413,8 +2527,73 @@ function exportZoneXML(){
 // Coupling Network
 // ─────────────────────────────────────────────
 
+var ALL_COUPLERS = ['R','D','I','G','T','L','Int'];
+
+function toggleCoupler(key, event) {
+  var cb    = document.getElementById('cpl-' + key);
+  var panel = document.getElementById('cpl-params-' + key);
+  if (!cb || !panel) return;
+  if (event && event.target === cb) {
+    panel.classList.toggle('open', cb.checked);
+    return;
+  }
+  cb.checked = !cb.checked;
+  panel.classList.toggle('open', cb.checked);
+}
+
+function resetCouplerForm() {
+  ALL_COUPLERS.forEach(function(key) {
+    var cb    = document.getElementById('cpl-' + key);
+    var panel = document.getElementById('cpl-params-' + key);
+    if (cb)    cb.checked = false;
+    if (panel) panel.classList.remove('open');
+  });
+}
+
+function readCouplerParams(key) {
+  var p = {};
+  if (key === 'R') {
+    p.gain   = parseFloat(document.getElementById('cpl-R-gain').value);
+    p.filter = document.getElementById('cpl-R-filter').value.trim();
+    p.lambda = parseFloat(document.getElementById('cpl-R-lambda').value);
+  } else if (key === 'D') {
+    p.gain   = parseFloat(document.getElementById('cpl-D-gain').value);
+    p.filter = document.getElementById('cpl-D-filter').value.trim();
+  } else if (key === 'I') {
+    p.gain   = parseFloat(document.getElementById('cpl-I-gain').value);
+    p.filter = document.getElementById('cpl-I-filter').value.trim();
+  } else if (key === 'G') {
+    p.threshold  = document.getElementById('cpl-G-threshold').value.trim();
+    p.inner      = document.getElementById('cpl-G-inner').value.trim();
+    p.inner_gain = parseFloat(document.getElementById('cpl-G-inner-gain').value);
+  } else if (key === 'T') {
+    p.trigger = document.getElementById('cpl-T-trigger').value.trim();
+    p.gain    = parseFloat(document.getElementById('cpl-T-gain').value);
+    p.filter  = document.getElementById('cpl-T-filter').value.trim();
+  } else if (key === 'L') {
+    p.lag    = parseInt(document.getElementById('cpl-L-lag').value);
+    p.gain   = parseFloat(document.getElementById('cpl-L-gain').value);
+    p.filter = document.getElementById('cpl-L-filter').value.trim();
+  } else if (key === 'Int') {
+    p.rate   = parseFloat(document.getElementById('cpl-Int-rate').value);
+    p.filter = document.getElementById('cpl-Int-filter').value.trim();
+  }
+  return p;
+}
+
+function readSelectedCouplers() {
+  var couplers = [], coupler_params = {};
+  ALL_COUPLERS.forEach(function(key) {
+    var cb = document.getElementById('cpl-' + key);
+    if (cb && cb.checked) {
+      couplers.push(key);
+      coupler_params[key] = readCouplerParams(key);
+    }
+  });
+  return { couplers: couplers, coupler_params: coupler_params };
+}
+
 function populateNetworkUI() {
-  // Populate agent dropdowns from placedAgents
   var agentNames = Object.keys(placedAgents);
   ['net-from','net-to'].forEach(function(id) {
     var sel = document.getElementById(id);
@@ -2439,11 +2618,12 @@ function renderNetLinks() {
     return;
   }
   el.innerHTML = networks.map(function(lk, i) {
+    var clist = (lk.couplers && lk.couplers.length) ? lk.couplers.join(',') : (lk.type || '—');
     return '<div class="net-link">' +
       '<span class="net-from">' + lk.from + '</span>' +
       '<span class="net-arrow">&#8594;</span>' +
       '<span class="net-to">' + lk.to + '</span>' +
-      '<span class="net-type">' + lk.type + '</span>' +
+      '<span class="net-couplers">' + clist + '</span>' +
       '<span class="net-str">' + parseFloat(lk.strength).toFixed(2) + '</span>' +
       '<button class="net-del" onclick="deleteNetLink(' + i + ')">&#10005;</button>' +
       '</div>';
@@ -2454,36 +2634,46 @@ function renderNetLinks() {
 function addNetLink() {
   var from     = document.getElementById('net-from').value;
   var to       = document.getElementById('net-to').value;
-  var type     = document.getElementById('net-type').value;
   var strength = parseFloat(document.getElementById('net-strength').value);
   if (!from || !to) { toast('Select both agents', true); return; }
   if (from === to)  { toast('From and To must differ', true); return; }
-  // Prevent exact duplicate
+  var sel = readSelectedCouplers();
+  if (!sel.couplers.length) { toast('Select at least one coupler', true); return; }
+  var key = sel.couplers.join(',');
   var dup = networks.some(function(lk) {
-    return lk.from === from && lk.to === to && lk.type === type;
+    return lk.from === from && lk.to === to && (lk.couplers||[]).join(',') === key;
   });
   if (dup) { toast('Link already exists', true); return; }
-  networks.push({ from: from, to: to, type: type, strength: strength });
+  networks.push({ from: from, to: to, strength: strength,
+                  couplers: sel.couplers, coupler_params: sel.coupler_params });
   renderNetLinks();
-  toast('Link added: ' + from + ' \u2192 ' + to);
+  resetCouplerForm();
+  toast('Link added: ' + from + ' \u2192 ' + to + ' [' + key + ']');
 }
 
 function addNetLinkBidi() {
   var from     = document.getElementById('net-from').value;
   var to       = document.getElementById('net-to').value;
-  var type     = document.getElementById('net-type').value;
   var strength = parseFloat(document.getElementById('net-strength').value);
   if (!from || !to) { toast('Select both agents', true); return; }
   if (from === to)  { toast('From and To must differ', true); return; }
+  var sel = readSelectedCouplers();
+  if (!sel.couplers.length) { toast('Select at least one coupler', true); return; }
+  var key = sel.couplers.join(',');
   var added = 0;
   [[from,to],[to,from]].forEach(function(pair) {
     var dup = networks.some(function(lk) {
-      return lk.from === pair[0] && lk.to === pair[1] && lk.type === type;
+      return lk.from === pair[0] && lk.to === pair[1] && (lk.couplers||[]).join(',') === key;
     });
-    if (!dup) { networks.push({ from: pair[0], to: pair[1], type: type, strength: strength }); added++; }
+    if (!dup) {
+      networks.push({ from: pair[0], to: pair[1], strength: strength,
+                      couplers: sel.couplers, coupler_params: sel.coupler_params });
+      added++;
+    }
   });
   renderNetLinks();
-  toast(added + ' bidirectional link(s) added');
+  resetCouplerForm();
+  toast(added + ' bidirectional link(s) added [' + key + ']');
 }
 
 function deleteNetLink(i) {
@@ -2547,7 +2737,8 @@ function exportSceneXML(){
     x+='</Zones>\n';
   }
   Object.values(placedAgents).forEach(function(a){
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
+    var hSrc = a.hanim_src ? ' hanim_src="'+xe(a.hanim_src)+'"' : '';
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"'+hSrc+'><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
   });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
@@ -2588,9 +2779,15 @@ function exportSceneXML(){
   if (networks.length > 0) {
     x += '<Network>\n';
     networks.forEach(function(lk) {
-      x += '  <Link from="' + xe(lk.from) + '" to="' + xe(lk.to) +
+      var clist = (lk.couplers && lk.couplers.length) ? lk.couplers.join(',') : (lk.type || 'R');
+      var line = '  <Link from="' + xe(lk.from) + '" to="' + xe(lk.to) +
            '" strength="' + parseFloat(lk.strength).toFixed(2) +
-           '" type="' + xe(lk.type) + '"/>\n';
+           '" couplers="' + xe(clist) + '"';
+      if (lk.coupler_params && Object.keys(lk.coupler_params).length) {
+        line += ' coupler_params=\'' + JSON.stringify(lk.coupler_params).replace(/'/g,'&apos;') + '\'';
+      }
+      line += '/>\n';
+      x += line;
     });
     x += '</Network>\n';
   }
@@ -2852,8 +3049,17 @@ function _restoreChorusFromXml(xml) {
         var from     = lk.getAttribute('from');
         var to       = lk.getAttribute('to');
         var strength = parseFloat(lk.getAttribute('strength')) || 0.5;
-        var type     = lk.getAttribute('type') || 'empathic';
-        if (from && to) networks.push({ from: from, to: to, strength: strength, type: type });
+        var couplersAttr = lk.getAttribute('couplers');
+        var couplers, coupler_params = {};
+        if (couplersAttr) {
+          couplers = couplersAttr.split(',').map(function(c){ return c.trim(); }).filter(Boolean);
+          var cpAttr = lk.getAttribute('coupler_params');
+          if (cpAttr) { try { coupler_params = JSON.parse(cpAttr); } catch(e) {} }
+        } else {
+          var typeMap = { 'empathic':['R'], 'behavioral':['R','D'], 'power':['R','I'], 'social':['R','Int'], 'full':['R','D','Int'] };
+          couplers = typeMap[lk.getAttribute('type') || 'empathic'] || ['R'];
+        }
+        if (from && to) networks.push({ from:from, to:to, strength:strength, couplers:couplers, coupler_params:coupler_params });
       });
     }
 
@@ -2901,6 +3107,7 @@ function _restoreChorusFromXml(xml) {
         var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
         if (!name) return;
         var ag = agents[name] || {};
+        var xmlHanim = ea.getAttribute('hanim_src') || '';
         placedAgents[name] = {
           name: name, position: [px3, 0, pz3],
           color:       ag.color       || agentColor(name),
@@ -2908,7 +3115,7 @@ function _restoreChorusFromXml(xml) {
           regulation:  ag.regulation  || 0.7,
           disposition: ag.disposition || '',
           voice:       voice,
-          hanim_src:   ag.hanim_src   || '',
+          hanim_src:   xmlHanim || ag.hanim_src || '',
           hanim_loa:   ag.hanim_loa   || 4
         };
       });
