@@ -5211,12 +5211,20 @@ def _parse_network_links(scene_xml_raw: str) -> list:
         else:
             link_type = link_el.get('type', 'empathic').lower()
             couplers  = _TYPE_TO_COUPLERS.get(link_type, ['R'])
+        # Parse per-coupler params from JSON attribute if present.
+        # ElementTree strips the outer XML quotes, so json.loads works directly.
+        import json as _json
+        cp_raw = link_el.get('coupler_params', '').strip()
+        try:
+            coupler_params = _json.loads(cp_raw) if cp_raw else {}
+        except (ValueError, TypeError):
+            coupler_params = {}
         links.append({
             'from':           src,
             'to':             tgt,
             'strength':       strength,
             'couplers':       couplers,
-            'coupler_params': {},
+            'coupler_params': coupler_params,
         })
     return links
 
