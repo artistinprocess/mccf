@@ -397,7 +397,7 @@ def avatar_preview():
     <div id="mo-status" class="mo-status"></div>
   </div>
   <script type="module">
-    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
+    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.mjs';
     const canvas  = document.getElementById('canvas');
     const EXPRESSIONS_URL = '__EXPRESSIONS_URL__';
 
@@ -1307,6 +1307,15 @@ def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
         ts.set('cycleInterval', str(cycle))
         ts.set('loop',          loop)
         ts.set('enabled',       'false')
+
+        # EXPORT so the loader can reach this timer via getImportedNode
+        # after the scene's <IMPORT> statement registers it.
+        # Identity export: localDEF and AS are the same bare name.
+        # The agent-suffix (e.g. WalkTimer_Cindy) is applied by the
+        # Scene Composer's IMPORT AS= attribute, not here.
+        ex = _ET_hanim.SubElement(scene_el, f'{{{ns}}}EXPORT')
+        ex.set('localDEF', timer_def)
+        ex.set('AS',       timer_def)
 
         # OrientationInterpolators per joint
         joint_names = set()
