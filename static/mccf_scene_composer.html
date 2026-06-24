@@ -931,10 +931,12 @@ function loadAll(){
         agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
         agents[c.agentname].hanim_src=c.hanim_src||'';
         agents[c.agentname].hanim_loa=c.hanim_loa||4;
+        agents[c.agentname].behavior_clips=c.behavior_clips||[];
         // Refresh placedAgents too — buildAvatarNode reads from placedAgents
         if(placedAgents[c.agentname]){
           placedAgents[c.agentname].hanim_src=c.hanim_src||'';
           placedAgents[c.agentname].hanim_loa=c.hanim_loa||4;
+          placedAgents[c.agentname].behavior_clips=c.behavior_clips||[];
         }
       });
       renderAll();
@@ -961,6 +963,7 @@ function loadAgents(){
       agents[c.agentname].weights=c.weights||agents[c.agentname].weights;
       agents[c.agentname].hanim_src=c.hanim_src||'';
       agents[c.agentname].hanim_loa=c.hanim_loa||4;
+      agents[c.agentname].behavior_clips=c.behavior_clips||[];
     });
     renderAgentRoster();renderPlaced();drawScene();
     toast('Agents loaded: '+Object.keys(agents).length);
@@ -1955,11 +1958,18 @@ function exportX3D(){
     x+='<IndexedLineSet coordIndex="0 1 -1"><Coordinate point="'+a.position[0]+' 1.5 '+a.position[2]+' '+b.position[0]+' 1.5 '+b.position[2]+'"/></IndexedLineSet></Shape>\n';}}x+='\n';}
   if(iI&&Object.keys(paths).length>0){
     Object.values(paths).forEach(function(p){x+=buildInterpNodes(p);});
+  }
+  if(iSc)x+=buildMS();
+  // ROUTEs must follow all DEF nodes — emit unconditionally if sound or paths present
+  var _hasRoutes=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0);
+  if(_hasRoutes){
     x+='\n<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->\n';
-    Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
-    // Session C: SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
+    if(iI&&Object.keys(paths).length>0){
+      Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
+    }
+    // SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
+    // Day 53: emitted even when scene has no paths (was incorrectly gated on paths.length>0)
     if(iS){
-      // Always emit ROUTE for every zone — SoundFader now always present (url check is inside Script)
       Object.values(zones).forEach(function(z){
         var sid=safeId(z.id);
         x+='<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
@@ -1968,7 +1978,6 @@ function exportX3D(){
     }
     x+='\n';
   }
-  if(iSc)x+=buildMS();
   x+='</Scene>\n</X3D>\n';
   dlFile(sn+'.x3d',x,'model/x3d+xml');
   document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Exported: '+sn+'.x3d</div>'+
@@ -2018,53 +2027,77 @@ function buildZX3D(z,iS){
       // Convolver (reverb) wraps the inner chain when an IR url is assigned
       var _cvUrl = snd.convolverUrl || '';
       var _cvNorm = snd.convolverNormalize !== false ? 'true' : 'false';
+      // Correct audio graph (Day 53 Priority 0):
+      //   AudioDestination gain=1.0 (master pass-through)
+      //     Gain DEF="GainNode_<sid>_Ambient" gain=0  ← SoundFader ramps this
+      //       [Convolver if IR assigned]
+      //         [BiquadFilter if filter enabled]
+      //           AudioClip
       if(snd.filter){
-        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
-        if(_cvUrl){ s+='  <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
-        s+='  <BiquadFilter containerField="children" type="lowpass"'
+        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="1.0">\n';
+        s+='  <Gain DEF="GainNode_'+sid+'_Ambient" containerField="children" gain="0">\n';
+        if(_cvUrl){ s+='    <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
+        s+='    <BiquadFilter containerField="children" type="lowpass"'
           +' frequency="'+(snd.filterFreq||900)+'" qualityFactor="'+(snd.filterQ||1.0).toFixed(1)+'">\n';
+        s+='      <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
+          +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
+          +' startTime="-1" stopTime="-2"/>\n';
+        s+='    </BiquadFilter>\n';
+        if(_cvUrl){ s+='    </Convolver>\n'; }
+        s+='  </Gain>\n';
+        s+='</AudioDestination>\n';
+      } else {
+        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="1.0">\n';
+        s+='  <Gain DEF="GainNode_'+sid+'_Ambient" containerField="children" gain="0">\n';
+        if(_cvUrl){ s+='    <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
         s+='    <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
           +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
           +' startTime="-1" stopTime="-2"/>\n';
-        s+='  </BiquadFilter>\n';
-        if(_cvUrl){ s+='  </Convolver>\n'; }
-        s+='</AudioDestination>\n';
-      } else {
-        s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
-        if(_cvUrl){ s+='  <Convolver containerField="children" url=\'"'+xe(_cvUrl)+'"\'  normalize="'+_cvNorm+'">\n'; }
-        s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
-          +' url=\'"'+xe(snd.url)+'"\'  loop="'+(snd.loop!==false?'true':'false')+'" gain="1.0"'
-          +' startTime="-1" stopTime="-2"/>\n';
-        if(_cvUrl){ s+='  </Convolver>\n'; }
+        if(_cvUrl){ s+='    </Convolver>\n'; }
+        s+='  </Gain>\n';
         s+='</AudioDestination>\n';
       }
-      // SoundFader script: ProximitySensor isActive → start/stop clip + fade destination gain
+      // SoundFader script: ProximitySensor isActive → start/stop clip + fade GainNode gain
+      // Day 53: ramps GainNode_<sid>_Ambient (not AudioDestination) via getField SAI.
+      //         masterVolume field clamps ramp ceiling (Priority 1 fix).
       var ambientGain=(snd.gain||0.8).toFixed(2);
       // SoundFader with 300ms gain ramp — always emitted even when no ambient assigned at export
       s+='<Script DEF="SoundFader_'+sid+'" directOutput="true" mustEvaluate="true">\n';
-      s+='  <field name="isActive" type="SFBool" accessType="inputOnly"/>\n';
-      s+='  <field name="playing"  type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <field name="isActive"     type="SFBool"  accessType="inputOnly"/>\n';
+      s+='  <field name="playing"      type="SFBool"  accessType="inputOnly"/>\n';
+      s+='  <field name="masterVolume" type="SFFloat" accessType="inputOnly"/>\n';
       s+='  <![CDATA[ecmascript:\n';
       s+='  var _fadeTimer=null; var _targetGain=0; var _curGain=0;\n';
-      s+='  var _playing=false;\n';
+      s+='  var _playing=false; var _masterVol=1.0;\n';
       s+='  var FADE_MS=300; var STEPS=15;\n';
+      s+='  function _setGainNode(v){\n';
+      s+='    try{\n';
+      s+='      var g=Browser.currentScene.getNamedNode("GainNode_'+sid+'_Ambient");\n';
+      s+='      if(g) g.getField("gain").setValue(v);\n';
+      s+='    }catch(e){}\n';
+      s+='  }\n';
       s+='  function _ramp(from,to){\n';
       s+='    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}\n';
-      s+='    _curGain=from; _targetGain=to;\n';
-      s+='    var step=(to-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
+      s+='    var ceiling=Math.min(to, _masterVol);\n';
+      s+='    _curGain=from; _targetGain=ceiling;\n';
+      s+='    var step=(ceiling-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
       s+='    _fadeTimer=setInterval(function(){\n';
       s+='      _curGain+=step;\n';
       s+='      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);\n';
       s+='      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}\n';
-      s+='      try{var d=Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");if(d)d.gain=_curGain;}catch(e){}\n';
+      s+='      _setGainNode(_curGain);\n';
       s+='    },interval);\n';
+      s+='  }\n';
+      s+='  function masterVolume(val, time) {\n';
+      s+='    _masterVol = val;\n';
+      s+='    if (_curGain > 0) { _setGainNode(Math.min(_curGain, _masterVol)); }\n';
       s+='  }\n';
       s+='  function playing(val, time) {\n';
       s+='    _playing = val;\n';
       s+='    Browser.println("SoundFader_'+sid+': playing=" + val);\n';
       s+='    if (!val) {\n';
       s+='      _ramp(_curGain, 0);\n';
-      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.stopTime = Browser.currentTime + (FADE_MS/1000); } catch(e) {}\n';
+      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.getField("stopTime").setValue(Browser.currentTime + (FADE_MS/1000)); } catch(e) {}\n';
       s+='    }\n';
       s+='  }\n';
       s+='  function isActive(val, time) {\n';
@@ -2072,13 +2105,13 @@ function buildZX3D(z,iS){
       s+='    var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient");\n';
       s+='    if (val) {\n';
       s+='      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {\n';
-      s+='        if(clip){clip.stopTime=-2;clip.startTime=Browser.currentTime;}\n';
+      s+='        try{clip.getField("stopTime").setValue(-2);clip.getField("startTime").setValue(Browser.currentTime);}catch(e){}\n';
       s+='        _ramp(0, '+ambientGain+');\n';
       s+='      }\n';
       s+='      Browser.println("SoundFader_'+sid+': ENTER");\n';
       s+='    } else {\n';
       s+='      _ramp(_curGain, 0);\n';
-      s+='      if(clip) clip.stopTime=Browser.currentTime+(FADE_MS/1000);\n';
+      s+='      try{if(clip)clip.getField("stopTime").setValue(Browser.currentTime+(FADE_MS/1000));}catch(e){}\n';
       s+='      Browser.println("SoundFader_'+sid+': EXIT");\n';
       s+='    }\n';
       s+='  }\n';
@@ -2094,35 +2127,51 @@ function buildZX3D(z,iS){
       s+='</AudioDestination>\n';
     } else {
       // No sound assigned — stub so loader panel can assign at runtime
-      s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="0">\n';
-      s+='  <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
+      // Day 53: AudioDestination gain=1.0, GainNode gain=0 as volume control point
+      s+='<AudioDestination DEF="SoundNode_'+sid+'_Ambient" gain="1.0">\n';
+      s+='  <Gain DEF="GainNode_'+sid+'_Ambient" containerField="children" gain="0">\n';
+      s+='    <AudioClip DEF="Clip_'+sid+'_Ambient" containerField="children"'
         +' url="" loop="true" gain="1.0" startTime="-1" stopTime="-2"/>\n';
+      s+='  </Gain>\n';
       s+='</AudioDestination>\n';
       // SoundFader stub — always present; clip.url check inside script means it silently no-ops if no url assigned
+      // Day 53: ramps GainNode via getField SAI; masterVolume field for ceiling control
       s+='<Script DEF="SoundFader_'+sid+'" directOutput="true" mustEvaluate="true">\n';
-      s+='  <field name="isActive" type="SFBool" accessType="inputOnly"/>\n';
-      s+='  <field name="playing"  type="SFBool" accessType="inputOnly"/>\n';
+      s+='  <field name="isActive"     type="SFBool"  accessType="inputOnly"/>\n';
+      s+='  <field name="playing"      type="SFBool"  accessType="inputOnly"/>\n';
+      s+='  <field name="masterVolume" type="SFFloat" accessType="inputOnly"/>\n';
       s+='  <![CDATA[ecmascript:\n';
       s+='  var _fadeTimer=null; var _targetGain=0; var _curGain=0;\n';
-      s+='  var _playing=false;\n';
+      s+='  var _playing=false; var _masterVol=1.0;\n';
       s+='  var FADE_MS=300; var STEPS=15;\n';
+      s+='  function _setGainNode(v){\n';
+      s+='    try{\n';
+      s+='      var g=Browser.currentScene.getNamedNode("GainNode_'+sid+'_Ambient");\n';
+      s+='      if(g) g.getField("gain").setValue(v);\n';
+      s+='    }catch(e){}\n';
+      s+='  }\n';
       s+='  function _ramp(from,to){\n';
       s+='    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}\n';
-      s+='    _curGain=from; _targetGain=to;\n';
-      s+='    var step=(to-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
+      s+='    var ceiling=Math.min(to, _masterVol);\n';
+      s+='    _curGain=from; _targetGain=ceiling;\n';
+      s+='    var step=(ceiling-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);\n';
       s+='    _fadeTimer=setInterval(function(){\n';
       s+='      _curGain+=step;\n';
       s+='      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);\n';
       s+='      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}\n';
-      s+='      try{var d=Browser.currentScene.getNamedNode("SoundNode_'+sid+'_Ambient");if(d)d.gain=_curGain;}catch(e){}\n';
+      s+='      _setGainNode(_curGain);\n';
       s+='    },interval);\n';
+      s+='  }\n';
+      s+='  function masterVolume(val, time) {\n';
+      s+='    _masterVol = val;\n';
+      s+='    if (_curGain > 0) { _setGainNode(Math.min(_curGain, _masterVol)); }\n';
       s+='  }\n';
       s+='  function playing(val, time) {\n';
       s+='    _playing = val;\n';
       s+='    Browser.println("SoundFader_'+sid+': playing=" + val);\n';
       s+='    if (!val) {\n';
       s+='      _ramp(_curGain, 0);\n';
-      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.stopTime = Browser.currentTime + (FADE_MS/1000); } catch(e) {}\n';
+      s+='      try { var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient"); if (clip) clip.getField("stopTime").setValue(Browser.currentTime + (FADE_MS/1000)); } catch(e) {}\n';
       s+='    }\n';
       s+='  }\n';
       s+='  function isActive(val, time) {\n';
@@ -2130,13 +2179,13 @@ function buildZX3D(z,iS){
       s+='    var clip = Browser.currentScene.getNamedNode("Clip_'+sid+'_Ambient");\n';
       s+='    if (val) {\n';
       s+='      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {\n';
-      s+='        if(clip){clip.stopTime=-2;clip.startTime=Browser.currentTime;}\n';
+      s+='        try{clip.getField("stopTime").setValue(-2);clip.getField("startTime").setValue(Browser.currentTime);}catch(e){}\n';
       s+='        _ramp(0, 0.80);\n';
       s+='      }\n';
       s+='      Browser.println("SoundFader_'+sid+': ENTER");\n';
       s+='    } else {\n';
       s+='      _ramp(_curGain, 0);\n';
-      s+='      if(clip) clip.stopTime=Browser.currentTime+(FADE_MS/1000);\n';
+      s+='      try{if(clip)clip.getField("stopTime").setValue(Browser.currentTime+(FADE_MS/1000));}catch(e){}\n';
       s+='      Browser.println("SoundFader_'+sid+': EXIT");\n';
       s+='    }\n';
       s+='  }\n';
@@ -2170,9 +2219,16 @@ function buildAX3D(a){
     // IMPORT behavior TimeSensors from Inline scope into parent scene.
     // HAnim file must have matching EXPORT statements (added by mccf_api.py upload_avatar).
     // AS = TimerBase_AgentSafeName for multi-agent collision safety.
-    var _bhTimers=['DefaultTimer','PitchTimer','YawTimer','RollTimer',
-                   'WalkTimer','RunTimer','JumpTimer','KickTimer'];
-    _bhTimers.forEach(function(base){
+    // Standard bases always imported; custom clips from cultivar behavior_clips merged in.
+    var _bhTimerSet=['DefaultTimer','PitchTimer','YawTimer','RollTimer',
+                     'WalkTimer','RunTimer','JumpTimer','KickTimer'];
+    // Merge cultivar-specific clip timerDEFs so custom behaviors are importable.
+    // behavior_clips is populated into placedAgents/agents at loadAll/loadAgents time.
+    ((a.behavior_clips)||[]).forEach(function(clip){
+      var td = clip.timerDEF || (clip.name + 'Timer');
+      if(_bhTimerSet.indexOf(td) === -1) _bhTimerSet.push(td);
+    });
+    _bhTimerSet.forEach(function(base){
       s+='  <IMPORT inlineDEF="HAnim_'+sn+'" exportedDEF="'+base+'" AS="'+base+'_'+sn+'"/>\n';
     });
   } else {
@@ -2456,18 +2512,19 @@ function buildX3DString(){
   if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterpNodes(p).trim());});}
   if(iSc)lines.push(buildMS().trim());
   // ROUTEs absolutely last — VRML/X3D requirement since VRML2.0
-  if(iI&&Object.keys(paths).length>0){
+  // Day 53: SoundFader ROUTEs emitted unconditionally (not gated on paths.length>0)
+  var _hasRoutes2=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0);
+  if(_hasRoutes2){
     lines.push('<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->');
-    Object.values(paths).forEach(function(p){lines.push(buildInterpRoutes(p).trim());});
-    // Session C: SoundFader ROUTEs
+    if(iI&&Object.keys(paths).length>0){
+      Object.values(paths).forEach(function(p){lines.push(buildInterpRoutes(p).trim());});
+    }
+    // SoundFader ROUTEs — all zones have SoundFader (url check is inside Script)
     if(iS){
       Object.values(zones).forEach(function(z){
-        var snd=z.sound;
-        if(snd && snd.url){
-          var sid=safeId(z.id);
-          lines.push('<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
-            +' toNode="SoundFader_'+sid+'" toField="isActive"/>');
-        }
+        var sid=safeId(z.id);
+        lines.push('<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
+          +' toNode="SoundFader_'+sid+'" toField="isActive"/>');
       });
     }
   }

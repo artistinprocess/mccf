@@ -2070,7 +2070,17 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
             // Retrieve imported nodes registered by the scene's <IMPORT> statements.
             // AS names follow convention: TimerBase_AgentSafeName (e.g. DefaultTimer_Cindy).
             var timerMapForAgent = {};
-            BEHAVIOR_TIMER_BASES.forEach(function(base) {
+            // Build the full set of timer bases: standard + any custom clips for this agent.
+            // _agentBehaviorClips[sName] is populated by _seedArcRecord before this runs.
+            var _timerBases = BEHAVIOR_TIMER_BASES.slice();
+            var _agentClipCfg = _agentBehaviorClips[sName];
+            if (_agentClipCfg && _agentClipCfg.clips) {
+              _agentClipCfg.clips.forEach(function(clip) {
+                var td = clip.timerDEF || (clip.name + 'Timer');
+                if (_timerBases.indexOf(td) === -1) _timerBases.push(td);
+              });
+            }
+            _timerBases.forEach(function(base) {
               var importedName = base + '_' + sName;
               try {
                 var node = sc.getImportedNode(importedName);
@@ -4073,11 +4083,16 @@ var _spFadeInDuration  = 1.5;
 var _spFadeOutDuration = 2.5;
 
 // Write control values to sound engine.
-// 'masterVolume'    → scale AudioDestination gain for all zone Ambient + Dwell nodes
+// 'masterVolume'    → Day 53: route through MCCFSoundMaster Script which fans to all
+//                    SoundFader_<sid>.masterVolume via getField SAI. SoundFader clamps
+//                    its ramp ceiling to masterVolume on next zone entry and immediately
+//                    re-applies ceiling if currently ramped open.
+//                    AudioDestination.gain is now always 1.0 (pass-through); the inner
+//                    GainNode_<sid>_Ambient is the volume control point.
 // 'fadeInDuration'  → store in _spFadeInDuration (used by SoundFader ramp — future)
 // 'fadeOutDuration' → store in _spFadeOutDuration
 // 'playing'         → send via getField/setValue to SoundFader Script (gate open/close)
-// All other fields  → ignored (SoundFader Script only declares isActive + playing)
+// All other fields  → ignored (SoundFader Script only declares isActive + playing + masterVolume)
 function spSetFader(field, value) {
   try {
     var scene = canvas.browser.currentScene;
@@ -4085,20 +4100,13 @@ function spSetFader(field, value) {
 
     if (field === 'masterVolume') {
       _spMasterVolume = value;
-      // Scale AudioDestination gain for all zones.
-      // SoundFader ramps SoundNode gain 0→0.8 on enter — master scales that ceiling.
-      // Direct gain write here overrides current ramp target; SoundFader will re-ramp
-      // on next zone entry using the updated master.
-      (_spZones || []).forEach(function(z) {
-        try {
-          var ambDest = scene.getNamedNode('SoundNode_' + z.key + '_Ambient');
-          if (ambDest) ambDest.gain = _spMasterVolume;
-        } catch(e) {}
-        try {
-          var dwDest = scene.getNamedNode('SoundNode_' + z.key + '_Dwell');
-          if (dwDest) dwDest.gain = _spMasterVolume * 0.98;  // preserve relative dwell gain
-        } catch(e) {}
-      });
+      // Route through MCCFSoundMaster — single SAI call fans to every SoundFader.
+      // MCCFSoundMaster.masterVolume() calls getField('masterVolume').setValue(v) on
+      // each SoundFader_<sid>, which clamps the active ramp ceiling immediately.
+      try {
+        var sm = scene.getNamedNode('MCCFSoundMaster');
+        if (sm) sm.getField('masterVolume').setValue(value);
+      } catch(e) {}
       return;
     }
 
