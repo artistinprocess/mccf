@@ -203,7 +203,10 @@ def parse_arc_file(filepath: str) -> dict:
 
             wp = ArcWaypoint(
                 stepno    = stepno,
-                wp_id     = wp_el.get("id", f"W{stepno}"),
+                # Prefer the "name" attribute (scene XML waypoint name, e.g. "w2").
+                # "id" in old arc files may be uppercased/mangled (e.g. "WAYPT2", "W2").
+                # Fall back to id if name is absent (legacy arcs).
+                wp_id     = wp_el.get("name") or wp_el.get("id", f"W{stepno}"),
                 cultivar  = cultivar_name,
                 E         = float(wp_el.get("E", 0.5)),
                 B         = float(wp_el.get("B", 0.5)),

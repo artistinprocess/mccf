@@ -19,6 +19,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--mono); font
   height: 100vh; display: grid; grid-template-rows: 44px 1fr;
   grid-template-columns: 270px 1fr 310px;
   grid-template-areas: "hdr hdr hdr" "left map right"; overflow: hidden; }
+/* Full-width tool mode: Characters and Events take the whole content row */
+body.tool-fullscreen {
+  grid-template-columns: 0 1fr 0;
+}
+body.tool-fullscreen #left-panel,
+body.tool-fullscreen #right-panel {
+  display: none;
+}
+body.tool-fullscreen #map-panel {
+  grid-column: 1 / -1;
+}
 header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 16px; gap: 16px; }
 .logo { font-family: var(--display); font-weight: 800; font-size: 19px; color: var(--warm); }
@@ -162,6 +173,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('agents')">Agents</button>
     <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
     <button class="mtab" onclick="setMode('paths')">Paths</button>
+    <button class="mtab" onclick="setMode('characters')">Characters</button>
+    <button class="mtab" onclick="setMode('events')">Events</button>
     <button class="mtab" onclick="setMode('network')">Network</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
     <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
@@ -449,6 +462,20 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
     </div>
   </div>
+  <div id="mode-characters" style="display:none">
+    <div class="sh">Character Creator</div>
+    <div style="font-size:13px;color:var(--dim);line-height:1.7">
+      Build and edit H-Anim figures, assign cultivar definitions, and configure expression slots.
+      Changes here update <code style="color:var(--accent);font-size:12px">hanim_src</code> on each agent.
+    </div>
+  </div>
+  <div id="mode-events" style="display:none">
+    <div class="sh">Events Editor</div>
+    <div style="font-size:13px;color:var(--dim);line-height:1.7">
+      Compose camera cues, lighting changes, fog, background, FX, and behavior triggers
+      anchored to waypoint arrivals. Exports <code style="color:var(--accent);font-size:12px">&lt;EventCues&gt;</code> into scene XML.
+    </div>
+  </div>
   <div id="mode-run" style="display:none">
     <div class="sh">Record Scene Arc</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
@@ -628,6 +655,23 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div class="place-hint" id="place-hint">Click map to place</div>
   <div class="coord-disp" id="coord-disp">x: 0.0  z: 0.0</div>
+  <!-- Full-bleed tool iframes — shown only in characters / events modes -->
+  <div id="tool-iframe-wrap" style="display:none;position:absolute;inset:0;z-index:20;">
+    <iframe id="char-creator-frame" src="/static/mccf_character_creator.html"
+      style="display:none;width:100%;height:100%;border:none;" title="Character Creator"></iframe>
+    <iframe id="events-editor-frame" src="/static/mccf_events_editor_prototype_2.html?v=58"
+      style="display:none;width:100%;height:100%;border:none;" title="Events Editor"></iframe>
+    <!-- Offline placeholder -->
+    <div id="tool-offline" style="display:none;position:absolute;inset:0;flex-direction:column;
+      align-items:center;justify-content:center;gap:14px;background:var(--s2);">
+      <div style="font-size:36px;opacity:0.15">◎</div>
+      <div id="tool-offline-name" style="font-family:var(--display);font-size:15px;font-weight:600;
+        color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;"></div>
+      <div style="font-size:13px;color:var(--dim);text-align:center;line-height:1.9;opacity:0.7">
+        File not yet in static/ — will load here when present
+      </div>
+    </div>
+  </div>
 </div>
 <div class="panel" id="right-panel">
   <div id="detail-zone" style="display:none">
@@ -992,7 +1036,7 @@ function pollField(){
 }
 function setMode(m){
   mode=m;
-  var ms=['scene','zones','agents','waypoints','paths','network','export','run'];
+  var ms=['scene','zones','agents','waypoints','paths','characters','events','network','export','run'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
   if(m==='paths')populatePathUI();
@@ -1001,8 +1045,155 @@ function setMode(m){
   if(m==='run')populateRunUI();
   if(m==='network')populateNetworkUI();
   if(m==='scene'||m==='export')refreshSceneList();
+
+  // Full-bleed tool modes: Characters and Events take over the entire content area
+  var isToolMode = (m==='characters'||m==='events');
+  document.body.classList.toggle('tool-fullscreen', isToolMode);
+  var wrap = document.getElementById('tool-iframe-wrap');
+  var charFrame  = document.getElementById('char-creator-frame');
+  var evFrame    = document.getElementById('events-editor-frame');
+  var offlineDiv = document.getElementById('tool-offline');
+  var offlineName= document.getElementById('tool-offline-name');
+  if(isToolMode){
+    wrap.style.display = 'block';
+    var activeFrame = m==='characters' ? charFrame : evFrame;
+    var inactiveFrame = m==='characters' ? evFrame : charFrame;
+    inactiveFrame.style.display = 'none';
+    offlineDiv.style.display = 'none';
+    activeFrame.style.display = 'block';
+    activeFrame.onload = function(){
+      try{
+        var doc = activeFrame.contentDocument||activeFrame.contentWindow.document;
+        if(doc && doc.body && doc.body.children.length > 0){
+          offlineDiv.style.display = 'none';
+        }
+      }catch(e){ offlineDiv.style.display='none'; } // cross-origin = loaded fine
+      // Push live scene data into Events Editor after it loads
+      if(m==='events') _sendSceneDataToEventsEditor();
+    };
+    activeFrame.onerror = function(){
+      activeFrame.style.display = 'none';
+      offlineName.textContent = m==='characters' ? 'Character Creator' : 'Events Editor';
+      offlineDiv.style.display = 'flex';
+    };
+    // If already loaded (tab revisited), send immediately
+    if(m==='events') _sendSceneDataToEventsEditor();
+  } else {
+    wrap.style.display = 'none';
+    charFrame.style.display = 'none';
+    evFrame.style.display = 'none';
+  }
   drawScene();
 }
+// ── Events Editor postMessage bridge ──────────────────────────────────────────
+
+function _eventsFrame() {
+  return document.getElementById('events-editor-frame');
+}
+
+function _buildSceneData() {
+  var wpsOrdered = [];
+  var firstPath = Object.values(paths)[0];
+  if (firstPath && firstPath.waypoints) {
+    firstPath.waypoints.forEach(function(n) {
+      var wp = waypoints[n];
+      if (wp) wpsOrdered.push({ name: wp.name, t: wpsOrdered.length * 8 });
+    });
+  } else {
+    Object.values(waypoints).forEach(function(wp, i) {
+      wpsOrdered.push({ name: wp.name, t: i * 8 });
+    });
+  }
+  function safeId(n) { return n.replace(/[^a-zA-Z0-9_]/g,'_'); }
+  var views = ['VP_Overview','VP_Origin'];
+  Object.keys(placedAgents).forEach(function(n) {
+    views.push('VP_'+safeId(n)+'_Eye');
+    views.push('VP_'+safeId(n)+'_Side');
+  });
+  var baseClips = (typeof BEHAVIOR_TIMER_BASES !== 'undefined') ? BEHAVIOR_TIMER_BASES : ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
+  var extraClips = [];
+  Object.values(placedAgents).forEach(function(a) {
+    (a.behavior_clips || []).forEach(function(c) {
+      if (c.timerDEF && extraClips.indexOf(c.timerDEF) === -1) extraClips.push(c.timerDEF);
+    });
+  });
+  var allClips = baseClips.concat(extraClips.filter(function(c) { return baseClips.indexOf(c) === -1; }));
+  var triggers = ['manual'];
+  wpsOrdered.forEach(function(wp) { triggers.push(wp.name + ' arrive'); });
+  triggers.push('field E>0.6', 'field E<0.3');
+  // X3D scene URL — use last known path from sendToLauncher, else guess x3d/ subdir
+  var sceneName = (typeof sceneConfig !== 'undefined' && sceneConfig.name) ? sceneConfig.name : 'mccf_scene';
+  var x3dUrl = _lastX3dUrl || '/static/x3d/' + sceneName + '.x3d';
+
+  return {
+    agents:   Object.keys(placedAgents),
+    wps:      wpsOrdered,
+    views:    views,
+    clips:    allClips,
+    triggers: triggers,
+    sceneEnd: Math.max(wpsOrdered.length * 8 + 8, 24),
+    x3dUrl:   x3dUrl
+  };
+}
+
+function _sendSceneDataToEventsEditor() {
+  // Don't send until scene XML has restored — sceneConfig.name is still the
+  // default 'garden_001' placeholder until _restoreChorusFromXml completes.
+  if (!window._sceneXmlLoaded) return;
+  var frame = _eventsFrame();
+  if (!frame || !frame.contentWindow) return;
+  try { frame.contentWindow.postMessage({ type: 'mccf_scene_data', data: _buildSceneData() }, '*'); }
+  catch(e) { console.warn('[events bridge] send failed:', e); }
+}
+
+function _sendCuesToEventsEditor(tracksJson) {
+  var frame = _eventsFrame();
+  if (!frame || !frame.contentWindow) return;
+  try { frame.contentWindow.postMessage({ type: 'mccf_load_cues', tracks: tracksJson }, '*'); }
+  catch(e) { console.warn('[events bridge] load cues failed:', e); }
+}
+
+var _pendingCueExport = null;
+window.addEventListener('message', function(evt) {
+  if (!evt.data) return;
+  // Events Editor finished loading and registered its listener — send scene data now
+  if (evt.data.type === 'mccf_ready') {
+    _sendSceneDataToEventsEditor();
+    return;
+  }
+  // Events Editor sending cues + requesting export in one shot — no request/response race.
+  // This is the primary export path from "Export cues ↗" button.
+  if (evt.data.type === 'mccf_save_cues') {
+    var tracks = evt.data.tracks || [];
+    console.log('[Composer] mccf_save_cues received — tracks:', tracks.length, 'cues:', tracks.reduce(function(n,t){return n+(t.cues||[]).length;},0));
+    _sendToLauncherWithTracks(tracks, true);
+    return;
+  }
+  // Fallback: Events Editor requesting a silent X3D re-export (legacy path)
+  if (evt.data.type === 'mccf_export_x3d') {
+    sendToLauncher(true);
+    return;
+  }
+  if (evt.data.type !== 'mccf_cue_data') return;
+  if (typeof _pendingCueExport === 'function') {
+    var cb = _pendingCueExport;
+    _pendingCueExport = null;
+    cb(evt.data.tracks || []);
+  }
+});
+
+function _requestCuesAndExport(callback) {
+  var frame = _eventsFrame();
+  if (!frame || !frame.contentWindow) { callback([]); return; }
+  _pendingCueExport = callback;
+  try { frame.contentWindow.postMessage({ type: 'mccf_request_cues' }, '*'); }
+  catch(e) { _pendingCueExport = null; callback([]); }
+  setTimeout(function() {
+    if (_pendingCueExport) { _pendingCueExport = null; callback([]); }
+  }, 500);
+}
+
+
 function setTool(t){
   tool=t;
   document.querySelectorAll('.tool-btn').forEach(function(b){b.classList.remove('active');});
@@ -1426,7 +1617,13 @@ function saveHanimSrc(){
   sel.style.display='none';
   var sav=document.getElementById('ad-hanim-save');
   if(sav)sav.style.display='none';
-  toast('Avatar swapped for '+name+' — re-export scene to apply');
+  toast('Avatar assigned for '+name+' — saving scene XML…');
+  // Auto-save so the hanim_src survives tab switches and scene reloads.
+  // Use _requestCuesAndExport to preserve any event cues already in the editor.
+  _requestCuesAndExport(function(_eventTracks){
+    _doExportSceneXML(_eventTracks);
+    toast('Avatar assignment saved for '+name);
+  });
 }
 function showWD(name){
   var wp=waypoints[name];if(!wp)return;
@@ -1941,10 +2138,10 @@ function exportX3D(){
   }
   x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>\n';
   x+='<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>\n\n';
-  x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>\n';
-  x+='<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0"/>\n';
+  x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8" jump="true"/>\n';
+  x+='<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0" jump="true"/>\n';
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
-    x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>\n';});
+    x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>\n';});
   x+='\n<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>\n';
   x+=buildGrid(w,d)+'\n';
   Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS);});
@@ -2243,8 +2440,8 @@ function buildAX3D(a){
   s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
   // Avatar viewpoints — parented inside Transform so they ride with the figure
-  s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159"/>\n';
-  s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708"/>\n';
+  s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159" jump="true"/>\n';
+  s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708" jump="true"/>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterpNodes(path){
@@ -2438,6 +2635,18 @@ function buildGrid(w,d){
   return '<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance>'+
     '<IndexedLineSet coordIndex="'+idx.join(' ')+'"><Coordinate point="'+pts.join(' ')+'"/></IndexedLineSet></Shape>\n';
 }
+var _lastX3dUrl = null; // set by sendToLauncher, used by Events Editor viewport
+
+// Direct-tracks export: bypasses mccf_request_cues round-trip.
+// Called from mccf_save_cues handler so EventCues are never lost to a timeout race.
+function _sendToLauncherWithTracks(eventTracks, silent) {
+  console.log('[Composer] _sendToLauncherWithTracks: saving scene XML then uploading X3D');
+  // 1. Save scene XML with the provided tracks (no request/response needed)
+  _doExportSceneXML(eventTracks);
+  // 2. Upload X3D to launcher (same as sendToLauncher)
+  setTimeout(function() { sendToLauncher(silent); }, 200);
+}
+
 function sendToLauncher(silent){
   var btn=document.getElementById('send-btn');
   if(!silent){btn.textContent='Sending...';btn.disabled=true;}
@@ -2447,9 +2656,19 @@ function sendToLauncher(silent){
     .then(function(r){return r.json();})
     .then(function(res){
       if(res.status==='ok'){
+        // Store the actual server path for Events Editor viewport
+        if(res.output) _lastX3dUrl = '/static/' + res.output.replace(/^.*static[\/]/,'');
         if(!silent){
           document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Select <b>'+res.filename+'</b> in loader, then reload.</div>';
           toast('Sent: '+res.filename+'. Select in loader.');
+        }
+        // If Events Editor is open, notify it of the new URL
+        if(_lastX3dUrl) {
+          var evFrame = document.getElementById('events-editor-frame');
+          if(evFrame && evFrame.contentWindow) {
+            try { evFrame.contentWindow.postMessage({ type: 'mccf_x3d_ready', url: _lastX3dUrl }, '*'); }
+            catch(e){}
+          }
         }
       } else { toast('Error: '+(res.error||'unknown'),true); }
     })
@@ -2502,9 +2721,9 @@ function buildX3DString(){
     lines.push('</AudioDestination>');
   }
   lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
-  lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8"/>');
+  lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.7)+' '+cz+'" orientation="1 0 0 -0.8" jump="true"/>');
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
-    lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0"/>');});
+    lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>');});
   lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
   lines.push(buildGrid(w,d).trim());
   Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
@@ -2739,6 +2958,13 @@ function deleteNetLink(i) {
 }
 
 function exportSceneXML(){
+  // Request current cues from Events Editor, then build XML
+  _requestCuesAndExport(function(_eventTracks) {
+    _doExportSceneXML(_eventTracks);
+  });
+}
+
+function _doExportSceneXML(_eventTracks){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
   x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
@@ -2847,6 +3073,23 @@ function exportSceneXML(){
       x += line;
     });
     x += '</Network>\n';
+  }
+  // ── EventCues block from Events Editor ──────────────────────────────────
+  if (_eventTracks && _eventTracks.length) {
+    x += '<EventCues>\n';
+    _eventTracks.forEach(function(track) {
+      (track.cues || []).forEach(function(cue) {
+        x += '  <Cue track="'+xe(track.type)+'" trackLabel="'+xe(track.label)+'" label="'+xe(cue.label)+
+             '" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+xe(cue.trigger||'manual')+'"';
+        if (cue.viewpoint) x += ' viewpoint="'+xe(cue.viewpoint)+'"';
+        if (track.type === 'camera') x += ' jump="'+(cue.jump === false ? 'false' : 'true')+'"';
+        if (cue.blend)     x += ' blend="'+xe(cue.blend)+'"';
+        if (cue.node)      x += ' node="'+xe(cue.node)+'" intensity="'+(cue.intensity||0.8).toFixed(2)+'"';
+        if (cue.agent)     x += ' agent="'+xe(cue.agent)+'" clip="'+xe(cue.clip||'')+'"';
+        x += '/>' + '\n';
+      });
+    });
+    x += '</EventCues>\n';
   }
   x+='</Scene>\n';
   var filename=sn+'_scene.xml';
@@ -3178,10 +3421,47 @@ function _restoreChorusFromXml(xml) {
       });
     }
 
+    // ── 8. Restore EventCues → send to Events Editor iframe ─────────────
+    var evCuesEl = doc.querySelector('EventCues');
+    if (evCuesEl) {
+      // Rebuild _tracks structure from XML preserving named tracks via trackLabel attr.
+      // Each <Cue trackLabel="Camera"> groups into a named track; cues without trackLabel
+      // fall back to a single track per type (legacy XML compat).
+      var trackOrder = [];   // insertion-ordered track keys
+      var trackMap   = {};   // key → {type, label, cues[]}
+      evCuesEl.querySelectorAll('Cue').forEach(function(cEl) {
+        var trackType  = cEl.getAttribute('track')      || 'camera';
+        var trackLabel = cEl.getAttribute('trackLabel') || (trackType.charAt(0).toUpperCase()+trackType.slice(1));
+        var key        = trackType + '::' + trackLabel;  // unique per named track
+        if (!trackMap[key]) {
+          trackMap[key] = { type: trackType, label: trackLabel, cues: [] };
+          trackOrder.push(key);
+        }
+        var cue = {
+          label:     cEl.getAttribute('label')     || 'cue',
+          t:         parseFloat(cEl.getAttribute('t')   || '0'),
+          dur:       parseFloat(cEl.getAttribute('dur') || '4'),
+          trigger:   cEl.getAttribute('trigger')   || 'manual',
+          viewpoint: cEl.getAttribute('viewpoint') || undefined,
+          blend:     cEl.getAttribute('blend')     || undefined,
+          node:      cEl.getAttribute('node')      || undefined,
+          intensity: cEl.getAttribute('intensity') ? parseFloat(cEl.getAttribute('intensity')) : undefined,
+          agent:     cEl.getAttribute('agent')     || undefined,
+          clip:      cEl.getAttribute('clip')      || undefined
+        };
+        Object.keys(cue).forEach(function(k){ if(cue[k]===undefined) delete cue[k]; });
+        trackMap[key].cues.push(cue);
+      });
+      var restoredTracks = trackOrder.map(function(k){ return trackMap[k]; });
+      if (restoredTracks.length) _sendCuesToEventsEditor(restoredTracks);
+    }
+
     computeScale();
     renderAll();
     updateSummary();
     window._sceneXmlLoaded = true;  // Day 47: block loadAll from overwriting XML-restored state
+    // Now that sceneConfig.name is correct, send live scene data to Events Editor if open.
+    _sendSceneDataToEventsEditor();
     console.log('[restore] zones:', Object.keys(zones).length,
                 'waypoints:', Object.keys(waypoints).length,
                 'paths:', Object.keys(paths).length,
