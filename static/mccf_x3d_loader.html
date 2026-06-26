@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>MCCF X3D Scene</title>
-<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.6/dist/x_ite.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
 <style>
 body { margin: 0; background: #0a0a0f; font-family: monospace; }
 x3d-canvas { width: 100vw; height: 88vh; display: block; }
@@ -434,6 +434,7 @@ canvas.addEventListener('load', () => {
   startPolling();
   spInit();
   _resumeAudioContext();
+  // Manual EventCues fire after _parseSceneZoneData completes (see fireManualCues call there)
   try {
     const arcChannel = new BroadcastChannel('mccf_arc');
     arcChannel.onmessage = (e) => {
@@ -1023,6 +1024,17 @@ window.addEventListener('mccf_x3d_projection', (e) => { if (e.detail) applyHotHo
 window.addEventListener('message', (e) => {
   if (e.data?.type === 'mccf_projection') applyHotHouseData(e.data.data);
   if (e.data?.type === 'mccf_arc_cv')     applyArcCV(e.data.data);
+
+  // Composer finished a cue export + X3D regeneration — re-parse scene XML so
+  // updated EventCues are live without requiring a manual X3D reload in the Loader.
+  if (e.data?.type === 'mccf_x3d_ready') {
+    console.log('[Loader] mccf_x3d_ready received — re-parsing scene XML for updated EventCues');
+    _eventCues = [];                          // clear stale cues
+    window._manualCuesFiredFor = null;        // reset one-shot guard so manual cues re-fire
+    setTimeout(function() {
+      _parseSceneZoneData();                  // re-fetches _scene.xml, re-parses, re-fires manual cues
+    }, 300);
+  }
 });
 
 // --- applyArcCV — confirmed working path for SAI writes ---
@@ -1123,6 +1135,7 @@ var _agentWalkStartTime  = {};   // {safeName: Date.now()} — wall ms when Walk
 var _agentArrivalTimeout = {};   // {safeName: timeoutId} — pending DefaultTimer switch at segment end
 var _agentWaypointCache  = {};   // {safeName: {stepNo: {pos_x,pos_z}}} — built from pbUpdateDisplay
 var _agentSegZoneMap     = {};   // {safeName: {segNo: zoneId}} — built from scene XML at play-start
+var _eventCues           = [];   // [{track,label,t,dur,trigger,viewpoint,blend,node,intensity,agent,clip}] — from EventCues in scene XML
 
 // Known behavior TimeSensor base DEF names in JinLOA4Animated.x3d
 var BEHAVIOR_TIMER_BASES = [
@@ -1795,6 +1808,173 @@ function _buildPivotCacheFromSceneXml(doc) {
     }
   });
 }
+
+// ─────────────────────────────────────────────
+// EventCues — read from scene XML, fire SAI at WP arrivals
+// ─────────────────────────────────────────────
+
+function _parseEventCues(doc) {
+  // Read <EventCues><Cue .../></EventCues> from scene XML doc.
+  // Called from _parseSceneZoneData after _buildPivotCacheFromSceneXml.
+  var cues = [];
+  doc.querySelectorAll('EventCues > Cue').forEach(function(el) {
+    cues.push({
+      track:     el.getAttribute('track')     || 'camera',
+      label:     el.getAttribute('label')     || '',
+      t:         parseFloat(el.getAttribute('t')   || '0'),
+      dur:       parseFloat(el.getAttribute('dur')  || '4'),
+      trigger:   el.getAttribute('trigger')   || 'manual',
+      viewpoint: el.getAttribute('viewpoint') || null,
+      jump:      el.getAttribute('jump') === 'false' ? false : true,
+      blend:     el.getAttribute('blend')     || 'cut',
+      node:      el.getAttribute('node')      || null,
+      intensity: el.getAttribute('intensity') ? parseFloat(el.getAttribute('intensity')) : null,
+      agent:     el.getAttribute('agent')     || null,
+      clip:      el.getAttribute('clip')      || null,
+    });
+  });
+  _eventCues = cues;
+  console.log('[EventCues] loaded:', _eventCues.length, _eventCues.map(function(c){ return c.track + ':' + c.trigger; }).join(', '));
+}
+
+// _resolveWpTriggerNames — given a server current_waypoint object, return all
+// candidate trigger name strings to try.
+// Problem: server WP id (e.g. "Waypt2", "W2", "WAYPT2") often does not match
+// the scene XML waypoint name (e.g. "w2") that EventCues triggers are authored against.
+// Solution: fire triggers for the server id AND every name in _wpXmlNamesList.
+// fireEventCuesForTrigger is a no-op if no cue matches — firing all is safe.
+// This is robust across any number of waypoints and any naming scheme.
+function _resolveWpTriggerNames(stepWp) {
+  var seen = {};
+  var candidates = [];
+  function add(n) {
+    if (n && !seen[n]) { seen[n] = true; candidates.push(n); }
+  }
+  // Server-provided id variants
+  add(stepWp.name);
+  add(stepWp.id);
+  add(stepWp.label);
+  // All scene XML waypoint names — one of them is guaranteed to match the cue
+  _wpXmlNamesList.forEach(function(n) { add(n); });
+  return candidates;
+}
+
+function fireEventCuesForTrigger(triggerName) {
+  if (!triggerName || !_eventCues.length) return;
+  var tLower = triggerName.toLowerCase();
+  _eventCues.forEach(function(cue) {
+    if ((cue.trigger || '').toLowerCase() !== tLower) return;
+    console.log('[EventCues] firing:', cue.track, '"' + cue.label + '"', 'trigger:', triggerName);
+    switch (cue.track) {
+      case 'camera':   _fireCameraEventCue(cue);   break;
+      case 'light':    _fireLightEventCue(cue);    break;
+      case 'fog':      _fireFogEventCue(cue);      break;
+      case 'bg':       _fireBgEventCue(cue);       break;
+      case 'behavior': _fireBehaviorEventCue(cue); break;
+      default: console.warn('[EventCues] unknown track:', cue.track);
+    }
+  });
+}
+
+function fireManualCues() {
+  // One-shot per scene: guard against multiple _parseSceneZoneData completions
+  // (e.g. from double canvas 'load' events or pbPlay pre-check calls).
+  var xSel = document.getElementById('x3d-file');
+  var sceneKey = xSel ? xSel.value : '__scene__';
+  if (window._manualCuesFiredFor === sceneKey) return;
+  window._manualCuesFiredFor = sceneKey;
+  // Fire all cues with trigger="manual" — called after scene XML parses.
+  fireEventCuesForTrigger('manual');
+}
+
+function _fireCameraEventCue(cue) {
+  if (!cue.viewpoint) return;
+  var attempts = 0;
+  function tryBind() {
+    attempts++;
+    try {
+      var scene = canvas.browser.currentScene;
+      var vpNode = scene.getNamedNode(cue.viewpoint);
+      if (vpNode) {
+        // set_bind is the write eventIn (confirmed working — same as gotoVP manual buttons).
+        // isBound is read-only status. jump=true → cut, false → fly-through.
+        // vpNode.jump direct assignment is silently ignored in X_ITE SAI.
+        // Use getField().setValue() which is the correct SAI exposed-field write path.
+        var wantJump = (cue.jump !== false);
+        try {
+          var jumpField = vpNode.getField('jump');
+          if (jumpField) jumpField.setValue(wantJump);
+          else vpNode.jump = wantJump;
+        } catch(je) { try { vpNode.jump = wantJump; } catch(je2) {} }
+        vpNode.set_bind = true;
+        console.log('[EventCues] camera: set_bind', cue.viewpoint,
+          'jump=' + wantJump,
+          attempts > 1 ? '(attempt ' + attempts + ')' : '');
+        return;
+      }
+    } catch(e) {}
+    if (attempts < 10) {
+      setTimeout(tryBind, 200);
+    } else {
+      console.warn('[EventCues] camera: viewpoint not found after retries:', cue.viewpoint);
+    }
+  }
+  tryBind();
+}
+
+function _fireLightEventCue(cue) {
+  if (!cue.node) return;
+  try {
+    var scene = canvas.browser.currentScene;
+    var ltNode = scene.getNamedNode(cue.node);
+    if (ltNode && cue.intensity !== null) {
+      ltNode.intensity = cue.intensity;
+      console.log('[EventCues] light:', cue.node, 'intensity →', cue.intensity);
+    } else if (!ltNode) {
+      console.warn('[EventCues] light: node not found:', cue.node);
+    }
+  } catch(e) { console.warn('[EventCues] light failed:', cue.node, e); }
+}
+
+function _fireFogEventCue(cue) {
+  // Convention: DEF="SceneFog" on the Fog node.
+  // cue.label may encode visibilityRange as a number string for now.
+  try {
+    var scene = canvas.browser.currentScene;
+    var fogNode = scene.getNamedNode('SceneFog');
+    if (fogNode) {
+      var range = parseFloat(cue.label);
+      if (!isNaN(range)) fogNode.visibilityRange = range;
+      console.log('[EventCues] fog: visibilityRange →', isNaN(range) ? '(no change)' : range);
+    } else {
+      console.warn('[EventCues] fog: SceneFog node not found');
+    }
+  } catch(e) { console.warn('[EventCues] fog failed:', e); }
+}
+
+function _fireBgEventCue(cue) {
+  // Convention: DEF="SceneBG" on the Background node.
+  // TODO: parse skyColor from cue.label when format is defined.
+  try {
+    var scene = canvas.browser.currentScene;
+    var bgNode = scene.getNamedNode('SceneBG');
+    if (bgNode) {
+      console.log('[EventCues] bg: SceneBG found — skyColor encoding TBD, label:', cue.label);
+    } else {
+      console.warn('[EventCues] bg: SceneBG node not found');
+    }
+  } catch(e) { console.warn('[EventCues] bg failed:', e); }
+}
+
+function _fireBehaviorEventCue(cue) {
+  if (!cue.agent || !cue.clip) return;
+  try {
+    switchBehaviorTimer(cue.agent, cue.clip);
+    console.log('[EventCues] behavior: agent', cue.agent, 'clip →', cue.clip);
+  } catch(e) { console.warn('[EventCues] behavior failed:', cue.agent, cue.clip, e); }
+}
+
+// TODO Day 56+: poll /field, compare EBPS values, fire threshold cues (trigger="field E>0.6" etc.)
 
 // _pivotAgentToSegment — rotate avatar to face direction of travel
 // ─────────────────────────────────────────────
@@ -2784,6 +2964,15 @@ async function pbStepSession(sessionId) {
       _fireZoneCommand(_stepCultivar, _stepZone, 'OnEnter', _stepWp.stepno || 0);
       _agentZone[_stepCultivar] = _stepZone;
     }
+    // Fire EventCues whose trigger matches this WP arrival
+    var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
+    console.log('[EventCues] WP arrival trigger: "' + _wpArrId + ' arrive"', '— cues loaded:', _eventCues.length, '— stepWp:', JSON.stringify({name:_stepWp.name,id:_stepWp.id,label:_stepWp.label}));
+    console.log('[EventCues] WP arrival trigger (pbStep): "' + _wpArrId + ' arrive"', '— cues:', _eventCues.length);
+    if (_wpArrId) {
+      var _arrCandidates = _resolveWpTriggerNames(_stepWp);
+      console.log('[EventCues] firing trigger candidates:', JSON.stringify(_arrCandidates.map(function(n){ return n + ' arrive'; })));
+      _arrCandidates.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
+    }
     _fireCouplerTick();
   } catch(e) { console.warn('pbStepSession error:', e); }
   finally { _pbStepInFlight[flagKey] = false; }
@@ -2909,6 +3098,7 @@ var _cultivarActors = {};
 // Cache waypoint name → zone id: {wp_name: zone_id}
 var _waypointZoneMap = {};
 var _waypointPosMap  = {};   // {wpName: {pos_x, pos_z}} — from scene XML, for pivot lookups
+var _wpXmlNamesList  = [];   // ordered list of waypoint XML names ["w1","w2","w3"] — for server id→xmlName resolution
 // Track which zones each cultivar currently occupies: {cultivar: zone_id|null}
 var _agentZone = {};
 // Zone command serial queue — prevents simultaneous Ollama calls timing out.
@@ -2980,11 +3170,13 @@ function _parseSceneZoneData() {
         // Also cache waypoint positions for pivot calculation (keyed by name)
         var _newWaypointZoneMap = {};
         var _newWaypointPosMap  = {};
+        var _newWpXmlNamesList  = [];
         doc.querySelectorAll('Waypoint').forEach(function(el) {
           var name = el.getAttribute('name');
           var zone = el.getAttribute('zone');
           var px   = el.getAttribute('pos_x');
           var pz   = el.getAttribute('pos_z');
+          if (name) _newWpXmlNamesList.push(name);
           if (name && zone) _newWaypointZoneMap[name] = zone;
           if (name && px !== null && pz !== null) {
             var _pos = { pos_x: parseFloat(px), pos_z: parseFloat(pz) };
@@ -2992,15 +3184,23 @@ function _parseSceneZoneData() {
             _newWaypointPosMap[name]               = _pos;
           }
         });
+        if (_newWpXmlNamesList.length > 0) _wpXmlNamesList = _newWpXmlNamesList;
         if (Object.keys(_newWaypointZoneMap).length > 0) _waypointZoneMap = _newWaypointZoneMap;
         if (Object.keys(_newWaypointPosMap).length > 0)  _waypointPosMap  = _newWaypointPosMap;
 
         // Build complete ordered pivot cache from path sequences
         _buildPivotCacheFromSceneXml(doc);
 
+        // Parse EventCues for Loader SAI execution
+        _parseEventCues(doc);
+
         console.log('Zone commands parsed:', Object.keys(_zoneCommands),
                     'Actors:', _cultivarActors,
                     'WaypointZones:', _waypointZoneMap);
+
+        // Fire manual-trigger cues now that SAI scene is loaded and EventCues are parsed.
+        // Small delay ensures X_ITE SAI is fully settled after the scene load event.
+        setTimeout(fireManualCues, 200);
       } catch(e) { console.warn('_parseSceneZoneData parse error:', e); }
     })
     .catch(function(e) { console.warn('_parseSceneZoneData fetch error:', e); });
@@ -3194,6 +3394,12 @@ async function pbStep() {
       if (_prevZone) _fireZoneCommand(_stepCultivar, _prevZone, 'OnExit', _stepWp.stepno||0);
       _fireZoneCommand(_stepCultivar, _stepZone, 'OnEnter', _stepWp.stepno||0);
       _agentZone[_stepCultivar] = _stepZone;
+    }
+    // Fire EventCues whose trigger matches this WP arrival
+    var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
+    if (_wpArrId) {
+      var _arrCandidates2 = _resolveWpTriggerNames(_stepWp);
+      _arrCandidates2.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
     }
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
   } catch(e) {}
@@ -3722,6 +3928,9 @@ function x3dFileChanged() {
   _agentWaypointCache = {};
   _agentSegZoneMap    = {};
   _waypointZoneMap    = {};
+  _wpXmlNamesList     = [];   // reset on scene switch; repopulated by _parseSceneZoneData
+  _eventCues          = [];   // cleared on scene switch; repopulated by _parseSceneZoneData
+  window._manualCuesFiredFor = null;  // reset one-shot guard for new scene
   // Notify server so ChorusManager can load config from matching scene XML.
   var sceneName = fname.replace(/\.x3d$/i, '');
   fetch(API + '/chorus/load', {

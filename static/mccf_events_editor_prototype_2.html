@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Events Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  background: #0a0c10;
+  color: #c8d0e0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+:root {
+  --bg:      #0a0c10;
+  --surface: #111318;
+  --surface2:#181c24;
+  --border:  #252a36;
+  --accent:  #4af0a8;
+  --accent2: #f06060;
+  --accent3: #60a8f0;
+  --accent4: #f0c060;
+  --muted:   #4a5568;
+  --text:    #c8d0e0;
+  --dim:     #6a7890;
+  --warm:    #f0c060;
+  --cool:    #60a8f0;
+  --purple:  #a880f0;
+  --radius:  4px;
+  --tl-height: 260px;    /* timeline panel height */
+  --stage-w:   200px;    /* left stage panel width */
+  --insp-w:    240px;    /* right inspector width */
+}
+
+/* ── Header ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent4);
+}
+.logo span { color: var(--dim); font-weight: 400; }
+
+/* Tab row */
+.tab-row {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 2px;
+  flex-shrink: 0;
+  height: 32px;
+  z-index: 10;
+}
+.tab {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent4); border-bottom-color: var(--accent4); }
+
+/* ── VIEWPORT ROW: stage | x3d viewport | inspector ── */
+.viewport-row {
+  display: grid;
+  grid-template-columns: var(--stage-w) 1fr var(--insp-w);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-bottom: 2px solid var(--border);
+}
+
+/* Stage panel (top-left) */
+.stage-panel {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+.stage-tabs {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.stage-tab {
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  font-size: 10px;
+  color: var(--dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  letter-spacing: 0.05em;
+}
+.stage-tab:hover { color: var(--text); }
+.stage-tab.active { color: var(--accent3); border-bottom-color: var(--accent3); }
+.stage-canvas-wrap {
+  flex: 1;
+  position: relative;
+  background: #080b12;
+  overflow: hidden;
+}
+#stage-canvas { width: 100%; height: 100%; display: block; }
+.stage-footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 5px 8px;
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.stage-add-btn {
+  flex: 1;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  text-align: center;
+}
+.stage-add-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+
+/* X3D Viewport (top-center) */
+.x3d-viewport {
+  position: relative;
+  background: #040608;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.x3d-topbar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 28px;
+  background: rgba(10,12,16,0.75);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  z-index: 5;
+  backdrop-filter: blur(4px);
+}
+.x3d-label {
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.x3d-cam-select {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  background: rgba(24,28,36,0.8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--accent3);
+  padding: 2px 6px;
+  outline: none;
+}
+.x3d-cam-select:focus { border-color: var(--accent3); }
+.x3d-status {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+.x3d-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #040608;
+}
+x3d-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: none;
+}
+.x3d-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.x3d-placeholder-icon {
+  font-size: 40px;
+  opacity: 0.18;
+}
+.x3d-placeholder-text {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-align: center;
+  line-height: 1.8;
+  opacity: 0.7;
+}
+/* Blender-style corner overlays */
+.x3d-corner {
+  position: absolute;
+  font-size: 9px;
+  color: rgba(200,208,224,0.3);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  z-index: 4;
+}
+.x3d-corner.tl { top: 36px; left: 8px; }
+.x3d-corner.tr { top: 36px; right: 8px; text-align: right; }
+.x3d-corner.bl { bottom: 8px; left: 8px; }
+.x3d-corner.br { bottom: 8px; right: 8px; text-align: right; }
+
+/* Playhead T indicator floating on viewport */
+.vp-playhead-badge {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10,12,16,0.8);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 14px;
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  z-index: 6;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+/* Inspector panel (top-right) */
+.insp-panel {
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+.insp-head {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 7px 10px;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.insp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.insp-body::-webkit-scrollbar { width: 3px; }
+.insp-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+.insp-cue-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.insp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.insp-field { margin-bottom: 9px; }
+.insp-label {
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.insp-select, .insp-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+}
+.insp-select:focus, .insp-input:focus { border-color: var(--accent); }
+.insp-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 9px; }
+.insp-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.insp-btn {
+  width: 100%;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  padding: 6px 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+.insp-btn-del  { background: transparent; border: 1px solid var(--accent2); color: var(--accent2); }
+.insp-btn-del:hover  { background: rgba(240,96,96,0.1); }
+.insp-btn-exp  { background: var(--purple); border: 1px solid var(--purple); color: #fff; }
+.insp-btn-exp:hover  { opacity: 0.85; }
+.empty-insp {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+/* ── TIMELINE DOCK (bottom) ── */
+.tl-dock {
+  height: var(--tl-height);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  border-top: 2px solid var(--border);
+}
+
+/* Timeline toolbar inside dock */
+.tl-toolbar {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.tb-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.tb-btn:hover { border-color: var(--muted); }
+.tb-btn.accent { border-color: var(--accent); color: var(--accent); }
+.tb-btn.accent:hover { background: rgba(74,240,168,0.1); }
+.tb-btn.purple { border-color: var(--purple); color: var(--purple); }
+.tb-btn.purple:hover { background: rgba(168,128,240,0.1); }
+.tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
+.tb-time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+  min-width: 60px;
+  text-align: center;
+}
+.tb-zoom {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.zoom-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  width: 20px; height: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zoom-btn:hover { border-color: var(--muted); }
+
+/* Timeline track area */
+.tl-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Track label gutter (fixed left side of timeline) */
+.tl-labels {
+  width: 90px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tl-label-head {
+  height: 26px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.tl-label-rows {
+  flex: 1;
+  overflow-y: hidden; /* synced via JS scroll event */
+  min-height: 0;
+}
+.tl-track-label {
+  height: 34px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 8px;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  overflow: hidden;
+}
+.tl-track-label:hover { background: rgba(255,255,255,0.03); }
+.track-icon { font-size: 12px; flex-shrink: 0; }
+.track-label-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.track-clear-btn {
+  font-size: 13px; line-height: 1; color: var(--muted); flex-shrink: 0;
+  padding: 1px 3px; border-radius: 3px; cursor: pointer; opacity: 0;
+  transition: opacity 0.15s;
+}
+.tl-track-label:hover .track-clear-btn { opacity: 1; }
+.track-clear-btn:hover { color: var(--accent2) !important; background: rgba(240,96,96,0.15); }
+
+/* Scrollable tracks + ruler area */
+.tl-scroll-area {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.tl-scroll-area::-webkit-scrollbar { height: 5px; width: 5px; }
+.tl-scroll-area::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+.tl-scroll-area::-webkit-scrollbar-corner { background: var(--surface); }
+
+.tl-ruler-row {
+  height: 26px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+}
+.tl-ruler { position: relative; height: 100%; min-width: 100%; }
+.wp-marker-head {
+  position: absolute;
+  top: 0;
+  font-size: 8px;
+  color: var(--purple);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  padding-top: 4px;
+  transform: translateX(-50%);
+}
+.wp-tick-head {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(168,128,240,0.3);
+}
+
+.tl-tracks-scroll {
+  flex: 1;
+  position: relative;
+  min-width: 100%;
+}
+.tl-track-row {
+  display: flex;
+  height: 34px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.tl-track-row:hover { background: rgba(255,255,255,0.01); }
+.tl-track-lane {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* WP vertical lines */
+.wp-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(168,128,240,0.2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Cue blocks */
+.cue {
+  position: absolute;
+  top: 3px;
+  height: 28px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+  z-index: 2;
+  user-select: none;
+  transition: filter 0.1s;
+}
+.cue:hover { filter: brightness(1.15); }
+.cue.selected { border-color: rgba(255,255,255,0.5); filter: brightness(1.2); }
+.cue-cam      { background: rgba(24,95,165,0.55);   color: #85b7eb; }
+.cue-light    { background: rgba(186,117,23,0.55);   color: #fac775; }
+.cue-fog      { background: rgba(31,158,117,0.45);   color: #5dcaa5; }
+.cue-bg       { background: rgba(83,74,183,0.45);    color: #afa9ec; }
+.cue-fx       { background: rgba(216,90,48,0.55);    color: #f0997b; }
+.cue-behavior { background: rgba(74,240,168,0.2);    color: #4af0a8; }
+
+/* Playhead */
+.playhead {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent2);
+  z-index: 10;
+  pointer-events: none;
+}
+/* Playhead on ruler */
+.ph-ruler {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent2);
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Drag resize handle for timeline dock */
+.tl-resize-handle {
+  height: 4px;
+  background: var(--border);
+  cursor: ns-resize;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+.tl-resize-handle:hover { background: var(--accent3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>/ Events Editor</span></div>
+</header>
+
+<div class="tab-row">
+  <button class="tab">Scene</button>
+  <button class="tab">Zones</button>
+  <button class="tab">Agents</button>
+  <button class="tab">Waypoints</button>
+  <button class="tab">Paths</button>
+  <button class="tab active">Events</button>
+  <button class="tab">Network</button>
+  <button class="tab">Export</button>
+</div>
+
+<!-- ── TOP: Stage | X3D Viewport | Inspector ── -->
+<div class="viewport-row">
+
+  <!-- Stage (top-left) -->
+  <div class="stage-panel">
+    <div class="stage-tabs">
+      <div class="stage-tab active" onclick="setStageTab('stage',this)">Stage</div>
+      <div class="stage-tab" onclick="setStageTab('assets',this)">Assets</div>
+    </div>
+    <div class="stage-canvas-wrap">
+      <canvas id="stage-canvas"></canvas>
+    </div>
+    <div class="stage-footer">
+      <button class="stage-add-btn" onclick="addCamera()">+ Cam</button>
+      <button class="stage-add-btn" onclick="addLight()">+ Light</button>
+    </div>
+  </div>
+
+  <!-- X3D Viewport (center) -->
+  <div class="x3d-viewport" id="x3d-viewport">
+    <div class="x3d-topbar">
+      <span class="x3d-label">viewport</span>
+      <select class="x3d-cam-select" id="vp-cam-select" onchange="switchViewpoint(this.value)">
+        <option>VP_Overview</option>
+        <option>VP_Origin</option>
+        <option>VP_Cindy_Eye</option>
+        <option>VP_Cindy_Side</option>
+        <option>VP_Witness_Eye</option>
+        <option>VP_Steward_Eye</option>
+      </select>
+      <span class="x3d-status" id="vp-status">— no scene loaded —</span>
+      <button id="vp-refresh-btn" onclick="refreshViewport()" title="Re-export X3D and reload viewport" style="
+        margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:9px;
+        padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius);
+        background:transparent;color:var(--dim);cursor:pointer;letter-spacing:0.06em;
+        text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">↺ refresh</button>
+    </div>
+
+    <!-- Blender-style corner labels -->
+    <div class="x3d-corner tl">PERSP · CAM</div>
+    <div class="x3d-corner tr" id="vp-frame-label">FRAME —</div>
+    <div class="x3d-corner bl" id="vp-wp-label">—</div>
+    <div class="x3d-corner br">X_ITE 11.6.0</div>
+
+    <!-- Placeholder when no scene loaded -->
+    <div class="x3d-placeholder" id="vp-placeholder">
+      <div class="x3d-placeholder-icon">◎</div>
+      <div class="x3d-placeholder-text">
+        X3D scene will render here<br>
+        <span style="color:var(--accent3);opacity:0.7">Export X3D from Scene Composer first,</span><br>
+        <span style="color:var(--accent3);opacity:0.7">then open Events tab</span>
+      </div>
+    </div>
+
+    <!-- X_ITE live viewport — shown when scene URL is available -->
+    <x3d-canvas id="vp-x3d" src="" cache="false"></x3d-canvas>
+
+    <!-- Ambient atmosphere canvas (shown until X3D loads) -->
+    <canvas id="vp-canvas" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.35;pointer-events:none;"></canvas>
+
+    <!-- Floating T badge -->
+    <div class="vp-playhead-badge" id="vp-t-badge">T 0.0s</div>
+  </div>
+
+  <!-- Inspector (top-right) -->
+  <div class="insp-panel">
+    <div class="insp-head">cue properties</div>
+    <div class="insp-body" id="insp-body">
+      <div class="empty-insp">Click a cue to edit its properties.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Drag handle for resizing timeline dock -->
+<div class="tl-resize-handle" id="tl-resize-handle"></div>
+
+<!-- ── BOTTOM: Timeline Dock ── -->
+<div class="tl-dock" id="tl-dock">
+
+  <!-- Timeline toolbar -->
+  <div class="tl-toolbar">
+    <button class="tb-btn" id="play-btn" onclick="togglePlay()">▶</button>
+    <button class="tb-btn" onclick="rewind()">⏮</button>
+    <div class="tb-time" id="t-display">T 0.0s</div>
+    <div class="tb-sep"></div>
+    <button class="tb-btn accent" onclick="snapToWP()">Snap to WP</button>
+    <button class="tb-btn purple" onclick="addCue()">+ Add cue</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" onclick="addTrack()">+ Track</button>
+    <div class="tb-zoom">
+      zoom: <span id="zoom-val">1</span>×
+      <button class="zoom-btn" onclick="zoomOut()">−</button>
+      <button class="zoom-btn" onclick="zoomIn()">+</button>
+    </div>
+  </div>
+
+  <!-- Track label gutter + scrollable tracks -->
+  <div class="tl-content">
+
+    <!-- Fixed label column -->
+    <div class="tl-labels">
+      <div class="tl-label-head">track</div>
+      <div class="tl-label-rows" id="tl-label-rows"></div>
+    </div>
+
+    <!-- Scrollable ruler + lane area -->
+    <div class="tl-scroll-area" id="tl-scroll-area">
+      <div class="tl-ruler-row">
+        <div class="tl-ruler" id="tl-ruler">
+          <div class="ph-ruler" id="ph-ruler" style="left:0px"></div>
+        </div>
+      </div>
+      <div class="tl-tracks-scroll" id="tl-tracks"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+var _zoom     = 1;
+var PX_PER_S  = 20;
+var _playing  = false;
+var _playT    = 0;
+var _playRaf  = null;
+var _playStart= 0;
+var _selCue   = null;
+
+var WPS = [
+  { name: 'WP1', t: 0  },
+  { name: 'WP2', t: 8  },
+  { name: 'WP3', t: 16 },
+];
+var SCENE_END = 24;
+
+var TRACK_TYPES = {
+  camera:   { label: 'Camera',     icon: '📷', color: 'cue-cam'      },
+  light:    { label: 'Lights',     icon: '💡', color: 'cue-light'    },
+  fog:      { label: 'Fog',        icon: '🌫', color: 'cue-fog'      },
+  bg:       { label: 'Background', icon: '🖼', color: 'cue-bg'       },
+  fx:       { label: 'FX',         icon: '✨', color: 'cue-fx'       },
+  behavior: { label: 'Behavior',   icon: '🎭', color: 'cue-behavior' },
+};
+
+var _tracksAreStub = false; // initial tracks are already the correct 6-row empty structure
+var _tracks = [
+  { type: 'camera',   label: 'Camera',     cues: [] },
+  { type: 'light',    label: 'Lights',     cues: [] },
+  { type: 'fog',      label: 'Fog',        cues: [] },
+  { type: 'bg',       label: 'Background', cues: [] },
+  { type: 'fx',       label: 'FX',         cues: [] },
+  { type: 'behavior', label: 'Behavior',   cues: [] },
+];
+
+var AGENTS   = ['Cindy','The Witness','The Steward'];
+var CLIPS    = ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
+var VIEWS    = ['VP_Overview','VP_Origin','VP_Cindy_Eye','VP_Cindy_Side','VP_Witness_Eye','VP_Steward_Eye'];
+var LIGHTS_L = ['KeyLight','FillLight','AmbientLight','RimLight','S0Light'];
+var TRIGGERS = ['manual','WAYPT1 arrive','WAYPT2 arrive','WAYPT3 arrive','WP1 arrive','WP2 arrive','WP3 arrive','field E>0.6','field E<0.3'];
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+function toPx(t) { return t * PX_PER_S * _zoom; }
+function zoomIn()  { if (_zoom < 4)   { _zoom = Math.round((_zoom + 0.5) * 2) / 2; renderTimeline(); } }
+function zoomOut() { if (_zoom > 0.5) { _zoom = Math.round((_zoom - 0.5) * 2) / 2; renderTimeline(); } }
+
+// ── Stage canvas ──────────────────────────────────────────────────────────────
+function drawStage() {
+  var canvas = document.getElementById('stage-canvas');
+  var w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = w; canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#080b12';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#1a1e2a'; ctx.lineWidth = 0.5;
+  var gs = 20;
+  for (var x=0; x<w; x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for (var y=0; y<h; y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  ctx.strokeStyle = '#252a36'; ctx.lineWidth = 1;
+  ctx.strokeRect(14, 14, w-28, h-28);
+  ctx.font = '9px IBM Plex Mono'; ctx.fillStyle = '#4a5568';
+  ctx.fillText('top-down view', 20, 28);
+  // Zones
+  var zones = [
+    { x: w*0.38, y: h*0.42, r: 30, fill:'#0f6e5640', line:'#1d9e75' },
+    { x: w*0.65, y: h*0.58, r: 22, fill:'#53349040', line:'#7f77dd', dash:true },
+  ];
+  zones.forEach(function(z){
+    ctx.beginPath(); ctx.arc(z.x,z.y,z.r,0,Math.PI*2);
+    ctx.fillStyle=z.fill; ctx.fill();
+    ctx.strokeStyle=z.line; ctx.lineWidth=1;
+    if(z.dash) ctx.setLineDash([3,3]); else ctx.setLineDash([]);
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+  // Agents
+  [{ x:w*.38,y:h*.42,c:'#4af0a8',l:'C' },{ x:w*.50,y:h*.30,c:'#f06060',l:'W' },{ x:w*.65,y:h*.58,c:'#f0c060',l:'S' }].forEach(function(a){
+    ctx.beginPath(); ctx.arc(a.x,a.y,8,0,Math.PI*2); ctx.fillStyle=a.c+'33'; ctx.fill();
+    ctx.strokeStyle=a.c; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=a.c; ctx.font='9px Syne,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(a.l,a.x,a.y); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  });
+  // Cameras
+  [{ x:w*.20,y:h*.22 },{ x:w*.78,y:h*.30 }].forEach(function(c){
+    ctx.fillStyle='#185fa533'; ctx.strokeStyle='#378add'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.rect(c.x-6,c.y-6,12,12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#85b7eb'; ctx.font='9px monospace'; ctx.textAlign='center';
+    ctx.fillText('C',c.x,c.y+3); ctx.textAlign='left';
+  });
+  // Lights
+  [{ x:w*.12,y:h*.58 },{ x:w*.82,y:h*.62 }].forEach(function(l){
+    ctx.beginPath(); ctx.arc(l.x,l.y,6,0,Math.PI*2); ctx.fillStyle='#ba751733'; ctx.fill();
+    ctx.strokeStyle='#ef9f27'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#fac775'; ctx.font='9px monospace'; ctx.textAlign='center';
+    ctx.fillText('L',l.x,l.y+3); ctx.textAlign='left';
+  });
+}
+
+// ── Viewport canvas (ambient atmosphere placeholder) ──────────────────────────
+function drawVPCanvas() {
+  var canvas = document.getElementById('vp-canvas');
+  var w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = w; canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  // Deep scene atmosphere
+  var grad = ctx.createRadialGradient(w*0.5, h*0.4, 0, w*0.5, h*0.4, w*0.6);
+  grad.addColorStop(0, '#0d2a1a');
+  grad.addColorStop(1, '#040608');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
+  // Ground plane perspective lines
+  ctx.strokeStyle = '#0d2a1a'; ctx.lineWidth = 0.8;
+  var vx = w*0.5, vy = h*0.38;
+  for (var i=0; i<=12; i++) {
+    var bx = (w/12)*i;
+    ctx.beginPath(); ctx.moveTo(vx,vy); ctx.lineTo(bx,h); ctx.stroke();
+  }
+  for (var j=0; j<=6; j++) {
+    var ty = vy + (h-vy)*(j/6);
+    var frac = j/6;
+    var xl = vx - (vx)*frac;
+    var xr = vx + (w-vx)*frac;
+    ctx.beginPath(); ctx.moveTo(xl,ty); ctx.lineTo(xr,ty); ctx.stroke();
+  }
+  // Agent silhouette suggestion
+  ctx.fillStyle = '#4af0a820';
+  ctx.beginPath();
+  ctx.ellipse(w*0.45, h*0.62, 8, 22, 0, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// ── Timeline render ───────────────────────────────────────────────────────────
+function renderTimeline() {
+  document.getElementById('zoom-val').textContent = _zoom;
+  var totalPx = toPx(SCENE_END) + 80;
+
+  // Sync label rows
+  var labelContainer = document.getElementById('tl-label-rows');
+  labelContainer.innerHTML = '';
+  _tracks.forEach(function(track, ti) {
+    var tdef = TRACK_TYPES[track.type] || TRACK_TYPES.camera;
+    var el = document.createElement('div');
+    el.className = 'tl-track-label';
+    el.innerHTML = '<span class="track-icon">'+tdef.icon+'</span>'
+      + '<span class="track-label-text">'+track.label+'</span>'
+      + '<span class="track-clear-btn" title="Clear all cues on this track" onclick="event.stopPropagation();clearTrack('+ti+')">×</span>';
+    labelContainer.appendChild(el);
+  });
+
+  // Ruler
+  var ruler = document.getElementById('tl-ruler');
+  ruler.style.width = totalPx + 'px';
+  // Clear old markers but keep ph-ruler
+  Array.from(ruler.children).forEach(function(c){ if (!c.id || c.id !== 'ph-ruler') ruler.removeChild(c); });
+  WPS.forEach(function(wp) {
+    var px = toPx(wp.t);
+    var tick = document.createElement('div');
+    tick.className = 'wp-tick-head'; tick.style.left = px + 'px';
+    ruler.appendChild(tick);
+    var label = document.createElement('div');
+    label.className = 'wp-marker-head'; label.style.left = px + 'px';
+    label.textContent = wp.name;
+    ruler.appendChild(label);
+  });
+
+  // Tracks
+  var container = document.getElementById('tl-tracks');
+  container.style.width = totalPx + 'px';
+  container.innerHTML = '';
+
+  _tracks.forEach(function(track, ti) {
+    var row = document.createElement('div');
+    row.className = 'tl-track-row';
+    var tdef = TRACK_TYPES[track.type] || TRACK_TYPES.camera;
+
+    var lane = document.createElement('div');
+    lane.className = 'tl-track-lane';
+    lane.style.width = totalPx + 'px';
+
+    WPS.forEach(function(wp) {
+      var line = document.createElement('div');
+      line.className = 'wp-line'; line.style.left = toPx(wp.t) + 'px';
+      lane.appendChild(line);
+    });
+
+    track.cues.forEach(function(cue, ci) {
+      var el = document.createElement('div');
+      var isSel = _selCue && _selCue.ti === ti && _selCue.ci === ci;
+      el.className = 'cue ' + tdef.color + (isSel ? ' selected' : '');
+      el.style.left  = toPx(cue.t) + 'px';
+      el.style.width = Math.max(toPx(cue.dur) - 3, 20) + 'px';
+      el.textContent = cue.label;
+      el.onclick = function(e) { e.stopPropagation(); selectCue(ti, ci); };
+      lane.appendChild(el);
+    });
+
+    var ph = document.createElement('div');
+    ph.className = 'playhead'; ph.id = 'ph-' + ti;
+    ph.style.left = toPx(_playT) + 'px';
+    lane.appendChild(ph);
+
+    row.appendChild(lane);
+    container.appendChild(row);
+  });
+
+  updatePlayhead();
+}
+
+// ── Cue selection ─────────────────────────────────────────────────────────────
+function selectCue(ti, ci) {
+  _selCue = { ti: ti, ci: ci };
+  renderTimeline();
+  renderInspector();
+}
+
+function renderInspector() {
+  var body = document.getElementById('insp-body');
+  if (!_selCue) { body.innerHTML = '<div class="empty-insp">Click a cue to edit its properties.</div>'; return; }
+  var track = _tracks[_selCue.ti];
+  var cue   = track.cues[_selCue.ci];
+  var dotColors = { camera:'#378add', light:'#ef9f27', fog:'#1d9e75', bg:'#7f77dd', fx:'#d85a30', behavior:'#4af0a8' };
+  var typeSpecific = '';
+
+  if (track.type === 'camera') {
+    var vpOpts = VIEWS.map(function(v){ return '<option value="'+v+'"'+(cue.viewpoint===v?' selected':'')+'>'+v+'</option>'; }).join('');
+    var blendOpts = ['cut','blend 0.5s','blend 1s','blend 2s'].map(function(b){ return '<option value="'+b+'"'+(cue.blend===b?' selected':'')+'>'+b+'</option>'; }).join('');
+    var jumpChecked = (cue.jump !== false) ? 'checked' : '';
+    typeSpecific = '<div class="insp-field"><div class="insp-label">viewpoint</div><select class="insp-select" onchange="setCueProp(\'viewpoint\',this.value)">'+vpOpts+'</select></div>'
+      + '<div class="insp-field"><div class="insp-label">cut / blend</div><select class="insp-select" onchange="setCueProp(\'blend\',this.value)">'+blendOpts+'</select></div>'
+      + '<div class="insp-field" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" '+jumpChecked+' onchange="setCueProp(\'jump\',this.checked)" style="width:auto;accent-color:var(--accent);cursor:pointer"><div class="insp-label" style="margin:0">jump (cut=true, fly=false)</div></div>';
+  } else if (track.type === 'light') {
+    var ltOpts = LIGHTS_L.map(function(l){ return '<option value="'+l+'"'+(cue.node===l?' selected':'')+'>'+l+'</option>'; }).join('');
+    typeSpecific = '<div class="insp-field"><div class="insp-label">light</div><select class="insp-select" onchange="setCueProp(\'node\',this.value)">'+ltOpts+'</select></div>'
+      + '<div class="insp-row2"><div class="insp-field"><div class="insp-label">intensity</div><input class="insp-input" type="number" min="0" max="2" step="0.1" value="'+(cue.intensity||0.8)+'" onchange="setCueProp(\'intensity\',parseFloat(this.value))"></div></div>';
+  } else if (track.type === 'behavior') {
+    var agOpts = AGENTS.map(function(a){ return '<option value="'+a+'"'+(cue.agent===a?' selected':'')+'>'+a+'</option>'; }).join('');
+    var clipOpts = CLIPS.map(function(c){ return '<option value="'+c+'"'+(cue.clip===c?' selected':'')+'>'+c.replace('Timer','')+'</option>'; }).join('');
+    typeSpecific = '<div class="insp-field"><div class="insp-label">agent</div><select class="insp-select" onchange="setCueProp(\'agent\',this.value)">'+agOpts+'</select></div>'
+      + '<div class="insp-field"><div class="insp-label">clip</div><select class="insp-select" onchange="setCueProp(\'clip\',this.value)">'+clipOpts+'</select></div>';
+  } else {
+    typeSpecific = '<div class="insp-field"><div class="insp-label">value / descriptor</div><input class="insp-input" value="'+(cue.label||'')+'" onchange="setCueProp(\'label\',this.value)"></div>';
+  }
+
+  var trigOpts = TRIGGERS.map(function(tr){ return '<option value="'+tr+'"'+(cue.trigger===tr?' selected':'')+'>'+tr+'</option>'; }).join('');
+
+  body.innerHTML =
+    '<div class="insp-cue-title"><div class="insp-dot" style="background:'+dotColors[track.type]+'"></div><span>'+cue.label+'</span></div>'
+    + '<div class="insp-field"><div class="insp-label">trigger</div><select class="insp-select" onchange="setCueProp(\'trigger\',this.value)">'+trigOpts+'</select></div>'
+    + typeSpecific
+    + '<div class="insp-row2">'
+    + '<div class="insp-field"><div class="insp-label">start (s)</div><input class="insp-input" type="number" min="0" step="0.5" value="'+cue.t+'" onchange="setCueProp(\'t\',parseFloat(this.value))"></div>'
+    + '<div class="insp-field"><div class="insp-label">duration (s)</div><input class="insp-input" type="number" min="0.5" step="0.5" value="'+cue.dur+'" onchange="setCueProp(\'dur\',parseFloat(this.value))"></div>'
+    + '</div>'
+    + '<div class="insp-footer">'
+    + '<button class="insp-btn insp-btn-del" onclick="deleteCue()">Delete cue</button>'
+    + '<button class="insp-btn insp-btn-exp" onclick="exportCues()">Export cues ↗</button>'
+    + '</div>';
+}
+
+function setCueProp(k, v) {
+  if (!_selCue) return;
+  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+  cue[k] = v;
+  renderTimeline();
+  if (k === 'label') renderInspector();
+}
+
+function deleteCue() {
+  if (!_selCue) return;
+  _tracks[_selCue.ti].cues.splice(_selCue.ci, 1);
+  _selCue = null;
+  renderTimeline(); renderInspector();
+}
+
+function clearTrack(ti) {
+  if (!_tracks[ti]) return;
+  if (!_tracks[ti].cues.length) return;
+  if (!confirm('Clear all cues on ' + _tracks[ti].label + '?')) return;
+  _tracks[ti].cues = [];
+  if (_selCue && _selCue.ti === ti) _selCue = null;
+  renderTimeline(); renderInspector();
+}
+
+// ── Transport ─────────────────────────────────────────────────────────────────
+function rewind() {
+  stopPlay(); _playT = 0;
+  updatePlayhead();
+  document.getElementById('t-display').textContent = 'T 0.0s';
+  document.getElementById('vp-t-badge').textContent = 'T 0.0s';
+  document.getElementById('vp-frame-label').textContent = 'FRAME 0';
+  document.getElementById('vp-wp-label').textContent = '→ WP1';
+}
+function togglePlay() { if (_playing) stopPlay(); else startPlay(); }
+function startPlay() {
+  _playing = true;
+  _playStart = performance.now() - _playT * 1000;
+  document.getElementById('play-btn').textContent = '⏸';
+  tick();
+}
+function stopPlay() {
+  _playing = false;
+  if (_playRaf) cancelAnimationFrame(_playRaf);
+  document.getElementById('play-btn').textContent = '▶';
+}
+function tick() {
+  if (!_playing) return;
+  _playT = (performance.now() - _playStart) / 1000;
+  if (_playT >= SCENE_END) { _playT = SCENE_END; stopPlay(); }
+  var tStr = 'T ' + _playT.toFixed(1) + 's';
+  document.getElementById('t-display').textContent = tStr;
+  document.getElementById('vp-t-badge').textContent = tStr;
+  document.getElementById('vp-frame-label').textContent = 'FRAME ' + Math.floor(_playT * 30);
+  // nearest WP
+  var nWP = WPS.reduce(function(a,b){ return Math.abs(b.t-_playT) < Math.abs(a.t-_playT) ? b : a; });
+  document.getElementById('vp-wp-label').textContent = '→ ' + nWP.name;
+  updatePlayhead();
+  _playRaf = requestAnimationFrame(tick);
+}
+function updatePlayhead() {
+  var px = toPx(_playT);
+  _tracks.forEach(function(t, i) {
+    var ph = document.getElementById('ph-' + i);
+    if (ph) ph.style.left = px + 'px';
+  });
+  var phr = document.getElementById('ph-ruler');
+  if (phr) phr.style.left = px + 'px';
+}
+
+// ── Toolbar actions ───────────────────────────────────────────────────────────
+function snapToWP() {
+  if (!_selCue) { alert('Select a cue first.'); return; }
+  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+  var nearest = WPS.reduce(function(a, b){ return Math.abs(b.t-cue.t) < Math.abs(a.t-cue.t) ? b : a; });
+  cue.t = nearest.t;
+  renderTimeline(); renderInspector();
+}
+function addCue() {
+  var ti = _selCue ? _selCue.ti : 0;
+  var track = _tracks[ti];
+  if (!track) return;
+  // Place new cue after the last cue on this track, or at _playT — whichever is later.
+  // This prevents silent overlap when multiple cues land at t=0.
+  var lastEnd = 0;
+  track.cues.forEach(function(c) { lastEnd = Math.max(lastEnd, c.t + (c.dur || 4)); });
+  var startT = Math.max(_playT, lastEnd);
+  var newCue = { label: 'new cue', t: startT, dur: 4, trigger: 'manual' };
+  // Camera-track defaults
+  if (track.type === 'camera') {
+    newCue.viewpoint = VIEWS[0] || 'VP_Overview';
+    newCue.jump = true;
+    newCue.blend = 'cut';
+  }
+  track.cues.push(newCue);
+  _selCue = { ti: ti, ci: track.cues.length - 1 };
+  renderTimeline(); renderInspector();
+}
+function addTrack() {
+  var types = Object.keys(TRACK_TYPES);
+  var type = types[_tracks.length % types.length];
+  _tracks.push({ type: type, label: TRACK_TYPES[type].label, cues: [] });
+  renderTimeline();
+}
+function addCamera() {
+  _tracks.unshift({ type: 'camera', label: 'Camera '+(_tracks.filter(function(t){ return t.type==='camera'; }).length+1), cues: [] });
+  renderTimeline();
+}
+function addLight() {
+  _tracks.push({ type: 'light', label: 'Light '+(_tracks.filter(function(t){ return t.type==='light'; }).length+1), cues: [] });
+  renderTimeline();
+}
+function exportCues() {
+  // Send tracks directly to Composer via mccf_save_cues — no alert, no round-trip race.
+  // Composer handles _doExportSceneXML(tracks) then sendToLauncher().
+  if (window.parent && window.parent !== window) {
+    var totalCues = _tracks.reduce(function(n,t){ return n+(t.cues||[]).length; }, 0);
+    console.log('[Events Editor] exportCues → mccf_save_cues tracks:', _tracks.length, 'cues:', totalCues);
+    window.parent.postMessage({ type: 'mccf_save_cues', tracks: _tracks }, '*');
+  } else {
+    // Standalone fallback — show XML for debugging
+    var xml = '<EventCues>\n';
+    _tracks.forEach(function(track) {
+      track.cues.forEach(function(cue) {
+        xml += '  <Cue track="'+track.type+'" label="'+cue.label+'" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+(cue.trigger||'manual')+'"';
+        if (cue.viewpoint) xml += ' viewpoint="'+cue.viewpoint+'"';
+        if (cue.jump !== undefined) xml += ' jump="'+cue.jump+'"';
+        if (cue.node)      xml += ' node="'+cue.node+'" intensity="'+(cue.intensity||0.8)+'"';
+        if (cue.agent)     xml += ' agent="'+cue.agent+'" clip="'+(cue.clip||'')+'"';
+        xml += '/>\n';
+      });
+    });
+    xml += '</EventCues>';
+    console.log('[Events Editor] standalone exportCues XML:\n' + xml);
+    alert('XML preview:\n\n' + xml);
+  }
+}
+function refreshViewport() {
+  var btn = document.getElementById('vp-refresh-btn');
+  if (btn) { btn.textContent = '↺ exporting…'; btn.style.color = 'var(--accent4)'; }
+  // Ask parent Composer to re-export X3D silently, then reload
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_export_x3d' }, '*');
+    // Reload after a short delay to let the server write the file
+    setTimeout(function() {
+      var x3d = document.getElementById('vp-x3d');
+      if (x3d && x3d.getAttribute('src')) {
+        var src = x3d.getAttribute('src');
+        x3d.setAttribute('src', '');
+        setTimeout(function() {
+          x3d.setAttribute('src', src + '?t=' + Date.now());
+          if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+        }, 100);
+      } else {
+        if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+      }
+    }, 1800);
+  } else {
+    // Standalone — just force-reload current src
+    var x3d = document.getElementById('vp-x3d');
+    if (x3d && x3d.getAttribute('src')) {
+      var src = x3d.getAttribute('src').split('?')[0];
+      x3d.setAttribute('src', src + '?t=' + Date.now());
+    }
+    if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+  }
+}
+
+function loadX3DViewport(url) {
+  var x3d    = document.getElementById('vp-x3d');
+  var canvas = document.getElementById('vp-canvas');
+  var ph     = document.getElementById('vp-placeholder');
+  var status = document.getElementById('vp-status');
+  if (!x3d) return;
+
+  // Show X3D canvas, hide placeholder and atmosphere canvas
+  x3d.style.display = 'block';
+  if (canvas) canvas.style.display = 'none';
+  if (ph)     ph.style.display     = 'none';
+
+  // Set src — x3d-canvas reloads on src change
+  x3d.setAttribute('src', url);
+  status.textContent = url.split('/').pop();
+
+  x3d.addEventListener('load', function onLoad() {
+    x3d.removeEventListener('load', onLoad);
+    status.textContent = url.split('/').pop() + ' ✓';
+    // Silence all Sound nodes — the viewport is a preview, not a playback surface.
+    // X_ITE autoplays any Sound with loop=true; we kill them all via SAI immediately.
+    try {
+      var scene = x3d.browser.currentScene;
+      var walk = function(node) {
+        try {
+          if (node.getTypeName && node.getTypeName() === 'Sound') {
+            node.enabled = false;
+          }
+          if (node.children) node.children.forEach(walk);
+        } catch(e) {}
+      };
+      scene.rootNodes.forEach(walk);
+      console.log('[Events Editor] Sound nodes muted in viewport');
+    } catch(e) { console.warn('[Events Editor] could not mute sounds:', e); }
+    // Bind initial viewpoint
+    var sel = document.getElementById('vp-cam-select');
+    if (sel && sel.value) switchViewpoint(sel.value);
+  }, { once: true });
+
+  x3d.addEventListener('error', function onErr() {
+    x3d.removeEventListener('error', onErr);
+    x3d.style.display = 'none';
+    if (canvas) canvas.style.display = 'block';
+    if (ph)     ph.style.display     = 'flex';
+    status.textContent = '— scene not found —';
+    console.warn('[Events Editor] X3D load failed:', url);
+  }, { once: true });
+}
+
+function switchViewpoint(vp) {
+  document.getElementById('vp-status').textContent = vp;
+  // Bind viewpoint in live X_ITE scene via SAI
+  var x3d = document.getElementById('vp-x3d');
+  if (!x3d || !x3d.browser) return;
+  try {
+    var browser = x3d.browser;
+    var vpNode  = browser.currentScene.getNamedNode(vp);
+    if (vpNode) vpNode.set_bind = true;
+  } catch(e) { /* viewpoint not yet in scene */ }
+}
+function setStageTab(tab, el) {
+  document.querySelectorAll('.stage-tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+}
+
+// ── Drag resize for timeline dock ─────────────────────────────────────────────
+(function() {
+  var handle = document.getElementById('tl-resize-handle');
+  var dock   = document.getElementById('tl-dock');
+  var dragging = false;
+  var startY = 0, startH = 0;
+  handle.addEventListener('mousedown', function(e) {
+    dragging = true; startY = e.clientY;
+    startH = dock.offsetHeight;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var delta = startY - e.clientY; // dragging up = bigger timeline
+    var newH = Math.max(120, Math.min(500, startH + delta));
+    dock.style.height = newH + 'px';
+  });
+  document.addEventListener('mouseup', function() {
+    if (dragging) {
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+})();
+
+// ── Sync label column scroll with track scroll area ───────────────────────────
+(function() {
+  var scrollArea = document.getElementById('tl-scroll-area');
+  var labelRows  = document.getElementById('tl-label-rows');
+  scrollArea.addEventListener('scroll', function() {
+    labelRows.scrollTop = scrollArea.scrollTop;
+  });
+})();
+
+// ── postMessage bridge — receives data from Scene Composer ───────────────────
+// Signal to parent that listener is registered and we're ready for scene data
+(function() {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_ready' }, '*');
+  }
+})();
+
+window.addEventListener('message', function(evt) {
+  if (!evt.data || !evt.data.type) return;
+
+  // Scene Composer pushing live scene data on tab activate
+  if (evt.data.type === 'mccf_scene_data') {
+    var d = evt.data.data || {};
+    if (d.agents   && d.agents.length)   AGENTS   = d.agents;
+    if (d.wps      && d.wps.length)      WPS      = d.wps;
+    if (d.views    && d.views.length)    VIEWS    = d.views;
+    if (d.clips    && d.clips.length)    CLIPS    = d.clips;
+    if (d.triggers && d.triggers.length) TRIGGERS = d.triggers;
+    if (d.sceneEnd)                      SCENE_END = d.sceneEnd;
+    // If still showing hardcoded stub tracks, replace with clean empty tracks
+    // (saved scenes will have already called mccf_load_cues before this)
+    if (_tracksAreStub) {
+      _tracks = [
+        { type: 'camera',   label: 'Camera',     cues: [] },
+        { type: 'light',    label: 'Lights',     cues: [] },
+        { type: 'fog',      label: 'Fog',        cues: [] },
+        { type: 'bg',       label: 'Background', cues: [] },
+        { type: 'fx',       label: 'FX',         cues: [] },
+        { type: 'behavior', label: 'Behavior',   cues: [] },
+      ];
+      _tracksAreStub = false;
+      _selCue = null;
+    }
+    renderTimeline();
+    renderInspector();
+    // Update viewport camera select
+    var sel = document.getElementById('vp-cam-select');
+    if (sel) {
+      sel.innerHTML = VIEWS.map(function(v) {
+        return '<option value="'+v+'">'+v+'</option>';
+      }).join('');
+    }
+    // Update stage and VP labels
+    document.getElementById('vp-wp-label').textContent = WPS.length ? ('→ ' + WPS[0].name) : '—';
+    drawStage();
+    // Load X3D scene into viewport if URL provided
+    if (d.x3dUrl) loadX3DViewport(d.x3dUrl);
+    console.log('[Events Editor] scene data received — agents:', AGENTS.length, 'wps:', WPS.length, 'x3d:', d.x3dUrl||'none');
+  }
+
+  // Composer finished X3D export — load the confirmed URL immediately
+  if (evt.data.type === 'mccf_x3d_ready') {
+    if (evt.data.url) loadX3DViewport(evt.data.url);
+    var btn = document.getElementById('vp-refresh-btn');
+    if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+    return;
+  }
+
+  // Scene Composer requesting cue data for export
+  if (evt.data.type === 'mccf_request_cues') {
+    if (evt.source) {
+      evt.source.postMessage({ type: 'mccf_cue_data', tracks: _tracks }, '*');
+    }
+  }
+
+  // Scene Composer pushing saved EventCues back on scene load
+  if (evt.data.type === 'mccf_load_cues') {
+    var incoming = evt.data.tracks || [];
+    if (incoming.length) {
+      // Merge incoming cues into the standard 6-track layout.
+      // Incoming tracks from Composer restore are keyed by type (one track per type).
+      // We preserve the full standard track list and graft cues into the matching
+      // type slot — so the editor always shows all 6 rows.
+      var STANDARD_TRACKS = [
+        { type: 'camera',   label: 'Camera'     },
+        { type: 'light',    label: 'Lights'     },
+        { type: 'fog',      label: 'Fog'        },
+        { type: 'bg',       label: 'Background' },
+        { type: 'fx',       label: 'FX'         },
+        { type: 'behavior', label: 'Behavior'   },
+      ];
+      // Build a map: type → [cues] from incoming
+      var incomingCueMap = {};
+      incoming.forEach(function(t) {
+        if (!incomingCueMap[t.type]) incomingCueMap[t.type] = [];
+        // incoming may already be multi-track per type from editor; collect all cues
+        (t.cues || []).forEach(function(c) { incomingCueMap[t.type].push(c); });
+      });
+      // Rebuild _tracks: use current track labels where they exist, else standard labels;
+      // replace cues for any type that has incoming data, preserve existing cues otherwise.
+      var merged = STANDARD_TRACKS.map(function(st) {
+        // Find existing track of this type (preserves custom label if user renamed it)
+        var existing = _tracks.find(function(t){ return t.type === st.type; });
+        var label = existing ? existing.label : st.label;
+        var cues  = incomingCueMap.hasOwnProperty(st.type) ? incomingCueMap[st.type] : (existing ? existing.cues : []);
+        // Auto-spread cues that overlap at the same t so they're all visible.
+        // Sort by t, then push any cue that overlaps its predecessor to the right.
+        cues = cues.slice().sort(function(a, b) { return a.t - b.t; });
+        var cursor = 0;
+        cues = cues.map(function(c) {
+          var t = Math.max(c.t, cursor);
+          cursor = t + (c.dur || 4);
+          return Object.assign({}, c, { t: t });
+        });
+        return { type: st.type, label: label, cues: cues };
+      });
+      _tracks = merged;
+      _tracksAreStub = false;
+      _selCue = null;
+      renderTimeline();
+      renderInspector();
+      console.log('[Events Editor] cues loaded —', _tracks.length, 'tracks,',
+        _tracks.reduce(function(n,t){ return n+t.cues.length; }, 0), 'cues total');
+    }
+  }
+});
+
+window.addEventListener('load', function() {
+  drawStage();
+  drawVPCanvas();
+  renderTimeline();
+  renderInspector();
+  document.getElementById('vp-wp-label').textContent = '→ WP1';
+  window.addEventListener('resize', function() {
+    drawStage();
+    drawVPCanvas();
+    renderTimeline();
+  });
+});
+</script>
+</body>
+</html>

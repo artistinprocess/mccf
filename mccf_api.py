@@ -4659,9 +4659,11 @@ def arc_export_save():
         xml += f'    <Seed value="{seed}" note="arc noise locked for reproducibility"/>\n'
 
     for row in rows:
-        wid = row.get("waypoint","").replace(" ","_").upper()
-        xml += f'    <Waypoint id="{wid}" stepno="{row.get("step","")}"'
-        xml += f' name="{xml_esc(row.get("waypoint",""))}"'
+        # Use waypoint name as-is — no uppercase mangling.
+        # Preserves scene XML name (e.g. "w2") so EventCues trigger matching works.
+        wid = row.get("waypoint", "")
+        xml += f'    <Waypoint id="{xml_esc(wid)}" stepno="{row.get("step","")}"'
+        xml += f' name="{xml_esc(wid)}"'
         xml += f' E="{row.get("E","")}" B="{row.get("B","")}"'
         xml += f' P="{row.get("P","")}" S="{row.get("S","")}"'
         xml += f' Mode="{row.get("mode","")}" Coherence="{row.get("coherence","")}"'
