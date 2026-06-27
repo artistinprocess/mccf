@@ -409,7 +409,8 @@ function buildVPButtons() {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
     var allNames = scene.namedNodes ? Object.keys(scene.namedNodes) : [];
-    allNames.filter(function(n){ return n.startsWith('VP_') && n !== 'VP_Overview' && n !== 'VP_Origin'; })
+    var _vpExclude = {'VP_Overview':1,'VP_Origin':1,'VP_Free':1};
+    allNames.filter(function(n){ return n.startsWith('VP_') && !_vpExclude[n]; })
       .forEach(function(vpId) {
         var label = vpId.replace('VP_','').replace(/_/g,' ');
         var btn = document.createElement('button');
@@ -1134,8 +1135,10 @@ var _agentLastLoopClip   = {};   // tracks last looping clip for oneshot return
 var _agentWalkStartTime  = {};   // {safeName: Date.now()} — wall ms when WalkTimer last started
 var _agentArrivalTimeout = {};   // {safeName: timeoutId} — pending DefaultTimer switch at segment end
 var _agentWaypointCache  = {};   // {safeName: {stepNo: {pos_x,pos_z}}} — built from pbUpdateDisplay
+var _agentCurrentStep    = {};   // {safeName: stepNo} — most-recently ARRIVED step, updated at runtime WP arrival
 var _agentSegZoneMap     = {};   // {safeName: {segNo: zoneId}} — built from scene XML at play-start
-var _eventCues           = [];   // [{track,label,t,dur,trigger,viewpoint,blend,node,intensity,agent,clip}] — from EventCues in scene XML
+var _eventCues           = [];   // [{track,label,t,dur,trigger,viewpoint,blend,node,intensity,agent,clip,...}] — from EventCues in scene XML
+var _pendingCueTimers    = [];   // [timeoutId,...] — cue delay timers; cleared on Stop/Reset
 
 // Known behavior TimeSensor base DEF names in JinLOA4Animated.x3d
 var BEHAVIOR_TIMER_BASES = [
@@ -1818,44 +1821,78 @@ function _parseEventCues(doc) {
   // Called from _parseSceneZoneData after _buildPivotCacheFromSceneXml.
   var cues = [];
   doc.querySelectorAll('EventCues > Cue').forEach(function(el) {
+    function ga(attr) { return el.getAttribute(attr); }
+    function gf(attr, def) { var v = parseFloat(ga(attr)); return isNaN(v) ? (def !== undefined ? def : null) : v; }
     cues.push({
-      track:     el.getAttribute('track')     || 'camera',
-      label:     el.getAttribute('label')     || '',
-      t:         parseFloat(el.getAttribute('t')   || '0'),
-      dur:       parseFloat(el.getAttribute('dur')  || '4'),
-      trigger:   el.getAttribute('trigger')   || 'manual',
-      viewpoint: el.getAttribute('viewpoint') || null,
-      jump:      el.getAttribute('jump') === 'false' ? false : true,
-      blend:     el.getAttribute('blend')     || 'cut',
-      node:      el.getAttribute('node')      || null,
-      intensity: el.getAttribute('intensity') ? parseFloat(el.getAttribute('intensity')) : null,
-      agent:     el.getAttribute('agent')     || null,
-      clip:      el.getAttribute('clip')      || null,
+      // Common fields
+      track:      ga('track')     || 'camera',
+      label:      ga('label')     || '',
+      t:          gf('t', 0),
+      dur:        gf('dur', 4),
+      trigger:    ga('trigger')   || 'manual',
+      delay:      gf('delay', 0),
+      // Legacy viewpoint-name path (old schema — kept for backward compat)
+      viewpoint:  ga('viewpoint') || null,
+      jump:       ga('jump') === 'false' ? false : true,
+      blend:      ga('blend')     || 'cut',
+      // Light / fog / bg / behavior fields
+      node:       ga('node')      || null,
+      intensity:  ga('intensity') ? gf('intensity') : null,
+      agent:      ga('agent')     || null,
+      clip:       ga('clip')      || null,
+      // Camera cue spec v1.0 fields (Day 58+)
+      shot:       ga('shot')      || null,    // e.g. 'wide','medium','closeup','orbit','agent_eye',...
+      subject:    ga('subject')   || null,    // cultivar name the camera looks at / attaches to
+      transition: ga('transition')|| 'cut',   // 'cut' | 'fly'
+      flyDuration:gf('flyDuration', 2),
+      distance:   gf('distance',   8),
+      height:     gf('height',     3),
+      hAngle:     gf('hAngle',     0),
+      vAngle:     gf('vAngle',     0),
+      roll:       gf('roll',       0),
+      distanceEnd:gf('distanceEnd', null),
+      hAngleEnd:  gf('hAngleEnd',  null),
+      vAngleEnd:  gf('vAngleEnd',  null),
+      heightEnd:  gf('heightEnd',  null),
     });
   });
   _eventCues = cues;
   console.log('[EventCues] loaded:', _eventCues.length, _eventCues.map(function(c){ return c.track + ':' + c.trigger; }).join(', '));
 }
 
-// _resolveWpTriggerNames — given a server current_waypoint object, return all
-// candidate trigger name strings to try.
+// _resolveWpTriggerNames — given a server current_waypoint object, return
+// candidate trigger name strings for THIS waypoint only.
 // Problem: server WP id (e.g. "Waypt2", "W2", "WAYPT2") often does not match
 // the scene XML waypoint name (e.g. "w2") that EventCues triggers are authored against.
-// Solution: fire triggers for the server id AND every name in _wpXmlNamesList.
-// fireEventCuesForTrigger is a no-op if no cue matches — firing all is safe.
-// This is robust across any number of waypoints and any naming scheme.
+// Fix: use stepno (1-based from server) to index into _wpXmlNamesList (0-based)
+// to find the ONE canonical XML name for the arriving WP.
+// Return only [serverIds..., xmlNameForThisWP] — NOT all WP names.
+// BUG 1 Day 58: old code returned all XML names, firing every camera cue at every WP.
 function _resolveWpTriggerNames(stepWp) {
   var seen = {};
   var candidates = [];
   function add(n) {
     if (n && !seen[n]) { seen[n] = true; candidates.push(n); }
   }
-  // Server-provided id variants
+  // Server-provided id variants for this WP
   add(stepWp.name);
   add(stepWp.id);
   add(stepWp.label);
-  // All scene XML waypoint names — one of them is guaranteed to match the cue
-  _wpXmlNamesList.forEach(function(n) { add(n); });
+  // Map stepno to the canonical XML name for this WP.
+  // stepno from server is 1-based; _wpXmlNamesList is 0-based.
+  var stepno = stepWp.stepno;
+  if (stepno !== undefined && stepno !== null) {
+    var idx = parseInt(stepno, 10) - 1;
+    if (idx >= 0 && idx < _wpXmlNamesList.length) {
+      add(_wpXmlNamesList[idx]);
+    }
+  } else {
+    // No stepno — match by name/id against XML list (case-insensitive fallback)
+    var serverKeys = [stepWp.name, stepWp.id, stepWp.label].filter(Boolean).map(function(s){ return s.toLowerCase(); });
+    _wpXmlNamesList.forEach(function(n) {
+      if (serverKeys.indexOf(n.toLowerCase()) !== -1) add(n);
+    });
+  }
   return candidates;
 }
 
@@ -1864,16 +1901,28 @@ function fireEventCuesForTrigger(triggerName) {
   var tLower = triggerName.toLowerCase();
   _eventCues.forEach(function(cue) {
     if ((cue.trigger || '').toLowerCase() !== tLower) return;
-    console.log('[EventCues] firing:', cue.track, '"' + cue.label + '"', 'trigger:', triggerName);
-    switch (cue.track) {
-      case 'camera':   _fireCameraEventCue(cue);   break;
-      case 'light':    _fireLightEventCue(cue);    break;
-      case 'fog':      _fireFogEventCue(cue);      break;
-      case 'bg':       _fireBgEventCue(cue);       break;
-      case 'behavior': _fireBehaviorEventCue(cue); break;
-      default: console.warn('[EventCues] unknown track:', cue.track);
+    var delayMs = (parseFloat(cue.delay) || 0) * 1000;
+    if (delayMs <= 0) {
+      // Fire immediately
+      _dispatchCue(cue, triggerName);
+    } else {
+      // Schedule after delay; track timer so Stop/Reset can cancel
+      var tid = setTimeout(function() { _dispatchCue(cue, triggerName); }, delayMs);
+      _pendingCueTimers.push(tid);
     }
   });
+}
+
+function _dispatchCue(cue, triggerName) {
+  console.log('[EventCues] firing:', cue.track, '"' + cue.label + '"', 'trigger:', triggerName, cue.delay > 0 ? '(delay ' + cue.delay + 's)' : '');
+  switch (cue.track) {
+    case 'camera':   _fireCameraEventCue(cue);   break;
+    case 'light':    _fireLightEventCue(cue);    break;
+    case 'fog':      _fireFogEventCue(cue);      break;
+    case 'bg':       _fireBgEventCue(cue);       break;
+    case 'behavior': _fireBehaviorEventCue(cue); break;
+    default: console.warn('[EventCues] unknown track:', cue.track);
+  }
 }
 
 function fireManualCues() {
@@ -1887,28 +1936,100 @@ function fireManualCues() {
   fireEventCuesForTrigger('manual');
 }
 
+// ─────────────────────────────────────────────────────────────
+// Camera EventCue execution — Camera System Spec v1.0
+// ─────────────────────────────────────────────────────────────
+//
+// Two fundamentally different camera types — never mixed:
+//
+//   BAKED cameras — authored Viewpoint nodes in the X3D file, bound by name.
+//     • agent_eye / agent_side  → VP_{subject}_{Eye|Side} inside agent Transform
+//     • cue.viewpoint set       → any named VP the author explicitly placed in scene
+//     Loader action: _bindNamedViewpoint(name). No SAI position writes. No VP_Free.
+//
+//   RUNTIME cameras — VP_Free driven by the Loader via SAI. Never named by author.
+//     • static shots (wide, medium, closeup, …) → compute position, write to VP_Free, bind
+//     • move shots (orbit, dolly_in, …)         → Phase 2: TimeSensor drives VP_Free
+//     Loader action: _executeStaticCameraShot(cue) or _executeMoveShot(cue).
+//     VP_Free is an implementation vessel — it never appears in the author's vocabulary.
+//
+// Rule: VP_Free is only ever bound by the runtime camera system as a consequence of
+// the author choosing a shot type. It is never bound as a fallback, default, or
+// side-effect of incomplete cue data.
+
+// Static shot types — all resolved via VP_Free driven by SAI (runtime path)
+var _STATIC_SHOTS = {
+  wide:true, medium:true, closeup:true, extreme_closeup:true,
+  overhead:true, worms_eye:true, dutch:true,
+  over_shoulder:true, profile:true, two_shot:true
+};
+// Move shot types — Phase 2, also runtime VP_Free but interpolated
+var _MOVE_SHOTS = {
+  dolly_in:true, dolly_out:true, pan:true, tilt:true,
+  orbit:true, crane_up:true, track:true
+};
+
 function _fireCameraEventCue(cue) {
-  if (!cue.viewpoint) return;
+  var shot = (cue.shot || '').toLowerCase();
+
+  // ── BAKED PATH: agent-attached viewpoints ─────────────────
+  // VP_{subject}_{Eye|Side} lives inside the agent Transform in X3D.
+  // Loader just binds it — no position computation, no VP_Free.
+  if (shot === 'agent_eye' || shot === 'agent_side') {
+    var suffix = (shot === 'agent_eye') ? 'Eye' : 'Side';
+    var subjectSafe = (cue.subject || '').replace(/[^A-Za-z0-9_]/g, '_');
+    _bindNamedViewpoint('VP_' + subjectSafe + '_' + suffix, cue.transition !== 'fly');
+    return;
+  }
+
+  // ── BAKED PATH: explicitly authored named viewpoint ───────
+  // Author placed a named VP in the scene and referenced it by name in the cue.
+  // This is the only other case where _bindNamedViewpoint is called.
+  if (cue.viewpoint) {
+    console.log('[EventCues] camera: baked VP «' + cue.viewpoint + '»');
+    _bindNamedViewpoint(cue.viewpoint, cue.jump !== false);
+    return;
+  }
+
+  // ── RUNTIME PATH: static computed shot via VP_Free ────────
+  // Author chose a shot type from the static list. Loader computes position
+  // from cue params and drives VP_Free. VP_Free is never named by the author.
+  if (_STATIC_SHOTS[shot]) {
+    _executeStaticCameraShot(cue);
+    return;
+  }
+
+  // ── RUNTIME PATH: move shot via VP_Free (Phase 2) ─────────
+  if (_MOVE_SHOTS[shot]) {
+    // TODO Phase 2: _executeMoveShot(cue)
+    console.warn('[EventCues] camera: move shot «' + shot + '» not yet implemented (Phase 2)');
+    return;
+  }
+
+  // ── No valid path — skip with diagnostic ─────────────────
+  // Reaches here only if cue has no viewpoint= and an unrecognised or absent shot=.
+  // VP_Free is never bound as a fallback.
+  console.warn('[EventCues] camera: cue «' + (cue.label||'?') + '» — shot «' + shot +
+    '» not recognised and no viewpoint= set. Cue skipped. ' +
+    'Check Events Editor export or scene XML.');
+}
+
+// Bind a named Viewpoint node (VP_Overview, VP_w2_Eye, etc.)
+function _bindNamedViewpoint(vpName, wantJump) {
   var attempts = 0;
   function tryBind() {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var vpNode = scene.getNamedNode(cue.viewpoint);
+      var vpNode = scene.getNamedNode(vpName);
       if (vpNode) {
-        // set_bind is the write eventIn (confirmed working — same as gotoVP manual buttons).
-        // isBound is read-only status. jump=true → cut, false → fly-through.
-        // vpNode.jump direct assignment is silently ignored in X_ITE SAI.
-        // Use getField().setValue() which is the correct SAI exposed-field write path.
-        var wantJump = (cue.jump !== false);
         try {
           var jumpField = vpNode.getField('jump');
-          if (jumpField) jumpField.setValue(wantJump);
-          else vpNode.jump = wantJump;
-        } catch(je) { try { vpNode.jump = wantJump; } catch(je2) {} }
+          if (jumpField) jumpField.setValue(wantJump !== false);
+          else vpNode.jump = (wantJump !== false);
+        } catch(je) { try { vpNode.jump = (wantJump !== false); } catch(je2) {} }
         vpNode.set_bind = true;
-        console.log('[EventCues] camera: set_bind', cue.viewpoint,
-          'jump=' + wantJump,
+        console.log('[EventCues] camera: set_bind', vpName, 'jump=' + (wantJump !== false),
           attempts > 1 ? '(attempt ' + attempts + ')' : '');
         return;
       }
@@ -1916,10 +2037,185 @@ function _fireCameraEventCue(cue) {
     if (attempts < 10) {
       setTimeout(tryBind, 200);
     } else {
-      console.warn('[EventCues] camera: viewpoint not found after retries:', cue.viewpoint);
+      console.warn('[EventCues] camera: viewpoint not found after retries:', vpName);
     }
   }
   tryBind();
+}
+
+// Compute camera world position from subject position + framing params
+function _computeCamPosition(subjectPos, distance, height, hAngleDeg) {
+  var hRad = (hAngleDeg || 0) * Math.PI / 180;
+  return [
+    subjectPos[0] + distance * Math.sin(hRad),
+    subjectPos[1] + height,
+    subjectPos[2] + distance * Math.cos(hRad)
+  ];
+}
+
+// Derive X3D axis-angle orientation so VP_Free looks from camPos toward targetPos
+// vAngleDeg tilts the look-vector up (+) or down (-) additionally
+function _lookAtOrientation(camPos, targetPos, vAngleDeg) {
+  var dx = targetPos[0] - camPos[0];
+  var dy = targetPos[1] - camPos[1];
+  var dz = targetPos[2] - camPos[2];
+  // X3D cameras look down -Z by default. To face the target we need the -Z axis
+  // to point toward (dx, dy, dz), so we negate the vector for atan2.
+  // Yaw (rotation around Y): atan2(-dx, -dz) points -Z toward target in XZ plane.
+  var yaw = Math.atan2(-dx, -dz);
+  // Pitch — tilt up/down to target plus authored vAngle offset.
+  // Positive pitch = look up, negative = look down.
+  var horizDist = Math.sqrt(dx * dx + dz * dz);
+  var pitch = Math.atan2(dy, horizDist) + ((vAngleDeg || 0) * Math.PI / 180);
+  // Full quaternion compose: q_yaw (Y axis) * q_pitch (X axis)
+  var cosY = Math.cos(yaw / 2),   sinY = Math.sin(yaw / 2);
+  var cosP = Math.cos(pitch / 2), sinP = Math.sin(pitch / 2);
+  // Quaternion multiply: q_yaw * q_pitch
+  var qw = cosY * cosP;
+  var qx = cosY * sinP;
+  var qy = sinY * cosP;
+  var qz = -sinY * sinP;
+  // Convert quaternion to axis-angle
+  var angle = 2 * Math.acos(Math.min(1, Math.max(-1, qw)));
+  var s = Math.sqrt(1 - qw * qw);
+  var ax, ay, az;
+  if (s < 0.001) {
+    ax = 0; ay = 1; az = 0;  // degenerate — default Y axis
+  } else {
+    ax = qx / s; ay = qy / s; az = qz / s;
+  }
+  return [ax, ay, az, angle];
+}
+
+// Resolve subject world position — looks up _waypointPosMap by current WP name for the subject
+// Returns [x, y, z] or null if not resolvable
+function _resolveSubjectPos(subjectName) {
+  if (!subjectName) return null;
+  var safeName = subjectName.replace(/[^A-Za-z0-9_]/g, '_');
+
+  // ── Path 1: runtime arrived position via _agentCurrentStep ──────────────
+  // Preferred path: use the step number that was recorded when this cultivar
+  // most recently arrived at a waypoint during live playback.
+  var arrivedStep = _agentCurrentStep[safeName];
+  if (arrivedStep !== undefined) {
+    var runtimeCache = _agentWaypointCache[safeName];
+    var runtimeEntry = runtimeCache && runtimeCache[arrivedStep];
+    if (runtimeEntry) {
+      var rpos = [parseFloat(runtimeEntry.pos_x) || 0, 0, parseFloat(runtimeEntry.pos_z) || 0];
+      console.log('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 1 (runtime step ' + arrivedStep + ')', rpos);
+      return rpos;
+    }
+    console.warn('[EventCues] _resolveSubjectPos «' + subjectName + '» — _agentCurrentStep=' + arrivedStep +
+      ' but no cache entry found (cache keys: ' + (runtimeCache ? Object.keys(runtimeCache) : 'null') + ')');
+  }
+
+  // ── Path 2: waypointPosMap keyed by subject name ─────────────────────────
+  // Only applies when subjectName happens to match a WP name (rare — zone centroids etc.)
+  var wpEntry = _waypointPosMap[subjectName] || _waypointPosMap[subjectName.toUpperCase()];
+  if (wpEntry) {
+    var wpos = [parseFloat(wpEntry.pos_x) || 0, 0, parseFloat(wpEntry.pos_z) || 0];
+    console.log('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 2 (_waypointPosMap match)', wpos);
+    return wpos;
+  }
+
+  // ── Path 3: pre-loaded pivot cache fallback (all steps present) ──────────
+  // WARNING: this cache contains ALL waypoints from scene XML at load time,
+  // so "most recent step" is the highest-numbered WP, not the arrived one.
+  // Only use as fallback when no runtime arrival has been recorded.
+  var cache = _agentWaypointCache[safeName];
+  if (cache) {
+    var steps = Object.keys(cache).filter(function(k){ return !isNaN(k); }).map(Number).sort(function(a,b){return b-a;});
+    if (steps.length > 0) {
+      var entry = cache[steps[0]];
+      var cpos = [parseFloat(entry.pos_x) || 0, 0, parseFloat(entry.pos_z) || 0];
+      console.warn('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 3 (pre-loaded cache step ' + steps[0] +
+        ' — no runtime arrival recorded yet). pos=', cpos,
+        '  All steps:', steps.join(','));
+      return cpos;
+    }
+  }
+
+  // ── Path 4: EmotionalArc start position ──────────────────────────────────
+  if (_cultivarStartPos[subjectName]) {
+    var sp = _cultivarStartPos[subjectName];
+    console.log('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 4 (start position)', sp);
+    return sp;
+  }
+
+  // ── Path 5: scene centroid fallback ──────────────────────────────────────
+  console.warn('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 5: position not found — using origin.');
+  return [0, 0, 0];
+}
+
+// Execute a static computed camera shot: position VP_Free via its CAM_Free_Transform parent and bind it.
+//
+// X3D Viewpoint position/orientation are OUTPUT fields — they report camera state, not set it.
+// Writing to vpFree.position via SAI is ignored by X_ITE (and per spec).
+// The correct pattern: VP_Free sits at local origin inside CAM_Free_Transform (a Transform node).
+// The Loader writes translation/rotation to CAM_Free_Transform, then binds VP_Free.
+// The Transform moves the camera; the Viewpoint just marks the bind point.
+function _executeStaticCameraShot(cue) {
+  var subjectPos = _resolveSubjectPos(cue.subject) || [0, 0, 0];
+  var distance  = (cue.distance  !== null && cue.distance  !== undefined) ? cue.distance  : 8;
+  var height    = (cue.height    !== null && cue.height    !== undefined) ? cue.height    : 3;
+  var hAngle    = (cue.hAngle    !== null && cue.hAngle    !== undefined) ? cue.hAngle    : 0;
+  var vAngle    = (cue.vAngle    !== null && cue.vAngle    !== undefined) ? cue.vAngle    : 0;
+
+  var camPos = _computeCamPosition(subjectPos, distance, height, hAngle);
+  var orient = _lookAtOrientation(camPos, subjectPos, vAngle);
+
+  var attempts = 0;
+  function trySet() {
+    attempts++;
+    try {
+      var scene = canvas.browser.currentScene;
+      var camXform = scene.getNamedNode('CAM_Free_Transform');
+      var vpFree   = scene.getNamedNode('VP_Free');
+      console.log('[EventCues] camera trySet attempt', attempts,
+        'camXform=', camXform ? 'FOUND' : 'NULL',
+        'vpFree=', vpFree ? 'FOUND' : 'NULL');
+      if (camXform && vpFree) {
+        // Write both translation and rotation to CAM_Free_Transform.
+        // VP_Free sits at local origin with identity pose — the Transform carries everything.
+        var writeErr = [];
+        try {
+          camXform.getField('translation').setValue(new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]));
+        } catch(e1) {
+          writeErr.push('translation getField: ' + e1.message);
+          try { camXform.translation = new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]); }
+          catch(e2) { writeErr.push('translation direct: ' + e2.message); }
+        }
+        try {
+          camXform.getField('rotation').setValue(new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]));
+        } catch(e3) {
+          writeErr.push('rotation getField: ' + e3.message);
+          try { camXform.rotation = new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]); }
+          catch(e4) { writeErr.push('rotation direct: ' + e4.message); }
+        }
+        if (writeErr.length) console.warn('[EventCues] camera: SAI write errors:', writeErr);
+        else console.log('[EventCues] camera: CAM_Free_Transform written OK — binding VP_Free');
+        var _camLog = 'subj=' + (cue.subject || 'origin')
+          + ' pos=[' + camPos.map(function(v){return v.toFixed(2);}).join(',') + ']'
+          + ' orient=[' + orient.map(function(v){return v.toFixed(3);}).join(',') + ']'
+          + (attempts > 1 ? ' (attempt ' + attempts + ')' : '');
+        console.log('[EventCues] camera: VP_Free static shot "' + (cue.shot || cue.label) + '"', _camLog);
+        // Bind VP_Free after one rAF so X_ITE processes the Transform write first.
+        requestAnimationFrame(function() {
+          console.log('[EventCues] camera: set_bind firing now');
+          vpFree.set_bind = true;
+        });
+        return;
+      }
+      if (!camXform) console.warn('[EventCues] camera: CAM_Free_Transform not found — re-export scene from Composer');
+      if (!vpFree)   console.warn('[EventCues] camera: VP_Free not found — re-export scene from Composer');
+    } catch(e) { console.warn('[EventCues] camera trySet exception:', e.message); }
+    if (attempts < 10) {
+      setTimeout(trySet, 200);
+    } else {
+      console.warn('[EventCues] camera: VP_Free/CAM_Free_Transform not found after retries');
+    }
+  }
+  trySet();
 }
 
 function _fireLightEventCue(cue) {
@@ -2967,8 +3263,14 @@ async function pbStepSession(sessionId) {
     // Fire EventCues whose trigger matches this WP arrival
     var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
     console.log('[EventCues] WP arrival trigger: "' + _wpArrId + ' arrive"', '— cues loaded:', _eventCues.length, '— stepWp:', JSON.stringify({name:_stepWp.name,id:_stepWp.id,label:_stepWp.label}));
-    console.log('[EventCues] WP arrival trigger (pbStep): "' + _wpArrId + ' arrive"', '— cues:', _eventCues.length);
     if (_wpArrId) {
+      // Record which step this cultivar has now arrived at, so _resolveSubjectPos
+      // can look up the correct position rather than the highest pre-loaded step.
+      if (_stepCultivar && _stepWp.stepno !== undefined) {
+        var _arrSafe = _stepCultivar.replace(/[^A-Za-z0-9_]/g, '_');
+        _agentCurrentStep[_arrSafe] = _stepWp.stepno;
+        console.log('[EventCues] _agentCurrentStep[' + _arrSafe + '] = ' + _stepWp.stepno);
+      }
       var _arrCandidates = _resolveWpTriggerNames(_stepWp);
       console.log('[EventCues] firing trigger candidates:', JSON.stringify(_arrCandidates.map(function(n){ return n + ' arrive'; })));
       _arrCandidates.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
@@ -3165,6 +3467,22 @@ function _parseSceneZoneData() {
 
         // Assign cultivar actors atomically
         if (Object.keys(_newCultivarActors).length > 0) _cultivarActors = _newCultivarActors;
+
+        // Parse cultivar start positions from <EmotionalArc cultivar="X"><StartPosition x y z/>
+        // Used by _resolveSubjectPos for camera shot framing when agent cache is empty.
+        var _newCultivarStartPos = {};
+        doc.querySelectorAll('EmotionalArc[cultivar]').forEach(function(el) {
+          var name = el.getAttribute('cultivar');
+          var sp   = el.querySelector('StartPosition');
+          if (name && sp) {
+            _newCultivarStartPos[name] = [
+              parseFloat(sp.getAttribute('x') || 0),
+              parseFloat(sp.getAttribute('y') || 0),
+              parseFloat(sp.getAttribute('z') || 0)
+            ];
+          }
+        });
+        if (Object.keys(_newCultivarStartPos).length > 0) _cultivarStartPos = _newCultivarStartPos;
 
         // Parse waypoint name → zone mapping for client-side zone derivation
         // Also cache waypoint positions for pivot calculation (keyed by name)
@@ -3398,6 +3716,12 @@ async function pbStep() {
     // Fire EventCues whose trigger matches this WP arrival
     var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
     if (_wpArrId) {
+      // Record current step for _resolveSubjectPos (mirrors pbStepSession logic)
+      if (_stepCultivar && _stepWp.stepno !== undefined) {
+        var _arrSafe2 = _stepCultivar.replace(/[^A-Za-z0-9_]/g, '_');
+        _agentCurrentStep[_arrSafe2] = _stepWp.stepno;
+        console.log('[EventCues] _agentCurrentStep[' + _arrSafe2 + '] = ' + _stepWp.stepno + ' (pbStep)');
+      }
       var _arrCandidates2 = _resolveWpTriggerNames(_stepWp);
       _arrCandidates2.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
     }
@@ -3410,6 +3734,9 @@ async function pbStop() {
   pbStopPolling();
   pbStopX3DTimers();
   spStopAll();  // Session C: stop all audio clips on Stop
+  // Cancel any pending EventCue delay timers
+  _pendingCueTimers.forEach(function(tid) { clearTimeout(tid); });
+  _pendingCueTimers = [];
   try { const r=await fetch(API+'/arc/playback/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); pbUpdateDisplay(await r.json()); } catch(e) {}
 }
 async function pbReset() {
@@ -3457,6 +3784,9 @@ async function pbReset() {
     if (_agentArrivalTimeout[k]) clearTimeout(_agentArrivalTimeout[k]);
   });
   _agentArrivalTimeout = {};
+  // Cancel all pending EventCue delay timers on reset
+  _pendingCueTimers.forEach(function(tid) { clearTimeout(tid); });
+  _pendingCueTimers = [];
   try {
     const r=await fetch(API+'/arc/playback/reset',{
       method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
@@ -3926,9 +4256,11 @@ function x3dFileChanged() {
   // New scene — clear per-scene caches so stale data from previous scene
   // doesn't bleed into pivot and dwell zone lookups.
   _agentWaypointCache = {};
+  _agentCurrentStep   = {};
   _agentSegZoneMap    = {};
   _waypointZoneMap    = {};
   _wpXmlNamesList     = [];   // reset on scene switch; repopulated by _parseSceneZoneData
+  _cultivarStartPos   = {};   // reset on scene switch; repopulated by _parseSceneZoneData
   _eventCues          = [];   // cleared on scene switch; repopulated by _parseSceneZoneData
   window._manualCuesFiredFor = null;  // reset one-shot guard for new scene
   // Notify server so ChorusManager can load config from matching scene XML.

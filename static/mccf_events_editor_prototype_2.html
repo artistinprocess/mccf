@@ -10,7 +10,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
+  font-size: 14px;
   background: #0a0c10;
   color: #c8d0e0;
   height: 100vh;
@@ -34,7 +34,7 @@ html, body {
   --cool:    #60a8f0;
   --purple:  #a880f0;
   --radius:  4px;
-  --tl-height: 260px;    /* timeline panel height */
+  --tl-height: 280px;    /* timeline panel height */
   --stage-w:   200px;    /* left stage panel width */
   --insp-w:    240px;    /* right inspector width */
 }
@@ -53,7 +53,7 @@ header {
 }
 .logo {
   font-family: 'Syne', sans-serif;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--accent4);
 }
@@ -73,7 +73,7 @@ header {
 }
 .tab {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 13px;
   padding: 4px 12px;
   border: none;
   background: transparent;
@@ -114,7 +114,7 @@ header {
   flex: 1;
   text-align: center;
   padding: 5px 0;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--dim);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -140,7 +140,7 @@ header {
 .stage-add-btn {
   flex: 1;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 13px;
   padding: 4px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -173,14 +173,14 @@ header {
   backdrop-filter: blur(4px);
 }
 .x3d-label {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 .x3d-cam-select {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 13px;
   background: rgba(24,28,36,0.8);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -191,7 +191,7 @@ header {
 .x3d-cam-select:focus { border-color: var(--accent3); }
 .x3d-status {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   letter-spacing: 0.06em;
 }
@@ -225,7 +225,7 @@ x3d-canvas {
   opacity: 0.18;
 }
 .x3d-placeholder-text {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.08em;
   text-align: center;
@@ -235,7 +235,7 @@ x3d-canvas {
 /* Blender-style corner overlays */
 .x3d-corner {
   position: absolute;
-  font-size: 9px;
+  font-size: 12px;
   color: rgba(200,208,224,0.3);
   letter-spacing: 0.06em;
   pointer-events: none;
@@ -256,7 +256,7 @@ x3d-canvas {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 3px 14px;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--accent);
   letter-spacing: 0.06em;
   z-index: 6;
@@ -276,7 +276,7 @@ x3d-canvas {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 7px 10px;
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -295,7 +295,7 @@ x3d-canvas {
 
 .insp-cue-title {
   font-family: 'Syne', sans-serif;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
   margin-bottom: 12px;
@@ -306,7 +306,7 @@ x3d-canvas {
 .insp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .insp-field { margin-bottom: 9px; }
 .insp-label {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -319,7 +319,7 @@ x3d-canvas {
   border-radius: var(--radius);
   color: var(--text);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
+  font-size: 14px;
   padding: 5px 8px;
   outline: none;
 }
@@ -336,7 +336,7 @@ x3d-canvas {
 .insp-btn {
   width: 100%;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 13px;
   padding: 6px 0;
   border-radius: var(--radius);
   cursor: pointer;
@@ -347,6 +347,15 @@ x3d-canvas {
 .insp-btn-del:hover  { background: rgba(240,96,96,0.1); }
 .insp-btn-exp  { background: var(--purple); border: 1px solid var(--purple); color: #fff; }
 .insp-btn-exp:hover  { opacity: 0.85; }
+.insp-slider-row { display: grid; grid-template-columns: 1fr 36px; align-items: center; gap: 5px; }
+.insp-slider-row input[type=range] { width: 100%; accent-color: var(--accent3); }
+.insp-slider-val { font-size: 13px; color: var(--accent3); text-align: right; }
+.insp-section { font-size: 12px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase;
+  border-top: 1px solid var(--border); margin: 10px 0 8px; padding-top: 7px; }
+.insp-radio-row { display: flex; gap: 8px; align-items: center; }
+.insp-radio-row label { display: flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: 13px; color: var(--text); }
+.insp-radio-row input[type=radio] { accent-color: var(--accent3); cursor: pointer; }
 .empty-insp {
   flex: 1;
   display: flex;
@@ -354,7 +363,7 @@ x3d-canvas {
   justify-content: center;
   text-align: center;
   color: var(--dim);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.9;
 }
 
@@ -382,7 +391,7 @@ x3d-canvas {
 }
 .tb-btn {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
+  font-size: 14px;
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -399,7 +408,7 @@ x3d-canvas {
 .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
 .tb-time {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--accent);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -410,7 +419,7 @@ x3d-canvas {
 }
 .tb-zoom {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--dim);
   display: flex;
   align-items: center;
@@ -423,7 +432,7 @@ x3d-canvas {
   border-radius: var(--radius);
   width: 20px; height: 20px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -455,7 +464,7 @@ x3d-canvas {
   display: flex;
   align-items: center;
   padding: 0 8px;
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -473,7 +482,7 @@ x3d-canvas {
   align-items: center;
   padding: 0 6px 0 8px;
   gap: 4px;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--text);
   cursor: pointer;
   user-select: none;
@@ -481,10 +490,10 @@ x3d-canvas {
   overflow: hidden;
 }
 .tl-track-label:hover { background: rgba(255,255,255,0.03); }
-.track-icon { font-size: 12px; flex-shrink: 0; }
+.track-icon { font-size: 14px; flex-shrink: 0; }
 .track-label-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .track-clear-btn {
-  font-size: 13px; line-height: 1; color: var(--muted); flex-shrink: 0;
+  font-size: 15px; line-height: 1; color: var(--muted); flex-shrink: 0;
   padding: 1px 3px; border-radius: 3px; cursor: pointer; opacity: 0;
   transition: opacity 0.15s;
 }
@@ -516,7 +525,7 @@ x3d-canvas {
 .wp-marker-head {
   position: absolute;
   top: 0;
-  font-size: 8px;
+  font-size: 11px;
   color: var(--purple);
   letter-spacing: 0.05em;
   white-space: nowrap;
@@ -537,7 +546,7 @@ x3d-canvas {
 }
 .tl-track-row {
   display: flex;
-  height: 34px;
+  height: 38px;
   border-bottom: 1px solid var(--border);
   position: relative;
 }
@@ -562,12 +571,12 @@ x3d-canvas {
 .cue {
   position: absolute;
   top: 3px;
-  height: 28px;
+  height: 32px;
   border-radius: 3px;
   display: flex;
   align-items: center;
   padding: 0 7px;
-  font-size: 10px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -665,7 +674,7 @@ x3d-canvas {
       </select>
       <span class="x3d-status" id="vp-status">— no scene loaded —</span>
       <button id="vp-refresh-btn" onclick="refreshViewport()" title="Re-export X3D and reload viewport" style="
-        margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:9px;
+        margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;
         padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius);
         background:transparent;color:var(--dim);cursor:pointer;letter-spacing:0.06em;
         text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">↺ refresh</button>
@@ -794,6 +803,53 @@ var VIEWS    = ['VP_Overview','VP_Origin','VP_Cindy_Eye','VP_Cindy_Side','VP_Wit
 var LIGHTS_L = ['KeyLight','FillLight','AmbientLight','RimLight','S0Light'];
 var TRIGGERS = ['manual','WAYPT1 arrive','WAYPT2 arrive','WAYPT3 arrive','WP1 arrive','WP2 arrive','WP3 arrive','field E>0.6','field E<0.3'];
 
+// Camera shot system — spec v1.0
+var SHOT_TYPES = [
+  { value:'wide',            label:'Wide',              group:'static'    },
+  { value:'medium',          label:'Medium',            group:'static'    },
+  { value:'closeup',         label:'Close-Up',          group:'static'    },
+  { value:'extreme_closeup', label:'Extreme Close-Up',  group:'static'    },
+  { value:'overhead',        label:'Overhead',          group:'static'    },
+  { value:'worms_eye',       label:"Worm's Eye",        group:'static'    },
+  { value:'dutch',           label:'Dutch Angle',       group:'static'    },
+  { value:'over_shoulder',   label:'Over Shoulder',     group:'relational'},
+  { value:'profile',         label:'Profile',           group:'relational'},
+  { value:'two_shot',        label:'Two Shot',          group:'relational'},
+  { value:'agent_eye',       label:'Agent Eye (POV)',   group:'attached'  },
+  { value:'agent_side',      label:'Agent Side',        group:'attached'  },
+  { value:'dolly_in',        label:'Dolly In',          group:'move'      },
+  { value:'dolly_out',       label:'Dolly Out',         group:'move'      },
+  { value:'pan',             label:'Pan',               group:'move'      },
+  { value:'tilt',            label:'Tilt',              group:'move'      },
+  { value:'orbit',           label:'Orbit',             group:'move'      },
+  { value:'crane_up',        label:'Crane Up',          group:'move'      },
+  { value:'track',           label:'Track',             group:'move'      },
+];
+// Default framing per shot type: [distance, height, hAngle, vAngle, roll]
+var SHOT_PRESETS = {
+  wide:            [12,  3.0,   0, -15,   0],
+  medium:          [ 5,  1.7,   0,  -8,   0],
+  closeup:         [ 1.5,1.7,   0,  -5,   0],
+  extreme_closeup: [ 0.4,1.7,   0,   0,   0],
+  overhead:        [ 0,  10,    0, -90,   0],
+  worms_eye:       [ 1.5,0.1,   0,  35,   0],
+  dutch:           [ 3,  1.7,   0,  -8,  25],
+  over_shoulder:   [ 0.8,1.6, -20,  -5,   0],
+  profile:         [ 3,  1.7,  90,  -8,   0],
+  two_shot:        [ 4,  1.7,   0,  -8,   0],
+  agent_eye:       [ 0,  0,     0,   0,   0],
+  agent_side:      [ 0,  0,     0,   0,   0],
+  dolly_in:        [ 8,  1.7,   0,  -8,   0],
+  dolly_out:       [ 3,  1.7,   0,  -8,   0],
+  pan:             [ 5,  1.7, -45,  -8,   0],
+  tilt:            [ 5,  1.7,   0, -30,   0],
+  orbit:           [ 5,  1.7,   0,  -8,   0],
+  crane_up:        [ 6,  1.5,   0, -15,   0],
+  track:           [ 4,  1.7, -90,  -8,   0],
+};
+var SHOT_ATTACHED = { agent_eye: true, agent_side: true };
+var SHOT_MOVES    = { dolly_in:true, dolly_out:true, pan:true, tilt:true, orbit:true, crane_up:true, track:true };
+
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 function toPx(t) { return t * PX_PER_S * _zoom; }
 function zoomIn()  { if (_zoom < 4)   { _zoom = Math.round((_zoom + 0.5) * 2) / 2; renderTimeline(); } }
@@ -813,8 +869,16 @@ function drawStage() {
   for (var y=0; y<h; y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
   ctx.strokeStyle = '#252a36'; ctx.lineWidth = 1;
   ctx.strokeRect(14, 14, w-28, h-28);
-  ctx.font = '9px IBM Plex Mono'; ctx.fillStyle = '#4a5568';
+  ctx.font = '11px IBM Plex Mono'; ctx.fillStyle = '#4a5568';
   ctx.fillText('top-down view', 20, 28);
+
+  // Dummy agent positions (replaced by Task 3 real scene data)
+  var stageAgents = [
+    { x:w*.38, y:h*.42, c:'#4af0a8', l:'C', name: AGENTS[0]||'Cindy' },
+    { x:w*.50, y:h*.30, c:'#f06060', l:'W', name: AGENTS[1]||'The Witness' },
+    { x:w*.65, y:h*.58, c:'#f0c060', l:'S', name: AGENTS[2]||'The Steward' }
+  ];
+
   // Zones
   var zones = [
     { x: w*0.38, y: h*0.42, r: 30, fill:'#0f6e5640', line:'#1d9e75' },
@@ -827,20 +891,87 @@ function drawStage() {
     if(z.dash) ctx.setLineDash([3,3]); else ctx.setLineDash([]);
     ctx.stroke(); ctx.setLineDash([]);
   });
+
   // Agents
-  [{ x:w*.38,y:h*.42,c:'#4af0a8',l:'C' },{ x:w*.50,y:h*.30,c:'#f06060',l:'W' },{ x:w*.65,y:h*.58,c:'#f0c060',l:'S' }].forEach(function(a){
+  stageAgents.forEach(function(a){
     ctx.beginPath(); ctx.arc(a.x,a.y,8,0,Math.PI*2); ctx.fillStyle=a.c+'33'; ctx.fill();
     ctx.strokeStyle=a.c; ctx.lineWidth=1.5; ctx.stroke();
     ctx.fillStyle=a.c; ctx.font='9px Syne,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(a.l,a.x,a.y); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   });
-  // Cameras
-  [{ x:w*.20,y:h*.22 },{ x:w*.78,y:h*.30 }].forEach(function(c){
-    ctx.fillStyle='#185fa533'; ctx.strokeStyle='#378add'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.rect(c.x-6,c.y-6,12,12); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#85b7eb'; ctx.font='9px monospace'; ctx.textAlign='center';
-    ctx.fillText('C',c.x,c.y+3); ctx.textAlign='left';
-  });
+
+  // Selected camera cue — draw FOV cone from computed position toward subject
+  if (_selCue) {
+    var track = _tracks[_selCue.ti];
+    var cue   = track && track.cues[_selCue.ci];
+    if (track && track.type === 'camera' && cue) {
+      var isMove = !!SHOT_MOVES[cue.shot];
+      var isAttached = !!SHOT_ATTACHED[cue.shot];
+      var subjectName = cue.subject || (AGENTS[0]||'');
+      // Find subject canvas position
+      var subj = stageAgents.reduce(function(best, a) {
+        return (a.name === subjectName) ? a : best;
+      }, stageAgents[0] || { x: w*0.5, y: h*0.5 });
+      var sx = subj.x, sy = subj.y;
+
+      if (!isAttached) {
+        // Compute camera canvas position from hAngle + distance
+        // Scene scale: w * 0.7 ≈ scene width, so 1m ≈ w*0.7/sceneWidth
+        // Use a fixed pixel scale: 1m = w/30
+        var pxPerM = w / 30;
+        var hRad = (cue.hAngle || 0) * Math.PI / 180;
+        var dist = (cue.distance || 3) * pxPerM;
+        var cx = sx + dist * Math.sin(hRad);
+        var cy = sy + dist * Math.cos(hRad);
+
+        // FOV cone — half-angle ~20°
+        var fovHalf = 20 * Math.PI / 180;
+        var coneColor = (cue.transition === 'fly' || isMove) ? '#f0c060' : '#378add';
+        var dx = sx - cx, dy = sy - cy;
+        var baseAngle = Math.atan2(dy, dx);
+        var coneLen = dist * 0.85;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + coneLen * Math.cos(baseAngle - fovHalf), cy + coneLen * Math.sin(baseAngle - fovHalf));
+        ctx.lineTo(cx + coneLen * Math.cos(baseAngle + fovHalf), cy + coneLen * Math.sin(baseAngle + fovHalf));
+        ctx.closePath();
+        ctx.fillStyle = coneColor + '22';
+        ctx.fill();
+        ctx.strokeStyle = coneColor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash(isMove ? [3,3] : []);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Camera icon at apex
+        ctx.fillStyle = coneColor + '55';
+        ctx.strokeStyle = coneColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.rect(cx - 5, cy - 5, 10, 10);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = coneColor;
+        ctx.font = '11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('CAM', cx, cy + 15);
+        ctx.textAlign = 'left';
+        // Shot label near subject
+        ctx.fillStyle = coneColor;
+        ctx.font = '11px IBM Plex Mono';
+        ctx.fillText((cue.shot||'').replace(/_/g,' '), sx + 10, sy - 10);
+      } else {
+        // Agent-attached — draw a ring around the subject
+        ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI*2);
+        ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([2,3]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#a880f0';
+        ctx.font = '11px IBM Plex Mono'; ctx.textAlign = 'center';
+        ctx.fillText(cue.shot==='agent_eye'?'EYE':'SIDE', sx, sy + 23);
+        ctx.textAlign = 'left';
+      }
+    }
+  }
+
   // Lights
   [{ x:w*.12,y:h*.58 },{ x:w*.82,y:h*.62 }].forEach(function(l){
     ctx.beginPath(); ctx.arc(l.x,l.y,6,0,Math.PI*2); ctx.fillStyle='#ba751733'; ctx.fill();
@@ -965,6 +1096,7 @@ function selectCue(ti, ci) {
   _selCue = { ti: ti, ci: ci };
   renderTimeline();
   renderInspector();
+  drawStage();
 }
 
 function renderInspector() {
@@ -976,12 +1108,83 @@ function renderInspector() {
   var typeSpecific = '';
 
   if (track.type === 'camera') {
-    var vpOpts = VIEWS.map(function(v){ return '<option value="'+v+'"'+(cue.viewpoint===v?' selected':'')+'>'+v+'</option>'; }).join('');
-    var blendOpts = ['cut','blend 0.5s','blend 1s','blend 2s'].map(function(b){ return '<option value="'+b+'"'+(cue.blend===b?' selected':'')+'>'+b+'</option>'; }).join('');
-    var jumpChecked = (cue.jump !== false) ? 'checked' : '';
-    typeSpecific = '<div class="insp-field"><div class="insp-label">viewpoint</div><select class="insp-select" onchange="setCueProp(\'viewpoint\',this.value)">'+vpOpts+'</select></div>'
-      + '<div class="insp-field"><div class="insp-label">cut / blend</div><select class="insp-select" onchange="setCueProp(\'blend\',this.value)">'+blendOpts+'</select></div>'
-      + '<div class="insp-field" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" '+jumpChecked+' onchange="setCueProp(\'jump\',this.checked)" style="width:auto;accent-color:var(--accent);cursor:pointer"><div class="insp-label" style="margin:0">jump (cut=true, fly=false)</div></div>';
+    var shot       = cue.shot       || 'closeup';
+    var subject    = cue.subject    || (AGENTS[0] || '');
+    var trans      = cue.transition || 'cut';
+    var isAttached = !!SHOT_ATTACHED[shot];
+    var isMove     = !!SHOT_MOVES[shot];
+    var isTwoShot  = shot === 'two_shot';
+    var isDutch    = shot === 'dutch';
+    var preset     = SHOT_PRESETS[shot] || [3, 1.7, 0, -8, 0];
+    var dist   = cue.distance    !== undefined ? cue.distance    : preset[0];
+    var ht     = cue.height      !== undefined ? cue.height      : preset[1];
+    var hAng   = cue.hAngle      !== undefined ? cue.hAngle      : preset[2];
+    var vAng   = cue.vAngle      !== undefined ? cue.vAngle      : preset[3];
+    var roll   = cue.roll        !== undefined ? cue.roll        : preset[4];
+    var flyDur = cue.flyDuration !== undefined ? cue.flyDuration : 1.5;
+    var delay  = cue.delay       !== undefined ? cue.delay       : 0;
+    var distEnd = cue.distanceEnd !== undefined ? cue.distanceEnd : +(dist * 0.4).toFixed(1);
+    var hAngEnd = cue.hAngleEnd   !== undefined ? cue.hAngleEnd   : hAng + 90;
+    var vAngEnd = cue.vAngleEnd   !== undefined ? cue.vAngleEnd   : vAng - 15;
+    var htEnd   = cue.heightEnd   !== undefined ? cue.heightEnd   : +(ht + 4).toFixed(1);
+
+    // Shot type grouped select
+    var shotOpts = ''; var lastGroup = '';
+    SHOT_TYPES.forEach(function(s) {
+      if (s.group !== lastGroup) {
+        var gl = {static:'Static',relational:'Relational',attached:'Agent POV',move:'Camera Moves'}[s.group]||s.group;
+        shotOpts += '<optgroup label="── '+gl+' ──">';
+        lastGroup = s.group;
+      }
+      shotOpts += '<option value="'+s.value+'"'+(shot===s.value?' selected':'')+'>'+s.label+'</option>';
+    });
+
+    var subjectOpts  = AGENTS.map(function(a){ return '<option value="'+a+'"'+(subject===a?' selected':'')+'>'+a+'</option>'; }).join('');
+    var subject2     = cue.subject2 || (AGENTS[1] || '');
+    var subject2Opts = AGENTS.map(function(a){ return '<option value="'+a+'"'+(subject2===a?' selected':'')+'>'+a+'</option>'; }).join('');
+
+    function sliderRow(prop, min, max, step, val, unit) {
+      return '<div class="insp-slider-row">'
+        + '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" '
+        + 'oninput="setCueProp(\''+prop+'\',parseFloat(this.value));this.nextElementSibling.textContent=parseFloat(this.value).toFixed('+(step<1?1:0)+')+\''+unit+'\'">'
+        + '<span class="insp-slider-val">'+parseFloat(val).toFixed(step<1?1:0)+unit+'</span></div>';
+    }
+
+    typeSpecific =
+      '<div class="insp-field"><div class="insp-label">shot type</div>'
+      + '<select class="insp-select" onchange="applyShotPreset(this.value)">'+shotOpts+'</select></div>'
+      + '<div class="insp-field"><div class="insp-label">subject</div>'
+      + '<select class="insp-select" onchange="setCueProp(\'subject\',this.value)">'+subjectOpts+'</select></div>'
+      + (isTwoShot
+          ? '<div class="insp-field"><div class="insp-label">subject 2</div>'
+            + '<select class="insp-select" onchange="setCueProp(\'subject2\',this.value)">'+subject2Opts+'</select></div>'
+          : '')
+      + (!isAttached
+          ? '<div class="insp-field"><div class="insp-label">transition</div>'
+            + '<div class="insp-radio-row">'
+            + '<label><input type="radio" name="trans_r" value="cut" '+(trans==='cut'?'checked':'')+' onchange="setCueProp(\'transition\',\'cut\');renderInspector()"> cut</label>'
+            + (!isMove ? '<label><input type="radio" name="trans_r" value="fly" '+(trans==='fly'?'checked':'')+' onchange="setCueProp(\'transition\',\'fly\');renderInspector()"> fly</label>' : '')
+            + '</div></div>'
+            + (trans==='fly'||isMove
+                ? '<div class="insp-field"><div class="insp-label">fly duration (s)</div>'+sliderRow('flyDuration',0.3,8,0.1,flyDur,'s')+'</div>'
+                : '')
+          : '')
+      + (!isAttached
+          ? '<div class="insp-section">framing</div>'
+            + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
+            + (isMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
+            + '<div class="insp-field"><div class="insp-label">height'+(isMove?' — start':'')+'(m)</div>'+sliderRow('height',-1,15,0.1,ht,'m')+'</div>'
+            + (isMove ? '<div class="insp-field"><div class="insp-label">height — end (m)</div>'+sliderRow('heightEnd',-1,15,0.1,htEnd,'m')+'</div>' : '')
+            + '<div class="insp-field"><div class="insp-label">h. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('hAngle',-180,180,1,hAng,'°')+'</div>'
+            + (isMove ? '<div class="insp-field"><div class="insp-label">h. angle — end (°)</div>'+sliderRow('hAngleEnd',-180,180,1,hAngEnd,'°')+'</div>' : '')
+            + '<div class="insp-field"><div class="insp-label">v. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
+            + (isMove ? '<div class="insp-field"><div class="insp-label">v. angle — end (°)</div>'+sliderRow('vAngleEnd',-90,90,1,vAngEnd,'°')+'</div>' : '')
+            + (isDutch ? '<div class="insp-field"><div class="insp-label">roll (°)</div>'+sliderRow('roll',-45,45,1,roll,'°')+'</div>' : '')
+          : '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
+            + 'Position from agent Transform.<br>'
+            + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>')
+      + '<div class="insp-section">timing</div>'
+      + '<div class="insp-field"><div class="insp-label">delay after trigger (s)</div>'+sliderRow('delay',0,10,0.5,delay,'s')+'</div>';
   } else if (track.type === 'light') {
     var ltOpts = LIGHTS_L.map(function(l){ return '<option value="'+l+'"'+(cue.node===l?' selected':'')+'>'+l+'</option>'; }).join('');
     typeSpecific = '<div class="insp-field"><div class="insp-label">light</div><select class="insp-select" onchange="setCueProp(\'node\',this.value)">'+ltOpts+'</select></div>'
@@ -1017,6 +1220,30 @@ function setCueProp(k, v) {
   cue[k] = v;
   renderTimeline();
   if (k === 'label') renderInspector();
+}
+
+function applyShotPreset(shotValue) {
+  if (!_selCue) return;
+  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+  var preset = SHOT_PRESETS[shotValue] || [3, 1.7, 0, -8, 0];
+  cue.shot       = shotValue;
+  cue.distance   = preset[0];
+  cue.height     = preset[1];
+  cue.hAngle     = preset[2];
+  cue.vAngle     = preset[3];
+  cue.roll       = preset[4];
+  // Move shots always fly; attached shots have no transition
+  if (SHOT_MOVES[shotValue])    { cue.transition = 'fly'; }
+  if (SHOT_ATTACHED[shotValue]) { delete cue.transition; }
+  else if (!cue.transition)     { cue.transition = 'cut'; }
+  // Auto-update label with shot + subject
+  // Ensure subject is set — if missing, default to first agent.
+  // This fixes the case where a cue was restored from XML without a subject= attribute.
+  if (!cue.subject) cue.subject = AGENTS[0] || '';
+  cue.label = shotValue.replace(/_/g,' ') + (cue.subject ? ' ' + cue.subject : '');
+  renderTimeline();
+  renderInspector();
+  drawStage();
 }
 
 function deleteCue() {
@@ -1098,11 +1325,20 @@ function addCue() {
   track.cues.forEach(function(c) { lastEnd = Math.max(lastEnd, c.t + (c.dur || 4)); });
   var startT = Math.max(_playT, lastEnd);
   var newCue = { label: 'new cue', t: startT, dur: 4, trigger: 'manual' };
-  // Camera-track defaults
+  // Camera-track defaults (spec v1.0 — inline per-cue shot system)
   if (track.type === 'camera') {
-    newCue.viewpoint = VIEWS[0] || 'VP_Overview';
-    newCue.jump = true;
-    newCue.blend = 'cut';
+    var preset = SHOT_PRESETS['closeup'];
+    newCue.shot       = 'closeup';
+    newCue.subject    = AGENTS[0] || '';
+    newCue.transition = 'cut';
+    newCue.flyDuration= 1.5;
+    newCue.distance   = preset[0];
+    newCue.height     = preset[1];
+    newCue.hAngle     = preset[2];
+    newCue.vAngle     = preset[3];
+    newCue.roll       = preset[4];
+    newCue.delay      = 0;
+    newCue.label      = 'closeup ' + (AGENTS[0] || 'agent');
   }
   track.cues.push(newCue);
   _selCue = { ti: ti, ci: track.cues.length - 1 };
@@ -1135,10 +1371,31 @@ function exportCues() {
     _tracks.forEach(function(track) {
       track.cues.forEach(function(cue) {
         xml += '  <Cue track="'+track.type+'" label="'+cue.label+'" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+(cue.trigger||'manual')+'"';
-        if (cue.viewpoint) xml += ' viewpoint="'+cue.viewpoint+'"';
-        if (cue.jump !== undefined) xml += ' jump="'+cue.jump+'"';
-        if (cue.node)      xml += ' node="'+cue.node+'" intensity="'+(cue.intensity||0.8)+'"';
-        if (cue.agent)     xml += ' agent="'+cue.agent+'" clip="'+(cue.clip||'')+'"';
+        if (track.type === 'camera') {
+          xml += ' shot="'+(cue.shot||'closeup')+'"';
+          xml += ' subject="'+(cue.subject||'')+'"';
+          if (cue.subject2)      xml += ' subject2="'+cue.subject2+'"';
+          xml += ' transition="'+(cue.transition||'cut')+'"';
+          if ((cue.transition==='fly')||SHOT_MOVES[cue.shot]) xml += ' flyDuration="'+(cue.flyDuration||1.5)+'"';
+          if (!SHOT_ATTACHED[cue.shot]) {
+            xml += ' distance="'+(cue.distance||3)+'"';
+            xml += ' height="'+(cue.height||1.7)+'"';
+            xml += ' hAngle="'+(cue.hAngle||0)+'"';
+            xml += ' vAngle="'+(cue.vAngle||-8)+'"';
+            if (cue.roll) xml += ' roll="'+cue.roll+'"';
+            if (SHOT_MOVES[cue.shot]) {
+              xml += ' distanceEnd="'+(cue.distanceEnd||1)+'"';
+              xml += ' heightEnd="'+(cue.heightEnd||5)+'"';
+              xml += ' hAngleEnd="'+(cue.hAngleEnd||0)+'"';
+              xml += ' vAngleEnd="'+(cue.vAngleEnd||-20)+'"';
+            }
+          }
+          xml += ' delay="'+(cue.delay||0)+'"';
+        } else if (cue.node) {
+          xml += ' node="'+cue.node+'" intensity="'+(cue.intensity||0.8)+'"';
+        } else if (cue.agent) {
+          xml += ' agent="'+cue.agent+'" clip="'+(cue.clip||'')+'"';
+        }
         xml += '/>\n';
       });
     });
@@ -1385,6 +1642,14 @@ window.addEventListener('message', function(evt) {
           return Object.assign({}, c, { t: t });
         });
         return { type: st.type, label: label, cues: cues };
+      });
+      // Ensure camera cues always have a subject — default to first agent if absent.
+      // Cues restored from old XML (pre-Day-58) may lack subject= attribute.
+      merged.forEach(function(track) {
+        if (track.type !== 'camera') return;
+        track.cues.forEach(function(cue) {
+          if (cue.shot && !cue.subject) cue.subject = AGENTS[0] || '';
+        });
       });
       _tracks = merged;
       _tracksAreStub = false;
