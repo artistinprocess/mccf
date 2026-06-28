@@ -406,3 +406,127 @@ Cindy arc exports use old `Pos_Cindy` naming. Revisit after V3-15 resolved.
 
 *V3 Session 3 additions: May 2026*
 *Len Bullard / Claude Sonnet 4.6 (Tae)*
+
+---
+
+## Day 60 — Camera System Issues (June 2026)
+
+Issues discovered and resolved during EventCues camera system development
+(Days 58–60). Documented here as permanent reference.
+
+---
+
+## D60-1 — Viewpoint position/orientation Are Output-Only Fields (RESOLVED)
+
+**Status:** RESOLVED Day 60.
+
+SAI writes to `Viewpoint.position` and `Viewpoint.orientation` are silently
+ignored by X_ITE. These are output fields — they report the current camera
+state to the scene graph; they do not accept input.
+
+**Symptom:** Camera appears to stay at its authored position despite SAI
+writes. No error in console. Write appears to succeed but has no effect.
+
+**Root cause:** X3D spec defines Viewpoint `position` and `orientation` as
+exposedFields with output semantics in the context of active viewpoint binding.
+X_ITE correctly ignores SAI writes to them.
+
+**Correct pattern — wrap Viewpoint in a Transform, write to the Transform:**
+
+```xml
+<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0.0001">
+  <Viewpoint DEF="VP_Free" description="Free Camera"
+             position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>
+</Transform>
+```
+
+```javascript
+// CORRECT — write to Transform (input fields), then bind Viewpoint
+var camXform = scene.getNamedNode('CAM_Free_Transform');
+var vpFree   = scene.getNamedNode('VP_Free');
+camXform.getField('translation').setValue(new X3D.SFVec3f(x, y, z));
+camXform.getField('rotation').setValue(new X3D.SFRotation(ax, ay, az, angle));
+requestAnimationFrame(function() { vpFree.set_bind = true; });
+
+// WRONG — Viewpoint position/orientation are output-only, writes silently ignored
+vpFree.position    = new X3D.SFVec3f(x, y, z);   // no effect
+vpFree.orientation = new X3D.SFRotation(...);      // no effect
+```
+
+VP_Free is at local origin inside the Transform; its world position is
+entirely determined by the Transform's translation and rotation. The Viewpoint's
+authored `position` and `orientation` values are irrelevant at runtime.
+
+**`set_bind` must be called after one `requestAnimationFrame`** — calling it
+in the same synchronous frame as the Transform write can bind the Viewpoint
+before the Transform update is processed.
+
+---
+
+## D60-2 — Viewpoint Zero-Angle Rotation Produces Black Viewport (RESOLVED)
+
+**Status:** RESOLVED Day 60.
+
+A Viewpoint node with `orientation="0 1 0 0"` (zero angle) causes X_ITE to
+render a black viewport when that Viewpoint is bound. No error in console.
+
+**Root cause:** Zero-angle axis-angle rotation is a degenerate state. The
+axis vector is meaningless at angle=0, and X_ITE's internal matrix
+construction produces an undefined or identity-conflicting result for the
+camera transform.
+
+**Workaround:** Always author Viewpoint nodes with a non-zero angle, even
+if the intended orientation is identity:
+
+```xml
+<!-- WRONG — zero angle, black viewport on bind -->
+<Viewpoint DEF="VP_Free" orientation="0 1 0 0" .../>
+
+<!-- CORRECT — near-identity, renders correctly -->
+<Viewpoint DEF="VP_Free" orientation="0 1 0 0.0001" .../>
+```
+
+This applies to authored Viewpoint nodes only. Transform `rotation` fields
+handle zero-angle correctly and do not require this workaround.
+
+---
+
+## D60-3 — Camera Look-At Yaw: X3D -Z Convention (RESOLVED)
+
+**Status:** RESOLVED Day 60. Documented to prevent recurrence.
+
+X3D cameras face **-Z** by default (into the scene). Computing a yaw angle
+to make a camera face a target requires negating the direction vector
+components. The non-negated form aims the camera's **+Z** axis at the target,
+which points the camera directly away from it.
+
+**Symptom:** Camera appears to face exactly opposite to the intended subject.
+Shot renders the background instead of the subject.
+
+**Correct formula:**
+
+```javascript
+var dx = targetPos[0] - camPos[0];
+var dz = targetPos[2] - camPos[2];
+
+// CORRECT — negate to aim -Z axis at target
+var yaw = Math.atan2(-dx, -dz);
+
+// WRONG — aims +Z at target (camera faces away from subject)
+var yaw = Math.atan2(dx, dz);
+```
+
+**Why the negation is required:** `atan2(dx, dz)` gives the angle of the
+direction vector from camera to target in the XZ plane. But the camera's
+forward axis is -Z, not +Z. To rotate the camera so its -Z axis aligns with
+the direction vector, the angle must be negated in both components. This is
+a coordinate system property, not an edge case — it applies everywhere
+look-at orientation is computed for X3D cameras.
+
+Comment this clearly wherever it appears in code. It cost a full test cycle
+in Day 60 development.
+
+---
+
+*Day 60 additions: June 2026*
+*Len Bullard / Claude Sonnet 4.6 (Tae)*
