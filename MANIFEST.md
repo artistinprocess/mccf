@@ -1,5 +1,5 @@
 # MCCF — Full Package Manifest
-## Updated Day 60 — June 27, 2026
+## Updated Day 61 — June 28, 2026
 
 ---
 
@@ -31,7 +31,6 @@
 - `mccf_scene_wrapper.py`    — Scene XML wrapper and utilities
 - `mccf_playback.py`         — Arc playback engine: step, session, waypoint resolution
 - `mccf_x3d_generator.py`    — Procedural X3D scene generation
-- `mccf_zone_api.py`         — Zone management blueprint
 - `mccf_cultivar_lambda.py`  — Cultivar lambda behavioral layer
 
 ## Browser Interfaces (`static/`)
@@ -72,6 +71,7 @@
 ## Specifications (`docs/`)
 - `MCCF_Camera_System_Spec_v1.2.md`        — Camera EventCues: shot types, VP_Free pattern, -Z convention
 - `MCCF_Events_Editor_Architecture.md`      — Baked vs runtime events, vessel principle, SAI rules, coordinate system
+- `MCCF_Scene_Animation_Spec.md`            — Scene animation specification
 - `MCCF_V5_Semantic_Field_Spec.md`          — Semantic field specification
 - `MCCF_HAnim_Behavior_Activation_Spec.md`  — HAnim behavior activation
 - `MCCF_HAnim_Editor_Spec.md`               — HAnim editor specification
@@ -90,6 +90,10 @@
 - Day-by-day session handoff documents
 - Each seed carries: GitHub baseline commit, confirmed working state, remaining tasks, key architecture facts
 - **Required reading at the start of each session**
+- **Local only — not pushed to GitHub.** Seeds are session state, not codebase artifacts.
+  They contain working notes, mid-session decisions, and architecture facts that are
+  promoted to `docs/` specs when stable. The `docs/` folder is the canonical reference;
+  seeds are the path that got there.
 
 ## Tests
 - `test_drift.py`, `test_playback.py`, `test_scene_generate_api.py`
