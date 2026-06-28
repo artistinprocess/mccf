@@ -976,9 +976,12 @@ function loadAll(){
         agents[c.agentname].hanim_src=c.hanim_src||'';
         agents[c.agentname].hanim_loa=c.hanim_loa||4;
         agents[c.agentname].behavior_clips=c.behavior_clips||[];
-        // Refresh placedAgents too — buildAvatarNode reads from placedAgents
+        // Refresh placedAgents too — buildAvatarNode reads from placedAgents.
+        // Only overwrite hanim_src if the cultivar definition carries a non-empty value.
+        // An empty cultivar hanim_src must NOT clobber a value already loaded from
+        // scene XML — that is the source of the avatar persistence bug (Day 61).
         if(placedAgents[c.agentname]){
-          placedAgents[c.agentname].hanim_src=c.hanim_src||'';
+          if(c.hanim_src) placedAgents[c.agentname].hanim_src=c.hanim_src;
           placedAgents[c.agentname].hanim_loa=c.hanim_loa||4;
           placedAgents[c.agentname].behavior_clips=c.behavior_clips||[];
         }
@@ -3461,17 +3464,24 @@ function _restoreChorusFromXml(xml) {
       if (bdGainVal2)bdGainVal2.textContent = (sceneConfig.sound.bedGain || 0.50).toFixed(2);
     }
 
-    // ── 7. Restore placedAgents from <EmotionalArc> if server didn't return them ──
-    if (!Object.keys(placedAgents).length) {
-      doc.querySelectorAll('EmotionalArc').forEach(function(ea) {
-        var name  = ea.getAttribute('cultivar');
-        var voice = ea.getAttribute('voice') || '';
-        var spEl  = ea.querySelector('StartPosition');
-        var px3   = spEl ? parseFloat(spEl.getAttribute('x') || '0') : 0;
-        var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
-        if (!name) return;
-        var ag = agents[name] || {};
-        var xmlHanim = ea.getAttribute('hanim_src') || '';
+    // ── 7. Restore placedAgents from <EmotionalArc> ──────────────────────────
+    // Two responsibilities:
+    // (a) If placedAgents is empty (server returned nothing), build it fully from XML.
+    // (b) Always patch hanim_src and voice from XML onto any already-placed agent —
+    //     the server cultivar definitions do not carry hanim_src, so without this patch
+    //     avatar assignments vanish every time the scene is reloaded even though they
+    //     were correctly serialized into the scene XML on save.
+    doc.querySelectorAll('EmotionalArc').forEach(function(ea) {
+      var name  = ea.getAttribute('cultivar');
+      var voice = ea.getAttribute('voice') || '';
+      var spEl  = ea.querySelector('StartPosition');
+      var px3   = spEl ? parseFloat(spEl.getAttribute('x') || '0') : 0;
+      var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
+      if (!name) return;
+      var ag       = agents[name] || {};
+      var xmlHanim = ea.getAttribute('hanim_src') || '';
+      if (!placedAgents[name]) {
+        // Agent not yet in placedAgents — build the full entry from XML (path a)
         placedAgents[name] = {
           name: name, position: [px3, 0, pz3],
           color:       ag.color       || agentColor(name),
@@ -3482,8 +3492,15 @@ function _restoreChorusFromXml(xml) {
           hanim_src:   xmlHanim || ag.hanim_src || '',
           hanim_loa:   ag.hanim_loa   || 4
         };
-      });
-    }
+      } else {
+        // Agent already in placedAgents (server path) — patch hanim_src and voice
+        // from XML, which is the only authoritative source for these fields (path b).
+        if (xmlHanim) placedAgents[name].hanim_src = xmlHanim;
+        if (voice)    placedAgents[name].voice      = voice;
+        // Also patch position from XML — server may return a stale start position
+        if (px3 || pz3) placedAgents[name].position = [px3, 0, pz3];
+      }
+    });
 
     // ── 8. Restore EventCues → send to Events Editor iframe ─────────────
     var evCuesEl = doc.querySelector('EventCues');

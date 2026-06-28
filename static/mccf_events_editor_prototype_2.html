@@ -817,6 +817,7 @@ var SHOT_TYPES = [
   { value:'two_shot',        label:'Two Shot',          group:'relational'},
   { value:'agent_eye',       label:'Agent Eye (POV)',   group:'attached'  },
   { value:'agent_side',      label:'Agent Side',        group:'attached'  },
+  { value:'named_vp',        label:'Bind Named VP',     group:'baked'     },
   { value:'dolly_in',        label:'Dolly In',          group:'move'      },
   { value:'dolly_out',       label:'Dolly Out',         group:'move'      },
   { value:'pan',             label:'Pan',               group:'move'      },
@@ -905,8 +906,9 @@ function drawStage() {
     var track = _tracks[_selCue.ti];
     var cue   = track && track.cues[_selCue.ci];
     if (track && track.type === 'camera' && cue) {
-      var isMove = !!SHOT_MOVES[cue.shot];
-      var isAttached = !!SHOT_ATTACHED[cue.shot];
+      var isNamedVPCue = (cue.viewpoint !== undefined && cue.viewpoint !== null);
+      var isMove = !isNamedVPCue && !!SHOT_MOVES[cue.shot];
+      var isAttached = !isNamedVPCue && !!SHOT_ATTACHED[cue.shot];
       var subjectName = cue.subject || (AGENTS[0]||'');
       // Find subject canvas position
       var subj = stageAgents.reduce(function(best, a) {
@@ -914,7 +916,20 @@ function drawStage() {
       }, stageAgents[0] || { x: w*0.5, y: h*0.5 });
       var sx = subj.x, sy = subj.y;
 
-      if (!isAttached) {
+      if (isNamedVPCue) {
+        // Named VP (baked) — camera position is unknown at author time.
+        // Draw a VP badge near the subject to indicate a baked viewpoint is bound.
+        ctx.beginPath(); ctx.arc(sx, sy, 15, 0, Math.PI*2);
+        ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#a880f0';
+        ctx.font = 'bold 10px IBM Plex Mono'; ctx.textAlign = 'center';
+        ctx.fillText('VP', sx, sy + 4);
+        ctx.font = '10px IBM Plex Mono';
+        var vpShort = (cue.viewpoint || 'unnamed').replace(/^VP_/,'');
+        ctx.fillText(vpShort, sx, sy + 22);
+        ctx.textAlign = 'left';
+      } else if (!isAttached) {
         // Compute camera canvas position from hAngle + distance
         // Scene scale: w * 0.7 ≈ scene width, so 1m ≈ w*0.7/sceneWidth
         // Use a fixed pixel scale: 1m = w/30
@@ -960,7 +975,7 @@ function drawStage() {
         ctx.font = '11px IBM Plex Mono';
         ctx.fillText((cue.shot||'').replace(/_/g,' '), sx + 10, sy - 10);
       } else {
-        // Agent-attached — draw a ring around the subject
+        // Agent-attached runtime shot — draw a ring around the subject
         ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI*2);
         ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
         ctx.setLineDash([2,3]); ctx.stroke(); ctx.setLineDash([]);
@@ -1097,6 +1112,9 @@ function selectCue(ti, ci) {
   renderTimeline();
   renderInspector();
   drawStage();
+  // Fire preview immediately when a camera cue is selected
+  var track = _tracks[ti];
+  if (track && track.type === 'camera') _previewCameraShot();
 }
 
 function renderInspector() {
@@ -1108,13 +1126,18 @@ function renderInspector() {
   var typeSpecific = '';
 
   if (track.type === 'camera') {
-    var shot       = cue.shot       || 'closeup';
+    // Detect which routing path this cue is on.
+    // Named VP (baked): cue.viewpoint is set (and cue.shot is absent).
+    // Runtime:          cue.shot is set (and cue.viewpoint is absent).
+    // These are mutually exclusive — see MCCF_Events_Editor_Architecture.md §4.
+    var isNamedVP  = (cue.viewpoint !== undefined && cue.viewpoint !== null);
+    var shot       = isNamedVP ? 'named_vp' : (cue.shot || 'closeup');
     var subject    = cue.subject    || (AGENTS[0] || '');
     var trans      = cue.transition || 'cut';
-    var isAttached = !!SHOT_ATTACHED[shot];
-    var isMove     = !!SHOT_MOVES[shot];
-    var isTwoShot  = shot === 'two_shot';
-    var isDutch    = shot === 'dutch';
+    var isAttached = !isNamedVP && !!SHOT_ATTACHED[shot];
+    var isMove     = !isNamedVP && !!SHOT_MOVES[shot];
+    var isTwoShot  = !isNamedVP && shot === 'two_shot';
+    var isDutch    = !isNamedVP && shot === 'dutch';
     var preset     = SHOT_PRESETS[shot] || [3, 1.7, 0, -8, 0];
     var dist   = cue.distance    !== undefined ? cue.distance    : preset[0];
     var ht     = cue.height      !== undefined ? cue.height      : preset[1];
@@ -1128,16 +1151,27 @@ function renderInspector() {
     var vAngEnd = cue.vAngleEnd   !== undefined ? cue.vAngleEnd   : vAng - 15;
     var htEnd   = cue.heightEnd   !== undefined ? cue.heightEnd   : +(ht + 4).toFixed(1);
 
-    // Shot type grouped select
+    // Shot type grouped select.
+    // 'named_vp' sentinel appears in its own "Named Viewpoint" group.
+    // When isNamedVP, it is pre-selected; selecting any other value calls
+    // applyShotPreset() which clears cue.viewpoint and sets cue.shot.
     var shotOpts = ''; var lastGroup = '';
+    var groupLabels = {
+      static:    'Static',
+      relational:'Relational',
+      attached:  'Agent POV',
+      baked:     'Named Viewpoint',
+      move:      'Camera Moves'
+    };
     SHOT_TYPES.forEach(function(s) {
       if (s.group !== lastGroup) {
-        var gl = {static:'Static',relational:'Relational',attached:'Agent POV',move:'Camera Moves'}[s.group]||s.group;
-        shotOpts += '<optgroup label="── '+gl+' ──">';
+        if (lastGroup) shotOpts += '</optgroup>';
+        shotOpts += '<optgroup label="── '+( groupLabels[s.group]||s.group)+' ──">';
         lastGroup = s.group;
       }
       shotOpts += '<option value="'+s.value+'"'+(shot===s.value?' selected':'')+'>'+s.label+'</option>';
     });
+    if (lastGroup) shotOpts += '</optgroup>';
 
     var subjectOpts  = AGENTS.map(function(a){ return '<option value="'+a+'"'+(subject===a?' selected':'')+'>'+a+'</option>'; }).join('');
     var subject2     = cue.subject2 || (AGENTS[1] || '');
@@ -1146,20 +1180,42 @@ function renderInspector() {
     function sliderRow(prop, min, max, step, val, unit) {
       return '<div class="insp-slider-row">'
         + '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" '
-        + 'oninput="setCueProp(\''+prop+'\',parseFloat(this.value));this.nextElementSibling.textContent=parseFloat(this.value).toFixed('+(step<1?1:0)+')+\''+unit+'\'">'
+        + 'oninput="setCueProp(\''+prop+'\',parseFloat(this.value));this.nextElementSibling.textContent=parseFloat(this.value).toFixed('+(step<1?1:0)+')+\''+unit+'\';">'
         + '<span class="insp-slider-val">'+parseFloat(val).toFixed(step<1?1:0)+unit+'</span></div>';
     }
+
+    // Named VP inspector block (baked path)
+    // Shows a text input for the VP name. No framing sliders — position is
+    // entirely the author's responsibility in the X3D file.
+    // The VP name must match a DEF in the exported X3D scene exactly.
+    var namedVPBlock = isNamedVP
+      ? '<div class="insp-section">viewpoint</div>'
+        + '<div class="insp-field"><div class="insp-label">VP name (must match DEF in X3D)</div>'
+        + '<input class="insp-input" type="text" placeholder="e.g. VP_Cindy_Overview" value="'+(cue.viewpoint||'')+'" '
+        + 'oninput="setNamedVP(this.value)"></div>'
+        + '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
+        + 'Baked path — Loader binds this Viewpoint by name.<br>'
+        + 'Do not use VP_Free here. See Architecture doc §4.'
+        + '</div>'
+      : '';
 
     typeSpecific =
       '<div class="insp-field"><div class="insp-label">shot type</div>'
       + '<select class="insp-select" onchange="applyShotPreset(this.value)">'+shotOpts+'</select></div>'
+
+      // Named VP path: show VP name field only; hide all runtime framing fields
+      + namedVPBlock
+
+      // Subject field — shown for all paths (the VP is still "about" an agent)
       + '<div class="insp-field"><div class="insp-label">subject</div>'
       + '<select class="insp-select" onchange="setCueProp(\'subject\',this.value)">'+subjectOpts+'</select></div>'
-      + (isTwoShot
+
+      // Runtime paths only below this point
+      + (!isNamedVP && isTwoShot
           ? '<div class="insp-field"><div class="insp-label">subject 2</div>'
             + '<select class="insp-select" onchange="setCueProp(\'subject2\',this.value)">'+subject2Opts+'</select></div>'
           : '')
-      + (!isAttached
+      + (!isNamedVP && !isAttached
           ? '<div class="insp-field"><div class="insp-label">transition</div>'
             + '<div class="insp-radio-row">'
             + '<label><input type="radio" name="trans_r" value="cut" '+(trans==='cut'?'checked':'')+' onchange="setCueProp(\'transition\',\'cut\');renderInspector()"> cut</label>'
@@ -1169,7 +1225,7 @@ function renderInspector() {
                 ? '<div class="insp-field"><div class="insp-label">fly duration (s)</div>'+sliderRow('flyDuration',0.3,8,0.1,flyDur,'s')+'</div>'
                 : '')
           : '')
-      + (!isAttached
+      + (!isNamedVP && !isAttached
           ? '<div class="insp-section">framing</div>'
             + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
             + (isMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
@@ -1180,9 +1236,11 @@ function renderInspector() {
             + '<div class="insp-field"><div class="insp-label">v. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
             + (isMove ? '<div class="insp-field"><div class="insp-label">v. angle — end (°)</div>'+sliderRow('vAngleEnd',-90,90,1,vAngEnd,'°')+'</div>' : '')
             + (isDutch ? '<div class="insp-field"><div class="insp-label">roll (°)</div>'+sliderRow('roll',-45,45,1,roll,'°')+'</div>' : '')
-          : '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
-            + 'Position from agent Transform.<br>'
-            + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>')
+          : (!isNamedVP && isAttached
+              ? '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
+                + 'Position from agent Transform.<br>'
+                + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>'
+              : ''))
       + '<div class="insp-section">timing</div>'
       + '<div class="insp-field"><div class="insp-label">delay after trigger (s)</div>'+sliderRow('delay',0,10,0.5,delay,'s')+'</div>';
   } else if (track.type === 'light') {
@@ -1220,11 +1278,162 @@ function setCueProp(k, v) {
   cue[k] = v;
   renderTimeline();
   if (k === 'label') renderInspector();
+  // Live camera preview — fire on any framing prop change for camera cues
+  var _PREVIEW_PROPS = { distance:1, height:1, hAngle:1, vAngle:1, roll:1, subject:1 };
+  var track = _tracks[_selCue.ti];
+  if (track && track.type === 'camera' && _PREVIEW_PROPS[k]) {
+    _previewCameraShot();
+  }
+}
+
+// setNamedVP — updates cue.viewpoint for the baked named VP path.
+// Also updates cue.label so the timeline block shows the VP name.
+// Called from the VP name text input in the inspector.
+function setNamedVP(vpName) {
+  if (!_selCue) return;
+  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+  cue.viewpoint = vpName;
+  cue.label = 'vp ' + (vpName || 'unnamed');
+  renderTimeline();
+  // Do not re-render inspector — the text input is live, re-rendering would
+  // reset the cursor position mid-type.
+}
+
+// ── Camera preview system ─────────────────────────────────────────────────────
+// Identical math to mccf_x3d_loader.html _computeCamPosition + _lookAtOrientation.
+// Keep in sync with Loader if that math ever changes.
+
+function _prevComputeCamPos(subjectPos, distance, height, hAngleDeg) {
+  var hRad = (hAngleDeg || 0) * Math.PI / 180;
+  return [
+    subjectPos[0] + distance * Math.sin(hRad),
+    subjectPos[1] + height,
+    subjectPos[2] + distance * Math.cos(hRad)
+  ];
+}
+
+function _prevLookAtOrientation(camPos, targetPos, vAngleDeg) {
+  var dx = targetPos[0] - camPos[0];
+  var dy = targetPos[1] - camPos[1];
+  var dz = targetPos[2] - camPos[2];
+  // X3D cameras face -Z. Negate vector so -Z axis points at target.
+  var yaw = Math.atan2(-dx, -dz);
+  var horizDist = Math.sqrt(dx * dx + dz * dz);
+  var pitch = Math.atan2(dy, horizDist) + ((vAngleDeg || 0) * Math.PI / 180);
+  var cosY = Math.cos(yaw / 2),   sinY = Math.sin(yaw / 2);
+  var cosP = Math.cos(pitch / 2), sinP = Math.sin(pitch / 2);
+  var qw = cosY * cosP;
+  var qx = cosY * sinP;
+  var qy = sinY * cosP;
+  var qz = -sinY * sinP;
+  var angle = 2 * Math.acos(Math.min(1, Math.max(-1, qw)));
+  var s = Math.sqrt(1 - qw * qw);
+  var ax, ay, az;
+  if (s < 0.001) { ax = 0; ay = 1; az = 0; }
+  else { ax = qx / s; ay = qy / s; az = qz / s; }
+  return [ax, ay, az, angle];
+}
+
+// Resolve a subject agent's position for preview.
+// Uses WPS data (t-keyed) or falls back to scene centroid.
+// WPS from the Composer carry x/z if the author set waypoint positions.
+// This is best-effort for preview — the Loader's PATH 1 runtime position
+// is more accurate during actual playback.
+function _prevResolveSubjectPos(subjectName) {
+  if (!subjectName) return [0, 0, 0];
+  // Look for a WP whose name or associated agent matches
+  // The Composer sends WPS as { name, t, x, z } when available.
+  for (var i = 0; i < WPS.length; i++) {
+    var wp = WPS[i];
+    if (wp.agent === subjectName && wp.x !== undefined && wp.z !== undefined) {
+      return [wp.x, 0, wp.z];
+    }
+  }
+  // Fallback: use agent index position on stage canvas (rough scene centroid offsets)
+  // These match the stage canvas dummy positions scaled to ~scene units (scene ~30m wide)
+  var agentFallbacks = {};
+  AGENTS.forEach(function(a, i) {
+    // Stage canvas: agents at roughly w*0.38, w*0.50, w*0.65 in a ~30m scene
+    var xFracs = [0.38, 0.50, 0.65];
+    var zFracs = [0.42, 0.30, 0.58];
+    agentFallbacks[a] = [xFracs[i] * 30, 0, zFracs[i] * 30];
+  });
+  return agentFallbacks[subjectName] || [15, 0, 15];
+}
+
+// _previewCameraShot — drives VP_Free in the Events Editor's own X_ITE viewport
+// using the currently selected cue's framing parameters.
+// Safe to call on every slider change — debounced via _previewRaf.
+var _previewRaf = null;
+function _previewCameraShot() {
+  if (_previewRaf) { cancelAnimationFrame(_previewRaf); _previewRaf = null; }
+
+  if (!_selCue) return;
+  var track = _tracks[_selCue.ti];
+  var cue   = track && track.cues[_selCue.ci];
+  if (!track || track.type !== 'camera' || !cue) return;
+  if (cue.viewpoint !== undefined) return; // named VP — nothing to preview
+  if (SHOT_ATTACHED[cue.shot]) return;      // agent-attached — no free camera position
+
+  var x3d = document.getElementById('vp-x3d');
+  if (!x3d || !x3d.browser) return;        // viewport not loaded
+
+  _previewRaf = requestAnimationFrame(function() {
+    _previewRaf = null;
+    try {
+      var scene    = x3d.browser.currentScene;
+      var camXform = scene.getNamedNode('CAM_Free_Transform');
+      var vpFree   = scene.getNamedNode('VP_Free');
+      if (!camXform || !vpFree) {
+        console.warn('[Preview] CAM_Free_Transform or VP_Free not found in viewport scene');
+        return;
+      }
+
+      var subjectPos = _prevResolveSubjectPos(cue.subject);
+      var distance   = cue.distance  !== undefined ? cue.distance  : 5;
+      var height     = cue.height    !== undefined ? cue.height    : 1.7;
+      var hAngle     = cue.hAngle    !== undefined ? cue.hAngle    : 0;
+      var vAngle     = cue.vAngle    !== undefined ? cue.vAngle    : -8;
+
+      var camPos = _prevComputeCamPos(subjectPos, distance, height, hAngle);
+      var orient = _prevLookAtOrientation(camPos, subjectPos, vAngle);
+
+      camXform.getField('translation').setValue(new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]));
+      camXform.getField('rotation').setValue(new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]));
+      requestAnimationFrame(function() { vpFree.set_bind = true; });
+
+      // Update corner label to show it's in preview mode
+      var statusEl = document.getElementById('vp-status');
+      if (statusEl) statusEl.textContent = 'PREVIEW — ' + (cue.shot || '') + ' / ' + (cue.subject || '');
+    } catch(e) {
+      console.warn('[Preview] camera preview failed:', e.message);
+    }
+  });
 }
 
 function applyShotPreset(shotValue) {
   if (!_selCue) return;
   var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+
+  // Named VP path (baked) — mutually exclusive with shot= path
+  if (shotValue === 'named_vp') {
+    delete cue.shot;
+    delete cue.distance; delete cue.height;
+    delete cue.hAngle;   delete cue.vAngle;
+    delete cue.roll;     delete cue.transition;
+    delete cue.flyDuration;
+    // Preserve existing viewpoint name if already set, else empty string
+    if (!cue.viewpoint) cue.viewpoint = '';
+    if (!cue.subject) cue.subject = AGENTS[0] || '';
+    cue.label = 'vp ' + (cue.viewpoint || 'unnamed');
+    renderTimeline(); renderInspector(); drawStage();
+    return;
+  }
+
+  // Runtime shot path — clear any baked viewpoint (Day 60 bug fix: applyShotPreset
+  // was not clearing cue.viewpoint, causing both shot= and viewpoint= to be set)
+  delete cue.viewpoint;
+
   var preset = SHOT_PRESETS[shotValue] || [3, 1.7, 0, -8, 0];
   cue.shot       = shotValue;
   cue.distance   = preset[0];
@@ -1244,6 +1453,7 @@ function applyShotPreset(shotValue) {
   renderTimeline();
   renderInspector();
   drawStage();
+  _previewCameraShot();
 }
 
 function deleteCue() {
@@ -1372,22 +1582,29 @@ function exportCues() {
       track.cues.forEach(function(cue) {
         xml += '  <Cue track="'+track.type+'" label="'+cue.label+'" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+(cue.trigger||'manual')+'"';
         if (track.type === 'camera') {
-          xml += ' shot="'+(cue.shot||'closeup')+'"';
-          xml += ' subject="'+(cue.subject||'')+'"';
-          if (cue.subject2)      xml += ' subject2="'+cue.subject2+'"';
-          xml += ' transition="'+(cue.transition||'cut')+'"';
-          if ((cue.transition==='fly')||SHOT_MOVES[cue.shot]) xml += ' flyDuration="'+(cue.flyDuration||1.5)+'"';
-          if (!SHOT_ATTACHED[cue.shot]) {
-            xml += ' distance="'+(cue.distance||3)+'"';
-            xml += ' height="'+(cue.height||1.7)+'"';
-            xml += ' hAngle="'+(cue.hAngle||0)+'"';
-            xml += ' vAngle="'+(cue.vAngle||-8)+'"';
-            if (cue.roll) xml += ' roll="'+cue.roll+'"';
-            if (SHOT_MOVES[cue.shot]) {
-              xml += ' distanceEnd="'+(cue.distanceEnd||1)+'"';
-              xml += ' heightEnd="'+(cue.heightEnd||5)+'"';
-              xml += ' hAngleEnd="'+(cue.hAngleEnd||0)+'"';
-              xml += ' vAngleEnd="'+(cue.vAngleEnd||-20)+'"';
+          if (cue.viewpoint !== undefined && cue.viewpoint !== null) {
+            // Baked named VP path — emit viewpoint= only, no shot= or framing fields
+            xml += ' viewpoint="'+cue.viewpoint+'"';
+            xml += ' subject="'+(cue.subject||'')+'"';
+          } else {
+            // Runtime shot path — emit shot= and framing fields, never viewpoint=
+            xml += ' shot="'+(cue.shot||'closeup')+'"';
+            xml += ' subject="'+(cue.subject||'')+'"';
+            if (cue.subject2)      xml += ' subject2="'+cue.subject2+'"';
+            xml += ' transition="'+(cue.transition||'cut')+'"';
+            if ((cue.transition==='fly')||SHOT_MOVES[cue.shot]) xml += ' flyDuration="'+(cue.flyDuration||1.5)+'"';
+            if (!SHOT_ATTACHED[cue.shot]) {
+              xml += ' distance="'+(cue.distance||3)+'"';
+              xml += ' height="'+(cue.height||1.7)+'"';
+              xml += ' hAngle="'+(cue.hAngle||0)+'"';
+              xml += ' vAngle="'+(cue.vAngle||-8)+'"';
+              if (cue.roll) xml += ' roll="'+cue.roll+'"';
+              if (SHOT_MOVES[cue.shot]) {
+                xml += ' distanceEnd="'+(cue.distanceEnd||1)+'"';
+                xml += ' heightEnd="'+(cue.heightEnd||5)+'"';
+                xml += ' hAngleEnd="'+(cue.hAngleEnd||0)+'"';
+                xml += ' vAngleEnd="'+(cue.vAngleEnd||-20)+'"';
+              }
             }
           }
           xml += ' delay="'+(cue.delay||0)+'"';
