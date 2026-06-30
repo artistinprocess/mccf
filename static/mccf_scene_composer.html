@@ -1112,6 +1112,7 @@ function _buildSceneData() {
   Object.keys(placedAgents).forEach(function(n) {
     views.push('VP_'+safeId(n)+'_Eye');
     views.push('VP_'+safeId(n)+'_Side');
+    views.push('VP_'+safeId(n)+'_Orbit'); // baked per-avatar by buildAvatarX3D — keep in sync with that function
   });
   var baseClips = (typeof BEHAVIOR_TIMER_BASES !== 'undefined') ? BEHAVIOR_TIMER_BASES : ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
   var extraClips = [];
@@ -2147,6 +2148,11 @@ function exportX3D(){
   x+='<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0">\n';
   x+='  <Viewpoint DEF="VP_Free" description="Free Camera" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>\n';
   x+='</Transform>\n';
+  x+='<!-- Move shot vessels: Loader writes key/keyValue via SAI at cue-fire time, then starts CAM_Timer -->\n';
+  x+='<!-- ROUTEs are static — set_fraction/value_changed are event fields, not SAI-writable -->\n';
+  x+='<TimeSensor DEF="CAM_Timer" cycleInterval="4" loop="false" enabled="false"/>\n';
+  x+='<PositionInterpolator DEF="CAM_PosInterp" key="0" keyValue="0 0 0"/>\n';
+  x+='<OrientationInterpolator DEF="CAM_OriInterp" key="0" keyValue="0 1 0 0.0001"/>\n';
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
     x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>\n';});
   x+='\n<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>\n';
@@ -2182,6 +2188,12 @@ function exportX3D(){
     }
     x+='\n';
   }
+  // Move shot ROUTEs — always emitted (vessels are always present regardless of scene content)
+  x+='<!-- ═══ Move shot ROUTEs — CAM_Timer → interpolators → CAM_Free_Transform ═══ -->\n';
+  x+='<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_PosInterp" toField="set_fraction"/>\n';
+  x+='<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_OriInterp" toField="set_fraction"/>\n';
+  x+='<ROUTE fromNode="CAM_PosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>\n';
+  x+='<ROUTE fromNode="CAM_OriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>\n';
   x+='</Scene>\n</X3D>\n';
   // Upload directly to server → static/x3d/{name}.x3d so the Loader can use it immediately.
   // Falls back to browser download if the server POST fails.
@@ -2478,6 +2490,21 @@ function buildAX3D(a){
   // Avatar viewpoints — parented inside Transform so they ride with the figure
   s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159" jump="true"/>\n';
   s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708" jump="true"/>\n';
+  // Agent-orbit camera — baked, rides with avatar via normal scene-graph parenting.
+  // Orbit math only needs the relative offset; the avatar's own motion is free.
+  // CAM_OrbitXform_{name} is local to the avatar's Transform — rotating it does NOT
+  // affect the avatar's body geometry, which lives in its own sibling Transforms above.
+  s+='<Transform DEF="CAM_OrbitXform_'+sn+'" translation="0 3.2 8.6" rotation="0 1 0 0">\n';
+  s+='  <Viewpoint DEF="VP_'+sn+'_Orbit" description="'+qn+' Orbit" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>\n';
+  s+='</Transform>\n';
+  s+='<TimeSensor DEF="CAM_OrbitTimer_'+sn+'" cycleInterval="4" loop="false" enabled="false"/>\n';
+  s+='<PositionInterpolator DEF="CAM_OrbitPosInterp_'+sn+'" key="0" keyValue="0 3.2 8.6"/>\n';
+  s+='<OrientationInterpolator DEF="CAM_OrbitOriInterp_'+sn+'" key="0" keyValue="0 1 0 0.0001"/>\n';
+  // Per-agent orbit ROUTEs — static, scoped to this avatar's own timer/interpolator/transform.
+  s+='<ROUTE fromNode="CAM_OrbitTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_OrbitPosInterp_'+sn+'" toField="set_fraction"/>\n';
+  s+='<ROUTE fromNode="CAM_OrbitTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_OrbitOriInterp_'+sn+'" toField="set_fraction"/>\n';
+  s+='<ROUTE fromNode="CAM_OrbitPosInterp_'+sn+'" fromField="value_changed" toNode="CAM_OrbitXform_'+sn+'" toField="set_translation"/>\n';
+  s+='<ROUTE fromNode="CAM_OrbitOriInterp_'+sn+'" fromField="value_changed" toNode="CAM_OrbitXform_'+sn+'" toField="set_rotation"/>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterpNodes(path){
@@ -2762,6 +2789,11 @@ function buildX3DString(){
   lines.push('<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0">');
   lines.push('  <Viewpoint DEF="VP_Free" description="Free Camera" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>');
   lines.push('</Transform>');
+  lines.push('<!-- Move shot vessels: Loader writes key/keyValue via SAI at cue-fire time, then starts CAM_Timer -->');
+  lines.push('<!-- ROUTEs are static — set_fraction/value_changed are event fields, not SAI-writable -->');
+  lines.push('<TimeSensor DEF="CAM_Timer" cycleInterval="4" loop="false" enabled="false"/>');
+  lines.push('<PositionInterpolator DEF="CAM_PosInterp" key="0" keyValue="0 0 0"/>');
+  lines.push('<OrientationInterpolator DEF="CAM_OriInterp" key="0" keyValue="0 1 0 0.0001"/>');
   Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
     lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>');});
   lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
@@ -2787,6 +2819,12 @@ function buildX3DString(){
       });
     }
   }
+  // Move shot ROUTEs — always emitted (vessels always present)
+  lines.push('<!-- ═══ Move shot ROUTEs — CAM_Timer → interpolators → CAM_Free_Transform ═══ -->');
+  lines.push('<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_PosInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_OriInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_PosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>');
+  lines.push('<ROUTE fromNode="CAM_OriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>');
   lines.push('</Scene>');
   lines.push('</X3D>');
   return lines.join('\n');
