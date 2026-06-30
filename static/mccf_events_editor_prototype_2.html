@@ -799,7 +799,13 @@ var _tracks = [
 
 var AGENTS   = ['Cindy','The Witness','The Steward'];
 var CLIPS    = ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
-var VIEWS    = ['VP_Overview','VP_Origin','VP_Cindy_Eye','VP_Cindy_Side','VP_Witness_Eye','VP_Steward_Eye'];
+// Fallback only — overwritten by Composer's postMessage (mccf_scene_data.views) on load.
+// Composer generates this dynamically per-agent (Eye/Side/Orbit); this hardcoded list is
+// just a reasonable starting point for standalone Events Editor testing without Composer.
+var VIEWS    = ['VP_Overview','VP_Origin',
+                 'VP_Cindy_Eye','VP_Cindy_Side','VP_Cindy_Orbit',
+                 'VP_Witness_Eye','VP_Witness_Side','VP_Witness_Orbit',
+                 'VP_Steward_Eye','VP_Steward_Side','VP_Steward_Orbit'];
 var LIGHTS_L = ['KeyLight','FillLight','AmbientLight','RimLight','S0Light'];
 var TRIGGERS = ['manual','WAYPT1 arrive','WAYPT2 arrive','WAYPT3 arrive','WP1 arrive','WP2 arrive','WP3 arrive','field E>0.6','field E<0.3'];
 
@@ -817,6 +823,7 @@ var SHOT_TYPES = [
   { value:'two_shot',        label:'Two Shot',          group:'relational'},
   { value:'agent_eye',       label:'Agent Eye (POV)',   group:'attached'  },
   { value:'agent_side',      label:'Agent Side',        group:'attached'  },
+  { value:'agent_orbit',     label:'Agent Orbit',       group:'attached'  },
   { value:'named_vp',        label:'Bind Named VP',     group:'baked'     },
   { value:'dolly_in',        label:'Dolly In',          group:'move'      },
   { value:'dolly_out',       label:'Dolly Out',         group:'move'      },
@@ -840,6 +847,7 @@ var SHOT_PRESETS = {
   two_shot:        [ 4,  1.7,   0,  -8,   0],
   agent_eye:       [ 0,  0,     0,   0,   0],
   agent_side:      [ 0,  0,     0,   0,   0],
+  agent_orbit:     [ 8.6,3.2,   0,  -8,   0],
   dolly_in:        [ 8,  1.7,   0,  -8,   0],
   dolly_out:       [ 3,  1.7,   0,  -8,   0],
   pan:             [ 5,  1.7, -45,  -8,   0],
@@ -849,7 +857,12 @@ var SHOT_PRESETS = {
   track:           [ 4,  1.7, -90,  -8,   0],
 };
 var SHOT_ATTACHED = { agent_eye: true, agent_side: true };
-var SHOT_MOVES    = { dolly_in:true, dolly_out:true, pan:true, tilt:true, orbit:true, crane_up:true, track:true };
+// agent_orbit is intentionally excluded from SHOT_ATTACHED — unlike eye/side it needs
+// framing fields (radius/height/start angle) and move-shot timing (loop/duration), since
+// it's a baked-but-animated shot: parented to the avatar (baked routing) yet continuously
+// driven by a TimeSensor (move-shot UI). It is included in SHOT_MOVES for the timing UI.
+var SHOT_MOVES    = { dolly_in:true, dolly_out:true, pan:true, tilt:true, orbit:true, crane_up:true, track:true, agent_orbit:true };
+var SHOT_AGENT_ORBIT = { agent_orbit: true };
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 function toPx(t) { return t * PX_PER_S * _zoom; }
@@ -1136,6 +1149,8 @@ function renderInspector() {
     var trans      = cue.transition || 'cut';
     var isAttached = !isNamedVP && !!SHOT_ATTACHED[shot];
     var isMove     = !isNamedVP && !!SHOT_MOVES[shot];
+    var isAgentOrbit = !!SHOT_AGENT_ORBIT[shot];
+    var isFullSweepMove = isMove && !isAgentOrbit; // agent_orbit always sweeps 360°, no end fields
     var isTwoShot  = !isNamedVP && shot === 'two_shot';
     var isDutch    = !isNamedVP && shot === 'dutch';
     var preset     = SHOT_PRESETS[shot] || [3, 1.7, 0, -8, 0];
@@ -1215,7 +1230,7 @@ function renderInspector() {
           ? '<div class="insp-field"><div class="insp-label">subject 2</div>'
             + '<select class="insp-select" onchange="setCueProp(\'subject2\',this.value)">'+subject2Opts+'</select></div>'
           : '')
-      + (!isNamedVP && !isAttached
+      + (!isNamedVP && !isAttached && !isAgentOrbit
           ? '<div class="insp-field"><div class="insp-label">transition</div>'
             + '<div class="insp-radio-row">'
             + '<label><input type="radio" name="trans_r" value="cut" '+(trans==='cut'?'checked':'')+' onchange="setCueProp(\'transition\',\'cut\');renderInspector()"> cut</label>'
@@ -1228,13 +1243,13 @@ function renderInspector() {
       + (!isNamedVP && !isAttached
           ? '<div class="insp-section">framing</div>'
             + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
-            + (isMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
+            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
             + '<div class="insp-field"><div class="insp-label">height'+(isMove?' — start':'')+'(m)</div>'+sliderRow('height',-1,15,0.1,ht,'m')+'</div>'
-            + (isMove ? '<div class="insp-field"><div class="insp-label">height — end (m)</div>'+sliderRow('heightEnd',-1,15,0.1,htEnd,'m')+'</div>' : '')
+            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">height — end (m)</div>'+sliderRow('heightEnd',-1,15,0.1,htEnd,'m')+'</div>' : '')
             + '<div class="insp-field"><div class="insp-label">h. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('hAngle',-180,180,1,hAng,'°')+'</div>'
-            + (isMove ? '<div class="insp-field"><div class="insp-label">h. angle — end (°)</div>'+sliderRow('hAngleEnd',-180,180,1,hAngEnd,'°')+'</div>' : '')
+            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">h. angle — end (°)</div>'+sliderRow('hAngleEnd',-180,180,1,hAngEnd,'°')+'</div>' : '')
             + '<div class="insp-field"><div class="insp-label">v. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
-            + (isMove ? '<div class="insp-field"><div class="insp-label">v. angle — end (°)</div>'+sliderRow('vAngleEnd',-90,90,1,vAngEnd,'°')+'</div>' : '')
+            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">v. angle — end (°)</div>'+sliderRow('vAngleEnd',-90,90,1,vAngEnd,'°')+'</div>' : '')
             + (isDutch ? '<div class="insp-field"><div class="insp-label">roll (°)</div>'+sliderRow('roll',-45,45,1,roll,'°')+'</div>' : '')
           : (!isNamedVP && isAttached
               ? '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
@@ -1242,6 +1257,7 @@ function renderInspector() {
                 + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>'
               : ''))
       + '<div class="insp-section">timing</div>'
+      + (isMove ? '<div class="insp-field"><div class="insp-label">loop</div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" '+(cue.loop?'checked':'')+' onchange="setCueProp(\'loop\',this.checked)"> repeat orbit continuously</label></div>' : '')
       + '<div class="insp-field"><div class="insp-label">delay after trigger (s)</div>'+sliderRow('delay',0,10,0.5,delay,'s')+'</div>';
   } else if (track.type === 'light') {
     var ltOpts = LIGHTS_L.map(function(l){ return '<option value="'+l+'"'+(cue.node===l?' selected':'')+'>'+l+'</option>'; }).join('');
@@ -1443,6 +1459,7 @@ function applyShotPreset(shotValue) {
   cue.roll       = preset[4];
   // Move shots always fly; attached shots have no transition
   if (SHOT_MOVES[shotValue])    { cue.transition = 'fly'; }
+  else                          { delete cue.loop; }  // loop only meaningful for move shots
   if (SHOT_ATTACHED[shotValue]) { delete cue.transition; }
   else if (!cue.transition)     { cue.transition = 'cut'; }
   // Auto-update label with shot + subject
@@ -1604,6 +1621,7 @@ function exportCues() {
                 xml += ' heightEnd="'+(cue.heightEnd||5)+'"';
                 xml += ' hAngleEnd="'+(cue.hAngleEnd||0)+'"';
                 xml += ' vAngleEnd="'+(cue.vAngleEnd||-20)+'"';
+                if (cue.loop) xml += ' loop="true"';
               }
             }
           }

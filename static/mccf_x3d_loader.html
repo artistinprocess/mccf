@@ -1854,6 +1854,7 @@ function _parseEventCues(doc) {
       hAngleEnd:  gf('hAngleEnd',  null),
       vAngleEnd:  gf('vAngleEnd',  null),
       heightEnd:  gf('heightEnd',  null),
+      loop:       ga('loop') === 'true' ? true : false,  // move shot loop flag
     });
   });
   _eventCues = cues;
@@ -1982,6 +1983,17 @@ function _fireCameraEventCue(cue) {
     return;
   }
 
+  // ── BAKED PATH: agent-orbit ────────────────────────────────
+  // VP_{subject}_Orbit + CAM_OrbitXform_{subject} live inside the agent's own
+  // Transform — parented, so the avatar's world motion is free (no tracking math).
+  // Orbit math here is RELATIVE OFFSET ONLY: radius/height/angle around the
+  // avatar's local origin. The avatar's Transform translation is never read or
+  // written by this path — that's the whole point of parenting.
+  if (shot === 'agent_orbit') {
+    _executeAgentOrbit(cue);
+    return;
+  }
+
   // ── BAKED PATH: explicitly authored named viewpoint ───────
   // Author placed a named VP in the scene and referenced it by name in the cue.
   // This is the only other case where _bindNamedViewpoint is called.
@@ -2001,8 +2013,7 @@ function _fireCameraEventCue(cue) {
 
   // ── RUNTIME PATH: move shot via VP_Free (Phase 2) ─────────
   if (_MOVE_SHOTS[shot]) {
-    // TODO Phase 2: _executeMoveShot(cue)
-    console.warn('[EventCues] camera: move shot «' + shot + '» not yet implemented (Phase 2)');
+    _executeMoveShot(cue);
     return;
   }
 
@@ -2214,6 +2225,277 @@ function _executeStaticCameraShot(cue) {
     } else {
       console.warn('[EventCues] camera: VP_Free/CAM_Free_Transform not found after retries');
     }
+  }
+  trySet();
+}
+
+// Execute an agent-orbit shot: BAKED path, parented under the avatar's own Transform.
+//
+// Architecture: CAM_OrbitTimer_{name}, CAM_OrbitPosInterp_{name}, CAM_OrbitOriInterp_{name},
+// and CAM_OrbitXform_{name} are per-avatar vessel nodes the Composer emits inside every
+// Avatar_{name} Transform. Because they are children of the avatar, the avatar's own world
+// motion is automatic — this function only ever computes a RELATIVE offset around local
+// origin [0,0,0], never the avatar's world position. There is no tracking math, no polling
+// of the avatar's current position, because none is needed: parenting handles it for free.
+//
+// This is architecturally distinct from the free/world-space 'orbit' move shot
+// (_executeMoveShot), which circles a fixed world point computed once at cue-fire time
+// and does NOT follow a moving subject. agent_orbit follows the subject indefinitely,
+// including movement that happens mid-orbit, because the Transform hierarchy carries it.
+function _executeAgentOrbit(cue) {
+  var subjectSafe = (cue.subject || '').replace(/[^A-Za-z0-9_]/g, '_');
+  if (!subjectSafe) {
+    console.warn('[EventCues] camera: agent_orbit — cue has no subject, skipped');
+    return;
+  }
+
+  var radius   = (cue.distance !== null && cue.distance !== undefined) ? parseFloat(cue.distance) : 5;
+  var height   = (cue.height   !== null && cue.height   !== undefined) ? parseFloat(cue.height)   : 1.7;
+  var hAngle   = (cue.hAngle   !== null && cue.hAngle   !== undefined) ? parseFloat(cue.hAngle)   : 0;
+  var vAngle   = (cue.vAngle   !== null && cue.vAngle   !== undefined) ? parseFloat(cue.vAngle)   : -8;
+  var duration = (cue.dur      !== null && cue.dur      !== undefined) ? parseFloat(cue.dur)      : 4;
+  var doLoop   = (cue.loop === true || cue.loop === 'true');
+
+  var STEPS = 36;
+  var keys = [];
+  var posKeys = [];
+  var oriKeys = [];
+  var subjectPos = [0, 0, 0]; // local origin — avatar Transform IS the world position
+
+  for (var i = 0; i <= STEPS; i++) {
+    var frac = i / STEPS;
+    var theta = (hAngle + frac * 360) * Math.PI / 180;
+    var cx = radius * Math.sin(theta);
+    var cy = height;
+    var cz = radius * Math.cos(theta);
+    var orient = _lookAtOrientation([cx, cy, cz], subjectPos, vAngle);
+    keys.push(frac);
+    posKeys.push(cx, cy, cz);
+    oriKeys.push(orient[0], orient[1], orient[2], orient[3]);
+  }
+
+  var attempts = 0;
+  function trySet() {
+    attempts++;
+    try {
+      var scene = canvas.browser.currentScene;
+      var camXform  = scene.getNamedNode('CAM_OrbitXform_'      + subjectSafe);
+      var vpOrbit   = scene.getNamedNode('VP_'                  + subjectSafe + '_Orbit');
+      var camTimer  = scene.getNamedNode('CAM_OrbitTimer_'      + subjectSafe);
+      var posInterp = scene.getNamedNode('CAM_OrbitPosInterp_'  + subjectSafe);
+      var oriInterp = scene.getNamedNode('CAM_OrbitOriInterp_'  + subjectSafe);
+
+      if (camXform && vpOrbit && camTimer && posInterp && oriInterp) {
+
+        posInterp.key.length      = 0;
+        posInterp.keyValue.length = 0;
+        oriInterp.key.length      = 0;
+        oriInterp.keyValue.length = 0;
+        for (var ki = 0; ki <= STEPS; ki++) {
+          posInterp.key[ki]      = keys[ki];
+          posInterp.keyValue[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
+          oriInterp.key[ki]      = keys[ki];
+          oriInterp.keyValue[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
+        }
+
+        try {
+          canvas.browser.addRoute(camTimer,  'fraction_changed', posInterp, 'set_fraction');
+          canvas.browser.addRoute(camTimer,  'fraction_changed', oriInterp, 'set_fraction');
+          canvas.browser.addRoute(posInterp, 'value_changed',    camXform,  'set_translation');
+          canvas.browser.addRoute(oriInterp, 'value_changed',    camXform,  'set_rotation');
+        } catch(eRoute) { console.warn('[EventCues] camera: agent_orbit addRoute failed:', eRoute.message); }
+
+        camTimer.cycleInterval = duration;
+        camTimer.loop          = doLoop;
+
+        camXform.getField('translation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
+        camXform.getField('rotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+
+        requestAnimationFrame(function() {
+          vpOrbit.set_bind = true;
+          requestAnimationFrame(function() {
+            var _t0 = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+              ? canvas.browser.currentTime : (performance.now() / 1000);
+            camTimer.startTime = _t0;
+            camTimer.enabled   = true;
+            console.log('[EventCues] camera: agent_orbit started — subject=' + subjectSafe
+              + ' radius=' + radius + ' height=' + height + ' hAngle=' + hAngle
+              + ' dur=' + duration + ' loop=' + doLoop);
+          });
+        });
+        return;
+      }
+
+      var missing = [];
+      if (!camXform)  missing.push('CAM_OrbitXform_'     + subjectSafe);
+      if (!vpOrbit)   missing.push('VP_'                 + subjectSafe + '_Orbit');
+      if (!camTimer)  missing.push('CAM_OrbitTimer_'     + subjectSafe);
+      if (!posInterp) missing.push('CAM_OrbitPosInterp_' + subjectSafe);
+      if (!oriInterp) missing.push('CAM_OrbitOriInterp_' + subjectSafe);
+      console.warn('[EventCues] camera: agent_orbit — missing vessel nodes:', missing.join(', '),
+        '— re-export scene from Composer');
+
+    } catch(e) { console.warn('[EventCues] camera: agent_orbit trySet exception:', e.message); }
+    if (attempts < 10) setTimeout(trySet, 200);
+    else console.warn('[EventCues] camera: agent_orbit — vessel nodes not found after retries');
+  }
+  trySet();
+}
+
+// Execute a move shot: compute keyframes, write to interpolator vessels via SAI, start CAM_Timer.
+//
+// Architecture: CAM_Timer, CAM_PosInterp, CAM_OriInterp are static vessel nodes emitted by the
+// Composer into every exported scene. Static ROUTEs wire them:
+//   CAM_Timer.fraction_changed → CAM_PosInterp.set_fraction  → CAM_Free_Transform.set_translation
+//   CAM_Timer.fraction_changed → CAM_OriInterp.set_fraction  → CAM_Free_Transform.set_rotation
+// The Loader only writes key/keyValue (writable [in,out] fields) and controls the TimeSensor.
+//
+// Currently implemented: orbit (free/world-space — circles a fixed point, does not follow
+// a moving subject; see _executeAgentOrbit for the avatar-parented version). Other move
+// types warn and skip until implemented.
+//
+// Orbit geometry — X3D right-handed coordinate system:
+//   +X right, +Y up, +Z toward viewer, -Z into scene (default camera direction).
+//   hAngle is measured from +Z axis, positive = counterclockwise viewed from above (right-hand +Y).
+//   camPos: x = subjectX + radius*sin(θ),  z = subjectZ + radius*cos(θ)
+//   Look-at yaw: atan2(-dx, -dz)  — negation because camera faces -Z by default.
+function _executeMoveShot(cue) {
+  var shot = cue.shot;
+
+  if (shot !== 'orbit') {
+    console.warn('[EventCues] camera: move shot «' + shot + '» not yet implemented');
+    return;
+  }
+
+  var subjectPos = _resolveSubjectPos(cue.subject) || [0, 0, 0];
+  var radius   = (cue.distance  !== null && cue.distance  !== undefined) ? parseFloat(cue.distance)  : 5;
+  var height   = (cue.height    !== null && cue.height    !== undefined) ? parseFloat(cue.height)    : 1.7;
+  var hAngle   = (cue.hAngle    !== null && cue.hAngle    !== undefined) ? parseFloat(cue.hAngle)    : 0;
+  var vAngle   = (cue.vAngle    !== null && cue.vAngle    !== undefined) ? parseFloat(cue.vAngle)    : -8;
+  var duration = (cue.dur       !== null && cue.dur       !== undefined) ? parseFloat(cue.dur)       : 4;
+  var doLoop   = (cue.loop === true || cue.loop === 'true');
+
+  // Number of keyframe steps around the full circle.
+  // 36 steps = one keyframe every 10°; smooth enough for any radius.
+  var STEPS = 36;
+  var keys = [];
+  var posKeys = [];
+  var oriKeys = [];
+
+  for (var i = 0; i <= STEPS; i++) {
+    var frac = i / STEPS;
+    // Full 360° orbit. Right-hand rule: positive angle = CCW from above (+Y axis).
+    // Start angle from authored hAngle; sweep full circle.
+    var theta = (hAngle + frac * 360) * Math.PI / 180;
+
+    // Camera position on orbit arc.
+    // X3D: +Z toward viewer, so cos(θ) at θ=0 places camera at +Z (in front of subject
+    // when subject faces -Z, the default forward direction).
+    var cx = subjectPos[0] + radius * Math.sin(theta);
+    var cy = subjectPos[1] + height;
+    var cz = subjectPos[2] + radius * Math.cos(theta);
+
+    // Look-at orientation: camera faces subject.
+    // _lookAtOrientation uses the confirmed -Z convention (atan2(-dx,-dz)).
+    var orient = _lookAtOrientation([cx, cy, cz], subjectPos, vAngle);
+
+    keys.push(frac);
+    posKeys.push(cx, cy, cz);
+    oriKeys.push(orient[0], orient[1], orient[2], orient[3]);
+  }
+
+  var attempts = 0;
+  function trySet() {
+    attempts++;
+    try {
+      var scene = canvas.browser.currentScene;
+      var camXform  = scene.getNamedNode('CAM_Free_Transform');
+      var vpFree    = scene.getNamedNode('VP_Free');
+      var camTimer  = scene.getNamedNode('CAM_Timer');
+      var posInterp = scene.getNamedNode('CAM_PosInterp');
+      var oriInterp = scene.getNamedNode('CAM_OriInterp');
+
+      if (camXform && vpFree && camTimer && posInterp && oriInterp) {
+
+        // Write keyframes to interpolators using indexed MF array assignment.
+        // Confirmed pattern from official X_ITE README (createNode/keyframe example):
+        //   interpolator.key[i] = ...;  interpolator.keyValue[i] = new X3D.SFVec3f(...);
+        // NOT a bulk MFFloat/MFVec3f constructor call — that API does not exist in X_ITE.
+        // Truncate any stale authored placeholder values before repopulating.
+        posInterp.key.length      = 0;
+        posInterp.keyValue.length = 0;
+        oriInterp.key.length      = 0;
+        oriInterp.keyValue.length = 0;
+        for (var ki = 0; ki <= STEPS; ki++) {
+          posInterp.key[ki]      = keys[ki];
+          posInterp.keyValue[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
+          oriInterp.key[ki]      = keys[ki];
+          oriInterp.keyValue[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
+        }
+
+        // DIAGNOSTIC — confirm the interpolator nodes actually hold the keyframes we just wrote.
+        console.log('[EventCues] camera: orbit keyframe check — posInterp.key.length=' + posInterp.key.length
+          + ' posInterp.keyValue.length=' + posInterp.keyValue.length
+          + ' oriInterp.key.length=' + oriInterp.key.length
+          + ' oriInterp.keyValue.length=' + oriInterp.keyValue.length);
+        console.log('[EventCues] camera: orbit keyframe[0]=', posInterp.keyValue[0] && posInterp.keyValue[0].toString());
+        console.log('[EventCues] camera: orbit keyframe[10]=', posInterp.keyValue[10] && posInterp.keyValue[10].toString());
+
+        // Belt-and-suspenders — add the ROUTEs via SAI as well as relying on the static XML
+        // ROUTEs from the Composer export. Browser.addRoute is idempotent-safe to call even
+        // if the route already exists from the X3D file; confirms the chain at runtime.
+        try {
+          canvas.browser.addRoute(camTimer,  'fraction_changed', posInterp, 'set_fraction');
+          canvas.browser.addRoute(camTimer,  'fraction_changed', oriInterp, 'set_fraction');
+          canvas.browser.addRoute(posInterp, 'value_changed',    camXform,  'set_translation');
+          canvas.browser.addRoute(oriInterp, 'value_changed',    camXform,  'set_rotation');
+          console.log('[EventCues] camera: orbit ROUTEs added via SAI (belt-and-suspenders)');
+        } catch(e) { console.warn('[EventCues] camera: addRoute via SAI failed:', e.message); }
+
+        // Configure timer — direct property assignment throughout (confirmed working pattern).
+        camTimer.cycleInterval = duration;
+        camTimer.loop          = doLoop;
+
+        // Snap camera to orbit start position then bind VP_Free (TELEPORT, instantaneous).
+        // This is intentional — the authored hAngle is the orbit start.
+        camXform.getField('translation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
+        camXform.getField('rotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+
+        requestAnimationFrame(function() {
+          vpFree.set_bind = true;
+          // Start timer one rAF after bind so VP_Free is active before interpolators fire.
+          // Use direct property assignment — confirmed working pattern from walk/avatar code.
+          // startTime set before enabled=true, matching dwell/segment timer pattern (line ~1592).
+          requestAnimationFrame(function() {
+            // canvas.browser.currentTime returns 0 in some X_ITE builds (confirmed
+            // elsewhere in this file, e.g. line ~1708) — fall back to performance.now()/1000
+            // exactly as every other startTime write in this codebase already does.
+            // Root cause of the orbit-never-moves bug: this was the one call site using
+            // currentTime raw with no fallback, producing startTime=0 and fraction_changed=NaN.
+            var _orbitStartTime = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+              ? canvas.browser.currentTime : (performance.now() / 1000);
+            camTimer.startTime = _orbitStartTime;
+            camTimer.enabled   = true;
+            console.log('[EventCues] camera: orbit started — subject=' + (cue.subject||'?')
+              + ' radius=' + radius + ' height=' + height
+              + ' hAngle=' + hAngle + ' dur=' + duration + ' loop=' + doLoop);
+          });
+        });
+        return;
+      }
+
+      var missing = [];
+      if (!camXform)  missing.push('CAM_Free_Transform');
+      if (!vpFree)    missing.push('VP_Free');
+      if (!camTimer)  missing.push('CAM_Timer');
+      if (!posInterp) missing.push('CAM_PosInterp');
+      if (!oriInterp) missing.push('CAM_OriInterp');
+      console.warn('[EventCues] camera: orbit — missing vessel nodes:', missing.join(', '),
+        '— re-export scene from Composer');
+
+    } catch(e) { console.warn('[EventCues] camera: orbit trySet exception:', e.message); }
+    if (attempts < 10) setTimeout(trySet, 200);
+    else console.warn('[EventCues] camera: orbit — vessel nodes not found after retries');
   }
   trySet();
 }
@@ -2631,6 +2913,29 @@ function pbStopX3DTimers() {
     } catch(e) {}
   }
   _x3dTimerActive = {};
+  // Stop CAM_Timer (free/world-space move shot orbit/dolly etc.) if running
+  try {
+    var _camScene = canvas && canvas.browser && canvas.browser.currentScene;
+    if (_camScene) {
+      var _camT = _camScene.getNamedNode('CAM_Timer');
+      if (_camT) {
+        _camT.enabled = false;
+        console.log('[EventCues] camera: CAM_Timer stopped by pbStopX3DTimers');
+      }
+      // Stop every agent's orbit timer too — agent_orbit is per-avatar, not singular.
+      var _orbitNames = window._avatarNodeNames || [];
+      _orbitNames.forEach(function(nm) {
+        try {
+          var safeNm = nm.replace(/^Avatar_/, '');
+          var _orbitT = _camScene.getNamedNode('CAM_OrbitTimer_' + safeNm);
+          if (_orbitT) {
+            _orbitT.enabled = false;
+            console.log('[EventCues] camera: CAM_OrbitTimer_' + safeNm + ' stopped by pbStopX3DTimers');
+          }
+        } catch(eOrbit) {}
+      });
+    }
+  } catch(e) {}
   // Stop all segmentArrived polls
   if (window._pbPollingSegment) {
     Object.keys(window._pbPollingSegment).forEach(function(k) {
