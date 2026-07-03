@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V3 Scene Wrapper - CameraTestAll - 2026-07-03T01:35:12 -->
+<Scene id="CameraTestAll" timestamp="2026-07-03T01:35:12" zone_set="CameraTestAll" mode="improvisation" width="120" depth="20">
+<EmotionalArc cultivar="TestSubjectA" actor="ollama" voice=""><StartPosition x="0" y="0" z="0"/></EmotionalArc>
+<EmotionalArc cultivar="TestSubjectB" actor="ollama" voice=""><StartPosition x="36" y="0" z="-3"/></EmotionalArc>
+<Waypoints>
+  <Waypoint name="TestAgentEye" label="TestAgentEye" zone="" pos_x="44.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestAgentOrbit" label="TestAgentOrbit" zone="" pos_x="76.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestAgentSide" label="TestAgentSide" zone="" pos_x="48.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestAgentTrack" label="TestAgentTrack" zone="" pos_x="80.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestCloseup" label="TestCloseup" zone="" pos_x="12.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestCraneUp" label="TestCraneUp" zone="" pos_x="72.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestDollyIn" label="TestDollyIn" zone="" pos_x="52.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestDollyOut" label="TestDollyOut" zone="" pos_x="56.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestDutch" label="TestDutch" zone="" pos_x="28.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestExtremeCloseup" label="TestExtremeCloseup" zone="" pos_x="16.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestMedium" label="TestMedium" zone="" pos_x="8.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestNamedVp" label="TestNamedVp" zone="" pos_x="0.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestOrbit" label="TestOrbit" zone="" pos_x="68.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestOverShoulder" label="TestOverShoulder" zone="" pos_x="32.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestOverhead" label="TestOverhead" zone="" pos_x="20.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestPan" label="TestPan" zone="" pos_x="60.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestProfile" label="TestProfile" zone="" pos_x="36.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestTilt" label="TestTilt" zone="" pos_x="64.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestTrack" label="TestTrack" zone="" pos_x="84.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestTwoShot" label="TestTwoShot" zone="" pos_x="40.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestWide" label="TestWide" zone="" pos_x="4.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestWormsEye" label="TestWormsEye" zone="" pos_x="24.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+</Waypoints>
+<Paths>
+  <Path name="path_TestSubjectA" agent="TestSubjectA" waypointOrder="1">
+    <PathWaypoint ref="TestNamedVp"/>
+    <PathWaypoint ref="TestWide"/>
+    <PathWaypoint ref="TestMedium"/>
+    <PathWaypoint ref="TestCloseup"/>
+    <PathWaypoint ref="TestExtremeCloseup"/>
+    <PathWaypoint ref="TestOverhead"/>
+    <PathWaypoint ref="TestWormsEye"/>
+    <PathWaypoint ref="TestDutch"/>
+    <PathWaypoint ref="TestOverShoulder"/>
+    <PathWaypoint ref="TestProfile"/>
+    <PathWaypoint ref="TestTwoShot"/>
+    <PathWaypoint ref="TestAgentEye"/>
+    <PathWaypoint ref="TestAgentSide"/>
+    <PathWaypoint ref="TestDollyIn"/>
+    <PathWaypoint ref="TestDollyOut"/>
+    <PathWaypoint ref="TestPan"/>
+    <PathWaypoint ref="TestTilt"/>
+    <PathWaypoint ref="TestOrbit"/>
+    <PathWaypoint ref="TestCraneUp"/>
+    <PathWaypoint ref="TestAgentOrbit"/>
+    <PathWaypoint ref="TestAgentTrack"/>
+    <PathWaypoint ref="TestTrack"/>
+  </Path>
+</Paths>
+<EventCues>
+  <Cue track="camera" trackLabel="Camera" label="01 named_vp" t="0" dur="4" trigger="TestNamedVp arrive" shot="named_vp" subject="TestSubjectA" transition="cut" flyDuration="1.5" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="02 wide" t="10" dur="4" trigger="TestWide arrive" shot="wide" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="12" height="3" hAngle="0" vAngle="-15" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="03 medium" t="20" dur="4" trigger="TestMedium arrive" shot="medium" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="04 closeup" t="30" dur="4" trigger="TestCloseup arrive" shot="closeup" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="1.5" height="1.7" hAngle="0" vAngle="-5" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="05 extreme_closeup" t="40" dur="4" trigger="TestExtremeCloseup arrive" shot="extreme_closeup" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="0.65" height="1.7" hAngle="0" vAngle="0" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="06 overhead" t="50" dur="4" trigger="TestOverhead arrive" shot="overhead" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="6" height="7" hAngle="40" vAngle="-6" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="07 worms_eye" t="60" dur="4" trigger="TestWormsEye arrive" shot="worms_eye" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="1.5" height="0.1" hAngle="0" vAngle="-15" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="08 dutch" t="70" dur="4" trigger="TestDutch arrive" shot="dutch" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="3" height="1.7" hAngle="0" vAngle="-8" roll="25" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="09 over_shoulder" t="80" dur="4" trigger="TestOverShoulder arrive" shot="over_shoulder" subject="TestSubjectA" subject2="TestSubjectB" transition="cut" flyDuration="1.5" distance="1.2" height="1.6" hAngle="-20" vAngle="-5" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="10 profile" t="90" dur="4" trigger="TestProfile arrive" shot="profile" subject="TestSubjectA" transition="cut" flyDuration="1.5" distance="3" height="1.7" hAngle="90" vAngle="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="11 two_shot" t="100" dur="4" trigger="TestTwoShot arrive" shot="two_shot" subject="TestSubjectA" subject2="TestSubjectB" transition="cut" flyDuration="1.5" distance="4" height="1.7" hAngle="0" vAngle="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="12 agent_eye" t="110" dur="4" trigger="TestAgentEye arrive" shot="agent_eye" subject="TestSubjectA" transition="cut" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="13 agent_side" t="120" dur="4" trigger="TestAgentSide arrive" shot="agent_side" subject="TestSubjectA" transition="cut" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="14 dolly_in" t="130" dur="4" trigger="TestDollyIn arrive" shot="dolly_in" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="8" height="1.7" hAngle="0" vAngle="-8" distanceEnd="3.2" heightEnd="1.7" hAngleEnd="0" vAngleEnd="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="15 dolly_out" t="140" dur="4" trigger="TestDollyOut arrive" shot="dolly_out" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="3" height="1.7" hAngle="0" vAngle="-8" distanceEnd="7.5" heightEnd="1.7" hAngleEnd="0" vAngleEnd="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="16 pan" t="150" dur="4" trigger="TestPan arrive" shot="pan" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="-45" vAngle="-8" distanceEnd="5" heightEnd="1.7" hAngleEnd="45" vAngleEnd="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="17 tilt" t="160" dur="4" trigger="TestTilt arrive" shot="tilt" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-30" distanceEnd="5" heightEnd="1.7" hAngleEnd="0" vAngleEnd="30" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="18 orbit" t="170" dur="8" trigger="TestOrbit arrive" shot="orbit" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-8" loop="true" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="19 crane_up" t="185" dur="4" trigger="TestCraneUp arrive" shot="crane_up" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="6" height="1.5" hAngle="0" vAngle="-15" heightEnd="5.5" arcDepth="3" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="20 agent_orbit" t="195" dur="8" trigger="TestAgentOrbit arrive" shot="agent_orbit" subject="TestSubjectA" transition="cut" distance="8.6" height="3.2" hAngle="0" vAngle="-8" loop="true" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="21 agent_track" t="210" dur="4" trigger="TestAgentTrack arrive" shot="agent_track" subject="TestSubjectA" transition="cut" height="1.7" vAngle="-8" trackOffset="-3" trackOffsetEnd="3" trackDepth="4" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="22 track (expect no-op)" t="220" dur="4" trigger="TestTrack arrive" shot="track" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="4" height="1.7" hAngle="-90" vAngle="-8" delay="0" jump="true"/>
+</EventCues>
+</Scene>

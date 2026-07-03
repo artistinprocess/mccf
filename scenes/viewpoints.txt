@@ -1,0 +1,136 @@
+Camera Protos for CameraExternprotos
+
+NOTE:  Remove OVERVIEW.  Loader defaults to first camera in file.
+
+
+
+
+<Proto>
+
+This is the standard camera set ALL avatars have:
+
+[Character] Identity
+Viewpoint
+    position='0 0 0'
+    orientation='0 1.00000004734349 0 9.99999952656509e-5'
+
+[Character] Front
+Viewpoint
+    position='0 0 0'
+    orientation='0 1.00000004734349 0 9.99999952656509e-5'
+	
+[Character] Front Close
+Viewpoint
+    position='0 0 0'
+    orientation='0 1.00000004734349 0 9.99999952656509e-5'
+	
+[Character] Front Closer
+Viewpoint
+    position='0 0 0'
+    orientation='0 1.00000004734349 0 9.99999952656509e-5'
+
+[Character] Front Face
+Viewpoint
+    position='0.06186648 1.53209 0.9354359'
+    orientation='-0.999107215201228 -0.0420432422727588 -0.00413984444701633 0.196474192205428'
+    centerOfRotation='0 1.5 0.0016'
+
+[Character] Right Side
+Viewpoint
+    position='0.06186648 1.53209 0.9354359'
+    orientation='-0.999107215201228 -0.0420432422727588 -0.00413984444701633 0.196474192205428'
+    centerOfRotation='0 1.5 0.0016'
+	
+[Character] Left Side
+Viewpoint
+    position='0.06186648 1.53209 0.9354359'
+    orientation='-0.999107215201228 -0.0420432422727588 -0.00413984444701633 0.196474192205428'
+    centerOfRotation='0 1.5 0.0016'
+
+[Character] Left Side Close
+Viewpoint
+    position='-1.3764 1.250411 1.063407'
+    orientation='-0.229102000884025 -0.965412157322414 -0.124465415618227 1.02514205921091'
+    centerOfRotation='0 0.9149 0.0016'
+	
+[Character] Top
+Viewpoint
+    position='-1.3764 1.250411 1.063407'
+    orientation='-0.229102000884025 -0.965412157322414 -0.124465415618227 1.02514205921091'
+    centerOfRotation='0 0.9149 0.0016'
+</proto>
+
+
+These are optional cameras a user can add to an avatar in character creator.  Each is a separate proto.
+<proto>
+[Character] namedVP
+
+</proto>
+
+<proto>
+[Character] wide
+<Viewpoint
+ 
+</proto
+<proto>
+[Character] medium
+0</proto>
+<proto>
+[Character] closeup
+
+</proto>
+<proto>
+[Character] extreme_closeup
+
+</proto>
+<proto>
+[Character] dutch
+
+</proto>
+<proto>
+[Character] profile
+
+</proto>
+<proto>
+[Character] two_shot
+
+</proto>
+<proto>
+[Character] agent_side
+
+</proto>
+
+<proto>
+[Character] dolly_in
+
+</proto>
+
+<proto>
+[Character] dolly_out
+
+</proto>
+
+<proto>
+[Character] pan
+
+</proto>
+
+<proto>
+[Character] orbit
+
+</proto>
+
+<proto>
+[Character] crane_up
+
+</proto>
+
+<proto>
+[Character] agent_orbit
+
+</proto>
+
+<proto>
+[Character] agent_track
+
+</proto>

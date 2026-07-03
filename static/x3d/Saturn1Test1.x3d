@@ -1,0 +1,927 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.1//EN" "https://www.web3d.org/specifications/x3d-4.1.dtd">
+<X3D profile='Interchange' version='4.1' xmlns:xsd='http://www.w3.org/2001/XMLSchema-instance' xsd:noNamespaceSchemaLocation='https://www.web3d.org/specifications/x3d-4.1.xsd'>
+  <head>
+    <component name='EnvironmentalSensor' level='1'/>
+    <component name='Lighting' level='2'/>
+    <component name='Networking' level='2'/>
+    <component name='Scripting' level='1'/>
+    <component name='Sound' level='2'/>
+    <component name='Text' level='1'/>
+    <meta name='title' content='Saturn1Test1'/>
+    <meta name='creator' content='len bullard'/>
+    <meta name='created' content='Thu, 02 Jul 2026 18:23:11 GMT'/>
+    <meta name='modified' content='Thu, 02 Jul 2026 18:23:11 GMT'/>
+    <meta name='generator' content='Sunrize X3D Editor V2.1.8, https://create3000.github.io/sunrize/'/>
+  </head>
+  <Scene>
+    <ProtoDeclare name='MCCFAgent'>
+      <ProtoInterface>
+        <field accessType='initializeOnly' type='MFString' name='agentName' value='"Agent"'/>
+        <field accessType='inputOutput' type='SFVec3f' name='position'/>
+        <field accessType='inputOutput' type='SFFloat' name='coherenceLevel' value='0.5'/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Transform>
+          <Transform
+              translation='0 0.04 0'>
+            <Shape>
+              <Appearance>
+                <Material
+                    diffuseColor='0.2 0.4 0.8'
+                    transparency='0.55'/>
+              </Appearance>
+              <Cylinder
+                  height='0.04'
+                  radius='0.75'/>
+            </Shape>
+          </Transform>
+          <Transform
+              translation='0 0.9 0'>
+            <Shape>
+              <Appearance>
+                <Material
+                    diffuseColor='0.3 0.55 0.9'
+                    specularColor='0.5 0.6 0.9'
+                    shininess='0.65'/>
+              </Appearance>
+              <Cylinder
+                  height='1.35'
+                  radius='0.33'/>
+            </Shape>
+          </Transform>
+          <Transform
+              translation='0 1.85 0'>
+            <Shape>
+              <Appearance>
+                <Material
+                    diffuseColor='0.88 0.78 0.68'
+                    shininess='0.3'/>
+              </Appearance>
+              <Sphere
+                  radius='0.3'/>
+            </Shape>
+          </Transform>
+          <Transform
+              translation='0 3.1 0'>
+            <Billboard>
+              <Shape>
+                <Appearance>
+                  <Material
+                      emissiveColor='0.8 0.95 1'/>
+                </Appearance>
+                <Text>
+                  <IS>
+                    <connect nodeField='string' protoField='agentName'/>
+                  </IS>
+                  <FontStyle
+                      family='"SANS"'
+                      size='0.32'
+                      justify='"MIDDLE"'/>
+                </Text>
+              </Shape>
+            </Billboard>
+          </Transform>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+    <ProtoDeclare name='MCCFZone'>
+      <ProtoInterface>
+        <field accessType='initializeOnly' type='SFString' name='zoneId' value='zone'/>
+        <field accessType='inputOutput' type='SFBool' name='active'/>
+      </ProtoInterface>
+      <ProtoBody>
+        <Transform>
+          <Transform
+              translation='0 0.15 0'>
+            <Shape>
+              <Appearance>
+                <Material
+                    emissiveColor='0.9 0.9 0.9'
+                    transparency='0.2'/>
+              </Appearance>
+              <Sphere
+                  radius='0.18'/>
+            </Shape>
+          </Transform>
+          <Transform
+              translation='0 1.2 0'>
+            <Billboard>
+              <Shape>
+                <Appearance>
+                  <Material
+                      emissiveColor='0.7 0.7 0.8'/>
+                </Appearance>
+                <Text
+                    string='"zone"'>
+                  <FontStyle
+                      family='"SANS"'
+                      size='0.24'
+                      justify='"MIDDLE"'/>
+                </Text>
+              </Shape>
+            </Billboard>
+          </Transform>
+        </Transform>
+      </ProtoBody>
+    </ProtoDeclare>
+    <NavigationInfo
+        visibilityLimit='300'
+        transitionType='"TELEPORT"'/>
+
+    <AudioDestination DEF='SoundNode_Music'
+        gain='0.7'>
+      <AudioClip DEF='Clip_Music' containerField='children'
+          url='"media/AnaasTriumph.mp3"'
+          startTime='-1'
+          stopTime='-2'/>
+    </AudioDestination>
+    <AudioDestination DEF='SoundNode_Bed'
+        gain='0.23'>
+      <AudioClip DEF='Clip_Bed' containerField='children'
+          enabled='false'
+          url='"media/Thunder1.mp3"'
+          startTime='-1'
+          stopTime='-2'/>
+    </AudioDestination>
+    <Transform
+        translation='50 15 50'>
+      <PointLight
+          color='1 0.97 0.92'
+          intensity='0.8'
+          radius='120'/>
+    </Transform>
+    <Viewpoint DEF='VP_Overview'
+        description='Overview'
+        position='46.74462 10.55803 70.9238'
+        orientation='0.993440994809575 0.111974301083787 0.0231677734915945 5.87251855363308'/>
+    <Transform DEF='CAM_Free_Transform'>
+      <Viewpoint DEF='VP_Free'
+          description='Free Camera'
+          position='0 0 0'
+          orientation='0 1 0 0.0001'/>
+    </Transform>
+    <TimeSensor DEF='CAM_Timer'
+        enabled='false'
+        cycleInterval='4'/>
+    <PositionInterpolator DEF='CAM_PosInterp'
+        key='0'
+        keyValue='0 0 0'/>
+    <OrientationInterpolator DEF='CAM_OriInterp'
+        key='0'
+        keyValue='0 1 0 0.0001'/>
+    <Viewpoint DEF='VP_Giparu'
+        description='SArrive'
+        position='48.4 3 38.33333'/>
+    <Transform
+        translation='50 -0.05 50'>
+      <Shape>
+        <Appearance>
+          <Material
+              diffuseColor='0.18 0.22 0.3'/>
+        </Appearance>
+        <Box
+            size='100 0.08 100'/>
+      </Shape>
+    </Transform>
+    <Shape>
+      <Appearance>
+        <Material
+            emissiveColor='0.22 0.28 0.4'
+            transparency='0.6'/>
+      </Appearance>
+      <IndexedLineSet
+          coordIndex='0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11, -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21, -1, 22, 23, -1, 24, 25, -1, 26, 27, -1, 28, 29, -1, 30, 31, -1, 32, 33, -1, 34, 35, -1, 36, 37, -1, 38, 39, -1, 40, 41, -1, 42, 43, -1'>
+        <Coordinate
+            point='0 0.02 0, 0 0.02 100, 10 0.02 0, 10 0.02 100, 20 0.02 0, 20 0.02 100, 30 0.02 0, 30 0.02 100, 40 0.02 0, 40 0.02 100, 50 0.02 0, 50 0.02 100, 60 0.02 0, 60 0.02 100, 70 0.02 0, 70 0.02 100, 80 0.02 0, 80 0.02 100, 90 0.02 0, 90 0.02 100, 100 0.02 0, 100 0.02 100, 0 0.02 0, 100 0.02 0, 0 0.02 10, 100 0.02 10, 0 0.02 20, 100 0.02 20, 0 0.02 30, 100 0.02 30, 0 0.02 40, 100 0.02 40, 0 0.02 50, 100 0.02 50, 0 0.02 60, 100 0.02 60, 0 0.02 70, 100 0.02 70, 0 0.02 80, 100 0.02 80, 0 0.02 90, 100 0.02 90, 0 0.02 100, 100 0.02 100'/>
+      </IndexedLineSet>
+    </Shape>
+    <Transform DEF='Zone_Giparu'
+        translation='48.4 0 46.33333'>
+      <Shape>
+        <Appearance>
+          <Material
+              diffuseColor='0.502 0.816 0.376'
+              emissiveColor='0.502 0.816 0.376'
+              transparency='0.55'/>
+        </Appearance>
+        <Cylinder
+            height='0.5'
+            radius='20'/>
+      </Shape>
+      <Transform
+          translation='0 11.2 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.502 0.816 0.376'/>
+            </Appearance>
+            <Text
+                string='"SArrive"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.28'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <ProximitySensor DEF='Prox_Giparu'
+          size='40 4 40'/>
+      <AudioDestination DEF='SoundNode_Giparu_Ambient'>
+        <Gain DEF='GainNode_Giparu_Ambient'
+            gain='0'>
+          <AudioClip DEF='Clip_Giparu_Ambient' containerField='children'
+              loop='true'
+              startTime='-1'
+              stopTime='-2'/>
+        </Gain>
+      </AudioDestination>
+      <Script DEF='SoundFader_Giparu'
+          directOutput='true'
+          mustEvaluate='true'>
+        <field accessType='inputOnly' type='SFBool' name='isActive'/>
+        <field accessType='inputOnly' type='SFBool' name='playing'/>
+        <field accessType='inputOnly' type='SFFloat' name='masterVolume'/>
+<![CDATA[ecmascript:
+  var _fadeTimer=null; var _targetGain=0; var _curGain=0;
+  var _playing=false; var _masterVol=1.0;
+  var FADE_MS=300; var STEPS=15;
+  function _setGainNode(v){
+    try{
+      var g=Browser.currentScene.getNamedNode("GainNode_Giparu_Ambient");
+      if(g) g.getField("gain").setValue(v);
+    }catch(e){}
+  }
+  function _ramp(from,to){
+    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}
+    var ceiling=Math.min(to, _masterVol);
+    _curGain=from; _targetGain=ceiling;
+    var step=(ceiling-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);
+    _fadeTimer=setInterval(function(){
+      _curGain+=step;
+      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);
+      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}
+      _setGainNode(_curGain);
+    },interval);
+  }
+  function masterVolume(val, time) {
+    _masterVol = val;
+    if (_curGain > 0) { _setGainNode(Math.min(_curGain, _masterVol)); }
+  }
+  function playing(val, time) {
+    _playing = val;
+    Browser.println("SoundFader_Giparu: playing=" + val);
+    if (!val) {
+      _ramp(_curGain, 0);
+      try { var clip = Browser.currentScene.getNamedNode("Clip_Giparu_Ambient"); if (clip) clip.getField("stopTime").setValue(Browser.currentTime + (FADE_MS/1000)); } catch(e) {}
+    }
+  }
+  function isActive(val, time) {
+    if (!_playing) { Browser.println("SoundFader_Giparu: GATED isActive="+val); return; }
+    var clip = Browser.currentScene.getNamedNode("Clip_Giparu_Ambient");
+    if (val) {
+      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {
+        try{clip.getField("stopTime").setValue(-2);clip.getField("startTime").setValue(Browser.currentTime);}catch(e){}
+        _ramp(0, 0.80);
+      }
+      Browser.println("SoundFader_Giparu: ENTER");
+    } else {
+      _ramp(_curGain, 0);
+      try{if(clip)clip.getField("stopTime").setValue(Browser.currentTime+(FADE_MS/1000));}catch(e){}
+      Browser.println("SoundFader_Giparu: EXIT");
+    }
+  }
+  ]]>
+      </Script>
+      <AudioDestination DEF='SoundNode_Giparu_Dwell'
+          gain='0.85'>
+        <AudioClip DEF='Clip_Giparu_Dwell' containerField='children'
+            startTime='-1'
+            stopTime='-2'/>
+      </AudioDestination>
+    </Transform>
+    <Transform DEF='Avatar_Cindy_1'
+        translation='52.2 0 49.34444'
+        scale='0.75 0.75 10'>
+      <ProximitySensor DEF='Prox_Cindy'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_Cindy'
+          url='"../avatars/cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_Cindy'
+                string='"Cindy"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_Cindy_Eye'
+          description='Cindy Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_Cindy_Side'
+          description='Cindy Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_Cindy'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_Cindy_Orbit'
+            description='Cindy Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_Cindy'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_Cindy'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_Cindy'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_Cindy'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_Cindy_Track'
+            description='Cindy Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_Cindy'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_Cindy'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_Cindy'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_Jack'
+        translation='50.75556 0 40.17778'>
+      <ProximitySensor DEF='Prox_Jack'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_Jack'
+          url='"../avatars/cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_Jack'
+                string='"Jack"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_Jack_Eye'
+          description='Jack Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_Jack_Side'
+          description='Jack Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_Jack'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_Jack_Orbit'
+            description='Jack Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_Jack'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_Jack'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_Jack'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_Jack'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_Jack_Track'
+            description='Jack Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_Jack'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_Jack'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_Jack'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_The_Advocate'
+        translation='45.86667 0 51.32222'>
+      <ProximitySensor DEF='Prox_The_Advocate'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_The_Advocate'
+          url='"../avatars/cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_The_Advocate'
+                string='"The Advocate"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_The_Advocate_Eye'
+          description='The Advocate Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_The_Advocate_Side'
+          description='The Advocate Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_The_Advocate'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_The_Advocate_Orbit'
+            description='The Advocate Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_The_Advocate'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_The_Advocate'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_The_Advocate'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_The_Advocate'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_The_Advocate_Track'
+            description='The Advocate Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_The_Advocate'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_The_Advocate'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_The_Advocate'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_The_Bridge'
+        translation='44.9 0 43.6'>
+      <ProximitySensor DEF='Prox_The_Bridge'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_The_Bridge'
+          url='"../avatars/cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_The_Bridge'
+                string='"The Bridge"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_The_Bridge_Eye'
+          description='The Bridge Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_The_Bridge_Side'
+          description='The Bridge Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_The_Bridge'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_The_Bridge_Orbit'
+            description='The Bridge Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_The_Bridge'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_The_Bridge'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_The_Bridge'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_The_Bridge'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_The_Bridge_Track'
+            description='The Bridge Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_The_Bridge'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_The_Bridge'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_The_Bridge'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_The_Gardener'
+        translation='14.11111 0 51.56667'>
+      <ProximitySensor DEF='Prox_The_Gardener'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_The_Gardener'
+          url='"../avatars/cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_The_Gardener'
+                string='"The Gardener"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_The_Gardener_Eye'
+          description='The Gardener Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_The_Gardener_Side'
+          description='The Gardener Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_The_Gardener'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_The_Gardener_Orbit'
+            description='The Gardener Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_The_Gardener'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_The_Gardener'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_The_Gardener'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_The_Gardener'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_The_Gardener_Track'
+            description='The Gardener Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_The_Gardener'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_The_Gardener'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_The_Gardener'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_The_Steward'
+        translation='49.2 0 35.1'>
+      <ProximitySensor DEF='Prox_The_Steward'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_The_Steward'
+          url='"../cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_The_Steward'
+                string='"The Steward"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_The_Steward_Eye'
+          description='The Steward Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_The_Steward_Side'
+          description='The Steward Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_The_Steward'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_The_Steward_Orbit'
+            description='The Steward Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_The_Steward'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_The_Steward'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_The_Steward'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_The_Steward'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_The_Steward_Track'
+            description='The Steward Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_The_Steward'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_The_Steward'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_The_Steward'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Transform DEF='Avatar_The_Witness'
+        translation='38.9 0 38.25556'>
+      <ProximitySensor DEF='Prox_The_Witness'
+          size='2 2.2 2'/>
+      <Inline DEF='HAnim_The_Witness'
+          url='"../cindy_hanim.x3d"'/>
+      <Transform
+          translation='0 3.1 0'>
+        <Billboard>
+          <Shape>
+            <Appearance>
+              <Material
+                  emissiveColor='0.8 0.95 1'/>
+            </Appearance>
+            <Text DEF='NameText_The_Witness'
+                string='"The Witness"'>
+              <FontStyle
+                  family='"SANS"'
+                  size='0.32'
+                  justify='"MIDDLE"'/>
+            </Text>
+          </Shape>
+        </Billboard>
+      </Transform>
+      <Viewpoint DEF='VP_The_Witness_Eye'
+          description='The Witness Eye'
+          position='0 1.7 0.2'
+          orientation='0 1 0 3.14159'/>
+      <Viewpoint DEF='VP_The_Witness_Side'
+          description='The Witness Side'
+          position='2.5 1.5 0'
+          orientation='0 1 0 1.5708'/>
+      <Transform DEF='CAM_OrbitXform_The_Witness'
+          translation='0 3.2 8.6'>
+        <Viewpoint DEF='VP_The_Witness_Orbit'
+            description='The Witness Orbit'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_OrbitTimer_The_Witness'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_OrbitPosInterp_The_Witness'
+          key='0'
+          keyValue='0 3.2 8.6'/>
+      <OrientationInterpolator DEF='CAM_OrbitOriInterp_The_Witness'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+      <Transform DEF='CAM_TrackXform_The_Witness'
+          translation='-3 1.7 4'>
+        <Viewpoint DEF='VP_The_Witness_Track'
+            description='The Witness Track'
+            position='0 0 0'
+            orientation='0 1 0 0.0001'/>
+      </Transform>
+      <TimeSensor DEF='CAM_TrackTimer_The_Witness'
+          enabled='false'
+          cycleInterval='4'/>
+      <PositionInterpolator DEF='CAM_TrackPosInterp_The_Witness'
+          key='0'
+          keyValue='-3 1.7 4'/>
+      <OrientationInterpolator DEF='CAM_TrackOriInterp_The_Witness'
+          key='0'
+          keyValue='0 1 0 0.0001'/>
+    </Transform>
+    <Script DEF='MCCFMaster'
+        directOutput='true'
+        mustEvaluate='true'>
+      <field accessType='initializeOnly' type='SFString' name='api_url' value='http://localhost:5000'/>
+      <field accessType='inputOnly' type='SFString' name='startAgent'/>
+      <field accessType='inputOnly' type='SFString' name='releaseDwellAgent'/>
+      <field accessType='inputOnly' type='SFString' name='startNextTimer'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_Cindy'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_Cindy'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_Jack'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_Jack'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_The_Advocate'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_The_Advocate'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_The_Bridge'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_The_Bridge'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_The_Gardener'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_The_Gardener'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_The_Steward'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_The_Steward'/>
+      <field accessType='inputOnly' type='SFVec3f' name='pos_The_Witness'/>
+      <field accessType='outputOnly' type='SFFloat' name='arousal_The_Witness'/>
+      <field accessType='inputOnly' type='SFBool' name='zoneActive_Giparu'/>
+<![CDATA[ecmascript:
+var _sceneNow=0;
+function _getSceneNow(agent,seg){var t=Browser.currentScene.getNamedNode("Timer_"+agent+"_"+seg);if(t&&t.time!==undefined&&t.time>0)return t.time;if(t&&t.startTime!==undefined&&t.cycleTime!==undefined&&(t.startTime+t.cycleTime)>0)return t.startTime+t.cycleTime;return _sceneNow;}
+function initialize(){Browser.println("MCCFMaster initialized.");}
+function startNextTimer(agentColonSeg,time){
+  try{
+  var parts=agentColonSeg.split(":");
+  var nextSeg=parseInt(parts[1])+1;
+  var t=Browser.currentScene.getNamedNode("Timer_"+parts[0]+"_"+nextSeg);
+  if(t){t.startTime=time;t.enabled=true;Browser.println("MCCFMaster: started Timer_"+parts[0]+"_"+nextSeg+" (next) at "+time);}
+  else{Browser.println("MCCFMaster: no Timer_"+parts[0]+"_"+nextSeg+" — arc complete");}
+}catch(e){Browser.println("MCCFMaster: startNextTimer end of arc — "+e.message);}
+}
+function startAgent(agentSafeName,time){
+  var t=Browser.currentScene.getNamedNode("Timer_"+agentSafeName+"_1");
+  if(t){t.startTime=time;t.enabled=true;_sceneNow=time;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at "+time);}
+  else{Browser.println("MCCFMaster: Timer_"+agentSafeName+"_1 NOT FOUND");}
+}
+function releaseDwellAgent(agentColonSeg,time){
+  var parts=agentColonSeg.split(":");
+  var dw=Browser.currentScene.getNamedNode("Dwell_"+parts[0]+"_"+parts[1]);
+  if(dw){var tNow=_getSceneNow(parts[0],parseInt(parts[1]));dw.startTime=tNow;dw.enabled=true;Browser.println("MCCFMaster: started Dwell_"+parts[0]+"_"+parts[1]+" at "+tNow);}
+  else{Browser.println("MCCFMaster: Dwell_"+parts[0]+"_"+parts[1]+" NOT FOUND");}
+}
+]]>
+    </Script>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='DefaultTimer' AS='DefaultTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='PitchTimer' AS='PitchTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='YawTimer' AS='YawTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='RollTimer' AS='RollTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='WalkTimer' AS='WalkTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='RunTimer' AS='RunTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='JumpTimer' AS='JumpTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Cindy' importedDEF='KickTimer' AS='KickTimer_Cindy'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='DefaultTimer' AS='DefaultTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='PitchTimer' AS='PitchTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='YawTimer' AS='YawTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='RollTimer' AS='RollTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='WalkTimer' AS='WalkTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='RunTimer' AS='RunTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='JumpTimer' AS='JumpTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_Jack' importedDEF='KickTimer' AS='KickTimer_Jack'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='DefaultTimer' AS='DefaultTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='PitchTimer' AS='PitchTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='YawTimer' AS='YawTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='RollTimer' AS='RollTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='WalkTimer' AS='WalkTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='RunTimer' AS='RunTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='JumpTimer' AS='JumpTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Advocate' importedDEF='KickTimer' AS='KickTimer_The_Advocate'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='DefaultTimer' AS='DefaultTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='PitchTimer' AS='PitchTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='YawTimer' AS='YawTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='RollTimer' AS='RollTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='WalkTimer' AS='WalkTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='RunTimer' AS='RunTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='JumpTimer' AS='JumpTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Bridge' importedDEF='KickTimer' AS='KickTimer_The_Bridge'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='DefaultTimer' AS='DefaultTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='PitchTimer' AS='PitchTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='YawTimer' AS='YawTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='RollTimer' AS='RollTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='WalkTimer' AS='WalkTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='RunTimer' AS='RunTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='JumpTimer' AS='JumpTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Gardener' importedDEF='KickTimer' AS='KickTimer_The_Gardener'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='DefaultTimer' AS='DefaultTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='PitchTimer' AS='PitchTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='YawTimer' AS='YawTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='RollTimer' AS='RollTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='WalkTimer' AS='WalkTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='RunTimer' AS='RunTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='JumpTimer' AS='JumpTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Steward' importedDEF='KickTimer' AS='KickTimer_The_Steward'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='DefaultTimer' AS='DefaultTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='PitchTimer' AS='PitchTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='YawTimer' AS='YawTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='RollTimer' AS='RollTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='WalkTimer' AS='WalkTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='RunTimer' AS='RunTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='JumpTimer' AS='JumpTimer_The_Witness'/>
+    <IMPORT inlineDEF='HAnim_The_Witness' importedDEF='KickTimer' AS='KickTimer_The_Witness'/>
+    <ROUTE fromNode='CAM_OrbitTimer_Cindy' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_Cindy' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_Cindy' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_Cindy' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_Cindy' fromField='value_changed' toNode='CAM_OrbitXform_Cindy' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_Cindy' fromField='value_changed' toNode='CAM_OrbitXform_Cindy' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_Cindy' fromField='fraction_changed' toNode='CAM_TrackPosInterp_Cindy' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_Cindy' fromField='fraction_changed' toNode='CAM_TrackOriInterp_Cindy' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_Cindy' fromField='value_changed' toNode='CAM_TrackXform_Cindy' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_Cindy' fromField='value_changed' toNode='CAM_TrackXform_Cindy' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_Jack' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_Jack' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_Jack' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_Jack' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_Jack' fromField='value_changed' toNode='CAM_OrbitXform_Jack' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_Jack' fromField='value_changed' toNode='CAM_OrbitXform_Jack' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_Jack' fromField='fraction_changed' toNode='CAM_TrackPosInterp_Jack' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_Jack' fromField='fraction_changed' toNode='CAM_TrackOriInterp_Jack' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_Jack' fromField='value_changed' toNode='CAM_TrackXform_Jack' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_Jack' fromField='value_changed' toNode='CAM_TrackXform_Jack' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Advocate' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_The_Advocate' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Advocate' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_The_Advocate' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_The_Advocate' fromField='value_changed' toNode='CAM_OrbitXform_The_Advocate' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_The_Advocate' fromField='value_changed' toNode='CAM_OrbitXform_The_Advocate' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Advocate' fromField='fraction_changed' toNode='CAM_TrackPosInterp_The_Advocate' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Advocate' fromField='fraction_changed' toNode='CAM_TrackOriInterp_The_Advocate' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_The_Advocate' fromField='value_changed' toNode='CAM_TrackXform_The_Advocate' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_The_Advocate' fromField='value_changed' toNode='CAM_TrackXform_The_Advocate' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Bridge' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_The_Bridge' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Bridge' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_The_Bridge' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_The_Bridge' fromField='value_changed' toNode='CAM_OrbitXform_The_Bridge' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_The_Bridge' fromField='value_changed' toNode='CAM_OrbitXform_The_Bridge' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Bridge' fromField='fraction_changed' toNode='CAM_TrackPosInterp_The_Bridge' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Bridge' fromField='fraction_changed' toNode='CAM_TrackOriInterp_The_Bridge' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_The_Bridge' fromField='value_changed' toNode='CAM_TrackXform_The_Bridge' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_The_Bridge' fromField='value_changed' toNode='CAM_TrackXform_The_Bridge' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Gardener' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_The_Gardener' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Gardener' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_The_Gardener' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_The_Gardener' fromField='value_changed' toNode='CAM_OrbitXform_The_Gardener' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_The_Gardener' fromField='value_changed' toNode='CAM_OrbitXform_The_Gardener' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Gardener' fromField='fraction_changed' toNode='CAM_TrackPosInterp_The_Gardener' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Gardener' fromField='fraction_changed' toNode='CAM_TrackOriInterp_The_Gardener' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_The_Gardener' fromField='value_changed' toNode='CAM_TrackXform_The_Gardener' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_The_Gardener' fromField='value_changed' toNode='CAM_TrackXform_The_Gardener' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Steward' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_The_Steward' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Steward' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_The_Steward' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_The_Steward' fromField='value_changed' toNode='CAM_OrbitXform_The_Steward' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_The_Steward' fromField='value_changed' toNode='CAM_OrbitXform_The_Steward' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Steward' fromField='fraction_changed' toNode='CAM_TrackPosInterp_The_Steward' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Steward' fromField='fraction_changed' toNode='CAM_TrackOriInterp_The_Steward' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_The_Steward' fromField='value_changed' toNode='CAM_TrackXform_The_Steward' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_The_Steward' fromField='value_changed' toNode='CAM_TrackXform_The_Steward' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Witness' fromField='fraction_changed' toNode='CAM_OrbitPosInterp_The_Witness' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitTimer_The_Witness' fromField='fraction_changed' toNode='CAM_OrbitOriInterp_The_Witness' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_OrbitPosInterp_The_Witness' fromField='value_changed' toNode='CAM_OrbitXform_The_Witness' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OrbitOriInterp_The_Witness' fromField='value_changed' toNode='CAM_OrbitXform_The_Witness' toField='set_rotation'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Witness' fromField='fraction_changed' toNode='CAM_TrackPosInterp_The_Witness' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackTimer_The_Witness' fromField='fraction_changed' toNode='CAM_TrackOriInterp_The_Witness' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_TrackPosInterp_The_Witness' fromField='value_changed' toNode='CAM_TrackXform_The_Witness' toField='set_translation'/>
+    <ROUTE fromNode='CAM_TrackOriInterp_The_Witness' fromField='value_changed' toNode='CAM_TrackXform_The_Witness' toField='set_rotation'/>
+    <ROUTE fromNode='Prox_Giparu' fromField='isActive' toNode='SoundFader_Giparu' toField='isActive'/>
+    <ROUTE fromNode='CAM_Timer' fromField='fraction_changed' toNode='CAM_PosInterp' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_Timer' fromField='fraction_changed' toNode='CAM_OriInterp' toField='set_fraction'/>
+    <ROUTE fromNode='CAM_PosInterp' fromField='value_changed' toNode='CAM_Free_Transform' toField='set_translation'/>
+    <ROUTE fromNode='CAM_OriInterp' fromField='value_changed' toNode='CAM_Free_Transform' toField='set_rotation'/>
+  </Scene>
+</X3D>

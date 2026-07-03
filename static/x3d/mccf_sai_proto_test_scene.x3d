@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF SAI-into-PROTO test scene — Day 63 -->
+<X3D profile="Immersive" version="4.0">
+<Scene>
+
+<!--
+  Minimal PROTO mirroring the shape of a real camera vessel (Transform + TimeSensor +
+  PositionInterpolator, wired by static ROUTE), instantiated TWICE so the multi-instance
+  question — the one that actually matters for the per-avatar CameraRig use case — gets
+  tested, not just single-instance reach-in.
+-->
+<ProtoDeclare name="TestProto">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFColor" name="tintColor"          value="0.2 0.6 0.9"/>
+    <field accessType="inputOutput" type="SFBool"  name="timerEnabled"       value="false"/>
+    <field accessType="inputOutput" type="SFTime"  name="timerStartTime"     value="0"/>
+    <field accessType="inputOutput" type="SFFloat" name="timerCycleInterval" value="2"/>
+  </ProtoInterface>
+  <ProtoBody>
+    <Transform DEF="Internal_Xform" translation="0 0 0">
+      <Shape>
+        <Appearance>
+          <Material DEF="Internal_Material" diffuseColor="0.2 0.6 0.9">
+            <IS><connect nodeField="diffuseColor" protoField="tintColor"/></IS>
+          </Material>
+        </Appearance>
+        <Box size="1 1 1"/>
+      </Shape>
+    </Transform>
+    <TimeSensor DEF="Internal_Timer" cycleInterval="2" loop="false" enabled="false">
+      <IS>
+        <connect nodeField="enabled"       protoField="timerEnabled"/>
+        <connect nodeField="startTime"     protoField="timerStartTime"/>
+        <connect nodeField="cycleInterval" protoField="timerCycleInterval"/>
+      </IS>
+    </TimeSensor>
+    <PositionInterpolator DEF="Internal_PosInterp" key="0 1" keyValue="0 0 0  0 2 0"/>
+    <ROUTE fromNode="Internal_Timer" fromField="fraction_changed" toNode="Internal_PosInterp" toField="set_fraction"/>
+    <ROUTE fromNode="Internal_PosInterp" fromField="value_changed" toNode="Internal_Xform" toField="set_translation"/>
+  </ProtoBody>
+</ProtoDeclare>
+
+<Viewpoint position="0 2 10" orientation="0 0 0 0" description="Test View"/>
+<DirectionalLight direction="-0.3 -0.8 -0.5" intensity="0.8"/>
+
+<Transform translation="-3 0 0">
+  <ProtoInstance name="TestProto" DEF="Test_A">
+    <fieldValue name="tintColor" value="0.15 0.55 0.95"/>
+  </ProtoInstance>
+</Transform>
+
+<Transform translation="3 0 0">
+  <ProtoInstance name="TestProto" DEF="Test_B">
+    <fieldValue name="tintColor" value="0.95 0.55 0.15"/>
+  </ProtoInstance>
+</Transform>
+
+</Scene>
+</X3D>

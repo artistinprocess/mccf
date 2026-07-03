@@ -27,11 +27,4 @@
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
   <HAnimFigure src="avatars/cindy_hanim.x3d" loa="4"/>
 
-  <!-- HAnim behavior clip selection table -->
-  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
-  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->
-  <Behaviors default="Default">
-    <Clip name="Default" timerDEF="DefaultTimer" loop="true" priority="0"/>
-  </Behaviors>
-
 </CultivarDefinition>

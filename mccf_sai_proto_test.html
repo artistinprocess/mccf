@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MCCF — SAI-into-PROTO Test</title>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #111; color: #eee; }
+  x3d-canvas { width: 100vw; height: 55vh; display: block; background: #222; }
+  #panel { padding: 16px; font-size: 13px; line-height: 1.5; }
+  #resultPanel { white-space: pre-wrap; background: #000; color: #7fdb7f; padding: 12px;
+                 border-radius: 6px; font-family: ui-monospace, monospace; font-size: 12px;
+                 max-height: 34vh; overflow-y: auto; }
+  h2 { margin: 0 0 6px; }
+  .hint { color: #aaa; }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h2>SAI-into-PROTO Test — Day 63</h2>
+  <p class="hint">
+    Two instances of the same PROTO, side by side. <b>Blue box = instance A (left), orange box = instance B (right).</b><br>
+    <b>Prong A</b> tests whether <code>getNamedNode()</code> can reach the PROTO's internal DEF names directly —
+    the pattern every camera vessel node in production relies on today.<br>
+    <b>Prong B</b> tests the standards-compliant fallback — exposed interface fields, written per-instance.
+    If A works cleanly, current SAI patterns carry over almost unchanged when we move to protos.
+    If A fails or is ambiguous, B is confirmed as the path forward for every future proto's interface design.<br>
+    Expected result if B works correctly: <b>left box turns red, right box rises over 2 seconds, nothing else moves.</b>
+  </p>
+  <div id="resultPanel">Waiting for scene load…</div>
+</div>
+
+<x3d-canvas id="x3d" src="mccf_sai_proto_test_scene.x3d" update="auto" contentScale="auto"></x3d-canvas>
+
+<script>
+const canvas = document.getElementById('x3d');
+
+canvas.addEventListener('load', function() {
+  const browser = canvas.browser;
+  const scene = browser.currentScene;
+  const results = [];
+  function log(line) {
+    results.push(line);
+    console.log('[SAIProtoTest] ' + line);
+    document.getElementById('resultPanel').innerText = results.join('\n');
+  }
+
+  log('=== PRONG A: direct reach-in to internal DEF names ===');
+  var directXform = null;
+  try {
+    directXform = scene.getNamedNode('Internal_Xform');
+    log('getNamedNode("Internal_Xform") => FOUND (type: ' + directXform.getTypeName() + ')');
+  } catch (e) {
+    log('getNamedNode("Internal_Xform") => THREW: ' + e.message);
+  }
+  try {
+    var directTimer = scene.getNamedNode('Internal_Timer');
+    log('getNamedNode("Internal_Timer") => FOUND (type: ' + directTimer.getTypeName() + ')');
+  } catch (e) {
+    log('getNamedNode("Internal_Timer") => THREW: ' + e.message);
+  }
+  try {
+    var directInterp = scene.getNamedNode('Internal_PosInterp');
+    log('getNamedNode("Internal_PosInterp") => FOUND (type: ' + directInterp.getTypeName() + ')');
+  } catch (e) {
+    log('getNamedNode("Internal_PosInterp") => THREW: ' + e.message);
+  }
+
+  if (directXform) {
+    log('NOTE: two instances share the internal DEF "Internal_Xform" — a single');
+    log('getNamedNode result is inherently ambiguous (which instance is this?).');
+    log('Writing translation="0 3 0" directly to whatever it resolved to...');
+    try {
+      directXform.translation = new X3D.SFVec3f(0, 3, 0);
+      log('Direct write succeeded, no exception. CHECK THE SCENE: did a box move');
+      log('up? Which one (blue/left or orange/right)? Did both move? Neither?');
+    } catch (e) {
+      log('Direct write THREW: ' + e.message);
+    }
+  }
+
+  log('');
+  log('=== PRONG B: exposed interface fields, per instance ===');
+  var instA = scene.getNamedNode('Test_A');
+  var instB = scene.getNamedNode('Test_B');
+  log('getNamedNode("Test_A") [instance itself] => ' + (instA ? 'FOUND' : 'NOT FOUND'));
+  log('getNamedNode("Test_B") [instance itself] => ' + (instB ? 'FOUND' : 'NOT FOUND'));
+
+  if (instA) {
+    try {
+      instA.tintColor = new X3D.SFColor(0.9, 0.1, 0.1);
+      log('instA.tintColor write succeeded — LEFT box should now be RED.');
+    } catch (e) { log('instA.tintColor write THREW: ' + e.message); }
+  }
+  if (instB) {
+    try {
+      instB.timerCycleInterval = 2;
+      var t0 = (browser.currentTime && browser.currentTime > 0) ? browser.currentTime : (performance.now() / 1000);
+      instB.timerStartTime = t0;
+      instB.timerEnabled = true;
+      log('instB timer started via exposed interface — RIGHT box (orange) should');
+      log('rise over 2s while LEFT box (now red) stays put. This mirrors the exact');
+      log('enabled/startTime/cycleInterval SAI pattern _executeMoveShot and');
+      log('_executeAgentOrbit already use in production.');
+    } catch (e) { log('instB timer-start THREW: ' + e.message); }
+  }
+
+  log('');
+  log('=== Read the scene against this log. Report back what you actually see. ===');
+});
+
+canvas.addEventListener('error', function() {
+  document.getElementById('resultPanel').innerText = 'LOAD ERROR — check console.';
+});
+</script>
+
+</body>
+</html>

@@ -27,6 +27,21 @@
     <Clip name="Salida Taunt" timerDEF="Timer12" cycleInterval="2.86666655540466" bone_count="65" />
   </Animations>
   <HAnimFigure src="avatars/SalidaAnimations_repaired_test.x3d" />
+  <Animations>
+    <Clip name="Timer1" timerDEF="Timer1" cycleInterval="0.0666666701436043" bone_count="66" />
+    <Clip name="Timer2" timerDEF="Timer2" cycleInterval="3.46666669845581" bone_count="66" />
+    <Clip name="Timer3" timerDEF="Timer3" cycleInterval="6.76666688919067" bone_count="66" />
+    <Clip name="Timer4" timerDEF="Timer4" cycleInterval="1.23333334922791" bone_count="66" />
+    <Clip name="Timer5" timerDEF="Timer5" cycleInterval="4.69999980926514" bone_count="66" />
+    <Clip name="Timer6" timerDEF="Timer6" cycleInterval="1.20000004768372" bone_count="66" />
+    <Clip name="Timer7" timerDEF="Timer7" cycleInterval="1.63333332538605" bone_count="66" />
+    <Clip name="Timer8" timerDEF="Timer8" cycleInterval="6.90000009536743" bone_count="66" />
+    <Clip name="Timer9" timerDEF="Timer9" cycleInterval="2.40000009536743" bone_count="66" />
+    <Clip name="Timer10" timerDEF="Timer10" cycleInterval="4.56666660308838" bone_count="66" />
+    <Clip name="Timer11" timerDEF="Timer11" cycleInterval="1.23333334922791" bone_count="66" />
+    <Clip name="Timer12" timerDEF="Timer12" cycleInterval="2.86666655540466" bone_count="66" />
+  </Animations>
+  <HAnimFigure src="avatars/SalidaAnimations_repaired_test.x3d" />
   <JointMap convention="mixamo">
     <Joint def="mixamorig:Head" hanim="skullbase" />
     <Joint def="mixamorig:Hips" hanim="humanoid_root" />

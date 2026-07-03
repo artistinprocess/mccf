@@ -1,0 +1,426 @@
+{ "X3D": {
+    "encoding": "UTF-8",
+    "@profile": "Interchange",
+    "@version": "4.0",
+    "@xsd:noNamespaceSchemaLocation": "https://www.web3d.org/specifications/x3d-4.0.xsd",
+    "JSON schema": "https://www.web3d.org/specifications/x3d-4.0-JSONSchema.json",
+    "head": {
+      "meta": [
+        {
+          "@name": "comment",
+          "@content": "Rise and Shine"
+        },
+        {
+          "@name": "created",
+          "@content": "Sat, 25 Nov 2017 08:43:49 GMT"
+        },
+        {
+          "@name": "creator",
+          "@content": "Holger Seelig"
+        },
+        {
+          "@name": "generator",
+          "@content": "Sunrize X3D Editor V1.7.9, https://create3000.github.io/sunrize/"
+        },
+        {
+          "@name": "generator",
+          "@content": "x3d-tidy V1.0.153, https://www.npmjs.com/package/x3d-tidy"
+        },
+        {
+          "@name": "modified",
+          "@content": "Thu, 08 Aug 2024 16:01:41 GMT"
+        }
+      ],
+      "component": [
+        {
+          "@name": "Followers",
+          "@level": 1
+        },
+        {
+          "@name": "Geometry2D",
+          "@level": 2
+        },
+        {
+          "@name": "PointingDeviceSensor",
+          "@level": 1
+        },
+        {
+          "@name": "Scripting",
+          "@level": 1
+        }
+      ]
+    },
+    "Scene": {
+      "-children": [
+        { "ProtoDeclare":
+          {
+            "@name": "ChromaticCircle",
+            "ProtoInterface": {
+              "field": [
+                {
+                  "@accessType": "inputOutput",
+                  "@type": "SFFloat",
+                  "@name": "value",
+                  "@value": 1
+                },
+                {
+                  "@accessType": "inputOutput",
+                  "@type": "SFVec2f",
+                  "@name": "size",
+                  "@value": [ 2, 2 ]
+                }
+              ]
+            },
+            "ProtoBody": {
+              "-children": [
+                { "Shape":
+                  {
+                    "-geometry": { "TriangleFanSet":
+                      {
+                        "@DEF": "Geometry",
+                        "@fanCount": [ 62 ],
+                        "-color": { "Color":
+                          {
+                            "@color": [ 1, 1, 1, 1, 0, 0, 1, 0.1, 0, 1, 0.2, 0, 1, 0.3, 0, 1, 0.4, 0, 1, 0.5, 0, 1, 0.6, 0, 1, 0.7, 0, 1, 0.8, 0, 1, 0.9, 0, 1, 1, 0, 0.9, 1, 0, 0.8, 1, 0, 0.7, 1, 0, 0.6, 1, 0, 0.5, 1, 0, 0.4, 1, 0, 0.3, 1, 0, 0.2, 1, 0, 0.1, 1, 0, 0, 1, 0, 0, 1, 0.0999999, 0, 1, 0.2, 0, 1, 0.3, 0, 1, 0.4, 0, 1, 0.5, 0, 1, 0.6, 0, 1, 0.7, 0, 1, 0.8, 0, 1, 0.9, 0, 1, 1, 0, 0.9, 1, 0, 0.8, 1, 0, 0.7, 1, 0, 0.6, 1, 0, 0.5, 1, 0, 0.4, 1, 0, 0.3, 1, 0, 0.2, 1, 0, 0.0999999, 1, 0, 0, 1, 0.0999999, 0, 1, 0.2, 0, 1, 0.3, 0, 1, 0.4, 0, 1, 0.5, 0, 1, 0.599999, 0, 1, 0.699999, 0, 1, 0.8, 0, 1, 0.9, 0, 1, 1, 0, 1, 1, 0, 0.900001, 1, 0, 0.8, 1, 0, 0.7, 1, 0, 0.6, 1, 0, 0.5, 1, 0, 0.4, 1, 0, 0.300001, 1, 0, 0.2, 1, 0, 0.1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0 ]
+                          }
+                        },
+                        "-coord": { "Coordinate":
+                          {
+                            "@point": [ 0, 0, 0, 1, 0, 0, 0.994522, 0.104528, 0, 0.978148, 0.207912, 0, 0.951057, 0.309017, 0, 0.913545, 0.406737, 0, 0.866025, 0.5, 0, 0.809017, 0.587785, 0, 0.743145, 0.669131, 0, 0.669131, 0.743145, 0, 0.587785, 0.809017, 0, 0.5, 0.866025, 0, 0.406737, 0.913545, 0, 0.309017, 0.951057, 0, 0.207912, 0.978148, 0, 0.104528, 0.994522, 0, 2.22045e-16, 1, 0, -0.104528, 0.994522, 0, -0.207912, 0.978148, 0, -0.309017, 0.951057, 0, -0.406737, 0.913545, 0, -0.5, 0.866025, 0, -0.587785, 0.809017, 0, -0.669131, 0.743145, 0, -0.743145, 0.669131, 0, -0.809017, 0.587785, 0, -0.866025, 0.5, 0, -0.913545, 0.406737, 0, -0.951057, 0.309017, 0, -0.978148, 0.207912, 0, -0.994522, 0.104528, 0, -1, 5.66554e-16, 0, -0.994522, -0.104528, 0, -0.978148, -0.207912, 0, -0.951057, -0.309017, 0, -0.913545, -0.406737, 0, -0.866025, -0.5, 0, -0.809017, -0.587785, 0, -0.743145, -0.669131, 0, -0.669131, -0.743145, 0, -0.587785, -0.809017, 0, -0.5, -0.866025, 0, -0.406737, -0.913545, 0, -0.309017, -0.951057, 0, -0.207912, -0.978148, 0, -0.104528, -0.994522, 0, -2.22045e-16, -1, 0, 0.104528, -0.994522, 0, 0.207912, -0.978148, 0, 0.309017, -0.951057, 0, 0.406737, -0.913545, 0, 0.5, -0.866025, 0, 0.587785, -0.809017, 0, 0.669131, -0.743145, 0, 0.743145, -0.669131, 0, 0.809017, -0.587785, 0, 0.866025, -0.5, 0, 0.913545, -0.406737, 0, 0.951057, -0.309017, 0, 0.978148, -0.207912, 0, 0.994522, -0.104528, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0 ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                { "Script":
+                  {
+                    "@directOutput": true,
+                    "field": [
+                      {
+                        "@accessType": "inputOutput",
+                        "@type": "SFFloat",
+                        "@name": "value"
+                      },
+                      {
+                        "@accessType": "inputOutput",
+                        "@type": "SFVec2f",
+                        "@name": "size"
+                      },
+                      {
+                        "@accessType": "initializeOnly",
+                        "@type": "SFInt32",
+                        "@name": "dimension",
+                        "@value": 60
+                      },
+                      {
+                        "@accessType": "initializeOnly",
+                        "@type": "SFNode",
+                        "@name": "geometry",
+                        "-children": [
+                          { "TriangleFanSet":
+                            {
+                              "@USE": "Geometry"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "#sourceCode": [
+"ecmascript:",
+"",
+"function initialize ()",
+"{",
+"\teventsProcessed ();",
+"}",
+"",
+"function eventsProcessed ()",
+"{",
+"\tvar coordIndex = new MFInt32 ();",
+"\tvar color      = geometry .color .color;",
+"\tvar point      = geometry .coord .point;",
+"",
+"\tvar vertex = new SFVec3f (1, 0, 0);",
+"\tvar scale  = new SFMatrix4f (size .x / 2, 0, 0, 0,",
+"\t                                   0, size .y / 2, 0, 0,",
+"\t                                   0, 0, 0, 0,",
+"\t                                   0, 0, 0, 1);",
+"",
+"\tcolor [0] .setHSV (0, 0, value);",
+"\tpoint [0] = new SFVec3f (0, 0, 0);",
+"",
+"\tfor (var i = 0; i < dimension; ++ i)",
+"\t{",
+"\t\tcolor [i + 1] .setHSV (2 * Math. PI * i / dimension, 1, value);",
+"\t\tpoint [i + 1] = scale .multMatrixVec (new SFRotation (0, 0, 1, 2 * Math. PI * i / dimension) .multVec (vertex));",
+"\t}",
+"",
+"\tcolor [color .length] = color [1];",
+"\tpoint [point .length] = point [1];",
+"",
+"\tgeometry .fanCount = new MFInt32 (dimension + 2);",
+"}",
+""
+                    ],
+                    "IS": {
+                      "connect": [
+                        {
+                          "@nodeField": "value",
+                          "@protoField": "value"
+                        },
+                        {
+                          "@nodeField": "size",
+                          "@protoField": "size"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        { "WorldInfo":
+          {
+            "@title": "ColorChaser.O"
+          }
+        },
+        { "NavigationInfo":
+          {
+            "@type": [ "NONE", "ANY" ]
+          }
+        },
+        { "Background":
+          {
+            "@skyColor": [ 0.2, 0.2, 0.2 ]
+          }
+        },
+        { "Viewpoint":
+          {
+            "@position": [ 0, 0, 3 ]
+          }
+        },
+        { "ColorChaser":
+          {
+            "@DEF": "Follower"
+          }
+        },
+        { "Transform":
+          {
+            "@DEF": "ColorSphere",
+            "@scale": [ 0.08, 0.08, 0.08 ],
+            "-children": [
+              { "Shape":
+                {
+                  "@pointerEvents": false,
+                  "-appearance": { "Appearance":
+                    {
+                      "-material": { "Material":
+                        {
+                          "@DEF": "SphereMaterial"
+                        }
+                      }
+                    }
+                  },
+                  "-geometry": { "Sphere":
+                    {
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        { "Transform":
+          {
+            "@DEF": "ChromaticCircleButton",
+            "-children": [
+              { "TouchSensor":
+                {
+                  "@DEF": "Touch"
+                }
+              },
+              { "ProtoInstance":
+                {
+                  "@name": "ChromaticCircle"
+                }
+              }
+            ]
+          }
+        },
+        { "Transform":
+          {
+            "@DEF": "ActivityCircle_1",
+            "@translation": [ 1.3, 0, 0 ],
+            "@scale": [ 0.15, 0.15, 0.15 ],
+            "-children": [
+              { "Shape":
+                {
+                  "-appearance": { "Appearance":
+                    {
+                      "-material": { "UnlitMaterial":
+                        {
+                          "@DEF": "_1"
+                        }
+                      }
+                    }
+                  },
+                  "-geometry": { "Disk2D":
+                    {
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        { "Script":
+          {
+            "@DEF": "FollowerScript",
+            "@directOutput": true,
+            "field": [
+              {
+                "@accessType": "inputOnly",
+                "@type": "SFTime",
+                "@name": "set_time"
+              },
+              {
+                "@accessType": "inputOnly",
+                "@type": "SFBool",
+                "@name": "set_active"
+              },
+              {
+                "@accessType": "inputOnly",
+                "@type": "SFColor",
+                "@name": "set_color"
+              },
+              {
+                "@accessType": "inputOutput",
+                "@type": "SFFloat",
+                "@name": "value",
+                "@value": 1
+              },
+              {
+                "@accessType": "outputOnly",
+                "@type": "SFColor",
+                "@name": "destination_changed"
+              },
+              {
+                "@accessType": "outputOnly",
+                "@type": "SFColor",
+                "@name": "color_changed"
+              },
+              {
+                "@accessType": "outputOnly",
+                "@type": "SFVec3f",
+                "@name": "translation_changed"
+              },
+              {
+                "@accessType": "initializeOnly",
+                "@type": "SFNode",
+                "@name": "touchSensor",
+                "-children": [
+                  { "TouchSensor":
+                    {
+                      "@USE": "Touch"
+                    }
+                  }
+                ]
+              }
+            ],
+            "#sourceCode": [
+"ecmascript:",
+"",
+"function set_time ()",
+"{",
+"\tvar hue        = Math .atan2 (touchSensor .hitPoint_changed .y, touchSensor .hitPoint_changed .x)",
+"\tvar saturation = touchSensor .hitPoint_changed .length ();",
+"",
+"\tif (hue < 0)",
+"\t\thue = 2 * Math .PI + hue;",
+"",
+"\tdestination_changed .setHSV (hue, saturation, value);",
+"}",
+"",
+"function set_active (value)",
+"{",
+"\tif (value)",
+"\t\tcolor_changed = new SFColor (0.8, 0, 0);",
+"",
+"\telse",
+"\t\tcolor_changed = new SFColor (0.8, 0.8, 0.8);",
+"}",
+"",
+"function set_color (value)",
+"{",
+"\tvar hsv = value .getHSV ();",
+"",
+"\tvar x = Math .cos (hsv [0]) * hsv [1];",
+"\tvar y = Math .sin (hsv [0]) * hsv [1];",
+"",
+"\ttranslation_changed\t= new SFVec3f (x, y, 0);",
+"}",
+""
+            ]
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "Touch",
+            "@fromField": "touchTime",
+            "@toNode": "FollowerScript",
+            "@toField": "set_time"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "FollowerScript",
+            "@fromField": "destination_changed",
+            "@toNode": "Follower",
+            "@toField": "set_destination"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "Follower",
+            "@fromField": "value_changed",
+            "@toNode": "SphereMaterial",
+            "@toField": "set_diffuseColor"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "Follower",
+            "@fromField": "value_changed",
+            "@toNode": "FollowerScript",
+            "@toField": "set_color"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "FollowerScript",
+            "@fromField": "translation_changed",
+            "@toNode": "ColorSphere",
+            "@toField": "set_translation"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "Follower",
+            "@fromField": "isActive",
+            "@toNode": "FollowerScript",
+            "@toField": "set_active"
+          }
+        },
+        { "ROUTE":
+          {
+            "@fromNode": "FollowerScript",
+            "@fromField": "color_changed",
+            "@toNode": "_1",
+            "@toField": "set_emissiveColor"
+          }
+        }
+      ]
+    }
+  }
+}

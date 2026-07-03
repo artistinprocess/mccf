@@ -1,9 +1,10 @@
 # MCCF HAnim Behavior Activation — Design Specification
 ## From Field Values to Scene Graph Motion
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Prepared:** Day 23 — 2026-05-22  
-**Status:** DESIGN COMPLETE — ready for implementation and W3C HAnim WG review  
+**Updated:** Day 61 — 2026-06-28  
+**Status:** DESIGN EXTENDED — authored override, Fallback Principle, persistence notes added  
 **Reference files:** `mccf_x3d_loader.html`, `mccf_cultivar_lambda.py`, `mccf_hotHouse.py`  
 **Avatar reference:** `JinLOA4Animated.x3d` (W3C HAnim examples repository)
 
@@ -595,6 +596,143 @@ is suppressed until her field shifts dramatically.
 
 ---
 
+## 6a. The Fallback Principle — Field as Default Performer
+
+This principle governs the relationship between authored behavior triggers and
+field-driven clip selection. It is the behavioral analog of the LLM fallback
+in the dialog system:
+
+> **If no behavior is authored for this moment, the field decides.**
+
+In the dialog system: if no response is authored for a waypoint question, the
+LLM answers from the cultivar's constitutional profile. The field provides the
+voice. In the behavior system: if no clip is authored for this moment, the
+field-driven `selectBehaviorClip()` selects from the `<Behaviors>` table. The
+field provides the body.
+
+This means:
+
+- A sparsely authored scene has a living, responsive avatar — the field fills
+  the gaps between scripted moments with emotionally continuous motion
+- A densely authored scene has precise narrative control — authored cues fire
+  at story beats, field-driven selection handles everything between
+- The same scene replayed with a different field trajectory produces visually
+  different performances even with identical authored cues — the body is
+  always responsive to accumulated emotional state
+
+**The author scripts the peaks. The field handles the texture.**
+
+This inverts the usual game engine authoring model, where everything is
+scripted and the engine handles physics. In MCCF, the field is the default
+performer and the author is the exception-handler.
+
+---
+
+### 6b. Authored Behavior Override — Events Editor Integration
+
+The Events Editor behavior track fires explicit clip selections at authored
+moments. These must take priority over field-driven selection for their
+duration, then yield back to the field.
+
+#### State variable
+
+```javascript
+// {agentSafeName: {timerDEF, clipName, expiresAt}}
+// Set by authored cue; cleared when expiresAt is passed.
+// selectBehaviorClip() checks this first on every tick.
+var _agentAuthoredClip = {};
+```
+
+#### Priority rule
+
+```
+function selectBehaviorClip(agentSafeName, cv):
+
+  // 1. Authored override — check first, always wins
+  var override = _agentAuthoredClip[agentSafeName];
+  if (override && Date.now() < override.expiresAt):
+      if override.clipName != _agentCurrentClip[agentSafeName]:
+          applyBehaviorClip(agentSafeName, override)
+      return
+
+  // 2. Field-driven selection — runs when no authored override is active
+  ... (existing algorithm, section 4.3) ...
+```
+
+#### Authored cue fires via EventCues behavior track
+
+When `fireEventCuesForTrigger()` processes a behavior cue:
+
+```javascript
+// cue = { track:'behavior', agent:'Cindy', clip:'JumpTimer',
+//          dur:3, delay:0, trigger:'w2 arrive' }
+function _fireBehaviorEventCue(cue) {
+  var safeName = (cue.agent||'').replace(/[^A-Za-z0-9_]/g,'_');
+  var durationMs = ((cue.dur || 2) + (cue.delay || 0)) * 1000;
+  _agentAuthoredClip[safeName] = {
+    timerDEF:  cue.clip,
+    clipName:  cue.clip,
+    expiresAt: Date.now() + durationMs
+  };
+  // Fire immediately — don't wait for next poll tick
+  applyBehaviorClip(safeName, { timerDEF: cue.clip, loop: true });
+}
+```
+
+#### Expiry and return
+
+When the override expires, `selectBehaviorClip()` falls through to field-driven
+selection on the next poll tick. No explicit "return to last clip" call is needed —
+the field simply resumes selecting on the next tick. This is consistent with the
+one-shot clip return mechanism already in the spec (section 4.3).
+
+#### Events Editor cue schema addition
+
+The behavior cue already carries `agent` and `clip`. No schema change is needed.
+The `dur` field on the cue determines how long the authored override holds before
+yielding back to the field.
+
+#### Mutual exclusion with field-driven one-shots
+
+If a field-driven one-shot (Jump, Kick) fires while an authored override is active,
+the one-shot is suppressed — the authored cue holds. One-shots can only fire from
+field selection when no authored override is present.
+
+---
+
+### 6c. Persistence and Accrual — Planned Extension
+
+The Chorus fires at scene end as an independent observer summarizing the full
+field transcript. This output is the natural accumulator for cross-scene memory.
+
+**Planned architecture (not yet implemented):**
+
+- `chorus_log` table: keyed by scene/arc, stores Chorus summary text and final
+  field values (EBPS) at scene end
+- Scene N+1 seed: Chorus summary from Scene N injected into the system prompt
+  context for the LLM at arc/record time — field arrives already shaped by
+  what the Chorus witnessed
+- Constitutional drift: field setpoints (φ) accumulate small offsets from
+  high-tension episodes across arcs — a cultivar who experienced sustained
+  high-E scenes arrives in new scenes with a slightly elevated E baseline
+- Chorus as conscience: accumulated Chorus summaries compressed and reinjected
+  as long-term context — the observer's memory becomes part of the scene's
+  moral atmosphere
+
+This is the behavioral analog of persistent memory in dialog systems. The field
+has a past. Characters don't remember explicitly — they arrive in a field already
+shaped by accumulated experience.
+
+**Implementation order:** dialog persistence first (simpler), then field
+persistence, then Chorus accrual as the synthesis layer.
+
+**Note for future sessions:** This is new territory. Integration of an LLM as
+a continuous field observer whose accumulated output shapes subsequent scene
+state has no established precedent in interactive 3D. The design rules are
+being written here.
+
+---
+
 ## 7. Cultivar Profile Implications for Behavior
 
 The HotHouse archetypes in `mccf_hotHouse.py` establish ideology vectors that
@@ -689,9 +827,14 @@ sufficient for the opening scene.
 | 4 | `mccf_x3d_loader.html` — load clips at arc/record | 0.5 session | Tasks 1, 3 |
 | 5 | `mccf_x3d_loader.html` — reset cleanup | trivial | Task 3 |
 | 6 | Author Cindy's `<Behaviors>` table | authoring only | Tasks 1–5 |
-| 7 | Author Anna's `<Behaviors>` table | authoring only | Task 6 (verify against Cindy) |
+| 7 | Author Anna's `<Behaviors>` table | authoring only | Task 6 |
+| 8 | `mccf_x3d_loader.html` — `_fireBehaviorEventCue()` + `_agentAuthoredClip` override | 0.5 session | Tasks 3, 4 |
+| 9 | Events Editor — verify behavior track cue fires override correctly | testing only | Task 8 |
+| 10 | Villain constitutional profiles | design + authoring | Tasks 6, 7 |
+| 11 | Chorus persistence / cross-scene accrual | design + new API | Tasks 1–9 |
 
-**Total estimated: 3 sessions** to full behavior activation on both Cindy and Anna.
+**Total estimated: 3–4 sessions** to full behavior activation including authored override.
+Tasks 10 and 11 are separate design sessions, not blocked by implementation.
 
 ---
 
@@ -738,5 +881,7 @@ MCCF never writes a joint rotation directly.
 
 ---
 
-*End of specification. Prepared Day 23 — 2026-05-22.*  
-*For session continuity, paste alongside the Day 23 handoff at the start of the implementation session.*
+*End of specification. Prepared Day 23 — 2026-05-22.*
+*Updated Day 61 — 2026-06-28: Added §6a Fallback Principle, §6b Authored Override,*
+*§6c Persistence/Accrual notes, villain constitutional profiles task, updated implementation table.*
+*For session continuity, paste alongside the Day 61 handoff at the start of the implementation session.*
