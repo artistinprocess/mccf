@@ -178,6 +178,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('network')">Network</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
     <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
+    <button class="mtab" onclick="setMode('cameras')">Cameras</button>
   </div>
   <div class="api-row">
     <div class="sdot" id="sdot"></div>
@@ -614,6 +615,34 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
     </div>
   </div>
+  <div id="mode-cameras" style="display:none">
+    <div class="sh">Free Cameras</div>
+    <div id="camera-list"></div>
+    <button class="btn full" style="margin-top:6px" onclick="startPlace('camera')">+ Place Free Camera</button>
+    <div id="camera-form" style="display:none;margin-top:10px">
+      <div class="sh">New Free Camera</div>
+      <label>Name</label><input id="cam-name" type="text" placeholder="CAM_Wide1">
+      <label>Height (m)</label><input id="cam-height" type="number" value="1.7" step="0.1" min="0">
+      <div class="insp-field">
+        <label>H. angle (yaw, °)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="cam-hangle" type="range" min="-180" max="180" step="1" value="0" style="flex:1" oninput="document.getElementById('cam-hangle-val').textContent=this.value">
+          <span id="cam-hangle-val" style="width:34px;text-align:right;font-family:monospace">0</span>
+        </div>
+      </div>
+      <div class="insp-field">
+        <label>V. angle (pitch, °)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="cam-vangle" type="range" min="-90" max="90" step="1" value="-10" style="flex:1" oninput="document.getElementById('cam-vangle-val').textContent=this.value">
+          <span id="cam-vangle-val" style="width:34px;text-align:right;font-family:monospace">-10</span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn pri" onclick="confirmCamera()">Place on Map</button>
+        <button class="btn" onclick="cancelPlace()">Cancel</button>
+      </div>
+    </div>
+  </div>
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
     <div class="expopt">
@@ -630,7 +659,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="btn cool" onclick="exportSceneXML()">Export</button>
     </div>
     <div class="expopt" style="border-color:var(--accent)">
-      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Writes static/mccf_scene.x3d &mdash; reload launcher</div></div>
+      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Uploads to static/x3d/ (same path as Export) — reload launcher</div></div>
       <button class="btn" id="send-btn" onclick="sendToLauncher()" style="border-color:var(--accent);color:var(--accent)">&#9654; Send</button>
     </div>
     <div class="expopt" style="border-color:var(--purple);margin-top:6px">
@@ -778,6 +807,7 @@ var pendingPos = null;
 var placingAgent = null;
 var sceneConfig = { name: 'garden_001', width: 40, depth: 40, description: '' };
 var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, networks = [];
+var placedCameras = {}; // Day 64: free/world-space cameras placed on the grid, class 3 of the three-class camera model
 var selectedId = null, selectedType = null, pathSeq = [];
 var canvas, ctx, arcCanvas, arcCtx, W, H, SCALE = 18, OX = 0, OZ = 0;
 var ZONE_COLORS = {
@@ -1039,7 +1069,7 @@ function pollField(){
 }
 function setMode(m){
   mode=m;
-  var ms=['scene','zones','agents','waypoints','paths','characters','events','network','export','run'];
+  var ms=['scene','zones','agents','waypoints','paths','characters','events','network','export','run','cameras'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
   if(m==='paths')populatePathUI();
@@ -1047,6 +1077,7 @@ function setMode(m){
   if(m==='agents'){loadAgents();}
   if(m==='run')populateRunUI();
   if(m==='network')populateNetworkUI();
+  if(m==='cameras')renderCameraList();
   if(m==='scene'||m==='export')refreshSceneList();
 
   // Full-bleed tool modes: Characters and Events take over the entire content area
@@ -1112,8 +1143,11 @@ function _buildSceneData() {
   Object.keys(placedAgents).forEach(function(n) {
     views.push('VP_'+safeId(n)+'_Eye');
     views.push('VP_'+safeId(n)+'_Side');
-    views.push('VP_'+safeId(n)+'_Orbit'); // baked per-avatar by buildAvatarX3D — keep in sync with that function
-    views.push('VP_'+safeId(n)+'_Track'); // baked per-avatar by buildAvatarX3D — keep in sync with that function
+    // VP_{name}_Orbit and VP_{name}_Track deliberately NOT listed here as of Day 64:
+    // post-proto-conversion, both Viewpoints are DEF'd "VP" *inside* their respective
+    // ProtoBody (AgentOrbitCamera / AgentTrackCamera), unreachable from outside via
+    // getNamedNode (confirmed by the Day 63 SAI-into-proto test). Both are only
+    // reachable through their shot= cue path now, not as standalone named-viewpoint picks.
   });
   var baseClips = (typeof BEHAVIOR_TIMER_BASES !== 'undefined') ? BEHAVIOR_TIMER_BASES : ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
   var extraClips = [];
@@ -1132,6 +1166,7 @@ function _buildSceneData() {
 
   return {
     agents:   Object.keys(placedAgents),
+    cameras:  Object.keys(placedCameras), // Day 64: free cameras, for the free_camera cue picker
     wps:      wpsOrdered,
     views:    views,
     clips:    allClips,
@@ -1241,8 +1276,20 @@ function updateSummary(){
   }).join('');
 }
 function renderAll(){
-  renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();
+  renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();renderCameraList();
   updateStats();updateSummary();drawScene();
+}
+function renderCameraList(){
+  var el=document.getElementById('camera-list');if(!el)return;
+  var list=Object.values(placedCameras);
+  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:14px">No free cameras placed.</div>';return;}
+  el.innerHTML=list.map(function(c){
+    var sel=selectedType==='camera'&&selectedId===c.name;
+    return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'camera\',\''+c.name+'\')">'+
+      '<div class="obj-dot" style="background:#e0c860"></div>'+
+      '<span class="obj-name">'+c.name+'</span>'+
+      '<span style="font-size:13px;color:var(--dim)">'+c.position[0].toFixed(1)+', '+c.position[1].toFixed(1)+', '+c.position[2].toFixed(1)+'</span></div>';
+  }).join('');
 }
 function renderZoneList(){
   var el=document.getElementById('zone-list'),list=Object.values(zones);
@@ -1332,6 +1379,24 @@ function drawScene(){
   Object.values(zones).forEach(drawZone);
   Object.values(placedAgents).forEach(drawAgent);
   Object.values(waypoints).forEach(function(wp,i){drawWP(wp,i);});
+  Object.values(placedCameras).forEach(drawCamera);
+}
+function drawCamera(c){
+  var pos=c.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
+  var p=w2c(pos[0],pos[2]),sel=selectedType==='camera'&&selectedId===c.name,col='#e0c860';
+  // Direction wedge — shows hAngle as a facing indicator, since a free camera's whole
+  // point (unlike an agent) is which way it's pointed, not just where it sits.
+  var rad=(c.hAngle||0)*Math.PI/180,len=20;
+  ctx.beginPath();ctx.moveTo(p.cx,p.cy);
+  ctx.lineTo(p.cx+Math.sin(rad-0.35)*len,p.cy-Math.cos(rad-0.35)*len);
+  ctx.lineTo(p.cx+Math.sin(rad+0.35)*len,p.cy-Math.cos(rad+0.35)*len);
+  ctx.closePath();ctx.fillStyle=col+'33';ctx.fill();ctx.strokeStyle=col+'88';ctx.lineWidth=1;ctx.stroke();
+  // Camera body — small square, distinct from the agent dot and the waypoint diamond
+  var s=8;
+  ctx.fillStyle=col;ctx.fillRect(p.cx-s/2,p.cy-s/2,s,s);
+  ctx.strokeStyle=sel?'#ffffff':col;ctx.lineWidth=sel?2:1;ctx.strokeRect(p.cx-s/2,p.cy-s/2,s,s);
+  ctx.fillStyle=col;ctx.font='13px IBM Plex Mono';ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillText(c.name,p.cx+9,p.cy-6);
 }
 function drawZone(z){
   var pos=z.location||z.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
@@ -1414,6 +1479,7 @@ function onCanvasClick(e){
   var wp=c2w(cx,cy);
   if(placing){var cl=clamp(wp.wx,wp.wz);pendingPos=[cl.wx,0,cl.wz];
     if(placing==='zone')confirmZone();else if(placing==='waypoint')confirmWP();
+    else if(placing==='camera')confirmCamera();
     else if(placing==='agent'&&placingAgent)placeAgentAt(placingAgent,cl.wx,cl.wz);return;}
   if(tool==='query'){showQuery(wp.wx,wp.wz);return;}
   var hit=hitTest(cx,cy);if(hit)selectObj(hit.type,hit.id);else clearSel();
@@ -1422,7 +1488,8 @@ function hitTest(cx,cy){
   var r=null;
   Object.keys(placedAgents).forEach(function(n){var pos=placedAgents[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<14)r={type:'agent',id:n};});if(r)return r;
   Object.keys(waypoints).forEach(function(n){var pos=waypoints[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'waypoint',id:n};});if(r)return r;
-  Object.keys(zones).forEach(function(id){var pos=zones[id].location||zones[id].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<16)r={type:'zone',id:id};});
+  Object.keys(zones).forEach(function(id){var pos=zones[id].location||zones[id].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<16)r={type:'zone',id:id};});if(r)return r;
+  Object.keys(placedCameras).forEach(function(n){var pos=placedCameras[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'camera',id:n};});
   return r;
 }
 function selectObj(type,id){
@@ -1438,7 +1505,7 @@ function clearSel(){
 }
 function deleteSelected(t){
   if(!selectedId)return;
-  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];
+  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];else if(t==='camera')delete placedCameras[selectedId];
   clearSel();renderAll();toast('Deleted.');
 }
 function chBars(w){
@@ -1694,12 +1761,14 @@ function showQuery(wx,wz){
 function startPlace(t){
   if(t==='zone'){document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
   else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';}
+  else if(t==='camera'){document.getElementById('camera-form').style.display='block';placing='camera';}
   showHint('Click map to place');
 }
 function cancelPlace(){
   placing=null;placingAgent=null;pendingPos=null;
   document.getElementById('zone-form').style.display='none';
   document.getElementById('wp-form').style.display='none';
+  document.getElementById('camera-form').style.display='none';
   _wpQALines=[];renderWPQALines();
   hideHint();
 }
@@ -2034,6 +2103,19 @@ function confirmWP(){
   _wpQALines=[];renderWPQALines();
   hideHint();renderAll();toast('Waypoint: '+name);
 }
+function confirmCamera(){
+  if(!pendingPos){toast('Click map first',true);return;}
+  var name=document.getElementById('cam-name').value.trim();
+  var height=parseFloat(document.getElementById('cam-height').value)||1.7;
+  var hAngle=parseFloat(document.getElementById('cam-hangle').value)||0;
+  var vAngle=parseFloat(document.getElementById('cam-vangle').value)||0;
+  if(!name){toast('Name required',true);return;}
+  if(placedCameras[name]){toast('Name already used',true);return;}
+  placedCameras[name]={name:name,position:[pendingPos[0],height,pendingPos[2]],hAngle:hAngle,vAngle:vAngle};
+  placing=null;pendingPos=null;
+  document.getElementById('camera-form').style.display='none';
+  hideHint();renderAll();toast('Camera: '+name);
+}
 function populateWPZones(){
   var sel=document.getElementById('wp-zone');
   sel.innerHTML='<option value="">-- none --</option>'+Object.keys(zones).map(function(id){return '<option value="'+id+'">'+(zones[id].name||id)+'</option>';}).join('');
@@ -2108,6 +2190,10 @@ function exportX3D(){
   x+='<X3D profile="Immersive" version="4.0">\n';
   x+='<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->\n';
   x+='<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>\n<Scene>\n\n';
+  // Camera proto library — Day 64 agent_orbit conversion. Unconditional (unlike the
+  // MCCFAgent/MCCFZone protos below, which stay behind the exp-protos toggle): this is
+  // required infrastructure per the Day 63 PROTO decision, not an optional include.
+  x+=buildCameraProtoDecls();
   if(iP){x+=buildAP();x+=buildZP();}
   x+='<NavigationInfo headlight="true" type=\'"EXAMINE" "WALK" "FLY" "ANY"\' transitionType=\'"TELEPORT"\' visibilityLimit="300"/>\n';
   x+='<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>\n\n';
@@ -2158,6 +2244,7 @@ function exportX3D(){
     x+='<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>\n';});
   x+='\n<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>\n';
   x+=buildGrid(w,d)+'\n';
+  x+=buildFreeCamerasX3D();
   Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS);});
   x+='\n';
   Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a);});
@@ -2229,6 +2316,62 @@ function exportX3D(){
       + '<div>Move '+sn+'.x3d to static/x3d/ manually</div>';
     toast('Server save failed — file downloaded to browser instead', true);
   });
+}
+// Camera proto library declarations (Day 64). One ExternProtoDeclare per shot type
+// converted so far — agent_orbit is the first. IMPORTANT: this document is XML-encoded
+// X3D (see the <?xml ...?> declaration and DOCTYPE at the top of every exported scene),
+// so the external-proto element is <ExternProtoDeclare>, NOT the classic/VRML-encoding
+// "EXTERNPROTO" keyword — a real bug caught during Day 64 testing: X_ITE's XML parser
+// silently rejected "EXTERNPROTO" as an unrecognized node type, which meant the proto
+// was never registered and every CAM_OrbitProto_{name} instance silently failed to
+// exist, surfacing later as a confusing "Named node not found" at cue-fire time rather
+// than an obvious error at load time. <ProtoDeclare>/<ProtoInterface>/<ProtoBody> next
+// door in this same file (MCCFAgent/MCCFZone) were already following the correct XML
+// convention — should have been matched from the start. Add new lines here, and a
+// matching ProtoDeclare in mccf_camera_protos.x3d, when converting the next shot type.
+// Per-scene code never grows; only this list and the library file do.
+// mccf_camera_protos.x3d lives at
+// static/x3d/protos/mccf_camera_protos.x3d — one directory below the exported scene
+// files (static/x3d/{sceneName}.x3d), which is why the url below is "protos/...", not a
+// bare filename. Kept in its own subdirectory deliberately: static/x3d/ already has
+// per-scene name collisions, and a shared library file sitting loose in that same
+// directory would be one collision away from being overwritten by a scene export.
+function buildCameraProtoDecls(){
+  var s ='<!-- Camera proto library (Day 64) — see mccf_camera_protos.x3d for ProtoBody definitions -->\n';
+  s+='<ExternProtoDeclare name="AgentOrbitCamera" url=\'"protos/mccf_camera_protos.x3d#AgentOrbitCamera"\'>\n';
+  s+='  <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation"/>\n';
+  s+='  <field accessType="inputOutput" type="SFRotation" name="initialRotation"/>\n';
+  s+='  <field accessType="inputOutput" type="MFFloat"    name="key"/>\n';
+  s+='  <field accessType="inputOutput" type="MFVec3f"    name="keyValue"/>\n';
+  s+='  <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"/>\n';
+  s+='  <field accessType="inputOutput" type="SFTime"     name="cycleInterval"/>\n';
+  s+='  <field accessType="inputOutput" type="SFBool"     name="loop"/>\n';
+  s+='  <field accessType="inputOutput" type="SFBool"     name="enabled"/>\n';
+  s+='  <field accessType="inputOutput" type="SFTime"     name="startTime"/>\n';
+  s+='  <field accessType="inputOutput" type="SFString"   name="description"/>\n';
+  s+='  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>\n';
+  s+='</ExternProtoDeclare>\n\n';
+  s+='<ExternProtoDeclare name="AgentTrackCamera" url=\'"protos/mccf_camera_protos.x3d#AgentTrackCamera"\'>\n';
+  s+='  <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation"/>\n';
+  s+='  <field accessType="inputOutput" type="SFRotation" name="initialRotation"/>\n';
+  s+='  <field accessType="inputOutput" type="MFFloat"    name="key"/>\n';
+  s+='  <field accessType="inputOutput" type="MFVec3f"    name="keyValue"/>\n';
+  s+='  <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"/>\n';
+  s+='  <field accessType="inputOutput" type="SFTime"     name="cycleInterval"/>\n';
+  s+='  <field accessType="inputOutput" type="SFBool"     name="loop"/>\n';
+  s+='  <field accessType="inputOutput" type="SFBool"     name="enabled"/>\n';
+  s+='  <field accessType="inputOutput" type="SFTime"     name="startTime"/>\n';
+  s+='  <field accessType="inputOutput" type="SFString"   name="description"/>\n';
+  s+='  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>\n';
+  s+='</ExternProtoDeclare>\n\n';
+  s+='<ExternProtoDeclare name="FreeCamera" url=\'"protos/mccf_camera_protos.x3d#FreeCamera"\'>\n';
+  s+='  <field accessType="inputOutput" type="SFVec3f"    name="position"/>\n';
+  s+='  <field accessType="inputOutput" type="SFRotation" name="yaw"/>\n';
+  s+='  <field accessType="inputOutput" type="SFRotation" name="pitch"/>\n';
+  s+='  <field accessType="inputOutput" type="SFString"   name="description"/>\n';
+  s+='  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>\n';
+  s+='</ExternProtoDeclare>\n\n';
+  return s;
 }
 function buildAP(){
   var s='<ProtoDeclare name="MCCFAgent"><ProtoInterface>\n';
@@ -2491,41 +2634,22 @@ function buildAX3D(a){
   // Avatar viewpoints — parented inside Transform so they ride with the figure
   s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159" jump="true"/>\n';
   s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708" jump="true"/>\n';
-  // Agent-orbit camera — baked, rides with avatar via normal scene-graph parenting.
-  // Orbit math only needs the relative offset; the avatar's own motion is free.
-  // CAM_OrbitXform_{name} is local to the avatar's Transform — rotating it does NOT
-  // affect the avatar's body geometry, which lives in its own sibling Transforms above.
-  s+='<Transform DEF="CAM_OrbitXform_'+sn+'" translation="0 3.2 8.6" rotation="0 1 0 0">\n';
-  s+='  <Viewpoint DEF="VP_'+sn+'_Orbit" description="'+qn+' Orbit" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>\n';
-  s+='</Transform>\n';
-  s+='<TimeSensor DEF="CAM_OrbitTimer_'+sn+'" cycleInterval="4" loop="false" enabled="false"/>\n';
-  s+='<PositionInterpolator DEF="CAM_OrbitPosInterp_'+sn+'" key="0" keyValue="0 3.2 8.6"/>\n';
-  s+='<OrientationInterpolator DEF="CAM_OrbitOriInterp_'+sn+'" key="0" keyValue="0 1 0 0.0001"/>\n';
-  // Per-agent orbit ROUTEs — static, scoped to this avatar's own timer/interpolator/transform.
-  s+='<ROUTE fromNode="CAM_OrbitTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_OrbitPosInterp_'+sn+'" toField="set_fraction"/>\n';
-  s+='<ROUTE fromNode="CAM_OrbitTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_OrbitOriInterp_'+sn+'" toField="set_fraction"/>\n';
-  s+='<ROUTE fromNode="CAM_OrbitPosInterp_'+sn+'" fromField="value_changed" toNode="CAM_OrbitXform_'+sn+'" toField="set_translation"/>\n';
-  s+='<ROUTE fromNode="CAM_OrbitOriInterp_'+sn+'" fromField="value_changed" toNode="CAM_OrbitXform_'+sn+'" toField="set_rotation"/>\n';
+  // Agent-orbit camera — Day 64: converted from hand-templated vessel XML to a real
+  // proto (AgentOrbitCamera, declared once per scene by buildCameraProtoDecls, defined
+  // in mccf_camera_protos.x3d). One DEF'd ProtoInstance replaces the old four-node,
+  // four-ROUTE block — the Loader now reads/writes this single node's exposed fields
+  // instead of reaching into five separately-DEF'd internal nodes. Still rides with the
+  // avatar via ordinary scene-graph parenting; nothing about the orbit math changed.
+  s+='<AgentOrbitCamera DEF="CAM_OrbitProto_'+sn+'" description="'+qn+' Orbit"/>\n';
   // Agent-track camera (Day 63) — same parenting principle as agent-orbit: baked inside
   // the avatar's own Transform, so the avatar's world motion is inherited for free via
   // ordinary scene-graph semantics. Built agent-attached from the start (not converted
   // after the fact from a free-camera version) per the Day 63 decision — see spec's
   // "parenting beats tracking" principle and the orbit→agent_orbit precedent it's named for.
-  // Unlike orbit's circular sweep, track keyframes are a linear local-space lerp: lateral
-  // X offset goes from trackOffset to trackOffsetEnd, height and depth (local Z standoff)
-  // stay constant. Placeholder translation below is the default authored start position —
-  // overwritten by the Loader's SAI write at cue-fire time, same as every other vessel node.
-  s+='<Transform DEF="CAM_TrackXform_'+sn+'" translation="-3 1.7 4" rotation="0 1 0 0">\n';
-  s+='  <Viewpoint DEF="VP_'+sn+'_Track" description="'+qn+' Track" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>\n';
-  s+='</Transform>\n';
-  s+='<TimeSensor DEF="CAM_TrackTimer_'+sn+'" cycleInterval="4" loop="false" enabled="false"/>\n';
-  s+='<PositionInterpolator DEF="CAM_TrackPosInterp_'+sn+'" key="0" keyValue="-3 1.7 4"/>\n';
-  s+='<OrientationInterpolator DEF="CAM_TrackOriInterp_'+sn+'" key="0" keyValue="0 1 0 0.0001"/>\n';
-  // Per-agent track ROUTEs — static, scoped to this avatar's own timer/interpolator/transform.
-  s+='<ROUTE fromNode="CAM_TrackTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_TrackPosInterp_'+sn+'" toField="set_fraction"/>\n';
-  s+='<ROUTE fromNode="CAM_TrackTimer_'+sn+'" fromField="fraction_changed" toNode="CAM_TrackOriInterp_'+sn+'" toField="set_fraction"/>\n';
-  s+='<ROUTE fromNode="CAM_TrackPosInterp_'+sn+'" fromField="value_changed" toNode="CAM_TrackXform_'+sn+'" toField="set_translation"/>\n';
-  s+='<ROUTE fromNode="CAM_TrackOriInterp_'+sn+'" fromField="value_changed" toNode="CAM_TrackXform_'+sn+'" toField="set_rotation"/>\n';
+  // Agent-track camera — Day 64: converted from hand-templated vessel XML to a real
+  // proto (AgentTrackCamera), same pattern as AgentOrbitCamera above. One DEF'd
+  // ProtoInstance replaces the old four-node, four-ROUTE block.
+  s+='<AgentTrackCamera DEF="CAM_TrackProto_'+sn+'" description="'+qn+' Track"/>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterpNodes(path){
@@ -2712,6 +2836,16 @@ function buildMS(){
   s+=']]>\n';
   s+='</'+'Script>\n\n';return s;
 }
+function buildFreeCamerasX3D(){
+  var s='';
+  Object.values(placedCameras).forEach(function(c){
+    var yawRad=(c.hAngle||0)*Math.PI/180, pitchRad=(c.vAngle||0)*Math.PI/180;
+    s+='<FreeCamera DEF="CAM_Free_'+safeId(c.name)+'" description="'+xe(c.name)+'" '+
+       'position="'+c.position[0]+' '+c.position[1]+' '+c.position[2]+'" '+
+       'yaw="0 1 0 '+yawRad+'" pitch="1 0 0 '+pitchRad+'"/>\n';
+  });
+  return s;
+}
 function buildGrid(w,d){
   var pts=[],idx=[],i=0;
   for(var x=0;x<=w;x+=10){pts.push(x+' 0.02 0',x+' 0.02 '+d);idx.push(i+' '+(i+1)+' -1');i+=2;}
@@ -2770,6 +2904,7 @@ function buildX3DString(){
   lines.push('<X3D profile="Immersive" version="4.0">');
   lines.push('<head><meta name="title" content="'+xe(sn)+'"/></head>');
   lines.push('<Scene>');
+  lines.push(buildCameraProtoDecls().trim());
   if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
   lines.push('<NavigationInfo headlight="true" type=\'"EXAMINE" "ANY"\' transitionType=\'"TELEPORT"\' visibilityLimit="300"/>');
   lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>');
@@ -2819,6 +2954,7 @@ function buildX3DString(){
     lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>');});
   lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
   lines.push(buildGrid(w,d).trim());
+  lines.push(buildFreeCamerasX3D().trim());
   Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
   Object.values(placedAgents).forEach(function(a){lines.push(buildAX3D(a).trim());});
   if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterpNodes(p).trim());});}

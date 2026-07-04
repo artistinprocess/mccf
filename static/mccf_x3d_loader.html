@@ -360,6 +360,9 @@ button.active { background: #4af0a8; color: #111; }
   <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
   <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
   <span id="status"><span id="poll-indicator"></span>Loading…</span>
+  <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
+  <span style="color:#6a7890;font-size:11px;">Cam:</span>
+  <span id="cam-telemetry" style="font-family:monospace;font-size:11px;color:#7fd8a0;margin-left:4px;">—</span>
 </div>
 
 <script>
@@ -369,6 +372,42 @@ const HOTHOUSE_MS = 1000;
 const LIGHTING_MS = 2000;
 
 const canvas = document.getElementById('x3d');
+
+// ── Live camera telemetry (Day 64) ──────────────────────────────────────────
+// Reads the currently BOUND Viewpoint's own position/orientation fields — the
+// same raw fields X_ITE's native Shift+F8 capture already reads (per the Day 63
+// finding: "copies the current viewpoint (position + orientation, no jump
+// attribute)"). Deliberately the same measurement basis as that already-trusted
+// on-demand workflow, just continuous instead of clipboard-on-keypress. This is
+// the BOUND node's own field values — for a camera nested inside a proto/avatar
+// Transform chain (agent_orbit, agent_track), that's relative to its immediate
+// parent, not resolved to world space. Good enough for "is this moving the way I
+// expect, and by roughly how much" — not a substitute for actual world-matrix
+// math if that's ever needed.
+var _camTelemetryTickCount = 0;
+function updateCamTelemetry() {
+  var el = document.getElementById('cam-telemetry');
+  if (!el) return;
+  _camTelemetryTickCount++;
+  try {
+    var vp = canvas.browser.getActiveViewpoint();
+    if (!vp) { el.textContent = '— (no active viewpoint)'; return; }
+    // Read via .getField(name).toString() — the same pattern this file's own
+    // _executeMoveShot diagnostics already use (posInterp.keyValue[0].toString()) and
+    // have already proven works against this X_ITE build. Direct property access
+    // (vp.position, p.x, p[0]) does NOT work here — confirmed by two failed attempts
+    // before this one. toString() sidesteps guessing the value's internal shape
+    // entirely, since X_ITE field objects format themselves as "x y z" / "x y z angle".
+    el.textContent = 'pos ' + vp.getField('position').toString()
+      + '   rot ' + vp.getField('orientation').toString();
+  } catch (e) {
+    el.textContent = '— (error, see console)';
+    if (_camTelemetryTickCount % 25 === 1) {
+      console.warn('[telemetry] tick', _camTelemetryTickCount, 'field access failed:', e.message);
+    }
+  }
+}
+setInterval(updateCamTelemetry, 200);
 let pollingActive = true;
 let activeVP = null;
 
@@ -2027,25 +2066,40 @@ function _fireCameraEventCue(cue) {
   }
 
   // ── BAKED PATH: agent-orbit ────────────────────────────────
-  // VP_{subject}_Orbit + CAM_OrbitXform_{subject} live inside the agent's own
-  // Transform — parented, so the avatar's world motion is free (no tracking math).
-  // Orbit math here is RELATIVE OFFSET ONLY: radius/height/angle around the
-  // avatar's local origin. The avatar's Transform translation is never read or
-  // written by this path — that's the whole point of parenting.
+  // Day 64: a CAM_OrbitProto_{subject} ProtoInstance (AgentOrbitCamera, see
+  // mccf_camera_protos.x3d) lives inside the agent's own Transform — parented, so the
+  // avatar's world motion is free (no tracking math). Orbit math here is RELATIVE
+  // OFFSET ONLY: radius/height/angle around the avatar's local origin. The avatar's
+  // Transform translation is never read or written by this path — that's the whole
+  // point of parenting.
   if (shot === 'agent_orbit') {
     _executeAgentOrbit(cue);
     return;
   }
 
   // ── BAKED PATH: agent-track ────────────────────────────────
-  // VP_{subject}_Track + CAM_TrackXform_{subject} live inside the agent's own
-  // Transform — parented, same principle as agent-orbit. Built agent-attached from
-  // the start (Day 63 decision), not converted after the fact from a free-camera
-  // version. Checked as its own explicit branch, not merged into agent_orbit's —
-  // the keyframe math is different (linear lateral lerp vs circular sweep) even
-  // though the parenting architecture is identical.
+  // Day 64: a CAM_TrackProto_{subject} ProtoInstance (AgentTrackCamera, see
+  // mccf_camera_protos.x3d) lives inside the agent's own Transform — parented, same
+  // principle as agent-orbit. Checked as its own explicit branch, not merged into
+  // agent_orbit's — the keyframe math is different (linear lateral lerp vs circular
+  // sweep) even though the parenting architecture and proto plumbing are identical.
   if (shot === 'agent_track') {
     _executeAgentTrack(cue);
+    return;
+  }
+
+  // ── BAKED PATH: placed free camera ────────────────────────
+  // Day 64: a CAM_Free_{name} FreeCamera ProtoInstance, placed via Composer's grid-based
+  // camera placement UI. Static — no TimeSensor, no interpolation. Deliberately a
+  // separate code path from cue.viewpoint below: that path calls _bindNamedViewpoint
+  // directly on a plain top-level authored Viewpoint, but a FreeCamera's inner Viewpoint
+  // is DEF'd "VP" *inside* its ProtoBody — unreachable via getNamedNode from outside,
+  // same SAI-into-proto constraint as agent_orbit/agent_track. Binding it means setting
+  // the ProtoInstance's own exposed set_bind field, not looking up an internal name that
+  // doesn't exist from the outside.
+  if (shot === 'free_camera' && cue.camera) {
+    var freeCamSafe = cue.camera.replace(/[^A-Za-z0-9_]/g, '_');
+    _bindFreeCamera(freeCamSafe);
     return;
   }
 
@@ -2244,6 +2298,31 @@ function _resolveSubjectPos(subjectName) {
 // The correct pattern: VP_Free sits at local origin inside CAM_Free_Transform (a Transform node).
 // The Loader writes translation/rotation to CAM_Free_Transform, then binds VP_Free.
 // The Transform moves the camera; the Viewpoint just marks the bind point.
+// Bind a placed FreeCamera by name (Day 64). Static camera, static bind — no keyframes,
+// no timer, just set_bind on the ProtoInstance's exposed field, with the same
+// find-with-retries pattern every other camera path in this file already uses (the scene
+// may still be finishing setup when the very first cue in a scene fires).
+function _bindFreeCamera(nameSafe) {
+  var attempts = 0;
+  function trySet() {
+    attempts++;
+    try {
+      var node = canvas.browser.currentScene.getNamedNode('CAM_Free_' + nameSafe);
+      if (node) {
+        node.set_bind = true;
+        console.log('[EventCues] camera: free camera «' + nameSafe + '» bound');
+        return;
+      }
+      console.warn('[EventCues] camera: free camera CAM_Free_' + nameSafe + ' not found — re-export scene from Composer');
+    } catch (e) {
+      console.warn('[EventCues] camera: free camera bind exception:', e.message);
+    }
+    if (attempts < 10) setTimeout(trySet, 200);
+    else console.warn('[EventCues] camera: free camera CAM_Free_' + nameSafe + ' not found after retries');
+  }
+  trySet();
+}
+
 function _executeStaticCameraShot(cue) {
   var subjectPos = _resolveSubjectPos(cue.subject) || [0, 0, 0];
   var distance  = (cue.distance  !== null && cue.distance  !== undefined) ? cue.distance  : 8;
@@ -2310,12 +2389,16 @@ function _executeStaticCameraShot(cue) {
 
 // Execute an agent-orbit shot: BAKED path, parented under the avatar's own Transform.
 //
-// Architecture: CAM_OrbitTimer_{name}, CAM_OrbitPosInterp_{name}, CAM_OrbitOriInterp_{name},
-// and CAM_OrbitXform_{name} are per-avatar vessel nodes the Composer emits inside every
-// Avatar_{name} Transform. Because they are children of the avatar, the avatar's own world
-// motion is automatic — this function only ever computes a RELATIVE offset around local
-// origin [0,0,0], never the avatar's world position. There is no tracking math, no polling
-// of the avatar's current position, because none is needed: parenting handles it for free.
+// Architecture (Day 64): CAM_OrbitProto_{name} is a single AgentOrbitCamera ProtoInstance
+// the Composer emits inside every Avatar_{name} Transform (see mccf_camera_protos.x3d for
+// the ProtoBody — the Transform/Viewpoint/TimeSensor/2x Interpolator and their ROUTEs that
+// used to be five separate top-level DEFs here now live inside the proto, wired statically).
+// Because the ProtoInstance is a child of the avatar, the avatar's own world motion is
+// automatic — this function only ever computes a RELATIVE offset around local origin
+// [0,0,0], never the avatar's world position. There is no tracking math, no polling of the
+// avatar's current position, because none is needed: parenting handles it for free. This
+// function talks only to the ProtoInstance's exposed interface, never to its internals —
+// the Day 63 SAI-into-proto test confirmed those internals are unreachable from outside.
 //
 // This is architecturally distinct from the free/world-space 'orbit' move shot
 // (_executeMoveShot), which circles a fixed world point computed once at cue-fire time
@@ -2353,50 +2436,47 @@ function _executeAgentOrbit(cue) {
     oriKeys.push(orient[0], orient[1], orient[2], orient[3]);
   }
 
+  // Day 64: the four internal vessel nodes (Transform/Viewpoint/TimeSensor/2x Interpolator)
+  // and their four ROUTEs are gone from view — they now live inside AgentOrbitCamera's
+  // ProtoBody (mccf_camera_protos.x3d), wired with static IS connections and static
+  // ROUTEs baked in at proto-declare time. This function talks to exactly one node —
+  // the ProtoInstance itself, DEF'd CAM_OrbitProto_{subject} by the Composer — through
+  // its exposed interface. No addRoute calls needed anymore: routing is structural, not
+  // runtime-assembled, so there's nothing left for this function to wire.
   var attempts = 0;
   function trySet() {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var camXform  = scene.getNamedNode('CAM_OrbitXform_'      + subjectSafe);
-      var vpOrbit   = scene.getNamedNode('VP_'                  + subjectSafe + '_Orbit');
-      var camTimer  = scene.getNamedNode('CAM_OrbitTimer_'      + subjectSafe);
-      var posInterp = scene.getNamedNode('CAM_OrbitPosInterp_'  + subjectSafe);
-      var oriInterp = scene.getNamedNode('CAM_OrbitOriInterp_'  + subjectSafe);
+      var orbitProto = scene.getNamedNode('CAM_OrbitProto_' + subjectSafe);
 
-      if (camXform && vpOrbit && camTimer && posInterp && oriInterp) {
+      if (orbitProto) {
 
-        posInterp.key.length      = 0;
-        posInterp.keyValue.length = 0;
-        oriInterp.key.length      = 0;
-        oriInterp.keyValue.length = 0;
+        var keyField      = orbitProto.getField('key');
+        var keyValueField = orbitProto.getField('keyValue');
+        var oriValueField = orbitProto.getField('oriKeyValue');
+        keyField.length      = 0;
+        keyValueField.length = 0;
+        oriValueField.length = 0;
         for (var ki = 0; ki <= STEPS; ki++) {
-          posInterp.key[ki]      = keys[ki];
-          posInterp.keyValue[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
-          oriInterp.key[ki]      = keys[ki];
-          oriInterp.keyValue[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
+          keyField[ki]      = keys[ki];
+          keyValueField[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
+          oriValueField[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
         }
 
-        try {
-          canvas.browser.addRoute(camTimer,  'fraction_changed', posInterp, 'set_fraction');
-          canvas.browser.addRoute(camTimer,  'fraction_changed', oriInterp, 'set_fraction');
-          canvas.browser.addRoute(posInterp, 'value_changed',    camXform,  'set_translation');
-          canvas.browser.addRoute(oriInterp, 'value_changed',    camXform,  'set_rotation');
-        } catch(eRoute) { console.warn('[EventCues] camera: agent_orbit addRoute failed:', eRoute.message); }
+        orbitProto.cycleInterval = duration;
+        orbitProto.loop          = doLoop;
 
-        camTimer.cycleInterval = duration;
-        camTimer.loop          = doLoop;
-
-        camXform.getField('translation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
-        camXform.getField('rotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+        orbitProto.getField('initialTranslation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
+        orbitProto.getField('initialRotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
 
         requestAnimationFrame(function() {
-          vpOrbit.set_bind = true;
+          orbitProto.set_bind = true;
           requestAnimationFrame(function() {
             var _t0 = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
               ? canvas.browser.currentTime : (performance.now() / 1000);
-            camTimer.startTime = _t0;
-            camTimer.enabled   = true;
+            orbitProto.startTime = _t0;
+            orbitProto.enabled   = true;
             console.log('[EventCues] camera: agent_orbit started — subject=' + subjectSafe
               + ' radius=' + radius + ' height=' + height + ' hAngle=' + hAngle
               + ' dur=' + duration + ' loop=' + doLoop);
@@ -2405,26 +2485,20 @@ function _executeAgentOrbit(cue) {
         return;
       }
 
-      var missing = [];
-      if (!camXform)  missing.push('CAM_OrbitXform_'     + subjectSafe);
-      if (!vpOrbit)   missing.push('VP_'                 + subjectSafe + '_Orbit');
-      if (!camTimer)  missing.push('CAM_OrbitTimer_'     + subjectSafe);
-      if (!posInterp) missing.push('CAM_OrbitPosInterp_' + subjectSafe);
-      if (!oriInterp) missing.push('CAM_OrbitOriInterp_' + subjectSafe);
-      console.warn('[EventCues] camera: agent_orbit — missing vessel nodes:', missing.join(', '),
-        '— re-export scene from Composer');
+      console.warn('[EventCues] camera: agent_orbit — missing proto instance CAM_OrbitProto_'
+        + subjectSafe + ' — re-export scene from Composer');
 
     } catch(e) { console.warn('[EventCues] camera: agent_orbit trySet exception:', e.message); }
     if (attempts < 10) setTimeout(trySet, 200);
-    else console.warn('[EventCues] camera: agent_orbit — vessel nodes not found after retries');
+    else console.warn('[EventCues] camera: agent_orbit — proto instance not found after retries');
   }
   trySet();
 }
 
-// Execute an agent-track shot (Day 63): BAKED path, parented under the avatar's own
-// Transform — same principle as _executeAgentOrbit. CAM_TrackTimer_{name},
-// CAM_TrackPosInterp_{name}, CAM_TrackOriInterp_{name}, and CAM_TrackXform_{name} are
-// per-avatar vessel nodes the Composer emits inside every Avatar_{name} Transform.
+// Execute an agent-track shot: BAKED path, parented under the avatar's own Transform.
+// Day 64: CAM_TrackProto_{name} is a single AgentTrackCamera ProtoInstance the Composer
+// emits inside every Avatar_{name} Transform — same mechanism as AgentOrbitCamera, see
+// mccf_camera_protos.x3d for the ProtoBody.
 //
 // Built agent-attached from the start, not converted after the fact from a free-camera
 // version — Day 63 decision, following the "parenting beats tracking" principle and the
@@ -2473,50 +2547,44 @@ function _executeAgentTrack(cue) {
     oriKeys.push(orient[0], orient[1], orient[2], orient[3]);
   }
 
+  // Day 64: converted to the same AgentTrackCamera proto pattern as agent_orbit — one
+  // ProtoInstance (CAM_TrackProto_{subject}) replaces the five internal vessel DEFs this
+  // function used to reach individually. No addRoute calls needed: routing is static
+  // inside the ProtoBody now, not runtime-assembled.
   var attempts = 0;
   function trySet() {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var camXform  = scene.getNamedNode('CAM_TrackXform_'      + subjectSafe);
-      var vpTrack   = scene.getNamedNode('VP_'                  + subjectSafe + '_Track');
-      var camTimer  = scene.getNamedNode('CAM_TrackTimer_'      + subjectSafe);
-      var posInterp = scene.getNamedNode('CAM_TrackPosInterp_'  + subjectSafe);
-      var oriInterp = scene.getNamedNode('CAM_TrackOriInterp_'  + subjectSafe);
+      var trackProto = scene.getNamedNode('CAM_TrackProto_' + subjectSafe);
 
-      if (camXform && vpTrack && camTimer && posInterp && oriInterp) {
+      if (trackProto) {
 
-        posInterp.key.length      = 0;
-        posInterp.keyValue.length = 0;
-        oriInterp.key.length      = 0;
-        oriInterp.keyValue.length = 0;
+        var keyField      = trackProto.getField('key');
+        var keyValueField = trackProto.getField('keyValue');
+        var oriValueField = trackProto.getField('oriKeyValue');
+        keyField.length      = 0;
+        keyValueField.length = 0;
+        oriValueField.length = 0;
         for (var ki = 0; ki <= STEPS; ki++) {
-          posInterp.key[ki]      = keys[ki];
-          posInterp.keyValue[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
-          oriInterp.key[ki]      = keys[ki];
-          oriInterp.keyValue[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
+          keyField[ki]      = keys[ki];
+          keyValueField[ki] = new X3D.SFVec3f(posKeys[ki*3], posKeys[ki*3+1], posKeys[ki*3+2]);
+          oriValueField[ki] = new X3D.SFRotation(oriKeys[ki*4], oriKeys[ki*4+1], oriKeys[ki*4+2], oriKeys[ki*4+3]);
         }
 
-        try {
-          canvas.browser.addRoute(camTimer,  'fraction_changed', posInterp, 'set_fraction');
-          canvas.browser.addRoute(camTimer,  'fraction_changed', oriInterp, 'set_fraction');
-          canvas.browser.addRoute(posInterp, 'value_changed',    camXform,  'set_translation');
-          canvas.browser.addRoute(oriInterp, 'value_changed',    camXform,  'set_rotation');
-        } catch(eRoute) { console.warn('[EventCues] camera: agent_track addRoute failed:', eRoute.message); }
+        trackProto.cycleInterval = duration;
+        trackProto.loop          = doLoop;
 
-        camTimer.cycleInterval = duration;
-        camTimer.loop          = doLoop;
-
-        camXform.getField('translation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
-        camXform.getField('rotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+        trackProto.getField('initialTranslation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
+        trackProto.getField('initialRotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
 
         requestAnimationFrame(function() {
-          vpTrack.set_bind = true;
+          trackProto.set_bind = true;
           requestAnimationFrame(function() {
             var _t0 = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
               ? canvas.browser.currentTime : (performance.now() / 1000);
-            camTimer.startTime = _t0;
-            camTimer.enabled   = true;
+            trackProto.startTime = _t0;
+            trackProto.enabled   = true;
             console.log('[EventCues] camera: agent_track started — subject=' + subjectSafe
               + ' offset=' + off0 + '→' + off1 + ' depth=' + depth + ' height=' + height
               + ' dur=' + duration);
@@ -2525,18 +2593,12 @@ function _executeAgentTrack(cue) {
         return;
       }
 
-      var missing = [];
-      if (!camXform)  missing.push('CAM_TrackXform_'     + subjectSafe);
-      if (!vpTrack)   missing.push('VP_'                 + subjectSafe + '_Track');
-      if (!camTimer)  missing.push('CAM_TrackTimer_'     + subjectSafe);
-      if (!posInterp) missing.push('CAM_TrackPosInterp_' + subjectSafe);
-      if (!oriInterp) missing.push('CAM_TrackOriInterp_' + subjectSafe);
-      console.warn('[EventCues] camera: agent_track — missing vessel nodes:', missing.join(', '),
-        '— re-export scene from Composer');
+      console.warn('[EventCues] camera: agent_track — missing proto instance CAM_TrackProto_'
+        + subjectSafe + ' — re-export scene from Composer');
 
     } catch(e) { console.warn('[EventCues] camera: agent_track trySet exception:', e.message); }
     if (attempts < 10) setTimeout(trySet, 200);
-    else console.warn('[EventCues] camera: agent_track — vessel nodes not found after retries');
+    else console.warn('[EventCues] camera: agent_track — proto instance not found after retries');
   }
   trySet();
 }
@@ -3180,17 +3242,23 @@ function pbStopX3DTimers() {
       _orbitNames.forEach(function(nm) {
         try {
           var safeNm = nm.replace(/^Avatar_/, '');
-          var _orbitT = _camScene.getNamedNode('CAM_OrbitTimer_' + safeNm);
-          if (_orbitT) {
-            _orbitT.enabled = false;
-            console.log('[EventCues] camera: CAM_OrbitTimer_' + safeNm + ' stopped by pbStopX3DTimers');
+          // Day 64: CAM_OrbitTimer_{name} is no longer a reachable top-level DEF — it lives
+          // inside AgentOrbitCamera's ProtoBody. Stop orbit via the proto instance's own
+          // exposed 'enabled' field instead, which is IS'd through to that internal timer.
+          var _orbitProto = _camScene.getNamedNode('CAM_OrbitProto_' + safeNm);
+          if (_orbitProto) {
+            _orbitProto.enabled = false;
+            console.log('[EventCues] camera: CAM_OrbitProto_' + safeNm + ' stopped by pbStopX3DTimers');
           }
           // Day 63: agent_track is also per-avatar, same structural reason as orbit above —
           // one timer per avatar, not a singular free-camera timer, so it needs the same loop.
-          var _trackT = _camScene.getNamedNode('CAM_TrackTimer_' + safeNm);
-          if (_trackT) {
-            _trackT.enabled = false;
-            console.log('[EventCues] camera: CAM_TrackTimer_' + safeNm + ' stopped by pbStopX3DTimers');
+          // Day 64: CAM_TrackTimer_{name} is no longer a reachable top-level DEF — it
+          // lives inside AgentTrackCamera's ProtoBody. Stop via the proto instance's own
+          // exposed 'enabled' field, matching the same fix already applied to orbit.
+          var _trackProto = _camScene.getNamedNode('CAM_TrackProto_' + safeNm);
+          if (_trackProto) {
+            _trackProto.enabled = false;
+            console.log('[EventCues] camera: CAM_TrackProto_' + safeNm + ' stopped by pbStopX3DTimers');
           }
         } catch(eOrbit) {}
       });
@@ -4265,6 +4333,7 @@ async function pbStep() {
   try {
     const r = await fetch(API+'/arc/playback/step', {method:'POST',
       headers:{'Content-Type':'application/json'}, body:'{}'});
+    if (!r.ok) { console.warn('pbStep: server returned', r.status, r.statusText); }
     const state = await r.json();
     pbUpdateDisplay(state);
     _seedArcRecord(state);   // seed ϕ from arc XML waypoint CV values
@@ -4304,7 +4373,7 @@ async function pbStep() {
       _arrCandidates2.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
     }
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
-  } catch(e) {}
+  } catch(e) { console.warn('pbStep: request failed:', e.message); }
   finally { _pbStepInFlight['__single__'] = false; }
 }
 async function pbStop() {
@@ -4829,7 +4898,11 @@ function x3dFileChanged() {
   if (!fname) return;
   var canvas = document.getElementById('x3d');
   if (!canvas) return;
-  canvas.src = API + '/static/x3d/' + fname;
+  // Cache-bust: without this, re-exporting a scene under the same filename (e.g.
+  // CameraTestAll.x3d during iterative proto testing) can silently load a stale
+  // cached copy — the file on disk is current but the browser serves the old one for
+  // the same URL. Same fix already applied to the Events Editor iframe's ?v= param.
+  canvas.src = API + '/static/x3d/' + fname + '?t=' + Date.now();
   console.log('x3dFileChanged: loaded', fname);
   // New scene — clear per-scene caches so stale data from previous scene
   // doesn't bleed into pivot and dwell zone lookups.

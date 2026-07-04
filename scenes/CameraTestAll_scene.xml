@@ -1,31 +1,75 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- MCCF V3 Scene Wrapper - CameraTestAll - 2026-07-03T01:35:12 -->
-<Scene id="CameraTestAll" timestamp="2026-07-03T01:35:12" zone_set="CameraTestAll" mode="improvisation" width="120" depth="20">
+<!-- MCCF V3 Scene Wrapper - CameraTestAll - 2026-07-04T17:24:12 -->
+<Scene id="CameraTestAll" timestamp="2026-07-04T17:24:12" zone_set="CameraTestAll" mode="improvisation" width="120" depth="20">
 <EmotionalArc cultivar="TestSubjectA" actor="ollama" voice=""><StartPosition x="0" y="0" z="0"/></EmotionalArc>
-<EmotionalArc cultivar="TestSubjectB" actor="ollama" voice=""><StartPosition x="36" y="0" z="-3"/></EmotionalArc>
+<EmotionalArc cultivar="TestSubjectB" actor="ollama" voice=""><StartPosition x="102.18705035971249" y="0" z="0.28776978417266186"/></EmotionalArc>
 <Waypoints>
-  <Waypoint name="TestAgentEye" label="TestAgentEye" zone="" pos_x="44.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestAgentOrbit" label="TestAgentOrbit" zone="" pos_x="76.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestAgentSide" label="TestAgentSide" zone="" pos_x="48.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestAgentTrack" label="TestAgentTrack" zone="" pos_x="80.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestCloseup" label="TestCloseup" zone="" pos_x="12.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestCraneUp" label="TestCraneUp" zone="" pos_x="72.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestDollyIn" label="TestDollyIn" zone="" pos_x="52.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestDollyOut" label="TestDollyOut" zone="" pos_x="56.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestDutch" label="TestDutch" zone="" pos_x="28.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestExtremeCloseup" label="TestExtremeCloseup" zone="" pos_x="16.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestMedium" label="TestMedium" zone="" pos_x="8.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestNamedVp" label="TestNamedVp" zone="" pos_x="0.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestOrbit" label="TestOrbit" zone="" pos_x="68.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestOverShoulder" label="TestOverShoulder" zone="" pos_x="32.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestOverhead" label="TestOverhead" zone="" pos_x="20.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestPan" label="TestPan" zone="" pos_x="60.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestProfile" label="TestProfile" zone="" pos_x="36.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestTilt" label="TestTilt" zone="" pos_x="64.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestTrack" label="TestTrack" zone="" pos_x="84.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestTwoShot" label="TestTwoShot" zone="" pos_x="40.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestWide" label="TestWide" zone="" pos_x="4.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
-  <Waypoint name="TestWormsEye" label="TestWormsEye" zone="" pos_x="24.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4"/>
+  <Waypoint name="TestAgentEye" label="TestAgentEye" zone="" pos_x="44.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Test Agent Eye</Statement>
+  </Waypoint>
+  <Waypoint name="TestAgentOrbit" label="TestAgentOrbit" zone="" pos_x="76.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Test Agent Orbit</Statement>
+  </Waypoint>
+  <Waypoint name="TestAgentSide" label="TestAgentSide" zone="" pos_x="48.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Test Agent Side</Statement>
+  </Waypoint>
+  <Waypoint name="TestAgentTrack" label="TestAgentTrack" zone="" pos_x="80.00" pos_y="0.00" pos_z="0.00" dwell="5" pace="1.4">
+    <Statement speaker="TestSubjectA">Agent Track.</Statement>
+  </Waypoint>
+  <Waypoint name="TestCloseup" label="TestCloseup" zone="" pos_x="12.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Clode Up</Statement>
+  </Waypoint>
+  <Waypoint name="TestCraneUp" label="TestCraneUp" zone="" pos_x="0.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Crane Up</Statement>
+  </Waypoint>
+  <Waypoint name="TestDollyIn" label="TestDollyIn" zone="" pos_x="52.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Dolly In</Statement>
+  </Waypoint>
+  <Waypoint name="TestDollyOut" label="TestDollyOut" zone="" pos_x="56.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Dolly Out</Statement>
+  </Waypoint>
+  <Waypoint name="TestDutch" label="TestDutch" zone="" pos_x="28.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Dutch</Statement>
+  </Waypoint>
+  <Waypoint name="TestExtremeCloseup" label="TestExtremeCloseup" zone="" pos_x="16.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Extreme Closup.</Statement>
+  </Waypoint>
+  <Waypoint name="TestMedium" label="TestMedium" zone="" pos_x="8.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Medium</Statement>
+  </Waypoint>
+  <Waypoint name="TestNamedVp" label="TestNamedVp" zone="" pos_x="0.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Named VP</Statement>
+  </Waypoint>
+  <Waypoint name="TestOrbit" label="TestOrbit" zone="" pos_x="68.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Test Scene Orbit.</Statement>
+  </Waypoint>
+  <Waypoint name="TestOverShoulder" label="TestOverShoulder" zone="" pos_x="32.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Over Shoulder</Statement>
+  </Waypoint>
+  <Waypoint name="TestOverhead" label="TestOverhead" zone="" pos_x="20.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Ocwehead</Statement>
+  </Waypoint>
+  <Waypoint name="TestPan" label="TestPan" zone="" pos_x="60.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement>Pan</Statement>
+  </Waypoint>
+  <Waypoint name="TestProfile" label="TestProfile" zone="" pos_x="36.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Profile</Statement>
+  </Waypoint>
+  <Waypoint name="TestTilt" label="TestTilt" zone="" pos_x="64.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Tilt</Statement>
+  </Waypoint>
+  <Waypoint name="TestTrack" label="TestTrack" zone="" pos_x="84.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Track</Statement>
+  </Waypoint>
+  <Waypoint name="TestTwoShot" label="TestTwoShot" zone="" pos_x="40.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Two Shot</Statement>
+  </Waypoint>
+  <Waypoint name="TestWide" label="TestWide" zone="" pos_x="4.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Wide</Statement>
+  </Waypoint>
+  <Waypoint name="TestWormsEye" label="TestWormsEye" zone="" pos_x="24.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+    <Statement speaker="TestSubjectA">Worms eye</Statement>
+  </Waypoint>
 </Waypoints>
 <Paths>
   <Path name="path_TestSubjectA" agent="TestSubjectA" waypointOrder="1">
@@ -71,10 +115,10 @@
   <Cue track="camera" trackLabel="Camera" label="15 dolly_out" t="140" dur="4" trigger="TestDollyOut arrive" shot="dolly_out" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="3" height="1.7" hAngle="0" vAngle="-8" distanceEnd="7.5" heightEnd="1.7" hAngleEnd="0" vAngleEnd="-8" delay="0" jump="true"/>
   <Cue track="camera" trackLabel="Camera" label="16 pan" t="150" dur="4" trigger="TestPan arrive" shot="pan" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="-45" vAngle="-8" distanceEnd="5" heightEnd="1.7" hAngleEnd="45" vAngleEnd="-8" delay="0" jump="true"/>
   <Cue track="camera" trackLabel="Camera" label="17 tilt" t="160" dur="4" trigger="TestTilt arrive" shot="tilt" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-30" distanceEnd="5" heightEnd="1.7" hAngleEnd="0" vAngleEnd="30" delay="0" jump="true"/>
-  <Cue track="camera" trackLabel="Camera" label="18 orbit" t="170" dur="8" trigger="TestOrbit arrive" shot="orbit" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-8" loop="true" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="18 orbit" t="170" dur="8" trigger="TestOrbit arrive" shot="orbit" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="5" height="1.7" hAngle="0" vAngle="-8" delay="0" jump="true"/>
   <Cue track="camera" trackLabel="Camera" label="19 crane_up" t="185" dur="4" trigger="TestCraneUp arrive" shot="crane_up" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="6" height="1.5" hAngle="0" vAngle="-15" heightEnd="5.5" arcDepth="3" delay="0" jump="true"/>
-  <Cue track="camera" trackLabel="Camera" label="20 agent_orbit" t="195" dur="8" trigger="TestAgentOrbit arrive" shot="agent_orbit" subject="TestSubjectA" transition="cut" distance="8.6" height="3.2" hAngle="0" vAngle="-8" loop="true" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="20 agent_orbit" t="195" dur="8" trigger="TestAgentOrbit arrive" shot="agent_orbit" subject="TestSubjectA" transition="cut" distance="8.6" height="3.2" hAngle="0" vAngle="-8" delay="0" jump="true"/>
   <Cue track="camera" trackLabel="Camera" label="21 agent_track" t="210" dur="4" trigger="TestAgentTrack arrive" shot="agent_track" subject="TestSubjectA" transition="cut" height="1.7" vAngle="-8" trackOffset="-3" trackOffsetEnd="3" trackDepth="4" delay="0" jump="true"/>
-  <Cue track="camera" trackLabel="Camera" label="22 track (expect no-op)" t="220" dur="4" trigger="TestTrack arrive" shot="track" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="4" height="1.7" hAngle="-90" vAngle="-8" delay="0" jump="true"/>
+  <Cue track="camera" trackLabel="Camera" label="track TestSubjectA" t="224" dur="4" trigger="TestTrack arrive" shot="track" subject="TestSubjectA" transition="fly" flyDuration="1.5" distance="4" height="1.7" hAngle="-90" vAngle="-8" distanceEnd="1.6" heightEnd="5.7" hAngleEnd="0" vAngleEnd="-23" delay="0" jump="true"/>
 </EventCues>
 </Scene>

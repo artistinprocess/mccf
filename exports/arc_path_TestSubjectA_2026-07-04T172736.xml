@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_TestSubjectA_2026-07-04T172736" scene="CameraTestAll">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_TestSubjectA_2026-07-04T172736" agentname="TestSubjectA" path_name="path_TestSubjectA">
+    <Timestamp date="2026-07-04" time="17:27:36"/>
+    <Waypoint id="TestNamedVp" stepno="1" name="TestNamedVp" E="0.3166" B="0.2074" P="0.1644" S="0.1614" Mode="scene" Coherence="0.0903" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Named VP</Statement>
+    </Waypoint>
+    <Waypoint id="TestWide" stepno="2" name="TestWide" E="0.3353" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0907" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="4.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Wide</Statement>
+    </Waypoint>
+    <Waypoint id="TestMedium" stepno="3" name="TestMedium" E="0.2944" B="0.1914" P="0.1764" S="0.1614" Mode="scene" Coherence="0.0902" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="8.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Medium</Statement>
+    </Waypoint>
+    <Waypoint id="TestCloseup" stepno="4" name="TestCloseup" E="0.3336" B="0.1754" P="0.1884" S="0.1614" Mode="scene" Coherence="0.0905" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="12.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Clode Up</Statement>
+    </Waypoint>
+    <Waypoint id="TestExtremeCloseup" stepno="5" name="TestExtremeCloseup" E="0.2777" B="0.1514" P="0.2064" S="0.1614" Mode="scene" Coherence="0.0895" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="16.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Extreme Closup.</Statement>
+    </Waypoint>
+    <Waypoint id="TestOverhead" stepno="6" name="TestOverhead" E="0.2443" B="0.1794" P="0.1854" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="20.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Ocwehead</Statement>
+    </Waypoint>
+    <Waypoint id="TestWormsEye" stepno="7" name="TestWormsEye" E="0.2985" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="24.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Worms eye</Statement>
+    </Waypoint>
+    <Waypoint id="TestDutch" stepno="8" name="TestDutch" E="0.2740" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0875" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="28.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Dutch</Statement>
+    </Waypoint>
+    <Waypoint id="TestOverShoulder" stepno="9" name="TestOverShoulder" E="0.3372" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0884" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="32.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Over Shoulder</Statement>
+    </Waypoint>
+    <Waypoint id="TestProfile" stepno="10" name="TestProfile" E="0.3282" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0890" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="36.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Profile</Statement>
+    </Waypoint>
+    <Waypoint id="TestTwoShot" stepno="11" name="TestTwoShot" E="0.3422" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0898" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="40.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Two Shot</Statement>
+    </Waypoint>
+    <Waypoint id="TestAgentEye" stepno="12" name="TestAgentEye" E="0.2849" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0893" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="44.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Test Agent Eye</Statement>
+    </Waypoint>
+    <Waypoint id="TestAgentSide" stepno="13" name="TestAgentSide" E="0.2688" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0885" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="48.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Test Agent Side</Statement>
+    </Waypoint>
+    <Waypoint id="TestDollyIn" stepno="14" name="TestDollyIn" E="0.2619" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0877" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="52.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Dolly In</Statement>
+    </Waypoint>
+    <Waypoint id="TestDollyOut" stepno="15" name="TestDollyOut" E="0.3114" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="56.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Dolly Out</Statement>
+    </Waypoint>
+    <Waypoint id="TestPan" stepno="16" name="TestPan" E="0.2973" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="60.00" pos_y="0.00" pos_z="0.00">
+      <Statement>Pan</Statement>
+    </Waypoint>
+    <Waypoint id="TestTilt" stepno="17" name="TestTilt" E="0.2940" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="64.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Tilt</Statement>
+    </Waypoint>
+    <Waypoint id="TestOrbit" stepno="18" name="TestOrbit" E="0.3214" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0885" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="68.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Test Scene Orbit.</Statement>
+    </Waypoint>
+    <Waypoint id="TestCraneUp" stepno="19" name="TestCraneUp" E="0.2761" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Crane Up</Statement>
+    </Waypoint>
+    <Waypoint id="TestAgentOrbit" stepno="20" name="TestAgentOrbit" E="0.3087" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0882" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="76.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Test Agent Orbit</Statement>
+    </Waypoint>
+    <Waypoint id="TestAgentTrack" stepno="21" name="TestAgentTrack" E="0.2910" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="80.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Agent Track.</Statement>
+    </Waypoint>
+    <Waypoint id="TestTrack" stepno="22" name="TestTrack" E="0.2945" B="0.1994" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0880" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="84.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="TestSubjectA">Track</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

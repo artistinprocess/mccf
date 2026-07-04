@@ -776,7 +776,32 @@ var WPS = [
   { name: 'WP2', t: 8  },
   { name: 'WP3', t: 16 },
 ];
+// Day 64 fix: SCENE_END used to be trusted as-is from Composer's postMessage
+// (d.sceneEnd = wpsOrdered.length*8+8, an evenly-spaced placeholder guess) or the
+// hardcoded 24 default below. Neither accounts for real authored cue/waypoint times —
+// mccf_load_cues (which restores a saved scene's actual cues) never touched SCENE_END
+// at all. Result: any cue whose t+dur ran past that guess got positioned beyond the
+// timeline lane's own rendered width and was clipped by .tl-track-lane's
+// overflow:hidden — unreachable by scroll or zoom, since the pixel position it needed
+// simply didn't exist inside a too-narrow container.
+// Fix: _sceneEndFloor holds only the hint/default; SCENE_END itself is recomputed from
+// scratch in _computeSceneEnd() every render, as the max of that floor and every actual
+// cue end / waypoint time currently loaded. Recomputed fresh each call (not padded
+// on top of its own previous value) so it self-heals regardless of load order and
+// never grows unboundedly across repeated renders.
+var _sceneEndFloor = 24;
 var SCENE_END = 24;
+function _computeSceneEnd() {
+  var maxT = _sceneEndFloor;
+  WPS.forEach(function(wp) { if (wp.t > maxT) maxT = wp.t; });
+  _tracks.forEach(function(track) {
+    (track.cues || []).forEach(function(c) {
+      var end = (c.t || 0) + (c.dur || 4);
+      if (end > maxT) maxT = end;
+    });
+  });
+  return maxT + 8; // fixed right-hand padding so the last cue/marker isn't flush against the edge
+}
 
 var TRACK_TYPES = {
   camera:   { label: 'Camera',     icon: '📷', color: 'cue-cam'      },
@@ -798,6 +823,7 @@ var _tracks = [
 ];
 
 var AGENTS   = ['Cindy','The Witness','The Steward'];
+var CAMERAS  = []; // Day 64: placed free cameras, populated from Composer via mccf_scene_data
 var CLIPS    = ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
 // Fallback only — overwritten by Composer's postMessage (mccf_scene_data.views) on load.
 // Composer generates this dynamically per-agent (Eye/Side/Orbit); this hardcoded list is
@@ -826,6 +852,7 @@ var SHOT_TYPES = [
   { value:'agent_orbit',     label:'Agent Orbit',       group:'attached'  },
   { value:'agent_track',     label:'Agent Track',       group:'attached'  },
   { value:'named_vp',        label:'Bind Named VP',     group:'baked'     },
+  { value:'free_camera',     label:'Free Camera',       group:'baked'     },
   { value:'dolly_in',        label:'Dolly In',          group:'move'      },
   { value:'dolly_out',       label:'Dolly Out',         group:'move'      },
   { value:'pan',             label:'Pan',               group:'move'      },
@@ -976,6 +1003,7 @@ function drawStage() {
     var cue   = track && track.cues[_selCue.ci];
     if (track && track.type === 'camera' && cue) {
       var isNamedVPCue = (cue.viewpoint !== undefined && cue.viewpoint !== null);
+      var isFreeCameraCue = (cue.shot === 'free_camera');
       var isMove = !isNamedVPCue && !!SHOT_MOVES[cue.shot];
       var isAttached = !isNamedVPCue && !!SHOT_ATTACHED[cue.shot];
       var subjectName = cue.subject || (AGENTS[0]||'');
@@ -985,17 +1013,21 @@ function drawStage() {
       }, stageAgents[0] || { x: w*0.5, y: h*0.5 });
       var sx = subj.x, sy = subj.y;
 
-      if (isNamedVPCue) {
-        // Named VP (baked) — camera position is unknown at author time.
-        // Draw a VP badge near the subject to indicate a baked viewpoint is bound.
+      if (isNamedVPCue || isFreeCameraCue) {
+        // Named VP or free camera (both baked) — camera position is unknown at author
+        // time here (it's either in the X3D file directly, or in Composer's
+        // placedCameras, neither of which this preview has access to). Draw a badge
+        // near the subject rather than a fabricated FOV cone from stale/default fields.
         ctx.beginPath(); ctx.arc(sx, sy, 15, 0, Math.PI*2);
         ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
         ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = '#a880f0';
         ctx.font = 'bold 10px IBM Plex Mono'; ctx.textAlign = 'center';
-        ctx.fillText('VP', sx, sy + 4);
+        ctx.fillText(isFreeCameraCue ? 'CAM' : 'VP', sx, sy + 4);
         ctx.font = '10px IBM Plex Mono';
-        var vpShort = (cue.viewpoint || 'unnamed').replace(/^VP_/,'');
+        var vpShort = isFreeCameraCue
+          ? (cue.camera || 'unset')
+          : (cue.viewpoint || 'unnamed').replace(/^VP_/,'');
         ctx.fillText(vpShort, sx, sy + 22);
         ctx.textAlign = 'left';
       } else if (!isAttached) {
@@ -1100,6 +1132,7 @@ function drawVPCanvas() {
 
 // ── Timeline render ───────────────────────────────────────────────────────────
 function renderTimeline() {
+  SCENE_END = _computeSceneEnd();
   document.getElementById('zoom-val').textContent = _zoom;
   var totalPx = toPx(SCENE_END) + 80;
 
@@ -1211,6 +1244,7 @@ function renderInspector() {
     var isTwoShot  = !isNamedVP && shot === 'two_shot';
     var isDutch    = !isNamedVP && shot === 'dutch';
     var isCraneUp  = !isNamedVP && shot === 'crane_up';
+    var isFreeCamera = (shot === 'free_camera'); // Day 64 — static, placed via Composer; no framing sliders at all
     var preset     = SHOT_PRESETS[shot] || [3, 1.7, 0, -8, 0];
     var dist   = cue.distance    !== undefined ? cue.distance    : preset[0];
     var ht     = cue.height      !== undefined ? cue.height      : preset[1];
@@ -1280,12 +1314,31 @@ function renderInspector() {
         + '</div>'
       : '';
 
+    // Free camera inspector block (baked path, Day 64). Position/orientation are fixed at
+    // placement time in Composer's grid UI — this cue only picks WHICH placed camera to
+    // bind, nothing else. No framing sliders: there's nothing here for them to adjust.
+    var cameraOpts = CAMERAS.map(function(c){ return '<option value="'+c+'"'+(cue.camera===c?' selected':'')+'>'+c+'</option>'; }).join('');
+    var freeCameraBlock = isFreeCamera
+      ? '<div class="insp-section">free camera</div>'
+        + (CAMERAS.length
+            ? '<div class="insp-field"><div class="insp-label">camera</div>'
+              + '<select class="insp-select" onchange="setFreeCameraName(this.value)"><option value="">-- choose --</option>'+cameraOpts+'</select></div>'
+            : '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
+              + 'No free cameras placed yet — use the Cameras tab in Composer, then re-sync.</div>')
+        + '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
+        + 'Position and angle are fixed at placement time — nothing to adjust here.'
+        + '</div>'
+      : '';
+
     typeSpecific =
       '<div class="insp-field"><div class="insp-label">shot type</div>'
       + '<select class="insp-select" onchange="applyShotPreset(this.value)">'+shotOpts+'</select></div>'
 
       // Named VP path: show VP name field only; hide all runtime framing fields
       + namedVPBlock
+
+      // Free camera path: show camera picker only; hide all runtime framing fields
+      + freeCameraBlock
 
       // Subject field — shown for all paths (the VP is still "about" an agent)
       + '<div class="insp-field"><div class="insp-label">subject</div>'
@@ -1296,7 +1349,7 @@ function renderInspector() {
           ? '<div class="insp-field"><div class="insp-label">subject 2</div>'
             + '<select class="insp-select" onchange="setCueProp(\'subject2\',this.value)">'+subject2Opts+'</select></div>'
           : '')
-      + (!isNamedVP && !isAttached && !isAgentOrbit && !isAgentTrack
+      + (!isNamedVP && !isFreeCamera && !isAttached && !isAgentOrbit && !isAgentTrack
           ? '<div class="insp-field"><div class="insp-label">transition</div>'
             + '<div class="insp-radio-row">'
             + '<label><input type="radio" name="trans_r" value="cut" '+(trans==='cut'?'checked':'')+' onchange="setCueProp(\'transition\',\'cut\');renderInspector()"> cut</label>'
@@ -1315,7 +1368,7 @@ function renderInspector() {
             + '<div class="insp-field"><div class="insp-label">depth — standoff (m)</div>'+sliderRow('trackDepth',0.5,15,0.1,trackDepth,'m')+'</div>'
             + '<div class="insp-field"><div class="insp-label">height (m)</div>'+sliderRow('height',-1,15,0.1,ht,'m')+'</div>'
             + '<div class="insp-field"><div class="insp-label">v. angle (°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
-          : (!isNamedVP && !isAttached
+          : (!isNamedVP && !isFreeCamera && !isAttached
           ? '<div class="insp-section">framing</div>'
             + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
             + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
@@ -1383,6 +1436,16 @@ function setCueProp(k, v) {
   }
 }
 
+// setFreeCameraName — updates cue.camera for the free_camera baked path.
+// Mirrors setNamedVP: also updates cue.label so the timeline block reflects the pick
+// immediately, since generic setCueProp only touches the label when k==='label'.
+function setFreeCameraName(camName) {
+  if (!_selCue) return;
+  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
+  cue.camera = camName;
+  cue.label = 'free camera ' + (camName || 'unset');
+  renderTimeline();
+}
 // setNamedVP — updates cue.viewpoint for the baked named VP path.
 // Also updates cue.label so the timeline block shows the VP name.
 // Called from the VP name text input in the inspector.
@@ -1533,7 +1596,13 @@ function applyShotPreset(shotValue) {
 
   var preset = SHOT_PRESETS[shotValue] || [3, 1.7, 0, -8, 0];
   cue.shot       = shotValue;
-  if (shotValue === 'agent_track') {
+  if (shotValue === 'free_camera') {
+    // Static, placed camera — no framing fields apply at all (position/orientation are
+    // fixed at placement time in Composer). Only cue.camera matters to the Loader.
+    delete cue.distance; delete cue.height; delete cue.hAngle; delete cue.vAngle;
+    delete cue.roll;     delete cue.trackOffset; delete cue.trackOffsetEnd; delete cue.trackDepth;
+    if (cue.camera === undefined) cue.camera = '';
+  } else if (shotValue === 'agent_track') {
     // Dedicated field set — lateral offset is signed and doesn't fit the generic
     // positive-only distance slider, so agent_track uses its own fields rather
     // than reusing distance/hAngle. See renderInspector's isAgentTrack block.
@@ -1569,7 +1638,9 @@ function applyShotPreset(shotValue) {
   // Ensure subject is set — if missing, default to first agent.
   // This fixes the case where a cue was restored from XML without a subject= attribute.
   if (!cue.subject) cue.subject = AGENTS[0] || '';
-  cue.label = shotValue.replace(/_/g,' ') + (cue.subject ? ' ' + cue.subject : '');
+  cue.label = (shotValue === 'free_camera')
+    ? 'free camera ' + (cue.camera || 'unset')
+    : shotValue.replace(/_/g,' ') + (cue.subject ? ' ' + cue.subject : '');
   renderTimeline();
   renderInspector();
   drawStage();
@@ -1895,11 +1966,12 @@ window.addEventListener('message', function(evt) {
   if (evt.data.type === 'mccf_scene_data') {
     var d = evt.data.data || {};
     if (d.agents   && d.agents.length)   AGENTS   = d.agents;
+    if (d.cameras)                       CAMERAS  = d.cameras; // Day 64: may legitimately be empty — no fallback to a placeholder list
     if (d.wps      && d.wps.length)      WPS      = d.wps;
     if (d.views    && d.views.length)    VIEWS    = d.views;
     if (d.clips    && d.clips.length)    CLIPS    = d.clips;
     if (d.triggers && d.triggers.length) TRIGGERS = d.triggers;
-    if (d.sceneEnd)                      SCENE_END = d.sceneEnd;
+    if (d.sceneEnd)                      _sceneEndFloor = d.sceneEnd;
     // If still showing hardcoded stub tracks, replace with clean empty tracks
     // (saved scenes will have already called mccf_load_cues before this)
     if (_tracksAreStub) {

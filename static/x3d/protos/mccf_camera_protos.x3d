@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
+<X3D profile="Immersive" version="4.0">
+<head><meta name="title" content="MCCF Camera Proto Library"/>
+<meta name="generator" content="MCCF — Day 64 agent_orbit conversion"/>
+<meta name="info" content="Shared PROTO library for MCCF camera shot types. Referenced by scene files via ExternProtoDeclare (XML encoding — not the classic-encoding EXTERNPROTO keyword), never edited per-scene. Add new shot types here as new ProtoDeclare blocks; scenes only ever change which ExternProtoDeclares they declare and which fields a ProtoInstance overrides."/>
+</head>
+<Scene>
+
+<!--
+  AgentOrbitCamera — Day 64 conversion of the agent_orbit shot type from hand-templated
+  vessel XML (buildAX3D in mccf_scene_composer.html) to a real X3D proto.
+
+  Behavior is unchanged from the pre-conversion version: a camera parented inside the
+  avatar's own Transform, computing a RELATIVE offset around local origin only. The
+  avatar's world motion is inherited for free via ordinary scene-graph parenting — this
+  proto does no tracking math and polls nothing, same as before.
+
+  What changed structurally: the four internal vessel nodes (Transform, Viewpoint,
+  TimeSensor, two Interpolators) and their four ROUTEs used to be separate top-level
+  DEFs the Loader reached individually via getNamedNode. The SAI-into-proto test (Day 63)
+  confirmed internal proto DEFs are unreachable from outside a proto instance — so those
+  nodes now live inside ProtoBody, wired with static IS connections and static ROUTEs
+  that never need runtime addRoute calls. The Loader talks to exactly one exposed
+  interface instead of five internal node lookups.
+
+  Exposed fields map directly onto what _executeAgentOrbit already computes per cue:
+  key/keyValue/oriKeyValue take the same keyframe arrays it already builds; cycleInterval/
+  loop/startTime/enabled replace direct camTimer.field writes; set_bind replaces
+  vpOrbit.set_bind = true. initialTranslation/initialRotation replace the manual
+  camXform.getField(...).setValue(...) calls used to avoid a first-frame snap before the
+  TimeSensor's own fraction_changed=0 event lands.
+-->
+<ProtoDeclare name="AgentOrbitCamera">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation" value="0 3.2 8.6"/>
+    <field accessType="inputOutput" type="SFRotation" name="initialRotation"    value="0 1 0 0"/>
+    <field accessType="inputOutput" type="MFFloat"    name="key"               value=""/>
+    <field accessType="inputOutput" type="MFVec3f"    name="keyValue"          value=""/>
+    <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"       value=""/>
+    <field accessType="inputOutput" type="SFTime"     name="cycleInterval"     value="4"/>
+    <field accessType="inputOutput" type="SFBool"     name="loop"              value="false"/>
+    <field accessType="inputOutput" type="SFBool"     name="enabled"           value="false"/>
+    <field accessType="inputOutput" type="SFTime"     name="startTime"         value="0"/>
+    <field accessType="inputOutput" type="SFString"   name="description"      value="Orbit"/>
+    <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+  </ProtoInterface>
+  <ProtoBody>
+
+    <Transform DEF="CamXform" translation="0 3.2 8.6" rotation="0 1 0 0">
+      <IS>
+        <connect nodeField="translation" protoField="initialTranslation"/>
+        <connect nodeField="rotation"    protoField="initialRotation"/>
+      </IS>
+      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true" description="Orbit">
+        <IS>
+          <connect nodeField="description" protoField="description"/>
+          <connect nodeField="set_bind"    protoField="set_bind"/>
+        </IS>
+      </Viewpoint>
+    </Transform>
+
+    <TimeSensor DEF="Timer" cycleInterval="4" loop="false" enabled="false">
+      <IS>
+        <connect nodeField="cycleInterval" protoField="cycleInterval"/>
+        <connect nodeField="loop"          protoField="loop"/>
+        <connect nodeField="enabled"       protoField="enabled"/>
+        <connect nodeField="startTime"     protoField="startTime"/>
+      </IS>
+    </TimeSensor>
+
+    <PositionInterpolator DEF="PosInterp" key="0" keyValue="0 3.2 8.6">
+      <IS>
+        <connect nodeField="key"      protoField="key"/>
+        <connect nodeField="keyValue" protoField="keyValue"/>
+      </IS>
+    </PositionInterpolator>
+
+    <OrientationInterpolator DEF="OriInterp" key="0" keyValue="0 1 0 0.0001">
+      <IS>
+        <connect nodeField="key"      protoField="key"/>
+        <connect nodeField="keyValue" protoField="oriKeyValue"/>
+      </IS>
+    </OrientationInterpolator>
+
+    <!-- Static, structural ROUTEs — always present, no longer wired at runtime by the Loader. -->
+    <ROUTE fromNode="Timer"     fromField="fraction_changed" toNode="PosInterp" toField="set_fraction"/>
+    <ROUTE fromNode="Timer"     fromField="fraction_changed" toNode="OriInterp" toField="set_fraction"/>
+    <ROUTE fromNode="PosInterp" fromField="value_changed"    toNode="CamXform"  toField="set_translation"/>
+    <ROUTE fromNode="OriInterp" fromField="value_changed"    toNode="CamXform"  toField="set_rotation"/>
+
+  </ProtoBody>
+</ProtoDeclare>
+
+<!--
+  FreeCamera — Day 64, added alongside the agent_orbit conversion for the new grid-based
+  free-camera placement UI in Composer. Class 3 of the Day 63 three-class camera model:
+  "free/world-space compute-once, unchanged, correct by design." No TimeSensor, no
+  Interpolators, no runtime wiring from the Loader at all beyond binding — this camera
+  never moves once placed.
+
+  Orientation is yaw-then-pitch, composed via two nested Transforms rather than a single
+  hand-derived combined axis-angle rotation: the outer Transform holds world position and
+  rotates about the world Y axis (yaw), the inner Transform is its child and rotates about
+  its own local X axis (pitch). Composer supplies both as plain single-axis SFRotation
+  values (e.g. "0 1 0 <radians>" / "1 0 0 <radians>") — ordinary X3D parent/child rotation
+  composition does the rest. Deliberately avoids combining yaw+pitch into one custom
+  axis-angle computation in JS, which would need to be re-derived and re-verified rather
+  than relying on well-understood scene-graph nesting.
+
+  Binding/triggering a placed free camera during playback (an Events Editor cue, or a
+  "goto" button alongside VP_Overview/VP_Origin) is NOT wired yet — this proto only covers
+  placement + export. Follow-up, not done here.
+-->
+<ProtoDeclare name="FreeCamera">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"    name="position"    value="0 1.7 0"/>
+    <field accessType="inputOutput" type="SFRotation" name="yaw"         value="0 1 0 0"/>
+    <field accessType="inputOutput" type="SFRotation" name="pitch"       value="1 0 0 0"/>
+    <field accessType="inputOutput" type="SFString"   name="description" value="Free Camera"/>
+    <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+  </ProtoInterface>
+  <ProtoBody>
+    <Transform DEF="YawXform">
+      <IS>
+        <connect nodeField="translation" protoField="position"/>
+        <connect nodeField="rotation"    protoField="yaw"/>
+      </IS>
+      <Transform DEF="PitchXform">
+        <IS>
+          <connect nodeField="rotation" protoField="pitch"/>
+        </IS>
+        <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0" jump="true" description="Free Camera">
+          <IS>
+            <connect nodeField="description" protoField="description"/>
+            <connect nodeField="set_bind"    protoField="set_bind"/>
+          </IS>
+        </Viewpoint>
+      </Transform>
+    </Transform>
+  </ProtoBody>
+</ProtoDeclare>
+
+<!--
+  AgentTrackCamera — Day 64, converted alongside AgentOrbitCamera. Identical mechanism,
+  different math producer: _executeAgentTrack (mccf_x3d_loader.html) lerps a lateral
+  offset rather than sweeping a full orbit, but the vessel structure — Transform/
+  Viewpoint/TimeSensor/2x Interpolator, static IS connections, static ROUTEs — is exactly
+  the same shape as AgentOrbitCamera above. Kept as a genuinely separate proto (not a
+  parameterized reuse of AgentOrbitCamera) because the two are conceptually distinct
+  shot types with independent authoring parameters in the Events Editor, even though the
+  underlying plumbing is a copy-paste of the same pattern.
+-->
+<ProtoDeclare name="AgentTrackCamera">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation" value="-3 1.7 4"/>
+    <field accessType="inputOutput" type="SFRotation" name="initialRotation"    value="0 1 0 0"/>
+    <field accessType="inputOutput" type="MFFloat"    name="key"               value=""/>
+    <field accessType="inputOutput" type="MFVec3f"    name="keyValue"          value=""/>
+    <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"       value=""/>
+    <field accessType="inputOutput" type="SFTime"     name="cycleInterval"     value="4"/>
+    <field accessType="inputOutput" type="SFBool"     name="loop"              value="false"/>
+    <field accessType="inputOutput" type="SFBool"     name="enabled"           value="false"/>
+    <field accessType="inputOutput" type="SFTime"     name="startTime"         value="0"/>
+    <field accessType="inputOutput" type="SFString"   name="description"      value="Track"/>
+    <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+  </ProtoInterface>
+  <ProtoBody>
+
+    <Transform DEF="CamXform" translation="-3 1.7 4" rotation="0 1 0 0">
+      <IS>
+        <connect nodeField="translation" protoField="initialTranslation"/>
+        <connect nodeField="rotation"    protoField="initialRotation"/>
+      </IS>
+      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true" description="Track">
+        <IS>
+          <connect nodeField="description" protoField="description"/>
+          <connect nodeField="set_bind"    protoField="set_bind"/>
+        </IS>
+      </Viewpoint>
+    </Transform>
+
+    <TimeSensor DEF="Timer" cycleInterval="4" loop="false" enabled="false">
+      <IS>
+        <connect nodeField="cycleInterval" protoField="cycleInterval"/>
+        <connect nodeField="loop"          protoField="loop"/>
+        <connect nodeField="enabled"       protoField="enabled"/>
+        <connect nodeField="startTime"     protoField="startTime"/>
+      </IS>
+    </TimeSensor>
+
+    <PositionInterpolator DEF="PosInterp" key="0" keyValue="-3 1.7 4">
+      <IS>
+        <connect nodeField="key"      protoField="key"/>
+        <connect nodeField="keyValue" protoField="keyValue"/>
+      </IS>
+    </PositionInterpolator>
+
+    <OrientationInterpolator DEF="OriInterp" key="0" keyValue="0 1 0 0.0001">
+      <IS>
+        <connect nodeField="key"      protoField="key"/>
+        <connect nodeField="keyValue" protoField="oriKeyValue"/>
+      </IS>
+    </OrientationInterpolator>
+
+    <ROUTE fromNode="Timer"     fromField="fraction_changed" toNode="PosInterp" toField="set_fraction"/>
+    <ROUTE fromNode="Timer"     fromField="fraction_changed" toNode="OriInterp" toField="set_fraction"/>
+    <ROUTE fromNode="PosInterp" fromField="value_changed"    toNode="CamXform"  toField="set_translation"/>
+    <ROUTE fromNode="OriInterp" fromField="value_changed"    toNode="CamXform"  toField="set_rotation"/>
+
+  </ProtoBody>
+</ProtoDeclare>
+
+</Scene>
+</X3D>
