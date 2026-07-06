@@ -1,12 +1,31 @@
 # MCCF HAnim Behavior Activation — Design Specification
 ## From Field Values to Scene Graph Motion
 
-**Version:** 1.1.0  
-**Prepared:** Day 23 — 2026-05-22  
-**Updated:** Day 61 — 2026-06-28  
-**Status:** DESIGN EXTENDED — authored override, Fallback Principle, persistence notes added  
-**Reference files:** `mccf_x3d_loader.html`, `mccf_cultivar_lambda.py`, `mccf_hotHouse.py`  
+**Version:** 1.2.0
+**Prepared:** Day 23 — 2026-05-22
+**Updated:** Day 61 — 2026-06-28 — authored override, Fallback Principle, persistence notes added
+**Updated:** Day 65 — 2026-07-06 — corrected SAI mechanism throughout (see §0), resolved §8.1, added live-test confirmation
+**Status:** Tasks 1–5 implemented and confirmed live (Day 65). Tasks 6b/6c partially designed, not yet built.
+**Reference files:** `mccf_x3d_loader.html`, `mccf_cultivar_lambda.py`, `mccf_hotHouse.py`
 **Avatar reference:** `JinLOA4Animated.x3d` (W3C HAnim examples repository)
+**Companion spec:** `MCCF_Timeline_Scheduling_Architecture.md` (Day 65) — governs *when* authored behavior overrides fire; this spec governs *why* the field selects a clip and *how* the SAI write happens. The two are independent; do not conflate them.
+
+---
+
+## 0. Day 65 Correction Notice — Read This First
+
+**Every code sample in this document originally used `startTime`/`stopTime` to switch behavior timers. This was wrong, and the error persisted through the Day 61 revision despite being empirically contradicted five weeks earlier.**
+
+`mccf_behavior_spec.md` (Day 25) already stated plainly: *"`enabled=true/false` is the ONLY working SAI mechanism in X_ITE. `startTime`, `stopTime` do NOT work for behavior switching. Do not use them."* The actual shipped code in `mccf_x3d_loader.html` has always used `enabled=true/false` and carries this exact comment at the site of every write:
+
+```javascript
+// MECHANISM (confirmed Day 25): enabled=true/false is the correct SAI path.
+// startTime/stopTime do NOT work in X_ITE for behavior switching.
+```
+
+This document's Task 3/4 pseudocode, however, still specified `targetNode.startTime = now + 0.05` and `node.stopTime = now + 0.01` as of the Day 61 update — and §8.1 posed the already-answered question to the W3C HAnim WG as if it were still open. Every code sample below has been corrected to match what was actually built and confirmed working. If you are implementing from an older printed or cached copy of this document, discard it — the mechanism it describes does not work.
+
+This is also, independently, a caution worth stating plainly: a design doc surviving a dated "Updated" revision without being checked against the thing it describes is exactly how this kind of drift happens. Treat any code sample in any MCCF spec as provisional until cross-checked against the actual shipped file, not as settled fact because it has a version number.
 
 ---
 
@@ -22,7 +41,7 @@ This is a director calling a cue, not a puppeteer driving joints.
 This separation means:
 
 - HAnim authors work in HAnim editors, not MCCF
-- MCCF authors set emotional thresholds, not joint rotations  
+- MCCF authors set emotional thresholds, not joint rotations
 - The same HAnim file can serve multiple cultivars in the same scene
 - Improving the HAnim file never requires touching MCCF code
 
@@ -51,6 +70,7 @@ separate design task (see Section 9). This spec covers **behavioral clip selecti
 - LOA 2 static avatar behavior (deferred — not needed now)
 - `<Receptivity>` extension from the Relational Dynamics spec
   (independent track, does not block behavior activation)
+- **Scheduling/timing of authored overrides** — see `MCCF_Timeline_Scheduling_Architecture.md` (Day 65). That spec governs *when* an authored cue fires; this spec governs *what* fires and *why* the field would have chosen something else.
 
 ### Architecture invariants — never violated
 These carry forward from the Day 23 session handoff and are restated here for
@@ -72,7 +92,7 @@ Additional invariant introduced by this spec:
 Behavior clip selection — driven by observed_cv, never by phi or eps alone
 Timer instance names   — suffixed with _AgentSafeName for multi-instance scenes
 Behavior state         — tracked per agent in JS, not in Python
-Clip change            — stop all clips, start selected clip (mutual exclusion)
+Clip change            — enabled=false on all others, enabled=true on selected (mutual exclusion)
 ```
 
 ---
@@ -120,6 +140,13 @@ fire `touchTime → set_startTime` / `touchTime → set_stopTime` ROUTEs for mut
 exclusion between clips. MCCF replaces this user-click mechanism with SAI writes
 from the loader's behavior selection function. The ROUTEs remain in the file and
 are harmless; the `TouchSensor` nodes become inactive during MCCF playback.
+
+Note (Day 65): the file's own internal ROUTE mechanism uses `startTime`/`stopTime`
+between its own TouchSensor and TimeSensor nodes — that is a different code path
+(pure X3D event routing, evaluated inside the browser's own event graph) from an
+*external SAI script* writing to those same fields from JavaScript. The former
+works; the latter, per Day 25, does not reliably drive a clean switch in X_ITE.
+This is not a contradiction — it is two different mechanisms sharing field names.
 
 ---
 
@@ -169,8 +196,8 @@ no other clip's conditions are met. Defaults to `"Default"` which maps to `Defau
 
 ### 4.3 Selection algorithm
 
-Evaluated on every hothouse poll tick (HOTHOUSE_MS interval, default 500ms) per agent.
-Only fires SAI writes when the selected clip changes — not on every tick.
+Evaluated whenever field state (`observed_cv`) updates for an agent. Only fires
+SAI writes when the selected clip changes — not on every update.
 
 ```
 function selectBehaviorClip(agentName, observed_cv, clips, defaultClipName):
@@ -212,6 +239,10 @@ is applied. Once a clip is active, it remains active until the relevant CV value
 has moved at least 0.03 past the boundary that would trigger a switch. This is
 implemented as a per-agent boundary memory, not as a change to the authored thresholds.
 
+Confirmed in the shipped implementation as a widened condition window on the
+*currently playing* clip only (`_BEHAV_HYST`), rather than a separately tracked
+per-channel boundary-memory object — functionally equivalent, simpler to implement.
+
 ---
 
 ## 5. Multi-Instance Timer Naming
@@ -230,17 +261,34 @@ by underscores — identical to the `safeId` already computed in the loader for
 **Examples:**
 ```
 WalkTimer_Cindy        // Cindy's walk timer
-WalkTimer_Anna         // Anna's walk timer (same mesh, independent instance)
+WalkTimer_Salida       // Salida's walk timer (independent instance, different avatar file)
 DefaultTimer_Cindy
-DefaultTimer_Anna
+DefaultTimer_Salida
 ```
 
-**Implementation note for scene authoring:**
-When an avatar is placed in the Scene Composer, the loader already renames
-`Timer_1` → `Timer_1_{AgentSafeName}` and `Arrival_` nodes correspondingly.
-The behavior clip TimeSensors (`DefaultTimer`, `WalkTimer`, etc.) must receive
-the same suffixing treatment at placement time. This is a one-line addition to
-the avatar placement code in `mccf_x3d_loader.html`.
+**Implementation note (Day 65 confirmed):** the scene X3D declares these as
+`IMPORT ... AS` aliases from each agent's Inline HAnim file:
+
+```xml
+<IMPORT inlineDEF="HAnim_Cindy"  exportedDEF="WalkTimer" AS="WalkTimer_Cindy"/>
+<IMPORT inlineDEF="HAnim_Salida" exportedDEF="WalkTimer" AS="WalkTimer_Salida"/>
+```
+
+The Loader resolves these via `scene.getImportedNode(base + '_' + agentSafeName)`
+in a retry loop (`pbActivateX3DTimers`), building the `_behaviorTimerMap[agentSafeName]`
+JS-side map described below. This is the approach this document's original Task 2
+flagged as the safer fallback if DEF-renaming wasn't supported by X_ITE's SAI — it
+was not, and the fallback is what was built.
+
+**Day 65 live-test finding:** this mechanism resolved correctly for Cindy on the
+first attempt in a real Play All run, mapping all eight timer bases immediately.
+The identical code path failed all twenty retry attempts for Salida in the same
+run. Since the code, timing, and scene context were identical between the two
+agents, this isolates the defect to the content of Salida's underlying HAnim file
+(`SalidaAnimations_repaired_test.x3d`) — it very likely does not expose the same
+TimeSensor/EXPORT structure `cindy_hanim.x3d` does. **This is an asset-repair task,
+not a defect in the mechanism described in this section**, which is now confirmed
+working end-to-end for at least one real agent in a real scene.
 
 ---
 
@@ -248,14 +296,22 @@ the avatar placement code in `mccf_x3d_loader.html`.
 
 These are ordered by dependency. Each task is a discrete, testable unit.
 
+**Status as of Day 65: Tasks 1–5 are implemented and confirmed working in the
+shipped `mccf_x3d_loader.html` (verified by direct code inspection and by a live
+Play All test showing Cindy's full clip chain — timer mapping, DefaultTimer start,
+walk/idle switching via `_wirePathTimerBehavior` — functioning correctly). The
+task descriptions below are retained for reference and because the corrected SAI
+mechanism (§0) applies to all of them; treat this section as documentation of what
+was built, not a to-do list, except where marked otherwise.**
+
 ---
 
 ### Task 1 — `mccf_cultivar_lambda.py`: `<Behaviors>` parse and serialize
 
-**File:** `mccf_cultivar_lambda.py`  
-**Effort:** Small — one session
+**File:** `mccf_cultivar_lambda.py`
+**Status:** Implemented (Day 65 confirms `behavior_clips` arriving correctly via the cultivar API and populating `_agentBehaviorClips` at arc-record time)
 
-**Add to `CultivarDefinition` dataclass:**
+**`CultivarDefinition` dataclass:**
 ```python
 # Behavior clip table — optional, loaded from <Behaviors> element
 # List of dicts: {name, timerDEF, loop, priority, E_min, E_max, B_min, B_max,
@@ -264,7 +320,7 @@ behavior_clips: list = field(default_factory=list)
 behavior_default: str = "Default"
 ```
 
-**Add to `_from_element()`:**
+**`_from_element()`:**
 ```python
 beh_el = root.find("{*}Behaviors")
 behavior_default = "Default"
@@ -287,7 +343,7 @@ if beh_el is not None:
         behavior_clips.append(clip)
 ```
 
-**Add to `to_xml()`** (after `<HAnimFigure>` block):
+**`to_xml()`** (after `<HAnimFigure>` block):
 ```python
 if self.behavior_clips:
     lines.append('')
@@ -305,190 +361,138 @@ if self.behavior_clips:
     lines.append('  </Behaviors>')
 ```
 
-**Add to `to_dict()`:**
+**`to_dict()` / `from_dict()`:**
 ```python
 "behavior_clips":   self.behavior_clips,
 "behavior_default": self.behavior_default,
 ```
 
-**Add to `from_dict()`:**
-```python
-behavior_clips=data.get("behavior_clips", []),
-behavior_default=data.get("behavior_default", "Default"),
-```
-
 ---
 
-### Task 2 — `mccf_x3d_loader.html`: TimeSensor suffix at avatar placement
+### Task 2 — `mccf_x3d_loader.html`: TimeSensor resolution at avatar placement
 
-**File:** `mccf_x3d_loader.html`  
-**Effort:** Small — add to existing avatar placement code  
-**Search target:** The section that renames `Timer_1` and `Arrival_` nodes
-at placement (currently in `pbActivateX3DTimers` or avatar load callback).
-
-When a LOA 4 HAnim avatar is placed, find all TimeSensor nodes whose DEF names
-match the known behavior clip names and rename them with the agent suffix:
+**File:** `mccf_x3d_loader.html`
+**Status:** Implemented, as the `getImportedNode` retry-loop approach (see §5) rather than the DEF-rename approach originally proposed here — confirmed working for Cindy, confirmed failing for Salida due to avatar-file content (§5).
 
 ```javascript
-const BEHAVIOR_TIMER_BASES = [
+var BEHAVIOR_TIMER_BASES = [
     'DefaultTimer','PitchTimer','YawTimer','RollTimer',
     'WalkTimer','RunTimer','JumpTimer','KickTimer'
 ];
-
-function suffixBehaviorTimers(scene, agentSafeName) {
-    BEHAVIOR_TIMER_BASES.forEach(function(base) {
-        const node = scene.getNamedNode(base);
-        if (node) {
-            // X_ITE SAI: rename by setting DEF — confirm API before implementing
-            // Fallback: maintain a JS map {baseName: instanceNode} per agent
-            _behaviorTimerMap[agentSafeName] = _behaviorTimerMap[agentSafeName] || {};
-            _behaviorTimerMap[agentSafeName][base] = node;
-        }
-    });
-}
 ```
 
-**Implementation note:** X_ITE's SAI may not expose a DEF rename API. The fallback
-is to maintain a JS-side map `_behaviorTimerMap[agentSafeName][baseDEF] → node`
-that resolves the correct instance without requiring a scene-graph rename. This is
-the safer approach and should be implemented first. Confirm with X_ITE SAI docs
-whether `node.DEF = newName` is supported.
+The safer fallback flagged in the original version of this task — a JS-side map
+resolved via `getImportedNode` rather than a DEF-rename API — is what was built,
+inside `pbActivateX3DTimers`, populating `_behaviorTimerMap[agentSafeName][base]`.
 
 ---
 
 ### Task 3 — `mccf_x3d_loader.html`: `selectBehaviorClip()` and `applyBehaviorClip()`
 
-**File:** `mccf_x3d_loader.html`  
-**Effort:** Medium — one session  
-**Location:** Add after `applyHotHouseData()`, call from `applyHotHouseData()`
+**File:** `mccf_x3d_loader.html`
+**Status:** Implemented, confirmed working for Cindy Day 65. **Mechanism corrected from the original Task 3 text — see §0.**
 
-**State variables to add (top of script):**
+**State variables (as shipped):**
 ```javascript
-let _agentCurrentClip    = {};   // {agentSafeName: clipName}
-let _agentLastLoopClip   = {};   // {agentSafeName: clipName} — for oneshot return
-let _agentClipHysteresis = {};   // {agentSafeName: {ch: lastBoundaryValue}}
-let _behaviorTimerMap    = {};   // {agentSafeName: {timerDEF: node}}
-let _agentBehaviorClips  = {};   // {agentSafeName: {clips:[], default:str}}
-                                 // populated at arc/record time from cultivar API
+var _agentCurrentClip    = {};   // {agentSafeName: clipName}
+var _agentLastLoopClip   = {};   // {agentSafeName: clipName} — for oneshot return
+var _behaviorTimerMap    = {};   // {agentSafeName: {timerDEF: node}}
+var _agentBehaviorClips  = {};   // {agentSafeName: {clips:[], default:str}}
+                                  // populated at _seedArcRecord (first waypoint per cultivar)
 ```
 
-**Core selection function:**
+**Core selection function (as shipped):**
 ```javascript
 function selectBehaviorClip(agentSafeName, cv) {
-    const config = _agentBehaviorClips[agentSafeName];
-    if (!config || !config.clips || !config.clips.length) return;
+  var config = _agentBehaviorClips[agentSafeName];
+  if (!config || !config.clips || !config.clips.length) return;
 
-    const clips   = config.clips;
-    const defName = config.default || 'Default';
-    const HYST    = 0.03;
+  var clips   = config.clips;
+  var defName = config.default || 'Default';
+  var current = _agentCurrentClip[agentSafeName];
 
-    function conditionMet(clip) {
-        for (const ch of ['E','B','P','S']) {
-            const val = cv[ch] || 0;
-            const minKey = ch+'_min', maxKey = ch+'_max';
-            if (clip[minKey] !== undefined && val < clip[minKey] - HYST) return false;
-            if (clip[maxKey] !== undefined && val > clip[maxKey] + HYST) return false;
-        }
-        return true;
+  function conditionMet(clip) {
+    var chs = ['E','B','P','S'];
+    for (var i = 0; i < chs.length; i++) {
+      var ch = chs[i];
+      var val = (cv && cv[ch] !== undefined) ? cv[ch] : 0.25;
+      var minKey = ch + '_min', maxKey = ch + '_max';
+      var hyst = (clip.name === current) ? _BEHAV_HYST : 0;   // widen for currently-playing clip
+      if (clip[minKey] !== undefined && val < clip[minKey] - hyst) return false;
+      if (clip[maxKey] !== undefined && val > clip[maxKey] + hyst) return false;
     }
+    return true;
+  }
 
-    const oneshots = clips.filter(c => !c.loop  && conditionMet(c));
-    const loopers  = clips.filter(c =>  c.loop  && conditionMet(c))
-                          .sort((a,b) => (b.priority||0) - (a.priority||0));
+  var oneshots = clips.filter(function(c) { return !c.loop  && conditionMet(c); });
+  var loopers  = clips.filter(function(c) { return  c.loop  && conditionMet(c); });
+  loopers.sort(function(a,b) { return (b.priority||0) - (a.priority||0); });
 
-    let selected;
-    if (oneshots.length) {
-        selected = oneshots.sort((a,b) => (b.priority||0) - (a.priority||0))[0];
-    } else if (loopers.length) {
-        selected = loopers[0];
-    } else {
-        selected = clips.find(c => c.name === defName) || clips[0];
-    }
+  var selected;
+  if (oneshots.length) {
+    oneshots.sort(function(a,b) { return (b.priority||0) - (a.priority||0); });
+    selected = oneshots[0];
+  } else if (loopers.length) {
+    selected = loopers[0];
+  } else {
+    selected = clips.find(function(c) { return c.name === defName; }) || clips[0];
+  }
 
-    if (!selected) return;
+  if (!selected) return;
+  if (selected.name === current) return;   // no change — skip SAI write
 
-    const current = _agentCurrentClip[agentSafeName];
-    if (current === selected.name) return;  // no change — skip SAI write
-
-    applyBehaviorClip(agentSafeName, selected, current);
+  applyBehaviorClip(agentSafeName, selected);
 }
 ```
 
-**Clip activation function:**
+**Clip activation function (as shipped — CORRECTED mechanism):**
 ```javascript
-function applyBehaviorClip(agentSafeName, clip, previousClipName) {
-    const timerMap = _behaviorTimerMap[agentSafeName];
-    if (!timerMap) return;
+function applyBehaviorClip(agentSafeName, clip) {
+  var timerMap = _behaviorTimerMap[agentSafeName];
+  if (!timerMap) return;
 
-    const scene = canvas.browser.currentScene;
-    const now   = _x3dNow(agentSafeName) || (performance.now() / 1000);
-
-    // Stop all other clips
-    Object.entries(timerMap).forEach(function([base, node]) {
-        if (node && base !== clip.timerDEF) {
-            try { node.stopTime = now + 0.01; } catch(e) {}
-        }
-    });
-
-    // Start selected clip
-    const targetNode = timerMap[clip.timerDEF];
-    if (!targetNode) {
-        console.warn('applyBehaviorClip: timer not found:', clip.timerDEF, agentSafeName);
-        return;
+  // MECHANISM (confirmed Day 25): enabled=true/false is the correct SAI path.
+  // startTime/stopTime do NOT work in X_ITE for behavior switching.
+  Object.keys(timerMap).forEach(function(base) {
+    if (base !== clip.timerDEF) {
+      try { timerMap[base].enabled = false; } catch(e) {}
     }
+  });
 
+  var targetNode = timerMap[clip.timerDEF];
+  if (!targetNode) {
+    console.warn('applyBehaviorClip: timer not found:', clip.timerDEF, agentSafeName);
+    return;
+  }
+
+  try {
+    targetNode.enabled = true;
+  } catch(e) {
+    console.warn('applyBehaviorClip: SAI write failed for', agentSafeName, clip.timerDEF, e);
+    return;
+  }
+
+  var previous = _agentCurrentClip[agentSafeName] || '(none)';
+  _agentCurrentClip[agentSafeName] = clip.name;
+
+  if (clip.loop) {
+    _agentLastLoopClip[agentSafeName] = clip.name;
+  } else {
+    // Oneshot: fire once, then return to last looping clip
+    var returnTo  = _agentLastLoopClip[agentSafeName] || 'Default';
+    var duration  = 5500;   // conservative fallback if cycleInterval unavailable
     try {
-        targetNode.loop      = clip.loop;
-        targetNode.startTime = now + 0.05;   // 50ms ahead — X_ITE timing safety margin
-    } catch(e) {
-        console.warn('applyBehaviorClip: SAI write failed:', e);
-        return;
-    }
-
-    // State tracking
-    if (clip.loop) {
-        _agentLastLoopClip[agentSafeName] = clip.name;
-    } else {
-        // Oneshot: schedule return to last loop clip after cycleInterval
-        // cycleInterval must be read from node or stored in clip definition
-        const duration = (targetNode.cycleInterval || 5.5) * 1000;
-        setTimeout(function() {
-            const returnTo = _agentLastLoopClip[agentSafeName];
-            if (returnTo && _agentCurrentClip[agentSafeName] === clip.name) {
-                const config = _agentBehaviorClips[agentSafeName];
-                const returnClip = (config.clips || []).find(c => c.name === returnTo);
-                if (returnClip) applyBehaviorClip(agentSafeName, returnClip, clip.name);
-            }
-        }, duration + 100);
-    }
-
-    _agentCurrentClip[agentSafeName] = clip.name;
-    console.log('behavior:', agentSafeName, previousClipName, '→', clip.name);
-}
-```
-
-**Integration into `applyHotHouseData()`:**
-
-After the existing material node writes (BodyMat_, GazeMat_, etc.), add:
-
-```javascript
-// Behavior clip selection from observed_cv
-// observed_cv is available from _lastFieldData; hotHouse data provides the
-// same channel values through morphWeight_emotion / animationSpeed etc.
-const fieldAgents = (window._lastFieldData || {}).agents || {};
-const agentFieldData = fieldAgents[agentName];
-if (agentFieldData && agentFieldData.observed_cv) {
-    selectBehaviorClip(suffix, agentFieldData.observed_cv);
-}
-// Fallback: construct cv from hotHouse channels if observed_cv not available
-else {
-    const cv = {
-        E: d.morphWeight_emotion || 0.25,
-        B: d.animationSpeed      || 0.25,
-        P: d.gazeDirectness      || 0.25,
-        S: d.socialProximity     || 0.25
-    };
-    selectBehaviorClip(suffix, cv);
+      var ci = targetNode.cycleInterval;
+      if (ci && ci > 0) duration = Math.round(ci * 1000);
+    } catch(e) {}
+    setTimeout(function() {
+      if (_agentCurrentClip[agentSafeName] !== clip.name) return;
+      var config = _agentBehaviorClips[agentSafeName];
+      if (!config) return;
+      var returnClip = (config.clips || []).find(function(c) { return c.name === returnTo; });
+      if (returnClip) applyBehaviorClip(agentSafeName, returnClip);
+    }, duration + 150);
+  }
 }
 ```
 
@@ -496,15 +500,13 @@ else {
 
 ### Task 4 — Load behavior clips at arc/record time
 
-**File:** `mccf_x3d_loader.html`  
-**Effort:** Small — add to `_seedArcRecord()`  
-**Purpose:** Populate `_agentBehaviorClips[safeName]` before playback begins
+**File:** `mccf_x3d_loader.html`
+**Status:** Implemented — confirmed by Day 65 console trace showing `behavior_clips` fetched from `GET /cultivars/<name>` and populating `_agentBehaviorClips` before playback.
 
-When `_seedArcRecord()` calls `GET /cultivars/{name}` to get the cultivar definition,
-the response now includes `behavior_clips` and `behavior_default` (Task 1). Store them:
+When `_seedArcRecord()` calls `GET /cultivars/{name}`, the response includes
+`behavior_clips` and `behavior_default` (Task 1). Stored as:
 
 ```javascript
-// Inside _seedArcRecord() after cultivar fetch:
 if (cultivarData.behavior_clips && cultivarData.behavior_clips.length) {
     _agentBehaviorClips[agentSafeName] = {
         clips:   cultivarData.behavior_clips,
@@ -517,12 +519,11 @@ if (cultivarData.behavior_clips && cultivarData.behavior_clips.length) {
         default: 'Default'
     };
 }
-// Start DefaultTimer immediately so avatar is animated before first waypoint
-const timerMap = _behaviorTimerMap[agentSafeName] || {};
-const defNode  = timerMap['DefaultTimer'];
+// Start DefaultTimer immediately (CORRECTED mechanism — enabled, not startTime)
+var timerMap = _behaviorTimerMap[agentSafeName] || {};
+var defNode  = timerMap['DefaultTimer'];
 if (defNode) {
-    defNode.loop      = true;
-    defNode.startTime = _x3dNow(agentSafeName) || (performance.now() / 1000);
+    defNode.enabled = true;
     _agentCurrentClip[agentSafeName]  = 'Default';
     _agentLastLoopClip[agentSafeName] = 'Default';
 }
@@ -532,14 +533,13 @@ if (defNode) {
 
 ### Task 5 — Reset cleanup
 
-**File:** `mccf_x3d_loader.html`  
-**Effort:** Trivial — add to `pbReset()`
+**File:** `mccf_x3d_loader.html`
+**Status:** Implemented.
 
 ```javascript
-// In pbReset(), after _pbCbGeneration++:
+// In pbReset()/pbPlayAll's state reset, before a new run:
 _agentCurrentClip    = {};
 _agentLastLoopClip   = {};
-_agentClipHysteresis = {};
 // Do NOT clear _behaviorTimerMap or _agentBehaviorClips —
 // those are populated at placement/arc-record and survive reset.
 ```
@@ -548,12 +548,8 @@ _agentClipHysteresis = {};
 
 ### Task 6 — Author Cindy's `<Behaviors>` table
 
-**File:** `Cindy.xml` (cultivar XML in cultivars/ directory)  
-**Effort:** Authoring — no code  
-**Purpose:** First live test of the behavior system
-
-Cindy's character: moderate-E, active, socially engaged. She moves. She should
-walk when behaviorally activated, stand attentively when calm, shift casually when idle.
+**File:** `Cindy.xml` (cultivar XML)
+**Status:** Confirmed live Day 65 — Cindy's clip chain fired correctly in a real Play All run.
 
 ```xml
 <Behaviors default="Default">
@@ -570,13 +566,13 @@ walk when behaviorally activated, stand attentively when calm, shift casually wh
 
 ---
 
-### Task 7 — Author Anna's `<Behaviors>` table
+### Task 7 — Author Salida's / Anna's `<Behaviors>` table
 
-**File:** `Anna.xml` (new cultivar XML, created when Anna is authored in Scene Composer)  
-**Effort:** Authoring — no code  
-**Character:** The Librarian. Delivers the opening monologue. Stationary. Postural.
-High-P. Low-B threshold for movement. She should almost never walk; when she does
-it is deliberate. Her behavioral range is attentive stance to formal address.
+**File:** cultivar XML for whichever agent is authored as the second character
+**Status:** Design note retained from the original "Anna" naming; the actual second
+agent placed and tested Day 65 was Salida. Same profile intent applies to whichever
+cultivar fills this narrative role — stationary, postural, high-P, low-B threshold
+for movement.
 
 ```xml
 <Behaviors default="Default">
@@ -587,12 +583,13 @@ it is deliberate. Her behavioral range is attentive stance to formal address.
 </Behaviors>
 ```
 
-Design note: Anna's `B_max="0.50"` for Default means she stays in idle stance
-for the bottom half of the B range. Her `Walk` threshold is 0.80 — very high.
-During monologue delivery the field will push her P up and keep B moderate,
-landing her in `Address` (PitchTimer — forward lean, attentive posture).
-She walks to her final waypoint under path control; behavioral B-driven walking
-is suppressed until her field shifts dramatically.
+Design note: `B_max="0.50"` for Default means the character stays in idle stance
+for the bottom half of the B range. The `Walk` threshold at `0.80` is deliberately
+high — during monologue delivery the field pushes P up and keeps B moderate,
+landing in `Address` (PitchTimer — forward lean, attentive posture). Path-driven
+walking to a waypoint is unaffected by this table (X3D `TimeSensor.enabled` for
+path segments is a separate mechanism from field-driven behavioral walking,
+per §1) — this table only governs *ambient* posture between path segments.
 
 ---
 
@@ -626,6 +623,12 @@ This inverts the usual game engine authoring model, where everything is
 scripted and the engine handles physics. In MCCF, the field is the default
 performer and the author is the exception-handler.
 
+**Day 65 note:** this principle is the reason `MCCF_Timeline_Scheduling_Architecture.md`
+explicitly excludes ambient behavior selection from its scope. A shared scene
+clock is for authored, discrete moments — putting the field's continuous,
+reactive texture onto a fixed clock would delete the exact property this
+section describes as the point of the system.
+
 ---
 
 ### 6b. Authored Behavior Override — Events Editor Integration
@@ -634,12 +637,18 @@ The Events Editor behavior track fires explicit clip selections at authored
 moments. These must take priority over field-driven selection for their
 duration, then yield back to the field.
 
+**Status: designed, not yet implemented.** When built, its *firing moment* should
+route through the scene-clock dispatch mechanism in `MCCF_Timeline_Scheduling_Architecture.md`
+rather than the trigger-string mechanism shown below, if precise timing matters
+for the cue. The `_agentAuthoredClip` override mechanism itself (what happens once
+it fires) is unaffected by which scheduling path invokes it.
+
 #### State variable
 
 ```javascript
 // {agentSafeName: {timerDEF, clipName, expiresAt}}
 // Set by authored cue; cleared when expiresAt is passed.
-// selectBehaviorClip() checks this first on every tick.
+// selectBehaviorClip() checks this first on every evaluation.
 var _agentAuthoredClip = {};
 ```
 
@@ -661,11 +670,9 @@ function selectBehaviorClip(agentSafeName, cv):
 
 #### Authored cue fires via EventCues behavior track
 
-When `fireEventCuesForTrigger()` processes a behavior cue:
-
 ```javascript
 // cue = { track:'behavior', agent:'Cindy', clip:'JumpTimer',
-//          dur:3, delay:0, trigger:'w2 arrive' }
+//          dur:3, delay:0, trigger:'w2 arrive' }   // or start_t/duration — see Timeline spec
 function _fireBehaviorEventCue(cue) {
   var safeName = (cue.agent||'').replace(/[^A-Za-z0-9_]/g,'_');
   var durationMs = ((cue.dur || 2) + (cue.delay || 0)) * 1000;
@@ -674,7 +681,7 @@ function _fireBehaviorEventCue(cue) {
     clipName:  cue.clip,
     expiresAt: Date.now() + durationMs
   };
-  // Fire immediately — don't wait for next poll tick
+  // enabled=true, not startTime — mechanism corrected per §0
   applyBehaviorClip(safeName, { timerDEF: cue.clip, loop: true });
 }
 ```
@@ -682,15 +689,9 @@ function _fireBehaviorEventCue(cue) {
 #### Expiry and return
 
 When the override expires, `selectBehaviorClip()` falls through to field-driven
-selection on the next poll tick. No explicit "return to last clip" call is needed —
-the field simply resumes selecting on the next tick. This is consistent with the
-one-shot clip return mechanism already in the spec (section 4.3).
-
-#### Events Editor cue schema addition
-
-The behavior cue already carries `agent` and `clip`. No schema change is needed.
-The `dur` field on the cue determines how long the authored override holds before
-yielding back to the field.
+selection on the next evaluation. No explicit "return to last clip" call is needed —
+the field simply resumes selecting. Consistent with the one-shot clip return
+mechanism already in section 4.3.
 
 #### Mutual exclusion with field-driven one-shots
 
@@ -754,24 +755,30 @@ determines what the field value means for each character's body.
 
 ## 8. W3C HAnim WG Review Points
 
-The following questions are appropriate for review by the HAnim Working Group
-(Don Brutzman, NPS, W3C HAnim):
+### 8.1 TimeSensor mutual exclusion via SAI — RESOLVED Day 65
 
-### 8.1 TimeSensor mutual exclusion via SAI
+~~Is there a preferred HAnim pattern for runtime clip switching via SAI that
+avoids the brief frame gap between stop and start? Does `stopTime`/`startTime`
+guarantee a clean transition?~~
 
-The MCCF approach stops all TimeSensors then starts the selected one. Is there
-a preferred HAnim pattern for runtime clip switching via SAI that avoids the
-brief frame gap between stop and start? Specifically: does `stopTime = now+0.01`
-followed by `startTime = now+0.05` guarantee a clean transition in compliant
-X3D browsers, or is there a blending mechanism available at LOA 4?
+**This question is withdrawn.** It was already answered empirically on Day 25,
+five weeks before the Day 61 revision of this document still posed it as open:
+`startTime`/`stopTime` do not work reliably for this purpose in X_ITE.
+`enabled=true` / `enabled=false` does, cleanly, with no observed frame-gap
+artifact across live testing including a real two-agent Play All run on Day 65.
+No WG input is needed on this point. Left here, struck through, as a record of
+the correction rather than a live question.
 
 ### 8.2 DEF renaming via SAI
 
 For multi-instance scenes (two agents sharing the same HAnim file), MCCF needs
 to address each agent's TimeSensor instances independently. The current design
-uses a JS-side map rather than SAI DEF renaming. Is there a supported SAI
-mechanism for addressing nodes by instance in X3D 4.0? Relevant to X_ITE
-(Holger Seelig, Savage Studio) as well.
+uses a JS-side map (`_behaviorTimerMap`, resolved via `getImportedNode` against
+`IMPORT ... AS` aliases declared in the scene X3D) rather than SAI DEF renaming.
+Confirmed working Day 65 for at least one agent (Cindy) in live testing. Is
+there a supported SAI mechanism for addressing nodes by instance in X3D 4.0
+that would be more direct than the IMPORT/AS + retry-resolution approach
+currently in use? Relevant to X_ITE (Holger Seelig, Savage Studio) as well.
 
 ### 8.3 Displacer activation for facial expression
 
@@ -791,6 +798,12 @@ correct TimeSensor/RotationInterpolator/ROUTE structure matching the
 `JinLOA4Animated.x3d` pattern. Is there an existing open-source LOA 4
 editor or reference workflow the WG would recommend as a starting point?
 
+**Day 65 relevance:** this question has gained urgency. Salida's behavior-timer
+resolution failure (§5) is very likely traceable to `SalidaAnimations_repaired_test.x3d`
+not matching the reference structure — a concrete, live example of exactly the
+gap this question is asking about. A reliable authoring workflow that guarantees
+structural conformance would have prevented this specific defect.
+
 ---
 
 ## 9. Future: Displacer Facial Animation (Deferred)
@@ -809,32 +822,35 @@ This design task requires:
 1. A reference LOA 4 HAnim file with displacer nodes (to be obtained from WG or authored)
 2. An HAnim editor module in Character Creator to author displacement shapes
 3. A `<FacialExpressions>` element in the cultivar XML (analogous to `<Behaviors>`)
-4. SAI write path: `displacerNode.displacements = [...]` or `weight` field write
+4. SAI write path: `displacerNode.displacements = [...]` or `weight` field write —
+   confirm against the Day 25/65 finding before assuming any specific field-write
+   pattern works; test empirically before writing it into a spec as settled.
 
 Estimated effort: one weekend for editor module, one session for MCCF integration.
-Not on critical path for Anna's monologue — behavioral clip selection alone is
-sufficient for the opening scene.
+Not on critical path for the opening scene — behavioral clip selection alone is
+sufficient.
 
 ---
 
 ## 10. Implementation Order and Session Estimate
 
-| Task | File | Estimated effort | Dependency |
+| Task | File | Status (Day 65) | Dependency |
 |---|---|---|---|
-| 1 | `mccf_cultivar_lambda.py` — `<Behaviors>` parse/serialize | 1 session | none |
-| 2 | `mccf_x3d_loader.html` — timer suffix at placement | 0.5 session | none |
-| 3 | `mccf_x3d_loader.html` — `selectBehaviorClip()` + `applyBehaviorClip()` | 1 session | Tasks 1, 2 |
-| 4 | `mccf_x3d_loader.html` — load clips at arc/record | 0.5 session | Tasks 1, 3 |
-| 5 | `mccf_x3d_loader.html` — reset cleanup | trivial | Task 3 |
-| 6 | Author Cindy's `<Behaviors>` table | authoring only | Tasks 1–5 |
-| 7 | Author Anna's `<Behaviors>` table | authoring only | Task 6 |
-| 8 | `mccf_x3d_loader.html` — `_fireBehaviorEventCue()` + `_agentAuthoredClip` override | 0.5 session | Tasks 3, 4 |
-| 9 | Events Editor — verify behavior track cue fires override correctly | testing only | Task 8 |
-| 10 | Villain constitutional profiles | design + authoring | Tasks 6, 7 |
-| 11 | Chorus persistence / cross-scene accrual | design + new API | Tasks 1–9 |
+| 1 | `mccf_cultivar_lambda.py` — `<Behaviors>` parse/serialize | Done | none |
+| 2 | `mccf_x3d_loader.html` — timer resolution at placement | Done | none |
+| 3 | `mccf_x3d_loader.html` — `selectBehaviorClip()` + `applyBehaviorClip()` | Done | Tasks 1, 2 |
+| 4 | `mccf_x3d_loader.html` — load clips at arc/record | Done | Tasks 1, 3 |
+| 5 | `mccf_x3d_loader.html` — reset cleanup | Done | Task 3 |
+| 6 | Cindy's `<Behaviors>` table | Done, confirmed live | Tasks 1–5 |
+| 7 | Second agent's `<Behaviors>` table | Authored; agent's own HAnim asset needs repair (§5) | Task 6 |
+| 8 | `_fireBehaviorEventCue()` + `_agentAuthoredClip` override | Designed, not built | Tasks 3, 4 |
+| 9 | Events Editor — verify behavior track cue fires override correctly | Blocked on Task 8 | Task 8 |
+| 10 | Villain constitutional profiles | Not started | Tasks 6, 7 |
+| 11 | Chorus persistence / cross-scene accrual | Not started | Tasks 1–9 |
 
-**Total estimated: 3–4 sessions** to full behavior activation including authored override.
-Tasks 10 and 11 are separate design sessions, not blocked by implementation.
+**Remaining estimated: 2–3 sessions** for Tasks 8–9 (authored override), assuming
+the Timeline spec's scheduling layer lands first or alongside. Tasks 10–11 remain
+separate design sessions, not blocked by implementation.
 
 ---
 
@@ -864,14 +880,16 @@ mccf_api.py    — arc/record seeds ϕ; couplers evolve ϵ; observed_cv = ϕ+ϵ
       ↓
 mccf_x3d_loader.html
   ├── Playback sequencer (waypointOrder, dwells, TTS, Chorus)
+  │     — WHEN this fires: MCCF_Timeline_Scheduling_Architecture.md (Day 65)
   ├── Hothouse polling loop → material node writes (BodyMat_, GazeMat_, etc.)
-  └── Behavior selection loop ← NEW (this spec)
+  └── Behavior selection loop ← THIS SPEC
             ↓
       selectBehaviorClip(agentSafeName, observed_cv)
             ↓
-      applyBehaviorClip → SAI writes → TimeSensor.startTime / stopTime
+      applyBehaviorClip → SAI writes → TimeSensor.enabled = true/false
             ↓
-JinLOA4Animated.x3d — TimeSensors own keyframe data, drive RotationInterpolators
+JinLOA4Animated.x3d (or per-agent equivalent) — TimeSensors own keyframe data,
+drive RotationInterpolators
             ↓
       HAnim joint rotations → visible avatar motion
 ```
@@ -884,4 +902,8 @@ MCCF never writes a joint rotation directly.
 *End of specification. Prepared Day 23 — 2026-05-22.*
 *Updated Day 61 — 2026-06-28: Added §6a Fallback Principle, §6b Authored Override,*
 *§6c Persistence/Accrual notes, villain constitutional profiles task, updated implementation table.*
-*For session continuity, paste alongside the Day 61 handoff at the start of the implementation session.*
+*Updated Day 65 — 2026-07-06: Corrected SAI mechanism from startTime/stopTime to enabled=true/false*
+*throughout (§0) — the original text contradicted mccf_behavior_spec.md's Day 25 finding and the*
+*actual shipped code. Resolved §8.1. Confirmed Tasks 1–6 working live for Cindy. Isolated Salida's*
+*behavior-timer failure to avatar-file content, not this mechanism. Cross-referenced the new*
+*MCCF_Timeline_Scheduling_Architecture.md for scheduling concerns, out of scope here.*

@@ -296,6 +296,13 @@ button.active { background: #4af0a8; color: #111; }
     <button id="pb-stop-btn" onclick="pbStop()" style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646; Stop</button>
     <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset + Replay</button>
   </div>
+  <div class="pb-row" style="margin-top:4px;align-items:center;gap:4px;">
+    <span style="font-size:10px;color:#6a8090;">Jump</span>
+    <select id="jump-agent" style="width:110px;font-size:11px;" onfocus="populateJumpAgents()"></select>
+    <input id="jump-step" type="number" min="1" value="1" style="width:48px;font-size:11px;">
+    <button onclick="pbJumpToWaypoint(document.getElementById('jump-agent').value, document.getElementById('jump-step').value)"
+      style="border-color:#e0a0f0;color:#e0a0f0;background:none;border:1px solid #e0a0f0;border-radius:3px;padding:3px 6px;font-family:monospace;font-size:11px;cursor:pointer;">&#8618; Jump &amp; Fire</button>
+  </div>
   <div style="margin-bottom:5px;">
     <button onclick="resetToStartPosition()" style="width:100%;border-color:#c080f0;color:#c080f0;background:none;border:1px solid #c080f0;border-radius:3px;padding:3px 6px;font-family:monospace;font-size:11px;cursor:pointer;">&#8602; Reset Position</button>
   </div>
@@ -1821,7 +1828,7 @@ function _buildPivotCacheFromSceneXml(doc) {
     refs.forEach(function(ref) {
       var wpName = ref.getAttribute('ref');
       if (wpName && posMap[wpName]) {
-        cache[stepNo] = posMap[wpName];
+        cache[stepNo] = { pos_x: posMap[wpName].pos_x, pos_z: posMap[wpName].pos_z, wpName: wpName };
         // Zone for waypoint (from _waypointZoneMap if already populated, or doc fallback)
         var zid = _waypointZoneMap[wpName] || _waypointZoneMap[wpName.toUpperCase()] || '';
         if (!zid) {
@@ -4154,6 +4161,7 @@ function _parseSceneZoneData() {
 
         // Build complete ordered pivot cache from path sequences
         _buildPivotCacheFromSceneXml(doc);
+        populateJumpAgents();
 
         // Parse EventCues for Loader SAI execution
         _parseEventCues(doc);
@@ -4327,6 +4335,91 @@ function _fireCouplerTick(sceneName) {
 // Per-session step-in-flight guard. Shared bool caused concurrent Arrival_ callbacks
 // to block each other. Keyed by session_id (or '__single__' for pbStep()).
 var _pbStepInFlight = {};
+// pbJumpToWaypoint — Day 65. The real gap pbStep always had: it advances the
+// server's conceptual step counter and fires cues "as if" the avatar arrived, but
+// NEVER moves the avatar's actual X3D Transform (that's normally driven frame-by-frame
+// by a TimeSensor+PositionInterpolator during real playback, which a discrete
+// server-round-trip step never runs). For camera cues parented to the avatar
+// (agent_orbit, agent_track — see mccf_camera_protos.x3d), a stale Transform means
+// the shot still "works" mechanically but frames whatever is actually there, which is
+// nowhere near where the test believes it is.
+//
+// This is a pure client-side jump — no server round trip, no dependency on the
+// session's sequential-only /arc/playback/step contract. It teleports instantly
+// (no walk animation) since the whole point is skipping the walk for fast iteration.
+// Fills the Jump agent picker from whatever _agentWaypointCache currently knows about —
+// same cache pbJumpToWaypoint reads from, so the dropdown can never offer an agent the
+// jump function can't actually resolve.
+function populateJumpAgents() {
+  var sel = document.getElementById('jump-agent');
+  if (!sel) return;
+  var current = sel.value;
+  var names = Object.keys(_agentWaypointCache);
+  sel.innerHTML = names.map(function(n) { return '<option value="' + n + '">' + n + '</option>'; }).join('');
+  if (names.indexOf(current) !== -1) sel.value = current;
+}
+
+async function pbJumpToWaypoint(agentSafeName, stepNo) {
+  stepNo = parseInt(stepNo, 10);
+  var cache = _agentWaypointCache[agentSafeName];
+  var entry = cache && cache[stepNo];
+  if (!entry) {
+    console.warn('[pbJump] no cached waypoint for', agentSafeName, 'step', stepNo,
+      '— known steps:', cache ? Object.keys(cache).join(',') : '(agent not found)');
+    return;
+  }
+
+  try {
+    var scene = canvas.browser.currentScene;
+    var avatarNodeName = 'Avatar_' + agentSafeName;
+    if (_x3dTimerActive && _x3dTimerActive[avatarNodeName]) {
+      console.warn('[pbJump] skipped — X3D TimeSensor is actively driving', avatarNodeName,
+        '(same guard as applyArcCV: writing translation here would fight the interpolator). Stop playback first.');
+      return;
+    }
+    var avatarNode = scene.getNamedNode(avatarNodeName);
+    if (!avatarNode) {
+      console.warn('[pbJump]', avatarNodeName, 'not found — re-export scene from Composer');
+      return;
+    }
+    var px = parseFloat(entry.pos_x) || 0, pz = parseFloat(entry.pos_z) || 0;
+    avatarNode.translation = new X3D.SFVec3f(px, 0, pz); // same direct-assignment pattern as applyArcCV
+    console.log('[pbJump]', agentSafeName, '→ step', stepNo, '(' + entry.wpName + ') teleported to', px, 0, pz);
+  } catch (e) {
+    console.warn('[pbJump] teleport failed:', e.message);
+    return;
+  }
+
+  // Keep _resolveSubjectPos's conceptual position consistent with the real teleport —
+  // same bookkeeping pbStep already does, just driven by the jump target instead of
+  // the server's sequential response.
+  _agentCurrentStep[agentSafeName] = stepNo;
+
+  // Best-effort zone OnEnter/OnExit — mirrors pbStep's block. Not load-bearing for
+  // camera testing (the main point of this function), kept for consistency.
+  try {
+    var zid = _waypointZoneMap[entry.wpName] || _waypointZoneMap[(entry.wpName||'').toUpperCase()] || '';
+    var prevZone = _agentZone[agentSafeName] || '';
+    if (zid && zid !== prevZone) {
+      if (prevZone) _fireZoneCommand(agentSafeName, prevZone, 'OnExit', stepNo);
+      _fireZoneCommand(agentSafeName, zid, 'OnEnter', stepNo);
+      _agentZone[agentSafeName] = zid;
+    }
+  } catch (eZone) { console.warn('[pbJump] zone command skipped:', eZone.message); }
+
+  // Fire this waypoint's cues via the same trusted, label-map-based resolution
+  // _resolveWpTriggerNames already uses for real arrivals — not the fragile global-
+  // index fallback, since we supply a real name candidate that resolves the same way
+  // a genuine server response's label/id would.
+  var candidates = _resolveWpTriggerNames({ label: entry.wpName, id: entry.wpName, name: entry.wpName, stepno: stepNo });
+  if (!candidates.length) {
+    console.warn('[pbJump] no trigger candidates resolved for', entry.wpName, '— cue will not fire');
+  }
+  candidates.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
+
+  _fireCouplerTick();
+}
+
 async function pbStep() {
   if (_pbStepInFlight['__single__']) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
   _pbStepInFlight['__single__'] = true;
@@ -4612,8 +4705,17 @@ function pbUpdateDisplay(state) {
         if (isX3DDriven) setTimeout(function(){ pbReleaseDwell(safeName2); }, 500);
       }
     }, ttsDelay);
-  } else if (isNewStep && isX3DDriven) {
-    // No dialogue at this waypoint — release dwell immediately so avatar keeps moving
+  } else if (isNewStep) {
+    // No dialogue at this waypoint — release dwell immediately so avatar keeps moving.
+    // Day 65 fix: this branch previously read `isX3DDriven` in its own condition
+    // (`else if (isNewStep && isX3DDriven)`), but isX3DDriven is a var only ever
+    // assigned inside the sibling if-block above — which by definition did NOT run
+    // if we reached this else-if. So isX3DDriven was always undefined here, and this
+    // branch — the ONLY thing that advances an agent past a dialogue-free waypoint —
+    // could never execute. Any waypoint with no authored dialogue (e.g. WP1, which
+    // has nothing to say yet since the agent hasn't arrived anywhere) stalled forever.
+    // Fix: drop the dead isX3DDriven from the guard; isX3DDriven2 below (already
+    // correctly computed, just previously unreachable) is the real check.
     var safeName3 = (wp.cultivar||'').replace(/[^A-Za-z0-9_]/g,'_');
     var isX3DDriven2 = !!_x3dTimerActive['Avatar_' + safeName3];
     if (isX3DDriven2) setTimeout(function(){ pbReleaseDwell(safeName3); }, 100);

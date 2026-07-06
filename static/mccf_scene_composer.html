@@ -40,6 +40,11 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
   border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
 .mtab:hover { color: var(--text); border-color: var(--dim); }
 .mtab.active { color: var(--warm); border-color: var(--warm); background: #1a1508; }
+/* Place tab's sub-nav — same look as the header's .mode-tabs but must wrap: the left
+   panel is far narrower than the header, so four buttons in one unwrapped flex row
+   ran past the panel edge and under the map canvas. */
+.place-subnav { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.place-subnav .mtab { font-size: 12px; padding: 3px 8px; flex: 0 0 auto; }
 .api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dim); }
 .api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
   color: var(--text); font-family: var(--mono); font-size: 14px; padding: 3px 8px; width: 160px; outline: none; }
@@ -169,16 +174,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   <div class="vbadge">V4</div>
   <div class="mode-tabs">
     <button class="mtab active" onclick="setMode('scene')">Scene</button>
-    <button class="mtab" onclick="setMode('zones')">Zones</button>
+    <button class="mtab" onclick="setMode('place')">Place</button>
     <button class="mtab" onclick="setMode('agents')">Agents</button>
-    <button class="mtab" onclick="setMode('waypoints')">Waypoints</button>
-    <button class="mtab" onclick="setMode('paths')">Paths</button>
     <button class="mtab" onclick="setMode('characters')">Characters</button>
     <button class="mtab" onclick="setMode('events')">Events</button>
     <button class="mtab" onclick="setMode('network')">Network</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
     <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
-    <button class="mtab" onclick="setMode('cameras')">Cameras</button>
   </div>
   <div class="api-row">
     <div class="sdot" id="sdot"></div>
@@ -250,6 +252,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:18px">Apply grid to begin.</div></div>
     <div class="sh">Zone Set</div>
     <div id="sc-zones" style="font-size:18px;color:var(--dim)">No zones placed.</div>
+  </div>
+  <div id="mode-place" style="display:none">
+    <div class="place-subnav">
+      <button class="mtab" id="place-tab-zones" onclick="setPlaceType('zones')">Zones</button>
+      <button class="mtab" id="place-tab-waypoints" onclick="setPlaceType('waypoints')">Waypoints</button>
+      <button class="mtab" id="place-tab-paths" onclick="setPlaceType('paths')">Paths</button>
+      <button class="mtab" id="place-tab-cameras" onclick="setPlaceType('cameras')">Cameras</button>
+    </div>
   </div>
   <div id="mode-zones" style="display:none">
     <div class="sh">Zones</div>
@@ -769,6 +779,36 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button>
     </div>
   </div>
+  <div id="detail-camera" style="display:none">
+    <div class="sh" style="margin-top:0">Free Camera</div>
+    <div id="cd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:#e0c860;margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="cd-pos" style="font-size:18px;color:var(--accent)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Facing</div><div id="cd-angle" style="font-size:18px;color:var(--dim)"></div></div>
+    <div class="btn-row">
+      <button class="btn cool" onclick="editCamera(selectedId)">Edit</button>
+      <button class="btn danger" onclick="deleteSelected('camera')">Delete</button>
+    </div>
+  </div>
+  <div id="detail-path" style="display:none">
+    <div class="sh" style="margin-top:0">Path</div>
+    <div id="pd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:#e0c860;margin-bottom:8px;"></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Agent</div><div id="pd-agent" style="font-size:18px;color:var(--accent)"></div></div>
+    <div class="dsect">
+      <div class="sh" style="margin:0 0 4px">Waypoint Order <span style="color:var(--danger)">* required</span></div>
+      <input type="number" id="pd-order" min="1" step="1" style="width:80px">
+      <div style="font-size:12px;color:var(--dim);margin-top:4px">Same number fires simultaneously. Higher number waits for lower group to complete. Missing = scene will not run.</div>
+    </div>
+    <div class="dsect">
+      <div class="sh" style="margin:0 0 4px">Waypoints (click a chip to remove)</div>
+      <div id="pd-seq" style="min-height:24px"></div>
+      <div class="sh" style="margin:8px 0 4px">Add waypoint</div>
+      <div id="pd-wp-pick" style="max-height:120px;overflow:auto"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn pri" onclick="savePathEdit()">Save</button>
+      <button class="btn danger" onclick="deleteSelected('path')">Delete</button>
+    </div>
+  </div>
   <div id="detail-arc">
     <div class="sh" style="margin-top:0">Affective Arc</div>
     <canvas id="arc-canvas"></canvas>
@@ -1067,17 +1107,23 @@ function pollField(){
     panel.innerHTML=html;
   }).catch(function(){});
 }
+var _placeType='zones';  // remembers last-selected Place sub-tab across mode switches
 function setMode(m){
   mode=m;
-  var ms=['scene','zones','agents','waypoints','paths','characters','events','network','export','run','cameras'];
+  var ms=['scene','place','agents','characters','events','network','export','run'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
-  document.querySelectorAll('.mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
-  if(m==='paths')populatePathUI();
-  if(m==='waypoints')populateWPZones();
+  // Scoped to header — the Place tab's own sub-nav buttons also carry .mtab for shared
+  // styling, and would otherwise throw off this array's positional index matching.
+  document.querySelectorAll('header .mtab').forEach(function(b,i){b.classList.toggle('active',ms[i]===m);});
+  // Zones/Waypoints/Paths/Cameras used to be four separate major tabs (four copies of
+  // essentially the same grid-placement UI). Consolidated under one Place tab — their
+  // panels live outside mode-place in the DOM still, so visibility is driven here rather
+  // than by the generic ms loop above, which only knows about 'place' as a whole.
+  if(m==='place'){ setPlaceType(_placeType); }
+  else { ['zones','waypoints','paths','cameras'].forEach(function(n){document.getElementById('mode-'+n).style.display='none';}); }
   if(m==='agents'){loadAgents();}
   if(m==='run')populateRunUI();
   if(m==='network')populateNetworkUI();
-  if(m==='cameras')renderCameraList();
   if(m==='scene'||m==='export')refreshSceneList();
 
   // Full-bleed tool modes: Characters and Events take over the entire content area
@@ -1119,6 +1165,23 @@ function setMode(m){
   }
   drawScene();
 }
+// Switches between Zones/Waypoints/Paths/Cameras within the single Place tab.
+// Each panel's own internal markup/logic (startPlace, confirm*, render*List) is
+// untouched — this only owns which one is visible and which init call it needs.
+function setPlaceType(t){
+  _placeType=t;
+  ['zones','waypoints','paths','cameras'].forEach(function(n){
+    document.getElementById('mode-'+n).style.display=(n===t?'block':'none');
+  });
+  document.querySelectorAll('#mode-place .mtab').forEach(function(b){
+    b.classList.toggle('active', b.id==='place-tab-'+t);
+  });
+  // Same per-type init calls setMode used to fire directly when these were separate tabs.
+  if(t==='paths')populatePathUI();
+  if(t==='waypoints')populateWPZones();
+  if(t==='cameras')renderCameraList();
+  drawScene();
+}
 // ── Events Editor postMessage bridge ──────────────────────────────────────────
 
 function _eventsFrame() {
@@ -1126,16 +1189,33 @@ function _eventsFrame() {
 }
 
 function _buildSceneData() {
+  // Day 65 fix: previously only read Object.values(paths)[0] — the first path
+  // found — so any scene with more than one agent's path (e.g. path_Anna for
+  // Salida + path_cindy for Cindy) silently dropped every waypoint belonging
+  // to every path after the first from wpsOrdered, and therefore from the
+  // Events Editor timeline header AND the trigger dropdown (triggers are
+  // derived from wpsOrdered below). Fix: merge waypoints across ALL paths,
+  // in path-then-waypoint order, deduped by waypoint name.
   var wpsOrdered = [];
-  var firstPath = Object.values(paths)[0];
-  if (firstPath && firstPath.waypoints) {
-    firstPath.waypoints.forEach(function(n) {
-      var wp = waypoints[n];
-      if (wp) wpsOrdered.push({ name: wp.name, t: wpsOrdered.length * 8 });
+  var _seenWpNames = {};
+  var allPaths = Object.values(paths);
+  var anyPathHasWaypoints = allPaths.some(function(p){ return p && p.waypoints && p.waypoints.length; });
+  if (anyPathHasWaypoints) {
+    allPaths.forEach(function(p) {
+      (p.waypoints || []).forEach(function(n) {
+        var wp = waypoints[n];
+        if (wp && !_seenWpNames[wp.name]) {
+          _seenWpNames[wp.name] = true;
+          wpsOrdered.push({ name: wp.name, t: wpsOrdered.length * 8 });
+        }
+      });
     });
   } else {
-    Object.values(waypoints).forEach(function(wp, i) {
-      wpsOrdered.push({ name: wp.name, t: i * 8 });
+    Object.values(waypoints).forEach(function(wp) {
+      if (!_seenWpNames[wp.name]) {
+        _seenWpNames[wp.name] = true;
+        wpsOrdered.push({ name: wp.name, t: wpsOrdered.length * 8 });
+      }
     });
   }
   function safeId(n) { return n.replace(/[^a-zA-Z0-9_]/g,'_'); }
@@ -1177,9 +1257,17 @@ function _buildSceneData() {
 }
 
 function _sendSceneDataToEventsEditor() {
-  // Don't send until scene XML has restored — sceneConfig.name is still the
-  // default 'garden_001' placeholder until _restoreChorusFromXml completes.
-  if (!window._sceneXmlLoaded) return;
+  // Day 65 fix: previously gated on window._sceneXmlLoaded, which is ONLY ever set
+  // true by _restoreChorusFromXml (the "Load Scene" dropdown path — see loadAll()'s
+  // use of the same flag a few functions up, which is the correct, unrelated use).
+  // A scene built by hand this session (agents/waypoints/paths placed directly,
+  // never loaded from a saved file) left _sceneXmlLoaded permanently false/undefined,
+  // so this function silently no-op'd on every call — iframe onload, mccf_ready,
+  // and every Events-tab revisit — and Events Editor never received real data at all.
+  // _buildSceneData() below reads live in-memory state (placedAgents/waypoints/paths/
+  // placedCameras), which is populated identically whether the scene was loaded or
+  // hand-authored, so there's no actual readiness condition left to gate on here —
+  // every call to setMode('events') already re-sends fresh data on its own.
   var frame = _eventsFrame();
   if (!frame || !frame.contentWindow) return;
   try { frame.contentWindow.postMessage({ type: 'mccf_scene_data', data: _buildSceneData() }, '*'); }
@@ -1321,7 +1409,8 @@ function renderPathList(){
     var badge=hasOrder
       ?'<span class="order-badge" title="waypointOrder='+orderVal+'">'+orderVal+'</span>'
       :'<span class="order-badge" style="border-color:var(--danger);color:var(--danger)" title="MISSING waypointOrder — scene will not run">!</span>';
-    return '<div class="obj-item" style="gap:6px">'+badge+
+    var sel=selectedType==='path'&&selectedId===p.name;
+    return '<div class="obj-item '+(sel?'sel':'')+'" style="gap:6px;cursor:pointer" onclick="selectObj(\'path\',\''+p.name+'\')">'+badge+
       '<span class="obj-name">'+p.name+'</span>'+
       '<span class="obj-tag">'+(p.agent||'?')+'</span>'+
       '<span style="font-size:12px;color:var(--dim)">'+(p.waypoints||[]).length+'wp</span></div>';
@@ -1465,6 +1554,7 @@ function onMouseMove(e){
     if(dragTyp==='zone'&&zones[dragTgt]){var pos=zones[dragTgt].location||zones[dragTgt].position,np=clamp(pos[0]+dx,pos[2]+dz);if(zones[dragTgt].location)zones[dragTgt].location=[np.wx,0,np.wz];else zones[dragTgt].position=[np.wx,0,np.wz];}
     else if(dragTyp==='agent'&&placedAgents[dragTgt]){var ap=placedAgents[dragTgt].position,anp=clamp(ap[0]+dx,ap[2]+dz);placedAgents[dragTgt].position=[anp.wx,0,anp.wz];}
     else if(dragTyp==='waypoint'&&waypoints[dragTgt]){var wpos=waypoints[dragTgt].position,wnp=clamp(wpos[0]+dx,wpos[2]+dz);waypoints[dragTgt].position=[wnp.wx,0,wnp.wz];}
+    else if(dragTyp==='camera'&&placedCameras[dragTgt]){var cpos=placedCameras[dragTgt].position,cnp=clamp(cpos[0]+dx,cpos[2]+dz);placedCameras[dragTgt].position=[cnp.wx,cpos[1],cnp.wz];}
     drawScene();lastMX=cx;lastMY=cy;
   }
 }
@@ -1494,18 +1584,18 @@ function hitTest(cx,cy){
 }
 function selectObj(type,id){
   selectedType=type;selectedId=id;
-  ['zone','agent','wp','arc'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
-  if(type==='zone')showZD(id);else if(type==='agent')showAD(id);else if(type==='waypoint')showWD(id);
+  ['zone','agent','wp','camera','arc','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  if(type==='zone')showZD(id);else if(type==='agent')showAD(id);else if(type==='waypoint')showWD(id);else if(type==='camera')showCD(id);else if(type==='path')showPD(id);
   renderAll();
 }
 function clearSel(){
   selectedType=null;selectedId=null;
-  ['zone','agent','wp','query'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  ['zone','agent','wp','camera','query','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
   document.getElementById('detail-arc').style.display='block';drawScene();
 }
 function deleteSelected(t){
   if(!selectedId)return;
-  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];else if(t==='camera')delete placedCameras[selectedId];
+  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];else if(t==='camera')delete placedCameras[selectedId];else if(t==='path')delete paths[selectedId];
   clearSel();renderAll();toast('Deleted.');
 }
 function chBars(w){
@@ -1717,6 +1807,33 @@ function showWD(name){
     }).join('');
   } else { qSect.style.display='none'; }
 }
+function showCD(name){
+  var c=placedCameras[name];if(!c)return;
+  document.getElementById('detail-camera').style.display='block';
+  document.getElementById('cd-name').textContent=name;
+  var pos=c.position||[0,0,0];
+  document.getElementById('cd-pos').textContent='X='+pos[0].toFixed(1)+' Y='+pos[1].toFixed(1)+' Z='+pos[2].toFixed(1);
+  document.getElementById('cd-angle').textContent='yaw='+(c.hAngle||0)+'°  pitch='+(c.vAngle||0)+'°';
+}
+function editCamera(name){
+  var c=placedCameras[name];if(!c)return;
+  document.getElementById('cam-name').value=c.name;
+  document.getElementById('cam-height').value=(c.position&&c.position[1]!==undefined)?c.position[1]:1.7;
+  document.getElementById('cam-hangle').value=c.hAngle||0;
+  document.getElementById('cam-hangle-val').textContent=c.hAngle||0;
+  document.getElementById('cam-vangle').value=c.vAngle||0;
+  document.getElementById('cam-vangle-val').textContent=c.vAngle||0;
+  // Reuse existing position so confirmCamera can save without requiring a map re-click,
+  // same pattern editWaypoint/editZone already use.
+  pendingPos=(c.position||[0,0,0]).slice();
+  _editingCameraName=name;
+  var btn=document.querySelector('#camera-form .btn.pri');
+  if(btn)btn.textContent='Save Changes';
+  document.getElementById('camera-form').style.display='block';
+  placing='camera';
+  setMode('place');
+  setPlaceType('cameras');
+}
 function editWaypoint(name) {
   var wp = waypoints[name]; if (!wp) return;
   // Pre-fill form fields
@@ -1739,7 +1856,8 @@ function editWaypoint(name) {
   if (btn) btn.textContent = 'Save Changes';
   document.getElementById('wp-form').style.display = 'block';
   placing = 'waypoint';
-  setMode('waypoints');
+  setMode('place');
+  setPlaceType('waypoints');
 }
 function showQuery(wx,wz){
   document.getElementById('detail-arc').style.display='none';document.getElementById('detail-query').style.display='block';
@@ -1770,6 +1888,9 @@ function cancelPlace(){
   document.getElementById('wp-form').style.display='none';
   document.getElementById('camera-form').style.display='none';
   _wpQALines=[];renderWPQALines();
+  _editingCameraName=null;
+  var camBtn=document.querySelector('#camera-form .btn.pri');if(camBtn)camBtn.textContent='Place on Map';
+  var wpBtn=document.querySelector('#wp-form .btn.pri');if(wpBtn)wpBtn.textContent='Place on Map';
   hideHint();
 }
 function toggleChorusForm() {
@@ -2059,7 +2180,7 @@ function editZone(id){
   // Set pendingPos so confirmZone doesn't reject — use existing zone location
   pendingPos=(z.location||[0,0]).slice();
   // Switch to zones mode and show form
-  if(mode!=='zones')setMode('zones');
+  if(mode!=='place'||_placeType!=='zones'){setMode('place');setPlaceType('zones');}
   document.getElementById('zone-form').style.display='block';
   document.getElementById('zone-form').querySelector('.sh').textContent='Edit Zone';
   placing='zone';
@@ -2103,6 +2224,7 @@ function confirmWP(){
   _wpQALines=[];renderWPQALines();
   hideHint();renderAll();toast('Waypoint: '+name);
 }
+var _editingCameraName=null;  // set by editCamera(); distinguishes "save changes" from "place new"
 function confirmCamera(){
   if(!pendingPos){toast('Click map first',true);return;}
   var name=document.getElementById('cam-name').value.trim();
@@ -2110,11 +2232,18 @@ function confirmCamera(){
   var hAngle=parseFloat(document.getElementById('cam-hangle').value)||0;
   var vAngle=parseFloat(document.getElementById('cam-vangle').value)||0;
   if(!name){toast('Name required',true);return;}
-  if(placedCameras[name]){toast('Name already used',true);return;}
+  // Block name collisions with a DIFFERENT existing camera — but allow saving back
+  // under the same name when editing (that's not a collision, it's the same object).
+  if(placedCameras[name]&&name!==_editingCameraName){toast('Name already used',true);return;}
+  if(_editingCameraName&&_editingCameraName!==name)delete placedCameras[_editingCameraName];  // rename
   placedCameras[name]={name:name,position:[pendingPos[0],height,pendingPos[2]],hAngle:hAngle,vAngle:vAngle};
-  placing=null;pendingPos=null;
+  var wasEditing=!!_editingCameraName;
+  placing=null;pendingPos=null;_editingCameraName=null;
+  var btn=document.querySelector('#camera-form .btn.pri');
+  if(btn)btn.textContent='Place on Map';
   document.getElementById('camera-form').style.display='none';
-  hideHint();renderAll();toast('Camera: '+name);
+  hideHint();renderAll();toast((wasEditing?'Updated: ':'Camera: ')+name);
+  if(wasEditing)selectObj('camera',name);
 }
 function populateWPZones(){
   var sel=document.getElementById('wp-zone');
@@ -2169,6 +2298,62 @@ function createPath(){
   document.getElementById('p-order').value='';
   document.getElementById('p-order').style.borderColor='var(--danger)';
   clearPathSeq();renderAll();toast('Path: '+name+' (order='+orderInt+')');
+}
+// ── Day 65: existing-path select/edit/delete. Previously renderPathList() rendered
+// saved paths with no onclick at all, and selectObj()/clearSel()/deleteSelected() had
+// no 'path' case — so a path, once created, could never be inspected, corrected, or
+// removed again. pathEditSeq mirrors pathSeq (the create-form's sequence array) but
+// operates on whichever existing path is currently selected. ──
+var pathEditSeq=[];
+function showPD(id){
+  var p=paths[id];if(!p)return;
+  document.getElementById('detail-path').style.display='block';
+  document.getElementById('pd-name').textContent=p.name||id;
+  document.getElementById('pd-agent').textContent=p.agent||'?';
+  var ov=p.waypointOrder;
+  document.getElementById('pd-order').value=(ov!==undefined&&ov!==null&&String(ov).trim()!=='')?ov:'';
+  pathEditSeq=(p.waypoints||[]).slice();
+  renderPathEditSeq();
+  renderPathEditWPPicker();
+}
+function renderPathEditSeq(){
+  var el=document.getElementById('pd-seq');if(!el)return;
+  el.innerHTML=pathEditSeq.length?pathEditSeq.map(function(n,i){
+    return (i>0?'<span style="color:var(--dim);font-size:16px"> -&gt; </span>':'')+
+      '<span class="pwp" onclick="pathEditSeq.splice('+i+',1);renderPathEditSeq()">'+n+'</span>';}).join('')
+    :'<span style="color:var(--dim);font-size:14px">No waypoints — path will not run.</span>';
+}
+function renderPathEditWPPicker(){
+  var el=document.getElementById('pd-wp-pick');if(!el)return;
+  el.innerHTML=Object.keys(waypoints).map(function(n){
+    return '<div style="padding:2px 4px;cursor:pointer;font-size:14px;color:var(--cool)" onclick="pathEditSeq.push(\''+n+'\');renderPathEditSeq()">'+n+'</div>';}).join('');
+}
+function savePathEdit(){
+  if(!selectedId||!paths[selectedId]){toast('No path selected',true);return;}
+  if(pathEditSeq.length<2){toast('2+ waypoints required',true);return;}
+  var orderRaw=document.getElementById('pd-order').value.trim();
+  if(!orderRaw){
+    toast('waypointOrder is REQUIRED — set a number (1, 2, 3…)',true);
+    document.getElementById('pd-order').style.borderColor='var(--danger)';
+    document.getElementById('pd-order').focus();
+    return;
+  }
+  var orderInt=parseInt(orderRaw,10);
+  if(isNaN(orderInt)||orderInt<1){
+    toast('waypointOrder must be a positive integer (1, 2, 3…)',true);
+    document.getElementById('pd-order').style.borderColor='var(--danger)';
+    document.getElementById('pd-order').focus();
+    return;
+  }
+  var p=paths[selectedId];
+  p.waypoints=pathEditSeq.slice();
+  p.waypointOrder=orderInt;
+  // Mirrors createPath()'s sync call. Note (same limitation createPath already has):
+  // this POSTs name/agent/waypoints, but waypointOrder itself is never persisted
+  // server-side by this endpoint — it only survives via Export Scene's XML, same
+  // as when the path was first created.
+  apiPost('/path',{name:p.name,agent_name:p.agent,waypoints:p.waypoints.slice()}).catch(function(){});
+  renderAll();toast('Path updated: '+p.name+' (order='+orderInt+')');
 }
 function showHint(msg){var h=document.getElementById('place-hint');h.textContent=msg;h.style.display='block';}
 function hideHint(){document.getElementById('place-hint').style.display='none';}

@@ -1,7 +1,46 @@
 # MCCF Behavior System Specification
-**Version:** 0.1 — Day 25, 2026-05-24
+**Version:** 0.2 — Day 25, 2026-05-24; updated Day 65, 2026-07-06
 **Rule:** Author does not edit code. Claude delivers complete files only.
 **Repo:** https://github.com/artistinprocess/mccf — branch `master`
+**Companion specs:** `MCCF_HAnim_Behavior_Activation_Spec.md` (detailed clip-selection design, corrected Day 65 to match this document's mechanism), `MCCF_Events_Editor_Architecture.md` (baked vs. runtime vessels — independent concern), `MCCF_Timeline_Scheduling_Architecture.md` (Day 65 — scheduling/timing of discrete authored moments, independent of this document's event sources)
+
+---
+
+## Day 65 Note — This Document Was Right All Along
+
+This document's Day 25 finding — `enabled=true/false` is the only working SAI
+mechanism for behavior-timer switching, `startTime`/`stopTime` do not work —
+turned out to have quietly drifted out of sync with `MCCF_HAnim_Behavior_Activation_Spec.md`,
+which still specified the disproven `startTime`/`stopTime` mechanism as of its
+own Day 61 revision, five weeks after this document settled the question. The
+actual shipped code in `mccf_x3d_loader.html` was correct — it followed *this*
+document, not the stale one. That spec has been corrected as of Day 65 to match.
+
+Lesson for future sessions: when two specs disagree on a mechanism, check the
+shipped code before assuming the newer-dated document is right. A later
+revision date is not evidence of correctness if the revision didn't re-verify
+the specific claim being changed.
+
+Also confirmed live Day 65: a real two-agent Play All run showed Cindy's full
+behavior-timer chain working end-to-end exactly as designed here — timer
+resolution, `DefaultTimer` start, and walk/idle switching via
+`_wirePathTimerBehavior()` all fired correctly. The second agent's identical
+code path failed timer resolution entirely; isolated to that agent's HAnim
+asset file not matching the required structure, not to any mechanism described
+in this document. See `MCCF_HAnim_Behavior_Activation_Spec.md` §5 for detail.
+
+Separately: Day 65 also found and fixed an unrelated bug that had been silently
+blocking *any* end-to-end playback test of this whole system — a scoping error
+in `pbUpdateDisplay()` where the "no dialogue at this waypoint, release the
+dwell" fallback branch read a variable that was only ever assigned in the
+sibling branch it was mutually exclusive with, making it permanently `undefined`
+and the branch permanently dead. Any waypoint with no authored dialogue —
+including every arc's first waypoint, which by construction has nothing to
+respond to yet — stalled the entire arc forever. Fixed by removing the dead
+variable from the branch's guard condition. This was a plain coding mistake, not
+a flaw in the behavior system described below, but it explains why "movement
+doesn't happen" reports earlier in Day 65 testing had nothing to do with
+behavior timers at all.
 
 ---
 
@@ -43,6 +82,11 @@ Python/Flask server process. Reads composer artifacts at scene load. Owns all ru
 - Accumulate resonance history → update behavior map weights over time
 - Persist inter-scene history to JSON store
 
+**Day 65 addition:** the Director is also the proposed authoritative owner of the
+scene clock described in `MCCF_Timeline_Scheduling_Architecture.md` — one
+monotonic time value per arc run, alongside the per-cultivar session state it
+already tracks. Not yet implemented; see that document for scope.
+
 ---
 
 ## 3. HAnim Behavior Timer Contract
@@ -74,8 +118,9 @@ All others are `enabled=false`. Mutual exclusion enforced by Director.
 All timers ship with `enabled="false"` in the HAnim X3D file.
 `DefaultTimer` is started by the loader on scene load (initial idle state).
 
-**Confirmed Day 25:** `enabled=true/false` is the ONLY working SAI mechanism in X_ITE.
-`startTime`, `stopTime` do NOT work for behavior switching. Do not use them.
+**Confirmed Day 25, reconfirmed live Day 65:** `enabled=true/false` is the ONLY
+working SAI mechanism in X_ITE. `startTime`, `stopTime` do NOT work for behavior
+switching. Do not use them.
 `setValue('enabled', new X3D.SFBool(true))` also fails — direct property assignment only.
 
 ### 3.3 IMPORT naming convention (in scene X3D)
@@ -91,13 +136,22 @@ const node = scene.getImportedNode('WalkTimer_Cindy');
 node.setValue('enabled', new X3D.SFBool(true));
 ```
 
+**Day 65 correction to this sample:** the working call is direct property
+assignment, not `setValue`, matching §3.2 above and the shipped code:
+```javascript
+const node = scene.getImportedNode('WalkTimer_Cindy');
+node.enabled = true;
+```
+This sample was internally inconsistent with §3.2 in the original document —
+worth flagging as exactly the kind of small drift that compounds if unchecked.
+
 ---
 
 ## 4. Event Sources and Behavior Triggers
 
 ### 4.1 Arc Playback (transit / dwell)
 
-**Implementation (confirmed Day 25):** walk/idle switching is driven by field callbacks
+**Implementation (confirmed Day 25, reconfirmed live Day 65):** walk/idle switching is driven by field callbacks
 on the path `Timer_N` nodes, wired in `_wirePathTimerBehavior()` after the behavior
 timer map resolves:
 
@@ -122,8 +176,17 @@ Locomotion is X3D-native. Dialogue is MCCF-native. They are independent.
 - **TODO (next):** duplicate first keyValue in PositionInterpolator in scene composer so avatar
   holds position briefly — removes need for 50ms setTimeout entirely
 
-
 **waypointOrder** groups simultaneous events. Numeric. Same number fires together; higher number waits for lower to complete.
+
+**Day 65 note:** this remains the correct author-facing model. `MCCF_Timeline_Scheduling_Architecture.md`
+adds explicit computed start-time values derived *from* `waypointOrder` for
+display and finer scheduling purposes — it does not replace or reinterpret
+`waypointOrder` itself. Also Day 65: `_buildSceneData()` in the Scene Composer
+originally read only the first path when computing waypoint/trigger lists for
+the Events Editor, silently dropping every other agent's path — fixed by
+merging across all paths. Unrelated to the Timer contract described here, but
+worth noting alongside `waypointOrder` since both are about correctly handling
+more than one path in the same scene.
 
 **Transit start** (movement Timer_N fires):
 - Stop current behavior
@@ -202,6 +265,14 @@ Initial static map (per cultivar XML, `<BehaviorMap>` element — TO BE ADDED):
 
 **Mapping algorithm** (Director): given current EBPS vector, find behavior whose map entry minimizes Euclidean distance. That behavior fires.
 
+**Note (Day 65):** `MCCF_HAnim_Behavior_Activation_Spec.md`'s shipped implementation
+uses a per-clip min/max range test with priority tiebreak (§4.3 of that document)
+rather than nearest-neighbor Euclidean distance against a single-point map entry
+as sketched here. Both are valid designs; the range-based approach is what was
+actually built and confirmed working. Treat this section's Euclidean-distance
+sketch as an earlier alternative, superseded by the shipped `<Behaviors>` schema,
+not as a second system running in parallel.
+
 ### 5.3 Dynamic weight accumulation
 
 After each inter-agent interaction the Director adjusts the behavior map weights:
@@ -239,12 +310,13 @@ Loaded by Director at scene start. Updated at scene end or on significant intera
 
 ## 7. Task List (ordered)
 
-### Phase 1 — Prove behavior firing works ✅ COMPLETE (Day 25)
+### Phase 1 — Prove behavior firing works ✅ COMPLETE (Day 25, reconfirmed live Day 65)
 - [x] **1.1** `getImportedNode` resolves after Inline load — confirmed
 - [x] **1.2** `WalkTimer_Cindy.enabled=true` → walk loops — confirmed
 - [x] **1.3** `WalkTimer_Cindy.enabled=false`, `DefaultTimer_Cindy.enabled=true` → idle — confirmed
 - [x] **1.4** Arc playback wired via `_wirePathTimerBehavior()`: `Timer_N.isActive=true` → Walk, `Timer_N.fraction_changed>=0.99` → Default — confirmed working cleanly
 - [x] **1.5** Avatar pivots to face direction of travel at each segment start — confirmed working
+- [x] **1.6** (Day 65) Confirmed working end-to-end in a real two-agent Play All run, not just in isolation — Cindy's full chain fired correctly. Second agent's identical chain failed at timer resolution, isolated to that agent's HAnim asset file (see `MCCF_HAnim_Behavior_Activation_Spec.md` §5) — not a regression of anything in this phase.
 
 ### Phase 2 — Waypoint behavior authoring
 - [ ] **2.1** Add `dwell_behavior` field to waypoint data model (server + waypoint editor UI)
@@ -260,7 +332,7 @@ Loaded by Director at scene start. Updated at scene end or on significant intera
 - [ ] **4.1** Composer adds `AgentProx_AgentSafeName` ProximitySensor to scene X3D at build time
 - [ ] **4.2** Loader reports `agent_prox_enter` / `agent_prox_exit` to Director
 - [ ] **4.3** Director applies network coupler math, fires behavior on both agents
-- [ ] **4.4** Add Anna as second agent (prerequisite: Phase 1 confirmed working for Cindy)
+- [x] **4.4** Add a second agent (prerequisite: Phase 1 confirmed working for Cindy) — done Day 65 (Salida); confirms the prerequisite, though 4.1–4.3 themselves remain unbuilt.
 
 ### Phase 5 — EBPS map authoring
 - [ ] **5.1** Add `<BehaviorMap>` to cultivar XML schema
@@ -299,3 +371,11 @@ Loaded by Director at scene start. Updated at scene end or on significant intera
 - Cultivar files: `cultivars/cultivar_*.xml`
 - Arc files: `exports/` — bare filename, no path prefix
 - Resonance history: `data/resonance_history.json`
+
+**Day 65 addition:** any HAnim avatar file added to `static/avatars/` should be
+verified against this invariant list — specifically the "EXPORT statements
+required for all 8 timer bases" line — before being wired into a scene. Salida's
+`SalidaAnimations_repaired_test.x3d` is suspected to violate this invariant,
+which is the working hypothesis for its behavior-timer resolution failure.
+Confirming this (and fixing the file, or regenerating it against
+`cindy_hanim.x3d`'s structure) is outstanding work, not yet done.

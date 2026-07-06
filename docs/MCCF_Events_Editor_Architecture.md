@@ -1,5 +1,5 @@
 # MCCF Events Editor — Architecture Specification
-## Version 1.1 — Day 60 (camera vessel confirmed; coordinate system; X3D SAI notes)
+## Version 1.2 — Day 65 (scope boundary with Timeline spec added; no architectural changes)
 
 ---
 
@@ -8,6 +8,12 @@
 This document defines the division of labor between the Events Editor, the Scene Composer, and the X3D Loader for all event cue types — current and planned. It exists because the camera system revealed a recurring architectural ambiguity: when does an event cue bind a named node that is **already in the X3D file**, and when does it instruct the **runtime to compute and drive something**? Getting this wrong produces subtle bugs that compound as new event types are added.
 
 Read this before implementing any new cue type or extending an existing one.
+
+**Day 65 addendum:** a second, independent ambiguity was found this session — not
+what a cue targets, but *when* it fires. This document was already correct and
+complete on the baked/runtime question; nothing in it needed changing. A new
+companion document, `MCCF_Timeline_Scheduling_Architecture.md`, now owns the
+*when* question. See §10 below for the exact boundary between the two.
 
 ---
 
@@ -127,6 +133,15 @@ Same status as Fog — baked by convention on `SceneBG`. Vessel promotion pendin
 
 Behavior cues are fully baked — they address authored TimeSensor nodes inside the agent's X3D subtree by the clip name convention. The Loader routes to `switchBehaviorTimer`, which looks up the named timer node.
 
+**Day 65 note:** the *content* of behavior cues (which clip, which agent) is exactly
+as described here and is unaffected by anything in this addendum. The *authored
+override* mechanism that lets a behavior cue temporarily preempt field-driven
+selection is specified in `MCCF_HAnim_Behavior_Activation_Spec.md` §6b. The
+*timing* of when such a cue fires — event-triggered vs. clock-triggered — is
+specified in `MCCF_Timeline_Scheduling_Architecture.md` §5.2 and §8. All three
+documents describe different aspects of the same cue; none of them duplicate
+or contradict the others by design.
+
 ---
 
 ### Semantic / Emotional animation track (Phase 2+)
@@ -167,6 +182,12 @@ The author named a specific authored VP they want bound. No shot params needed.
 ```
 Ambiguous. Two different routing systems are both indicated. One will silently win. This is the exact bug that triggered this document.
 
+**Day 65 note:** `MCCF_Timeline_Scheduling_Architecture.md` §5.2 extends this exact
+rule to a second axis: a cue may specify `trigger` (event-based) **or**
+`start_t`/`duration` (clock-based), never both, for precisely the same reason —
+two routing systems both indicated, one silently winning. The rule stated in
+this section generalizes cleanly; it did not need to be re-derived.
+
 ---
 
 ## 5. The Composer's Responsibilities
@@ -177,6 +198,13 @@ The Composer is the gatekeeper between the Events Editor and the X3D file. Its r
 2. **Never write vessel node names into cue data.** The serialization of camera cues must not include `viewpoint="VP_Free"` or any other vessel name — only authored VP names (for baked cues) or no viewpoint field at all (for runtime cues).
 3. **Suppress legacy `viewpoint=` on shot= cues.** When a cue has a `shot=` value (runtime path), the Composer must not also write `viewpoint=` (Day 60 fix: `if (cue.viewpoint && !cue.shot)`).
 4. **Maintain the vessel list.** As new vessel types are added, the Composer X3D export is the single place they are added to every scene. The Loader can then assume they exist.
+
+**Day 65 addition:** Composer also now computes `start_t`/`duration` per path
+segment for the Events Editor's timeline display, per
+`MCCF_Timeline_Scheduling_Architecture.md` §5.1/§5.3. This is a scheduling
+computation, not a vessel, and does not change anything in this section — it's
+listed here only so a reader of this document knows the Composer's
+responsibility list has grown, and where to find the addition.
 
 ---
 
@@ -195,6 +223,16 @@ The Composer is the gatekeeper between the Events Editor and the X3D file. Its r
 2. **The shot type list is the author's vocabulary** for runtime camera. It maps to behavior, not to implementation nodes.
 3. **Named VP selection** (baked path) is a separate UI element from shot type selection. The two must not be combined in a way that produces both `shot=` and `viewpoint=` in the same cue (the Day 60 bug root cause in the Events Editor was `applyShotPreset` not clearing `cue.viewpoint`).
 4. **Future tracks follow the same pattern:** the author describes intent; the inspector fields encode intent; vessel names never appear.
+
+**Day 65 addition:** the Events Editor's dropdowns (agents, viewpoints, triggers)
+depend on a `postMessage('mccf_scene_data', ...)` bridge from Composer. This
+session found that bridge silently non-functional for any hand-authored scene
+(gated on a flag — `_sceneXmlLoaded` — that was only ever set by the "Load Scene
+from file" path, never by live authoring). Fixed in `mccf_scene_composer.html`.
+Unrelated to the baked/runtime architecture this document describes, but worth
+noting here since it means any Events Editor testing done before that fix may
+have been looking at stale placeholder data (`Cindy`/`The Witness`/`The Steward`)
+rather than the actual current scene.
 
 ---
 
@@ -246,6 +284,7 @@ Not all X3D fields are writable via SAI:
 - `Viewpoint.set_bind` — **writable** (event-in) ✓
 - `PointLight.intensity`, `Fog.visibilityRange` — **writable** ✓
 - `AudioClip.startTime`, `AudioClip.stopTime` — **writable** ✓
+- `TimeSensor.enabled` — **writable** ✓ (confirmed Day 25/65 — the correct mechanism for behavior-timer switching; `TimeSensor.startTime`/`stopTime` are technically writable fields but do not reliably produce a clean switch when driven externally via SAI for this purpose — see `mccf_behavior_spec.md` §3.2)
 
 When a Viewpoint needs to be repositioned at runtime, wrap it in a Transform and write to the Transform. Never write to Viewpoint position/orientation directly.
 
@@ -275,7 +314,36 @@ When a new event track is designed, answer these questions before writing any co
 5. **What is the unrecognised-value behaviour?**
    - Always: warn and skip. Never silently activate a vessel or bind a node.
 
+6. **(Day 65 addition) Is this track's firing moment event-triggered or clock-triggered?**
+   - This is a separate question from baked/runtime. A track can be baked AND
+     event-triggered (most current behavior cues), baked AND clock-triggered,
+     runtime AND event-triggered, or runtime AND clock-triggered. See
+     `MCCF_Timeline_Scheduling_Architecture.md` §5.2 for the schema rule
+     (mutually exclusive `trigger` vs. `start_t`/`duration`) and §8 for how the
+     Events Editor should present the choice.
+
+---
+
+## 10. Scope Boundary With the Timeline Spec (Day 65)
+
+This document and `MCCF_Timeline_Scheduling_Architecture.md` answer different
+questions and were kept deliberately separate rather than merged:
+
+| This document answers | The Timeline spec answers |
+|---|---|
+| What node does a cue write to? | When does a cue fire? |
+| Is it a named authored node, or a computed vessel? | Is it triggered by a named event, or by an exact clock value? |
+| How does the Loader decide which write-path to use? | How does the Loader decide which moment to act at? |
+
+Neither document should be extended to answer the other's question. If a future
+cue type seems to need both a new vessel *and* new scheduling behavior, that is
+two changes, tracked against two documents, not one. This mirrors the same
+discipline §4 of this document already established for baked-vs-runtime
+ambiguity — the fix, both times, is to keep the two concerns legible as
+separate axes rather than letting one cue schema silently encode both.
+
 ---
 
 *Day 60. Baked vs Runtime. Vessels are implementation, not author vocabulary.*
 *Day 60 confirmed: CAM_Free_Transform + VP_Free pattern working. _lookAtOrientation -Z convention fixed. Static computed shots verified in live playback.*
+*Day 65: no architectural changes. Added §10 scope boundary with the new Timeline spec, and small cross-reference notes throughout (§3 Behavior track, §4, §5, §7, §8, §9) pointing to where scheduling, the postMessage bridge fix, and the corrected TimeSensor mechanism now live. This document's own content was confirmed still accurate and did not need correction.*
