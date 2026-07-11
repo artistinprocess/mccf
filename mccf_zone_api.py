@@ -233,11 +233,18 @@ def create_path():
     scene = get_scene()
     data = request.get_json()
     name       = data.get('name')
-    agent_name = data.get('agent')
+    # Was data.get('agent') — client (mccf_scene_composer.html, createPath()/
+    # savePathEdit()) sends the key as 'agent_name', matching AgentPath's own
+    # field name below. The mismatch meant agent_name was always None here,
+    # so every POST to /path — every path create AND every path edit — hit
+    # the 400 branch unconditionally. No path from Composer ever actually
+    # reached scene.add_path(); everything lived only in client-side memory
+    # or XML restore.
+    agent_name = data.get('agent_name')
     wp_names   = data.get('waypoints', [])
 
     if not name or not agent_name:
-        return jsonify({'error': 'name and agent required'}), 400
+        return jsonify({'error': 'name and agent_name required'}), 400
 
     waypoints = []
     for wpn in wp_names:

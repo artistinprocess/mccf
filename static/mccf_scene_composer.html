@@ -128,7 +128,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   padding: 2px 7px; font-size: 14px; color: var(--cool); cursor: pointer; }
 /* ── Network links ── */
 .net-link { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
-  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; font-size: 13px; }
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; font-size: 13px;
+  transition: border-color 0.3s, background 0.3s; }
+.net-link.flash { border-color: var(--purple); background: #1c1030; }
 .net-from { color: var(--cool); font-weight: 600; }
 .net-arrow { color: var(--dim); }
 .net-to   { color: var(--accent); font-weight: 600; }
@@ -446,7 +448,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="sh">Paths</div>
     <div id="path-list"></div>
     <div style="margin-top:10px">
-      <div class="sh">New Path</div>
+      <div class="sh" id="path-form-heading">New Path</div>
       <label>Path Name</label><input id="p-name" type="text" placeholder="path_witness">
       <label>Agent</label><select id="p-agent"></select>
       <!-- ── waypointOrder REQUIRED field ── -->
@@ -468,8 +470,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div id="p-wp-pick" style="max-height:120px;overflow-y:auto;background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px"></div>
       <div id="p-seq" class="path-seq"></div>
       <div class="btn-row">
-        <button class="btn pri" onclick="createPath()">Create Path</button>
-        <button class="btn" onclick="clearPathSeq()">Clear</button>
+        <button class="btn pri" id="path-save-btn" onclick="createPath()">Create Path</button>
+        <button class="btn" onclick="resetPathForm()">Clear</button>
       </div>
     </div>
   </div>
@@ -490,8 +492,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   <div id="mode-run" style="display:none">
     <div class="sh">Record Scene Arc</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
-      <label>Path</label>
-      <select id="run-path"></select>
+      <label>Paths — select one or more (Ctrl/Cmd-click). Paths sharing a Waypoint Order run concurrently; higher orders wait for lower ones to finish.</label>
+      <select id="run-path" multiple size="4"></select>
       <label>LLM Adapter</label>
       <select id="run-adapter">
         <option value="ollama">ollama (local)</option>
@@ -509,28 +511,20 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
     <div class="sh">Progress</div>
     <div id="run-progress" style="font-size:14px;color:var(--dim);margin-bottom:6px">Not running.</div>
-    <div id="run-step-detail" style="display:none">
-      <div class="dsect">
-        <div class="sh" style="margin:0 0 4px">Current Waypoint</div>
-        <div id="run-wp-name" style="color:var(--cool);font-family:var(--display);font-size:16px;font-weight:700"></div>
-        <div id="run-wp-pos" style="color:var(--accent);font-size:13px;margin-top:2px"></div>
+    <div id="run-multi-status"></div>
+    <div class="sh" style="margin-top:10px">Arc Export</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--dim)">
+        Take: <span id="take-current" style="color:var(--accent)">none yet — starts on first save</span>
       </div>
-      <div class="dsect">
-        <div class="sh" style="margin:0 0 4px">Question</div>
-        <div id="run-question" style="color:var(--warm);font-size:13px;font-style:italic"></div>
+      <div class="btn-row" style="margin-top:6px">
+        <input id="take-label" type="text" placeholder="optional take label" style="flex:1">
+        <button class="btn" onclick="_startNewTake(document.getElementById('take-label').value)">New Take</button>
       </div>
-      <div class="dsect">
-        <div class="sh" style="margin:0 0 4px">Response</div>
-        <div id="run-response" style="color:var(--text);font-size:13px;line-height:1.5;max-height:100px;overflow-y:auto"></div>
-      </div>
-      <div id="run-channels" style="display:flex;gap:8px;margin-top:6px;font-size:13px">
-        <span style="color:var(--E)">E —</span>
-        <span style="color:var(--B)">B —</span>
-        <span style="color:var(--P)">P —</span>
-        <span style="color:var(--S)">S —</span>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">
+        Every arc saved without starting a new take lands in the same take folder — this is how multiple agents' arcs from one session end up grouped together, and how the playback dropdown stays scoped to one scene/take instead of showing arcs from every scene ever recorded.
       </div>
     </div>
-    <div class="sh" style="margin-top:10px">Arc Export</div>
     <div id="run-log" style="font-size:13px;color:var(--dim)">Run a scene to generate arc.</div>
   </div>
   <div id="mode-network" style="display:none">
@@ -539,6 +533,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       Links define which agents are coupled and how strongly their expressive states influence each other.
       Strength 0–1. Bidirectional = two links.
     </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
+      <input type="checkbox" id="net-show-links" onchange="toggleShowLinks()">
+      Show links on grid
+    </label>
     <div id="net-link-list"><div style="color:var(--dim);font-size:13px;">No links defined.</div></div>
     <div style="margin-top:12px">
       <div class="sh">New Link</div>
@@ -794,18 +792,15 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="pd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:#e0c860;margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Agent</div><div id="pd-agent" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect">
-      <div class="sh" style="margin:0 0 4px">Waypoint Order <span style="color:var(--danger)">* required</span></div>
-      <input type="number" id="pd-order" min="1" step="1" style="width:80px">
-      <div style="font-size:12px;color:var(--dim);margin-top:4px">Same number fires simultaneously. Higher number waits for lower group to complete. Missing = scene will not run.</div>
+      <div class="sh" style="margin:0 0 4px">Waypoint Order</div>
+      <div id="pd-order-display" style="font-size:18px;color:var(--dim)"></div>
     </div>
     <div class="dsect">
-      <div class="sh" style="margin:0 0 4px">Waypoints (click a chip to remove)</div>
+      <div class="sh" style="margin:0 0 4px">Waypoints</div>
       <div id="pd-seq" style="min-height:24px"></div>
-      <div class="sh" style="margin:8px 0 4px">Add waypoint</div>
-      <div id="pd-wp-pick" style="max-height:120px;overflow:auto"></div>
     </div>
     <div class="btn-row">
-      <button class="btn pri" onclick="savePathEdit()">Save</button>
+      <button class="btn cool" onclick="editPath(selectedId)">Edit</button>
       <button class="btn danger" onclick="deleteSelected('path')">Delete</button>
     </div>
   </div>
@@ -847,6 +842,7 @@ var pendingPos = null;
 var placingAgent = null;
 var sceneConfig = { name: 'garden_001', width: 40, depth: 40, description: '' };
 var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, networks = [];
+var _showLinks = false;  // off by default — crowded scenes get noisy fast; opt-in via Network tab
 var placedCameras = {}; // Day 64: free/world-space cameras placed on the grid, class 3 of the three-class camera model
 var selectedId = null, selectedType = null, pathSeq = [];
 var canvas, ctx, arcCanvas, arcCtx, W, H, SCALE = 18, OX = 0, OZ = 0;
@@ -1012,7 +1008,7 @@ function setStatus(s){
   document.getElementById('stext').textContent=s==='on'?'online':'offline';
 }
 function apiGet(p){return fetch(API+p).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
-function apiPost(p,b){return fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();});}
+function apiPost(p,b){return fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j&&j.error?j.error:('HTTP '+r.status));return j;});});}
 function loadAll(){
   Promise.all([apiGet('/zone'),apiGet('/waypoint'),apiGet('/path'),apiGet('/field')])
     .then(function(res){
@@ -1089,7 +1085,12 @@ function loadAgents(){
 function pollField(){
   apiGet('/field').then(function(fd){
     var panel=document.getElementById('field-state');
-    var names=Object.keys((fd||{}).agents||{});
+    // /field is server-side simulation state and can outlive this scene (e.g. leftover
+    // from a previous session's seed data) — Archivist/Steward/Witness showing up here
+    // with nothing placed on the map is that mismatch. Only show agents this scene
+    // actually has placed; the backend's own field state is a separate cleanup (session
+    // reset on scene load) that lives outside this file.
+    var names=Object.keys((fd||{}).agents||{}).filter(function(n){return !!placedAgents[n];});
     if(!names.length){panel.textContent='No agents in field.';return;}
     var html='';
     names.forEach(function(n){
@@ -1109,7 +1110,14 @@ function pollField(){
 }
 var _placeType='zones';  // remembers last-selected Place sub-tab across mode switches
 function setMode(m){
+  var prevMode=mode;
   mode=m;
+  // Right-pane detail panels (zone/agent/waypoint/camera/path) are keyed off
+  // selectedType/selectedId, which used to survive a tab switch — so e.g. selecting
+  // a zone in Place>Zones, then clicking Waypoints, left the zone's detail panel
+  // showing in the right pane with no zone in view. Clearing selection on every
+  // mode change keeps left/right panes in sync with whichever tool is actually active.
+  clearSel();
   var ms=['scene','place','agents','characters','events','network','export','run'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   // Scoped to header — the Place tab's own sub-nav buttons also carry .mtab for shared
@@ -1141,6 +1149,11 @@ function setMode(m){
     inactiveFrame.style.display = 'none';
     offlineDiv.style.display = 'none';
     activeFrame.style.display = 'block';
+    // Re-entering Events after the leave-mode teardown above blanked its src —
+    // restore it so the iframe (and its X_ITE viewport) loads fresh.
+    if(m==='events' && evFrame.dataset.src && evFrame.getAttribute('src')==='about:blank'){
+      evFrame.src = evFrame.dataset.src;
+    }
     activeFrame.onload = function(){
       try{
         var doc = activeFrame.contentDocument||activeFrame.contentWindow.document;
@@ -1162,6 +1175,17 @@ function setMode(m){
     wrap.style.display = 'none';
     charFrame.style.display = 'none';
     evFrame.style.display = 'none';
+    // Leaving Events mode: the events-editor iframe was previously only hidden
+    // (display:none), never unloaded. Its embedded <x3d-canvas> (its own live X_ITE
+    // viewport, used for cue preview) kept its WebGL context and any Sound nodes
+    // alive in the background — audible even after switching tabs, and a second,
+    // independent X_ITE instance next to whatever the standalone X3D Loader opens.
+    // Blanking src forces the iframe to tear down its document (and with it, X_ITE)
+    // completely; onload below reloads it fresh next time Events is opened.
+    if(prevMode==='events' && evFrame.getAttribute('src')){
+      evFrame.dataset.src = evFrame.getAttribute('src');
+      evFrame.src = 'about:blank';
+    }
   }
   drawScene();
 }
@@ -1169,6 +1193,10 @@ function setMode(m){
 // Each panel's own internal markup/logic (startPlace, confirm*, render*List) is
 // untouched — this only owns which one is visible and which init call it needs.
 function setPlaceType(t){
+  // Sub-tab buttons (Zones/Waypoints/Paths/Cameras) call this directly, not through
+  // setMode — so without this, selecting e.g. a zone then clicking Waypoints left
+  // the zone's detail panel stranded in the right pane. Same fix as setMode's clearSel.
+  if(_placeType!==t) clearSel();
   _placeType=t;
   ['zones','waypoints','paths','cameras'].forEach(function(n){
     document.getElementById('mode-'+n).style.display=(n===t?'block':'none');
@@ -1450,6 +1478,65 @@ function drawArcChart(){
   if(!arcCtx)return;
   arcCtx.clearRect(0,0,arcCanvas.width,arcCanvas.height);
 }
+function _networkPairs(){
+  // Group networks[] (each entry is one *directed* link) into unique unordered agent
+  // pairs, so a bidirectional coupling — which is stored as two directed entries,
+  // Cindy->Salida and Salida->Cindy — draws as a single line, not two overlapping ones.
+  var pairs={};
+  networks.forEach(function(lk,i){
+    var key=[lk.from,lk.to].slice().sort().join('|');
+    if(!pairs[key]) pairs[key]={from:lk.from,to:lk.to,entries:[]};
+    pairs[key].entries.push({idx:i,link:lk});
+  });
+  return Object.values(pairs);
+}
+var _linkOverlayBoxes=[];  // pill hit-boxes from the last drawNetworkLinks() pass, read by hitTestLink
+function drawNetworkLinks(){
+  _linkOverlayBoxes=[];
+  if(!_showLinks) return;
+  _networkPairs().forEach(function(pr){
+    var a=placedAgents[pr.from],b=placedAgents[pr.to];
+    if(!a||!b) return;  // can't draw a link to an agent not on the grid
+    var pa=w2c(a.position[0],a.position[2]),pb=w2c(b.position[0],b.position[2]);
+    var bidir=pr.entries.length>1;
+    var lk=pr.entries[0].link;
+    var clist=(lk.couplers&&lk.couplers.length)?lk.couplers.join(','):(lk.type||'R');
+    var primary=clist.split(',')[0];
+    var label=primary+' '+parseFloat(lk.strength).toFixed(2)+(bidir?' \u21c4':' \u2192');
+    ctx.save();
+    ctx.strokeStyle='#a060f0';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(pa.cx,pa.cy);ctx.lineTo(pb.cx,pb.cy);ctx.stroke();
+    ctx.setLineDash([]);
+    var mx=(pa.cx+pb.cx)/2,my=(pa.cy+pb.cy)/2;
+    ctx.font='12px IBM Plex Mono';
+    var tw=ctx.measureText(label).width,padX=6,boxW=tw+padX*2,boxH=16;
+    ctx.fillStyle='#1c1030';ctx.strokeStyle='#a060f0';ctx.lineWidth=1;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(mx-boxW/2,my-boxH/2,boxW,boxH,8);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(mx-boxW/2,my-boxH/2,boxW,boxH);ctx.strokeRect(mx-boxW/2,my-boxH/2,boxW,boxH);}
+    ctx.fillStyle='#c9a0f0';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(label,mx,my+1);
+    ctx.restore();
+    _linkOverlayBoxes.push({idx:pr.entries[0].idx,pa:pa,pb:pb,mx:mx,my:my,boxW:boxW,boxH:boxH});
+  });
+}
+// Click hit-test for the link overlay — checks the pill (its full drawn footprint,
+// via _linkOverlayBoxes from the last draw pass) and a corridor along the line itself
+// (so clicking anywhere on a long line works, not just the label).
+function hitTestLink(cx,cy){
+  if(!_showLinks) return null;
+  var r=null;
+  _linkOverlayBoxes.forEach(function(b){
+    if(r) return;
+    if(Math.abs(cx-b.mx)<b.boxW/2 && Math.abs(cy-b.my)<b.boxH/2){ r={type:'link',idx:b.idx}; return; }
+    var dx=b.pb.cx-b.pa.cx,dz=b.pb.cy-b.pa.cy,len2=dx*dx+dz*dz;
+    if(len2<1) return;
+    var t=((cx-b.pa.cx)*dx+(cy-b.pa.cy)*dz)/len2;
+    if(t<0||t>1) return;
+    var px=b.pa.cx+t*dx,pz=b.pa.cy+t*dz;
+    if(Math.hypot(cx-px,cy-pz)<6) r={type:'link',idx:b.idx};
+  });
+  return r;
+}
 function drawScene(){
   if(!ctx)return;
   ctx.clearRect(0,0,W,H);
@@ -1466,6 +1553,7 @@ function drawScene(){
   }
   Object.values(paths).forEach(drawPath);
   Object.values(zones).forEach(drawZone);
+  drawNetworkLinks();
   Object.values(placedAgents).forEach(drawAgent);
   Object.values(waypoints).forEach(function(wp,i){drawWP(wp,i);});
   Object.values(placedCameras).forEach(drawCamera);
@@ -1572,15 +1660,17 @@ function onCanvasClick(e){
     else if(placing==='camera')confirmCamera();
     else if(placing==='agent'&&placingAgent)placeAgentAt(placingAgent,cl.wx,cl.wz);return;}
   if(tool==='query'){showQuery(wp.wx,wp.wz);return;}
-  var hit=hitTest(cx,cy);if(hit)selectObj(hit.type,hit.id);else clearSel();
+  var hit=hitTest(cx,cy);
+  if(hit&&hit.type==='link'){highlightNetLink(hit.idx);return;}
+  if(hit)selectObj(hit.type,hit.id);else clearSel();
 }
 function hitTest(cx,cy){
   var r=null;
   Object.keys(placedAgents).forEach(function(n){var pos=placedAgents[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<14)r={type:'agent',id:n};});if(r)return r;
   Object.keys(waypoints).forEach(function(n){var pos=waypoints[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'waypoint',id:n};});if(r)return r;
   Object.keys(zones).forEach(function(id){var pos=zones[id].location||zones[id].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<16)r={type:'zone',id:id};});if(r)return r;
-  Object.keys(placedCameras).forEach(function(n){var pos=placedCameras[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'camera',id:n};});
-  return r;
+  Object.keys(placedCameras).forEach(function(n){var pos=placedCameras[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'camera',id:n};});if(r)return r;
+  return hitTestLink(cx,cy);
 }
 function selectObj(type,id){
   selectedType=type;selectedId=id;
@@ -1914,7 +2004,11 @@ var _mediaFiles = [];  // cached from last fetch
 function refreshMediaList() {
   refreshConvolverList();
   refreshSoundEffectsList();
-  fetch(API + '/media/list')
+  // Music/bed/zone-loop tracks live in static/x3d/media/music/ (same split as
+  // soundeffects/ below) — must pass subdir=music or this scans the flat
+  // media/ folder and finds nothing, leaving these three selects empty while
+  // Dwell (subdir=soundeffects) populates fine.
+  fetch(API + '/media/list?subdir=music')
     .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function(data) {
       _mediaFiles = (data.files || []).filter(function(f) {
@@ -1925,7 +2019,7 @@ function refreshMediaList() {
     })
     .catch(function(e) {
       // Endpoint may not exist yet — leave selects with whatever they have
-      console.warn('refreshMediaList: /media/list not available (' + e.message + ')');
+      console.warn('refreshMediaList: /media/list?subdir=music not available (' + e.message + ')');
     });
 }
 
@@ -1938,8 +2032,9 @@ function _populateMediaSelect(sel, currentVal, allowEmpty) {
   _mediaFiles.forEach(function(f) {
     var opt = document.createElement('option');
     opt.value = 'media/' + f;
+    var label = f.replace(/^music\//, '');
     var isMidi = /\.(mid|midi)$/i.test(f);
-    opt.textContent = f + (isMidi ? '  [MIDI→Reaper]' : '');
+    opt.textContent = label + (isMidi ? '  [MIDI→Reaper]' : '');
     if (isMidi) opt.style.color = 'var(--purple)';
     sel.appendChild(opt);
   });
@@ -2266,6 +2361,21 @@ function addToPath(n){
   }
   pathSeq.push(n);renderPathSeq();
 }
+// _editingPathName tracks whether the left-pane form is creating a new path or
+// editing an existing one — same convention _editingCameraName already uses, so
+// renaming (a new p-name value while editing) is handled the same way: delete the
+// old key, save under the new one.
+var _editingPathName=null;
+function resetPathForm(){
+  pathSeq=[];
+  document.getElementById('p-name').value='';
+  document.getElementById('p-order').value='';
+  document.getElementById('p-order').style.borderColor='var(--danger)';
+  _editingPathName=null;
+  document.getElementById('path-form-heading').textContent='New Path';
+  document.getElementById('path-save-btn').textContent='Create Path';
+  renderPathSeq();
+}
 function clearPathSeq(){pathSeq=[];renderPathSeq();}
 function renderPathSeq(){
   document.getElementById('p-seq').innerHTML=pathSeq.map(function(n,i){
@@ -2291,69 +2401,57 @@ function createPath(){
     document.getElementById('p-order').focus();
     return;
   }
+  var wasEditing=!!_editingPathName;
+  if(wasEditing && _editingPathName!==name) delete paths[_editingPathName];  // rename
   paths[name]={name:name,agent:agent,waypoints:pathSeq.slice(),waypointOrder:orderInt};
-  apiPost('/path',{name:name,agent_name:agent,waypoints:pathSeq.slice()}).catch(function(){});
-  // Reset form
-  document.getElementById('p-name').value='';
-  document.getElementById('p-order').value='';
-  document.getElementById('p-order').style.borderColor='var(--danger)';
-  clearPathSeq();renderAll();toast('Path: '+name+' (order='+orderInt+')');
+  apiPost('/path',{name:name,agent_name:agent,waypoints:pathSeq.slice()})
+    .then(function(){ toast((wasEditing?'Path updated: ':'Path: ')+name+' (order='+orderInt+')'); })
+    .catch(function(err){ toast('Path NOT saved to server — '+err.message,true); });
+  resetPathForm();
+  if(wasEditing) clearSel();
+  renderAll();
 }
-// ── Day 65: existing-path select/edit/delete. Previously renderPathList() rendered
+// Day 65: existing-path select/edit/delete. Previously renderPathList() rendered
 // saved paths with no onclick at all, and selectObj()/clearSel()/deleteSelected() had
 // no 'path' case — so a path, once created, could never be inspected, corrected, or
-// removed again. pathEditSeq mirrors pathSeq (the create-form's sequence array) but
-// operates on whichever existing path is currently selected. ──
-var pathEditSeq=[];
+// removed again.
+// Day 66: editing used to live in a second, parallel form in the right pane (pathEditSeq,
+// pd-order, pd-wp-pick) — a full duplicate of the left pane's create form with its own
+// waypointOrder validation. Now Edit routes into the same left-pane form every other
+// object type (Zone/Waypoint/Camera) already uses; the right pane is read-only summary
+// + Edit/Delete, consistent with those.
 function showPD(id){
   var p=paths[id];if(!p)return;
   document.getElementById('detail-path').style.display='block';
   document.getElementById('pd-name').textContent=p.name||id;
   document.getElementById('pd-agent').textContent=p.agent||'?';
-  var ov=p.waypointOrder;
-  document.getElementById('pd-order').value=(ov!==undefined&&ov!==null&&String(ov).trim()!=='')?ov:'';
-  pathEditSeq=(p.waypoints||[]).slice();
-  renderPathEditSeq();
-  renderPathEditWPPicker();
-}
-function renderPathEditSeq(){
-  var el=document.getElementById('pd-seq');if(!el)return;
-  el.innerHTML=pathEditSeq.length?pathEditSeq.map(function(n,i){
+  var ov=p.waypointOrder,hasOrder=(ov!==undefined&&ov!==null&&String(ov).trim()!=='');
+  var ordEl=document.getElementById('pd-order-display');
+  ordEl.textContent=hasOrder?ov:'MISSING — scene will not run';
+  ordEl.style.color=hasOrder?'var(--text)':'var(--danger)';
+  var seqEl=document.getElementById('pd-seq');
+  var wps=p.waypoints||[];
+  seqEl.innerHTML=wps.length?wps.map(function(n,i){
     return (i>0?'<span style="color:var(--dim);font-size:16px"> -&gt; </span>':'')+
-      '<span class="pwp" onclick="pathEditSeq.splice('+i+',1);renderPathEditSeq()">'+n+'</span>';}).join('')
+      '<span class="pwp">'+n+'</span>';}).join('')
     :'<span style="color:var(--dim);font-size:14px">No waypoints — path will not run.</span>';
 }
-function renderPathEditWPPicker(){
-  var el=document.getElementById('pd-wp-pick');if(!el)return;
-  el.innerHTML=Object.keys(waypoints).map(function(n){
-    return '<div style="padding:2px 4px;cursor:pointer;font-size:14px;color:var(--cool)" onclick="pathEditSeq.push(\''+n+'\');renderPathEditSeq()">'+n+'</div>';}).join('');
-}
-function savePathEdit(){
-  if(!selectedId||!paths[selectedId]){toast('No path selected',true);return;}
-  if(pathEditSeq.length<2){toast('2+ waypoints required',true);return;}
-  var orderRaw=document.getElementById('pd-order').value.trim();
-  if(!orderRaw){
-    toast('waypointOrder is REQUIRED — set a number (1, 2, 3…)',true);
-    document.getElementById('pd-order').style.borderColor='var(--danger)';
-    document.getElementById('pd-order').focus();
-    return;
-  }
-  var orderInt=parseInt(orderRaw,10);
-  if(isNaN(orderInt)||orderInt<1){
-    toast('waypointOrder must be a positive integer (1, 2, 3…)',true);
-    document.getElementById('pd-order').style.borderColor='var(--danger)';
-    document.getElementById('pd-order').focus();
-    return;
-  }
-  var p=paths[selectedId];
-  p.waypoints=pathEditSeq.slice();
-  p.waypointOrder=orderInt;
-  // Mirrors createPath()'s sync call. Note (same limitation createPath already has):
-  // this POSTs name/agent/waypoints, but waypointOrder itself is never persisted
-  // server-side by this endpoint — it only survives via Export Scene's XML, same
-  // as when the path was first created.
-  apiPost('/path',{name:p.name,agent_name:p.agent,waypoints:p.waypoints.slice()}).catch(function(){});
-  renderAll();toast('Path updated: '+p.name+' (order='+orderInt+')');
+function editPath(name){
+  var p=paths[name];if(!p){toast('Path not found',true);return;}
+  // setPlaceType('paths') rebuilds the agent <select> via populatePathUI() — set field
+  // values after that runs, not before, or the rebuild wipes them back to default.
+  setMode('place');
+  setPlaceType('paths');
+  document.getElementById('p-name').value=p.name||name;
+  document.getElementById('p-agent').value=p.agent||'';
+  var ov=p.waypointOrder;
+  document.getElementById('p-order').value=(ov!==undefined&&ov!==null&&String(ov).trim()!=='')?ov:'';
+  document.getElementById('p-order').style.borderColor=(ov?'var(--warm)':'var(--danger)');
+  pathSeq=(p.waypoints||[]).slice();
+  renderPathSeq();
+  _editingPathName=name;
+  document.getElementById('path-form-heading').textContent='Edit Path: '+name;
+  document.getElementById('path-save-btn').textContent='Save Changes';
 }
 function showHint(msg){var h=document.getElementById('place-hint');h.textContent=msg;h.style.display='block';}
 function hideHint(){document.getElementById('place-hint').style.display='none';}
@@ -3315,7 +3413,7 @@ function renderNetLinks() {
   }
   el.innerHTML = networks.map(function(lk, i) {
     var clist = (lk.couplers && lk.couplers.length) ? lk.couplers.join(',') : (lk.type || '—');
-    return '<div class="net-link">' +
+    return '<div class="net-link" data-net-idx="' + i + '">' +
       '<span class="net-from">' + lk.from + '</span>' +
       '<span class="net-arrow">&#8594;</span>' +
       '<span class="net-to">' + lk.to + '</span>' +
@@ -3325,6 +3423,20 @@ function renderNetLinks() {
       '</div>';
   }).join('');
   updateSummary();
+}
+function toggleShowLinks(){
+  _showLinks = document.getElementById('net-show-links').checked;
+  drawScene();
+}
+// Jump here from a canvas link click (see drawNetworkLinks/hitTest) — switches to the
+// Network tab and flashes the matching row so the click actually lands somewhere.
+function highlightNetLink(idx){
+  setMode('network');
+  var row=document.querySelector('.net-link[data-net-idx="'+idx+'"]');
+  if(!row) return;
+  row.scrollIntoView({block:'center',behavior:'smooth'});
+  row.classList.add('flash');
+  setTimeout(function(){row.classList.remove('flash');},1400);
 }
 
 function addNetLink() {
@@ -3415,7 +3527,7 @@ function _doExportSceneXML(_eventTracks){
       var zpos=z.location||z.position||[0,0,0];
       var zw=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25};
       var zat=z.ambient_theme||{scale:'major',tempo:'medium'};
-      x+='  <Zone id="'+xe(z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
+      x+='  <Zone id="'+xe(z.id)+'" name="'+xe(z.name||z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
       x+='    <Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
       x+='    <Weights E="'+zw.E+'" B="'+zw.B+'" P="'+zw.P+'" S="'+zw.S+'"/>\n';
       x+='    <Position x="'+zpos[0]+'" y="0" z="'+zpos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
@@ -3478,6 +3590,18 @@ function _doExportSceneXML(_eventTracks){
       x+='  </Path>'+'\n';
     });
     x+='</Paths>'+'\n';
+  }
+  // Free cameras — previously only written into the separate X3D export
+  // (buildFreeCamerasX3D), never into this composer save/load format, so a placed
+  // camera survived an Export but vanished on the next Scene reload/refresh.
+  if(Object.keys(placedCameras).length>0){
+    x+='<Cameras>\n';
+    Object.values(placedCameras).forEach(function(c){
+      var cpos=c.position||[0,1.7,0];
+      x+='  <Camera name="'+xe(c.name)+'" x="'+cpos[0]+'" y="'+(cpos[1]!==undefined?cpos[1]:1.7)+'" z="'+cpos[2]+
+        '" hAngle="'+(c.hAngle||0)+'" vAngle="'+(c.vAngle||0)+'"/>\n';
+    });
+    x+='</Cameras>\n';
   }
   if (networks.length > 0) {
     x += '<Network>\n';
@@ -3551,7 +3675,7 @@ function _doExportSceneXML(_eventTracks){
   x+='</Scene>\n';
   var filename=sn+'_scene.xml';
   fetch(API+'/scene/save/scene',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({filename:filename,content:x})})
+    body:JSON.stringify({filename:filename,content:x,scene_name:sn})})
     .then(function(r){return r.json();})
     .then(function(res){
       document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Scene XML: scenes/'+filename+'</div>';
@@ -3648,6 +3772,7 @@ function _restoreChorusFromXml(xml) {
     // Does NOT require zones{} to be pre-populated — replaces existing entries.
     doc.querySelectorAll('Zones > Zone').forEach(function(zEl) {
       var zid      = zEl.getAttribute('id');
+      var zname    = zEl.getAttribute('name');
       var ztype    = zEl.getAttribute('zone_type') || 'neutral';
       if (!zid) return;
 
@@ -3721,7 +3846,7 @@ function _restoreChorusFromXml(xml) {
       // Build or merge zone object
       if (!zones[zid]) zones[zid] = {};
       Object.assign(zones[zid], {
-        id: zid, name: zones[zid].name || zid,
+        id: zid, name: zname || zones[zid].name || zid,
         zone_type: ztype,
         location: [px, 0, pz],
         radius: radius,
@@ -3736,67 +3861,63 @@ function _restoreChorusFromXml(xml) {
     });
 
     // ── 3. Restore waypoints from <Waypoints><Waypoint> ───────────────────
-    if (!Object.keys(waypoints).length) {
-      doc.querySelectorAll('Waypoints > Waypoint').forEach(function(wpEl) {
-        var wpName = wpEl.getAttribute('name');
-        if (!wpName) return;
-        var px2 = parseFloat(wpEl.getAttribute('pos_x') || '0');
-        var pz2 = parseFloat(wpEl.getAttribute('pos_z') || '0');
-        var label   = wpEl.getAttribute('label') || '';
-        var zone    = wpEl.getAttribute('zone')  || '';
-        var dwell   = parseFloat(wpEl.getAttribute('dwell') || '2');
-        var pace    = parseFloat(wpEl.getAttribute('pace')  || '1.4');
-        var qaLines = [];
-        wpEl.querySelectorAll('Statement, Question, Response').forEach(function(lineEl) {
-          qaLines.push({
-            type:    lineEl.tagName,
-            speaker: lineEl.getAttribute('speaker') || '',
-            text:    lineEl.textContent || ''
-          });
+    // Per-item merge, like zones above — NOT gated on waypoints{} being empty.
+    // The old all-or-nothing guard (if !Object.keys(waypoints).length) skipped
+    // the whole XML block whenever anything had already populated waypoints{}
+    // (e.g. loadAll()'s initial /waypoint GET), which silently discarded any
+    // edited dialogue/qaLines that had actually been exported to the file.
+    doc.querySelectorAll('Waypoints > Waypoint').forEach(function(wpEl) {
+      var wpName = wpEl.getAttribute('name');
+      if (!wpName) return;
+      var px2 = parseFloat(wpEl.getAttribute('pos_x') || '0');
+      var pz2 = parseFloat(wpEl.getAttribute('pos_z') || '0');
+      var label   = wpEl.getAttribute('label') || '';
+      var zone    = wpEl.getAttribute('zone')  || '';
+      var dwell   = parseFloat(wpEl.getAttribute('dwell') || '2');
+      var pace    = parseFloat(wpEl.getAttribute('pace')  || '1.4');
+      var qaLines = [];
+      wpEl.querySelectorAll('Statement, Question, Response').forEach(function(lineEl) {
+        qaLines.push({
+          type:    lineEl.tagName,
+          speaker: lineEl.getAttribute('speaker') || '',
+          text:    lineEl.textContent || ''
         });
-        var firstQ = '';
-        qaLines.forEach(function(l) { if (!firstQ && l.type === 'Question' && l.text) firstQ = l.text; });
-        waypoints[wpName] = {
-          name: wpName, label: label, zone: zone,
-          dwell: dwell, pace: pace,
-          position: [px2, 0, pz2],
-          question: firstQ,
-          qaLines: qaLines
-        };
       });
-    }
+      var firstQ = '';
+      qaLines.forEach(function(l) { if (!firstQ && l.type === 'Question' && l.text) firstQ = l.text; });
+      waypoints[wpName] = {
+        name: wpName, label: label, zone: zone,
+        dwell: dwell, pace: pace,
+        position: [px2, 0, pz2],
+        question: firstQ,
+        qaLines: qaLines
+      };
+    });
 
     // ── 4. Restore paths from <Paths><Path> ───────────────────────────────
-    if (!Object.keys(paths).length) {
-      doc.querySelectorAll('Paths > Path').forEach(function(pEl) {
-        var pname = pEl.getAttribute('name');
-        var agent = pEl.getAttribute('agent') || '';
-        if (!pname) return;
-        var orderRaw = pEl.getAttribute('waypointOrder');
-        var orderInt = parseInt(orderRaw, 10);
-        var wpRefs = [];
-        pEl.querySelectorAll('PathWaypoint').forEach(function(r) {
-          var ref = r.getAttribute('ref');
-          if (ref) wpRefs.push(ref);
-        });
-        paths[pname] = {
-          name: pname,
-          agent: agent,
-          waypoints: wpRefs,
-          waypointOrder: (!isNaN(orderInt) && orderInt > 0) ? orderInt : 1
-        };
+    // Per-item merge, unconditional — same fix as waypoints above. The old
+    // guard only fully rebuilt paths{} when it was empty; otherwise it just
+    // patched waypointOrder back in from XML, leaving edits to a path's
+    // waypoint sequence (reordering, added/removed stops) silently dropped
+    // whenever paths{} had already been populated from elsewhere.
+    doc.querySelectorAll('Paths > Path').forEach(function(pEl) {
+      var pname = pEl.getAttribute('name');
+      var agent = pEl.getAttribute('agent') || '';
+      if (!pname) return;
+      var orderRaw = pEl.getAttribute('waypointOrder');
+      var orderInt = parseInt(orderRaw, 10);
+      var wpRefs = [];
+      pEl.querySelectorAll('PathWaypoint').forEach(function(r) {
+        var ref = r.getAttribute('ref');
+        if (ref) wpRefs.push(ref);
       });
-    } else {
-      // Paths exist from server — just patch waypointOrder from XML
-      doc.querySelectorAll('Paths > Path').forEach(function(pEl) {
-        var pname    = pEl.getAttribute('name');
-        var orderRaw = pEl.getAttribute('waypointOrder');
-        if (pname && paths[pname] && orderRaw && orderRaw !== 'MISSING') {
-          var orderInt = parseInt(orderRaw, 10);
-          if (!isNaN(orderInt) && orderInt > 0) paths[pname].waypointOrder = orderInt;
-        }
-      });
-    }
+      paths[pname] = {
+        name: pname,
+        agent: agent,
+        waypoints: wpRefs,
+        waypointOrder: (!isNaN(orderInt) && orderInt > 0) ? orderInt : 1
+      };
+    });
 
     // ── 5. Restore network links ───────────────────────────────────────────
     var netEl = doc.querySelector('Network');
@@ -3819,6 +3940,24 @@ function _restoreChorusFromXml(xml) {
         if (from && to) networks.push({ from:from, to:to, strength:strength, couplers:couplers, coupler_params:coupler_params });
       });
     }
+
+    // ── 5b. Restore free cameras from <Cameras><Camera> ────────────────────
+    // Counterpart to the Cameras block added to exportSceneXML — without this,
+    // placed cameras survived an Export but vanished on the next Scene reload.
+    doc.querySelectorAll('Cameras > Camera').forEach(function(cEl) {
+      var cname = cEl.getAttribute('name');
+      if (!cname) return;
+      placedCameras[cname] = {
+        name: cname,
+        position: [
+          parseFloat(cEl.getAttribute('x') || '0'),
+          parseFloat(cEl.getAttribute('y') || '1.7'),
+          parseFloat(cEl.getAttribute('z') || '0')
+        ],
+        hAngle: parseFloat(cEl.getAttribute('hAngle') || '0'),
+        vAngle: parseFloat(cEl.getAttribute('vAngle') || '0')
+      };
+    });
 
     // ── 6. Restore scene-level sound from <SceneSound> ────────────────────
     var sndEl = doc.querySelector('SceneSound');
@@ -4005,77 +4144,165 @@ function _applyLoadedScene(data) {
 }
 
 // ─────────────────────────────────────────────
-// Run Scene Arc
+// Run Scene Arc — multi-path, group-ordered by Waypoint Order
+// Day 66 fix: previously a single global (_sceneArcPath/_sceneArcStep/_sceneArcRows)
+// meant only one path could ever be recorded per run, and any agent not selected
+// never got /arc/record called for them at all — which silently starved behavior
+// clip selection, the coupler tick, HotHouse, and the trust panel for that agent
+// (all of them gate on that agent having been seeded via /arc/record). This
+// replaces the single-path state with per-path state keyed by path name, grouped
+// and sequenced by waypointOrder — honoring the rule the UI already documented
+// ("Same number fires simultaneously. Higher number waits for lower group to
+// complete.") but never actually executed.
 // ─────────────────────────────────────────────
-var _sceneArcRunning=false, _sceneArcStep=0, _sceneArcRows=[], _sceneArcPath=null, _sceneArcTimer=null;
-
+var _sceneArc = {};           // pname -> {step, rows, path, timer, done, running}
+var _sceneArcGroups = [];     // array of arrays of pnames, sorted by waypointOrder
+var _sceneArcGroupIdx = 0;
+var _sceneArcAnyRunning = false;
 
 function populateRunUI(){
   var sel=document.getElementById('run-path');
   sel.innerHTML=Object.keys(paths).length
-    ? Object.keys(paths).map(function(n){return '<option value="'+n+'">'+n+' ('+paths[n].agent+')</option>';}).join('')
+    ? Object.keys(paths).map(function(n){return '<option value="'+n+'">'+n+' ('+paths[n].agent+', order='+(paths[n].waypointOrder||1)+')</option>';}).join('')
     : '<option value="">-- no paths defined --</option>';
 }
 
+function _groupPathsByOrder(pnames){
+  var groups={};
+  pnames.forEach(function(pn){
+    var ord=(paths[pn]&&paths[pn].waypointOrder)||1;
+    if(!groups[ord])groups[ord]=[];
+    groups[ord].push(pn);
+  });
+  var orderKeys=Object.keys(groups).map(Number).sort(function(a,b){return a-b;});
+  return orderKeys.map(function(k){return groups[k];});
+}
+
+function _safePname(pname){ return pname.replace(/[^A-Za-z0-9_]/g,'_'); }
+
+function _renderRunStatusShell(pnames){
+  var container=document.getElementById('run-multi-status');
+  container.innerHTML=pnames.map(function(pn){
+    var sid=_safePname(pn);
+    return '<div id="run-status-'+sid+'" style="background:var(--s2);border:1px solid var(--border);'
+      +'border-radius:5px;padding:8px;margin-bottom:8px">'
+      +'<div style="color:var(--cool);font-family:var(--display);font-size:14px;font-weight:700">'+pn+' <span style="color:var(--dim);font-weight:400;font-size:12px">('+(paths[pn]?paths[pn].agent:'')+')</span></div>'
+      +'<div id="run-status-'+sid+'-wp" style="color:var(--accent);font-size:13px;margin-top:2px">queued…</div>'
+      +'<div id="run-status-'+sid+'-q" style="color:var(--warm);font-size:13px;font-style:italic;margin-top:4px"></div>'
+      +'<div id="run-status-'+sid+'-r" style="color:var(--text);font-size:13px;line-height:1.5;max-height:80px;overflow-y:auto;margin-top:2px"></div>'
+      +'<div id="run-status-'+sid+'-ch" style="display:flex;gap:8px;margin-top:4px;font-size:12px">'
+      +'<span style="color:var(--E)">E —</span><span style="color:var(--B)">B —</span>'
+      +'<span style="color:var(--P)">P —</span><span style="color:var(--S)">S —</span></div>'
+      +'</div>';
+  }).join('');
+}
+
+function _updateOverallProgress(){
+  var total=Object.keys(_sceneArc).length;
+  var done=Object.values(_sceneArc).filter(function(s){return s.done;}).length;
+  var groupNo=_sceneArcGroupIdx+1, groupTotal=_sceneArcGroups.length;
+  document.getElementById('run-progress').textContent=
+    _sceneArcAnyRunning
+      ? 'Running — group '+groupNo+'/'+groupTotal+' — '+done+'/'+total+' paths complete'
+      : (total ? 'Complete — '+done+'/'+total+' paths recorded.' : 'Not running.');
+}
+
 function runSceneArc(){
-  var pname=document.getElementById('run-path').value;
-  if(!pname||!paths[pname]){toast('Select a path first',true);return;}
-  if(_sceneArcRunning){toast('Already running',true);return;}
-  _sceneArcPath=paths[pname];
-  _sceneArcRunning=true;_sceneArcStep=0;_sceneArcRows=[];
+  var sel=document.getElementById('run-path');
+  var pnames=Array.prototype.slice.call(sel.selectedOptions).map(function(o){return o.value;}).filter(function(v){return v&&paths[v];});
+  if(!pnames.length){toast('Select at least one path first',true);return;}
+  if(_sceneArcAnyRunning){toast('Already running',true);return;}
+  _sceneArc={};
+  pnames.forEach(function(pn){
+    _sceneArc[pn]={step:0,rows:[],path:paths[pn],timer:null,done:false,running:false};
+  });
+  _sceneArcGroups=_groupPathsByOrder(pnames);
+  _sceneArcGroupIdx=0;
+  _sceneArcAnyRunning=true;
   document.getElementById('run-btn').disabled=true;
-  document.getElementById('run-step-detail').style.display='block';
   document.getElementById('run-log').textContent='Running...';
-  _sceneArcAdvance();
+  _renderRunStatusShell(pnames);
+  _updateOverallProgress();
+  _startArcGroup(_sceneArcGroupIdx);
+}
+
+function _startArcGroup(idx){
+  var group=_sceneArcGroups[idx];
+  if(!group)return;
+  group.forEach(function(pn){
+    _sceneArc[pn].running=true;
+    _sceneArcAdvance(pn);
+  });
+}
+
+function _maybeAdvanceGroup(){
+  var group=_sceneArcGroups[_sceneArcGroupIdx]||[];
+  var groupDone=group.every(function(pn){return _sceneArc[pn].done;});
+  if(!groupDone)return;
+  _sceneArcGroupIdx++;
+  if(_sceneArcGroupIdx<_sceneArcGroups.length){
+    _startArcGroup(_sceneArcGroupIdx);
+  } else {
+    _sceneArcAnyRunning=false;
+    document.getElementById('run-btn').disabled=false;
+  }
+  _updateOverallProgress();
 }
 
 function stopSceneArc(){
-  _sceneArcRunning=false;
-  if(_sceneArcTimer){clearTimeout(_sceneArcTimer);_sceneArcTimer=null;}
+  _sceneArcAnyRunning=false;
+  Object.keys(_sceneArc).forEach(function(pn){
+    var s=_sceneArc[pn];
+    if(s.timer){clearTimeout(s.timer);s.timer=null;}
+    s.running=false;
+    if(s.rows.length>0 && !s.done)_saveSceneArc(pn);
+  });
   document.getElementById('run-btn').disabled=false;
-  document.getElementById('run-progress').textContent='Stopped at step '+_sceneArcStep+'.';
-  if(_sceneArcRows.length>0)_saveSceneArc();
+  document.getElementById('run-progress').textContent='Stopped.';
 }
 
 function resetSceneArc(){
   stopSceneArc();
-  _sceneArcStep=0;_sceneArcRows=[];_sceneArcPath=null;
+  _sceneArc={};_sceneArcGroups=[];_sceneArcGroupIdx=0;_sceneArcAnyRunning=false;
   document.getElementById('run-progress').textContent='Not running.';
-  document.getElementById('run-step-detail').style.display='none';
+  document.getElementById('run-multi-status').innerHTML='';
   document.getElementById('run-log').textContent='Run a scene to generate arc.';
 }
 
-async function _sceneArcAdvance(){
-  if(!_sceneArcRunning)return;
-  var wps=(_sceneArcPath.waypoints||[]);
-  if(_sceneArcStep>=wps.length){
-    _sceneArcRunning=false;
-    document.getElementById('run-btn').disabled=false;
-    document.getElementById('run-progress').textContent='Complete — '+_sceneArcRows.length+' waypoints recorded.';
-    _saveSceneArc();
+async function _sceneArcAdvance(pname){
+  var st=_sceneArc[pname];
+  if(!st||!st.running)return;
+  var sid=_safePname(pname);
+  var wps=(st.path.waypoints||[]);
+  if(st.step>=wps.length){
+    st.running=false;st.done=true;
+    var elWp=document.getElementById('run-status-'+sid+'-wp');
+    if(elWp)elWp.textContent='Complete — '+st.rows.length+' waypoints recorded.';
+    _saveSceneArc(pname);
+    _maybeAdvanceGroup();
     return;
   }
-  var wpName=wps[_sceneArcStep],wp=waypoints[wpName];
-  if(!wp){_sceneArcStep++;_sceneArcAdvance();return;}
+  var wpName=wps[st.step],wp=waypoints[wpName];
+  if(!wp){st.step++;_sceneArcAdvance(pname);return;}
   var pos=wp.position||[0,0,0];
-  var cultivar=_sceneArcPath.agent;
+  var cultivar=st.path.agent;
   var pace = 2;  // recording step interval (s) — X3D timers drive actual movement timing
   var total=wps.length;
 
-  document.getElementById('run-progress').textContent=
-    'Step '+(_sceneArcStep+1)+' / '+total+' — '+wpName;
-  document.getElementById('run-wp-name').textContent=wpName+(wp.label?' — '+wp.label:'');
-  document.getElementById('run-wp-pos').textContent=
-    'X='+pos[0].toFixed(2)+' Z='+pos[2].toFixed(2)+(wp.zone?' ['+wp.zone+']':'')
-    +' (scene '+sceneConfig.width+'x'+sceneConfig.depth+'m)';
-  document.getElementById('run-question').textContent=wp.question||'(no question)';
-  document.getElementById('run-response').textContent='…';
+  var elWp=document.getElementById('run-status-'+sid+'-wp');
+  var elQ=document.getElementById('run-status-'+sid+'-q');
+  var elR=document.getElementById('run-status-'+sid+'-r');
+  var elCh=document.getElementById('run-status-'+sid+'-ch');
+  if(elWp)elWp.textContent='Step '+(st.step+1)+'/'+total+' — '+wpName
+    +' — X='+pos[0].toFixed(2)+' Z='+pos[2].toFixed(2)+(wp.zone?' ['+wp.zone+']':'');
+  if(elQ)elQ.textContent=wp.question||'(no question)';
+  if(elR)elR.textContent='…';
 
   // Push avatar position via BroadcastChannel so loader moves avatar NOW
   try{
     var bc=new BroadcastChannel('mccf_arc');
     bc.postMessage({type:'mccf_arc_cv',data:{
-      cultivar:cultivar,step:_sceneArcStep+1,
+      cultivar:cultivar,step:st.step+1,
       cv:{E:0.35,B:0.25,P:0.25,S:0.15},coherence:0.5
     }});
     bc.close();
@@ -4096,7 +4323,7 @@ async function _sceneArcAdvance(){
         adapter_id:adapter, api_key:apikey||'',
         persona:{name:cultivar,role:'agent',description:''},
         params:{max_tokens:300,temperature:0.72},
-        clear_history:(_sceneArcStep===0)
+        clear_history:(st.step===0)
       });
       for(var qi=0;qi<qaLines.length;qi++){
         var ql=qaLines[qi];
@@ -4104,23 +4331,23 @@ async function _sceneArcAdvance(){
         if(ql.type==='Response'||ql.type==='Statement'){
           // Scripted/Statement line — record as-is, no LLM call. Carry type for arc XML.
           arcRLines.push({_type:ql.type, speaker:ql.speaker, text:ql.text});
-          document.getElementById('run-response').textContent=ql.text;
+          if(elR)elR.textContent=ql.text;
           continue;
         }
         // Question line — check if next line is an authored Response
         var nextLine = qaLines[qi+1];
         var hasAuthoredResponse = nextLine && nextLine.type==='Response' && nextLine.text && nextLine.text.trim();
         arcQLines.push({speaker:ql.speaker,text:ql.text});
-        document.getElementById('run-question').textContent=ql.text;
+        if(elQ)elQ.textContent=ql.text;
         if(hasAuthoredResponse){
           // Authored response present — skip Ollama, record as-is
-          document.getElementById('run-response').textContent=nextLine.text;
+          if(elR)elR.textContent=nextLine.text;
           arcRLines.push({_type:'Response', speaker:nextLine.speaker, text:nextLine.text});
           qi++;  // consume the Response line so the loop doesn't re-process it
           continue;
         }
         // No authored response — call Ollama
-        document.getElementById('run-response').textContent='…';
+        if(elR)elR.textContent='…';
         var llmResponse='', channels=null;
         var speakResp=await fetch(API+'/voice/speak',{
           method:'POST',headers:{'Content-Type':'application/json'},
@@ -4135,13 +4362,13 @@ async function _sceneArcAdvance(){
             var sline=slines[li]; if(!sline.startsWith('data: '))continue;
             try{
               var evt=JSON.parse(sline.slice(6));
-              if(evt.type==='token'){llmResponse+=evt.content;document.getElementById('run-response').textContent=llmResponse;}
+              if(evt.type==='token'){llmResponse+=evt.content;if(elR)elR.textContent=llmResponse;}
               else if(evt.type==='affect'){channels=evt.params;}
             }catch(pe){}
           }
         }
         arcRLines.push({speaker:cultivar,text:llmResponse});
-        var recResp2=await apiPost('/arc/record',{cultivar:cultivar,step:_sceneArcStep+1,waypoint:wpName,response:llmResponse});
+        var recResp2=await apiPost('/arc/record',{cultivar:cultivar,step:st.step+1,waypoint:wpName,response:llmResponse});
         var cv=channels||(recResp2.cv?recResp2.cv:null);
         E=cv?(cv.E||0.35):0.35; B=cv?(cv.B||0.25):0.25;
         P=cv?(cv.P||0.25):0.25; S=cv?(cv.S||0.25):0.25;
@@ -4156,6 +4383,13 @@ async function _sceneArcAdvance(){
   // any waypoint still at defaults, using authored text for sentiment.
   // This makes the Constitutional Navigator obsolete: the composer is the
   // sole arc/record caller for every waypoint in a scene arc.
+  //
+  // Day 66: this call is also what seeds this agent into field.agents,
+  // which is what unblocks the coupler tick, HotHouse, and behavior clip
+  // selection for them — so it must run for every selected path, not just
+  // whichever one used to be the sole selection. That's the whole point
+  // of this rewrite: every path in _sceneArc gets its own _sceneArcAdvance
+  // loop, so every one of them reaches this call.
   if(E===0.35 && B===0.25 && P===0.25 && S===0.25){
     var allAuthoredText = arcRLines.map(function(l){return l.text||'';}).join(' ').trim()
       || arcQLines.map(function(l){return l.text||'';}).join(' ').trim()
@@ -4163,7 +4397,7 @@ async function _sceneArcAdvance(){
     try{
       var recResp3 = await apiPost('/arc/record',{
         cultivar: cultivar,
-        step:     _sceneArcStep+1,
+        step:     st.step+1,
         waypoint: wpName,
         response: allAuthoredText
       });
@@ -4174,9 +4408,9 @@ async function _sceneArcAdvance(){
 
   var displayQ=arcQLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'(no question — movement only)';
   var displayR=arcRLines.map(function(l){return(l.speaker?l.speaker+': ':'')+l.text;}).join(' / ')||'';
-  document.getElementById('run-question').textContent=displayQ;
-  document.getElementById('run-response').textContent=displayR;
-  document.getElementById('run-channels').innerHTML=
+  if(elQ)elQ.textContent=displayQ;
+  if(elR)elR.textContent=displayR;
+  if(elCh)elCh.innerHTML=
     '<span style="color:var(--E)">E '+E.toFixed(2)+'</span>'+
     '<span style="color:var(--B)">B '+B.toFixed(2)+'</span>'+
     '<span style="color:var(--P)">P '+P.toFixed(2)+'</span>'+
@@ -4185,7 +4419,7 @@ async function _sceneArcAdvance(){
   try{
     var bc2=new BroadcastChannel('mccf_arc');
     bc2.postMessage({type:'mccf_arc_cv',data:{
-      cultivar:cultivar,step:_sceneArcStep+1,
+      cultivar:cultivar,step:st.step+1,
       cv:{E:E,B:B,P:P,S:S},coherence:coherence,
       pos_x:pos[0],pos_y:0,pos_z:pos[2]
     }});
@@ -4222,8 +4456,8 @@ async function _sceneArcAdvance(){
     // No dialogue at this waypoint — carry authored qaLines as-is (movement only)
     mergedQALines = qaLines.slice();
   }
-  _sceneArcRows.push({
-    step:_sceneArcStep+1,waypoint:wp.label||wpName,
+  st.rows.push({
+    step:st.step+1,waypoint:wp.label||wpName,
     E:E.toFixed(4),B:B.toFixed(4),P:P.toFixed(4),S:S.toFixed(4),
     mode:'scene',coherence:coherence.toFixed(4),
     uncertainty:'0.5',valence:'0.0',reward:'0.0',
@@ -4233,31 +4467,71 @@ async function _sceneArcAdvance(){
     response:arcRLines.length?arcRLines[arcRLines.length-1].text:''
   });
 
-  _sceneArcStep++;
-  _sceneArcTimer=setTimeout(_sceneArcAdvance, pace*1000);
+  st.step++;
+  _updateOverallProgress();
+  st.timer=setTimeout(function(){_sceneArcAdvance(pname);}, pace*1000);
 }
 
-function _saveSceneArc(){
-  if(!_sceneArcRows.length||!_sceneArcPath)return;
-  var cultivar=_sceneArcPath.agent;
-  var pathName=_sceneArcPath.name||cultivar;
+// Take grouping (Day 67 directory redesign): every arc exported during one
+// working session on a scene should land in the same take folder, so the
+// playback dropdown can scope to "this scene's this take" rather than
+// showing every arc ever recorded across every scene. Auto-generated
+// (unlabeled, timestamp-only) on first save after a scene change; the
+// "New Take" button lets the author start a fresh one deliberately, with
+// an optional human label, at any point.
+var _currentTakeId = null;
+var _currentTakeScene = null;
+
+function _sanitizeTakeLabel(s){
+  return (s||'').trim().replace(/[\\\/:*?"<>|]/g,'_');
+}
+
+function _ensureTakeId(sceneName){
+  if (_currentTakeId && _currentTakeScene === sceneName) return _currentTakeId;
+  // Scene changed (or no take started yet) — start a fresh, unlabeled take.
+  _currentTakeId = new Date().toISOString().replace(/[:.]/g,'').slice(0,15);
+  _currentTakeScene = sceneName;
+  var el = document.getElementById('take-current');
+  if (el) el.textContent = _currentTakeId + ' (auto-started)';
+  return _currentTakeId;
+}
+
+function _startNewTake(label){
+  var sceneName = document.getElementById('sc-name').value.trim() || 'unknown';
+  var ts = new Date().toISOString().replace(/[:.]/g,'').slice(0,15);
+  var clean = _sanitizeTakeLabel(label);
+  _currentTakeId = clean ? (clean + '__' + ts) : ts;
+  _currentTakeScene = sceneName;
+  var el = document.getElementById('take-current');
+  if (el) el.textContent = _currentTakeId;
+  var lbl = document.getElementById('take-label');
+  if (lbl) lbl.value = '';
+  toast('New take started: ' + _currentTakeId);
+}
+
+function _saveSceneArc(pname){
+  var st=_sceneArc[pname];
+  if(!st||!st.rows.length)return;
+  var cultivar=st.path.agent;
+  var pathName=st.path.name||cultivar;
   var ts=new Date().toISOString().slice(0,19);
   var sceneName=document.getElementById('sc-name').value.trim()||'unknown';
-  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,scene_name:sceneName,rows:_sceneArcRows})
+  var takeName=_ensureTakeId(sceneName);
+  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,scene_name:sceneName,take_name:takeName,rows:st.rows})
     .then(function(res){
-      document.getElementById('run-log').innerHTML=
+      document.getElementById('run-log').innerHTML+=
         '<div style="color:var(--accent)">Saved: '+res.filename+'</div>'+
-        '<div style="color:var(--dim)">'+_sceneArcRows.length+' waypoints — sending to launcher…</div>';
+        '<div style="color:var(--dim)">'+pathName+' — '+st.rows.length+' waypoints — sending to launcher…</div>';
       toast('Scene arc saved: '+res.filename);
       // Auto send to launcher so loader has current scene
       return sendToLauncher(true);
     })
     .then(function(){
       document.getElementById('run-log').innerHTML+=
-        '<div style="color:var(--dim)">Launcher updated — </div>'+
+        '<div style="color:var(--dim)">Launcher updated ('+pathName+') — </div>'+
         '<div><button class="btn" onclick="openLoader()" style="margin-top:4px;border-color:var(--purple);color:var(--purple)">&#9654; Open X3D Loader</button></div>';
     })
-    .catch(function(){toast('Arc save failed',true);});
+    .catch(function(){toast('Arc save failed for '+pathName,true);});
 }
 
 

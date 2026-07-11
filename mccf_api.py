@@ -30,6 +30,7 @@ Affect parameter output (returned to X3D):
 
 import json
 import math
+import re
 import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -85,10 +86,9 @@ def serve_x3d_scene(filename):
         cm = app.config.get('_chorus_manager')
         if cm is not None:
             base = filename.replace('.x3d', '')
-            scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
             candidates = [
-                os.path.join(scenes_dir, base + '_scene.xml'),
-                os.path.join(scenes_dir, base + '.xml'),
+                _scene_filepath(base + '_scene.xml'),
+                _scene_filepath(base + '.xml'),
             ]
             for cpath in candidates:
                 if os.path.exists(cpath):
@@ -114,9 +114,11 @@ def upload_x3d_scene():
     scene_name = request.headers.get('X-Scene-Name', '').strip()
     if not scene_name:
         scene_name = 'mccf_scene'
-    # Sanitise: keep alphanumeric, underscore, hyphen only
-    import re as _re
-    safe_name = _re.sub(r'[^A-Za-z0-9_\-]', '_', scene_name)
+    # Sanitise via the shared helper — must stay identical to the sanitization
+    # used for the scenes/<scene_name>/ folder (save_scene_xml, arc_export_save)
+    # or the Loader's derived scene_name (from this .x3d filename) won't match
+    # the arcs folder on disk. See _safe_path_component's docstring.
+    safe_name = _safe_path_component(scene_name)
     filename = safe_name + '.x3d'
     filepath = os.path.join(x3d_dir, filename)
     content = request.get_data(as_text=True)
@@ -158,6 +160,32 @@ def list_x3d_scenes():
     return jsonify({'files': [f['filename'] for f in files]})
 
 
+def _safe_path_component(s):
+    """
+    Sanitize a single path SEGMENT (a scene name or take name) for safe use
+    inside a nested directory path — NOT the same job as os.path.basename(),
+    which only strips a full filename down to its last segment. This is used
+    when we're deliberately building a multi-segment path (scenes/<scene>/
+    arcs/<take>/<file>) and each segment individually needs to be safe
+    without collapsing the whole intended structure down to one component.
+
+    IMPORTANT: this must sanitize identically to upload_x3d_scene()'s
+    `re.sub(r'[^A-Za-z0-9_\\-]', '_', scene_name)`, because the X3D Loader
+    derives "current scene name" by stripping ".x3d" off whatever filename
+    /scene/x3d/list gave it, then sends that as scene_name to /arc/playback.
+    If this function sanitized differently (e.g. only stripping slashes and
+    leaving spaces/punctuation alone), a scene name like "Giparu Garden"
+    would produce scenes/Giparu Garden/arcs/... on save but the Loader would
+    query scene_name=Giparu_Garden (from Giparu_Garden.x3d) — a folder that
+    doesn't exist, so /arc/playback correctly reports zero files even though
+    the arc really was saved. Keeping both sanitizers in lock-step is what
+    makes the folder name and the .x3d filename the same string.
+    """
+    s = (s or '').strip()
+    s = re.sub(r'[^A-Za-z0-9_\-]', '_', s)
+    return s or 'unnamed'
+
+
 @app.route('/scene/save/zones', methods=['POST'])
 def save_zone_xml():
     """
@@ -183,28 +211,60 @@ def save_zone_xml():
 @app.route('/scene/save/scene', methods=['POST'])
 def save_scene_xml():
     """
-    Write scene XML from Scene Composer to scenes/<filename>.
+    Write scene XML from Scene Composer to scenes/<scene_name>/<filename>.
     Called by exportSceneXML() in mccf_scene_composer.html.
-    Body: { filename: "garden_001_scene.xml", content: "<Scene>...</Scene>" }
+    Body: { filename: "garden_001_scene.xml", content: "<Scene>...</Scene>",
+            scene_name: "garden_001" }
+
+    scene_name is now required (Day 67 directory redesign) — the scene folder
+    is the container for everything belonging to that scene, including its
+    arcs/ subdirectory. Falls back to deriving scene_name from the filename
+    (stripping a trailing "_scene.xml") only if the caller doesn't send it,
+    for compatibility with any caller not yet updated.
     """
     data = request.get_json() or {}
     filename = data.get('filename', '').strip()
     content  = data.get('content', '').strip()
+    scene_name = data.get('scene_name', '').strip()
     if not filename or not content:
         return jsonify({'status': 'error', 'error': 'filename and content required'}), 400
+    if not scene_name:
+        scene_name = filename[:-len('_scene.xml')] if filename.endswith('_scene.xml') else filename
+    scene_name = _safe_path_component(scene_name)
     filename = os.path.basename(filename)
-    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
-    os.makedirs(scenes_dir, exist_ok=True)
-    filepath = os.path.join(scenes_dir, filename)
+    scenes_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    scene_dir = os.path.join(scenes_root, scene_name)
+    os.makedirs(scene_dir, exist_ok=True)
+    filepath = os.path.join(scene_dir, filename)
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
-    return jsonify({'status': 'ok', 'path': f'scenes/{filename}'})
+    return jsonify({'status': 'ok', 'path': f'scenes/{scene_name}/{filename}'})
+
+
+def _derive_scene_name(filename):
+    """
+    Scene name is the filename with its '_scene.xml' suffix stripped — the
+    same convention used as the save-time fallback above. Lets every read
+    endpoint locate a scene's folder from just the filename it's always been
+    passed, without every caller needing to be updated to send scene_name
+    explicitly.
+    """
+    fn = os.path.basename(filename)
+    return fn[:-len('_scene.xml')] if fn.endswith('_scene.xml') else fn
+
+
+def _scene_filepath(filename):
+    """Resolve a scene wrapper filename to scenes/<scene_name>/<filename>."""
+    filename = os.path.basename(filename)
+    scene_name = _safe_path_component(_derive_scene_name(filename))
+    scenes_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
+    return os.path.join(scenes_root, scene_name, filename)
 
 
 @app.route('/scenes', methods=['GET'])
 def list_scenes():
     """
-    List scene XML files in scenes/ directory.
+    List scene XML files under scenes/<scene_name>/<scene_name>_scene.xml.
     Returns filename, cultivars found, waypoint count.
     """
     import re as _re
@@ -212,43 +272,54 @@ def list_scenes():
     if not os.path.isdir(scenes_dir):
         return jsonify({'files': [], 'scenes_dir': scenes_dir})
     files = []
-    for fname in sorted(os.listdir(scenes_dir)):
-        if not fname.endswith('.xml'):
+    for scene_name in sorted(os.listdir(scenes_dir)):
+        scene_dir = os.path.join(scenes_dir, scene_name)
+        if not os.path.isdir(scene_dir):
             continue
-        fpath = os.path.join(scenes_dir, fname)
-        size  = os.path.getsize(fpath)
-        cultivars = []
-        waypoint_count = 0
-        try:
-            with open(fpath, encoding='utf-8') as f:
-                raw = f.read(4000)
-            cultivars = _re.findall(r'cultivar="([^"]+)"', raw)
-            waypoint_count = len(_re.findall(r'<Waypoint ', raw))
-        except Exception:
-            pass
-        files.append({
-            'filename':       fname,
-            'size':           size,
-            'cultivars':      list(dict.fromkeys(cultivars)),
-            'waypoint_count': waypoint_count,
-        })
+        for fname in sorted(os.listdir(scene_dir)):
+            if not fname.endswith('.xml'):
+                continue
+            fpath = os.path.join(scene_dir, fname)
+            size  = os.path.getsize(fpath)
+            cultivars = []
+            waypoint_count = 0
+            try:
+                with open(fpath, encoding='utf-8') as f:
+                    raw = f.read(4000)
+                cultivars = _re.findall(r'cultivar="([^"]+)"', raw)
+                waypoint_count = len(_re.findall(r'<Waypoint ', raw))
+            except Exception:
+                pass
+            files.append({
+                'filename':       fname,
+                'size':           size,
+                'cultivars':      list(dict.fromkeys(cultivars)),
+                'waypoint_count': waypoint_count,
+            })
     return jsonify({'files': files, 'count': len(files)})
 
 
 @app.route('/scene/list/scenes', methods=['GET'])
 def list_scenes_for_composer():
     """
-    List scene XML files in scenes/ directory.
+    List scene XML files under scenes/<scene_name>/<scene_name>_scene.xml.
     Used by the composer scene dropdown (GET /scene/list/scenes).
-    Returns { files: ["garden_001_scene.xml", ...] } sorted newest-first.
+    Returns { files: ["garden_001_scene.xml", ...] } sorted newest-first
+    by scene folder mtime.
     """
     scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
     if not os.path.isdir(scenes_dir):
         return jsonify({'files': [], 'scenes_dir': scenes_dir})
-    files = sorted(
-        [f for f in os.listdir(scenes_dir) if f.endswith('.xml')],
-        reverse=True
-    )
+    entries = []
+    for scene_name in os.listdir(scenes_dir):
+        scene_dir = os.path.join(scenes_dir, scene_name)
+        if not os.path.isdir(scene_dir):
+            continue
+        for fname in os.listdir(scene_dir):
+            if fname.endswith('.xml'):
+                entries.append((os.path.getmtime(os.path.join(scene_dir, fname)), fname))
+    entries.sort(reverse=True)
+    files = [fname for _, fname in entries]
     return jsonify({'files': files, 'scenes_dir': scenes_dir})
 
 
@@ -297,8 +368,7 @@ def get_scene_xml_raw():
     filename = os.path.basename(request.args.get('filename', '').strip())
     if not filename:
         return 'filename required', 400
-    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
-    filepath   = os.path.join(scenes_dir, filename)
+    filepath = _scene_filepath(filename)
     if not os.path.exists(filepath):
         return f'Not found: {filename}', 404
     with open(filepath, encoding='utf-8') as f:
@@ -331,8 +401,7 @@ def load_scene_xml():
     if not filename:
         return jsonify({'error': 'filename required'}), 400
 
-    scenes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scenes')
-    filepath   = os.path.join(scenes_dir, filename)
+    filepath = _scene_filepath(filename)
     if not os.path.exists(filepath):
         return jsonify({'error': f'File not found: {filename}'}), 404
 
@@ -1004,6 +1073,15 @@ def get_field():
         name: agent.summary()
         for name, agent in field.agents.items()
     }
+    # Day 66 fix: summary() alone doesn't carry weights (same convention as
+    # /agent/<name>, which adds weights as a sibling key rather than nesting
+    # it inside summary()). Without this, every consumer of /field that reads
+    # agents[name].weights — Composer's Field State panel, the Loader's
+    # applyFieldData()/applyHotHouseData() — got undefined, defaulted to {},
+    # and every channel rendered as flat 0.00 regardless of the agent's real
+    # constitutional weights.
+    for name, agent in field.agents.items():
+        agents_summary[name]["weights"] = dict(agent.weights)
     # Attach runtime state (ϕ/ϵ split) to each agent summary
     for name in agents_summary:
         if name in _agent_runtime:
@@ -1223,6 +1301,12 @@ def hothouse_x3d():
     if ef is None:
         return jsonify({}), 200
     try:
+        # Day 66 fix: this was the only hothouse endpoint the Loader's pollHotHouse()
+        # ever called, and it never advanced the simulation — ef.step() was only
+        # wired into /hothouse/state, which nothing on the client calls. Every
+        # 1000ms poll was re-serving the same frozen snapshot instead of a running
+        # field. Stepping here is what makes HotHouse actually live.
+        ef.step()
         return jsonify(adapter.generate_x3d_state())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1289,8 +1373,20 @@ def export_python():
 @app.route("/arc/export", methods=["POST"])
 def arc_export_save():
     """
-    Save arc export as XML to exports/ directory (V2.3.1 — replaces TSV).
-    Body: { cultivar, timestamp, genre, seed, rows }
+    Save arc export as XML.
+    Body: { cultivar, timestamp, genre, seed, rows, scene_name, take_name }
+
+    Day 67 directory redesign: an arc belongs to a scene, and multiple
+    agents' arcs recorded as part of the same working session belong
+    together in one take. Path is now:
+        scenes/<scene_name>/arcs/<take_name>/arc_<id>.xml
+    take_name is generated client-side once per session and reused across
+    every arc saved in that session — see mccf_scene_composer.html's
+    _currentTakeId. If the caller doesn't send scene_name or take_name
+    (an older client, or a direct API call), falls back to a flat
+    scenes/_unscoped_arcs/ location rather than failing, so nothing breaks —
+    but this fallback location won't show up scoped to any real scene in
+    the playback dropdown, so it's a degraded path, not an equivalent one.
     Returns: { status, filename, path }
     """
     import os
@@ -1299,6 +1395,7 @@ def arc_export_save():
     path_name = data.get("path_name", "").strip()
     timestamp = data.get("timestamp", "")
     scene_name= data.get("scene_name", "").strip()
+    take_name = data.get("take_name", "").strip()
     rows      = data.get("rows", [])
     genre     = data.get("genre", "")
     seed      = data.get("seed", None)
@@ -1306,8 +1403,19 @@ def arc_export_save():
     if not rows:
         return jsonify({"status": "error", "message": "no rows"}), 400
 
-    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
-    os.makedirs(exports_dir, exist_ok=True)
+    mccf_root = os.path.dirname(os.path.abspath(__file__))
+    if scene_name and take_name:
+        arcs_dir = os.path.join(
+            mccf_root, 'scenes',
+            _safe_path_component(scene_name), 'arcs',
+            _safe_path_component(take_name)
+        )
+    else:
+        # Degraded fallback — see docstring. Keeps the endpoint working for
+        # any caller not yet sending scene_name/take_name, but these land
+        # outside every scene's own folder and won't appear scene-scoped.
+        arcs_dir = os.path.join(mccf_root, 'scenes', '_unscoped_arcs')
+    os.makedirs(arcs_dir, exist_ok=True)
 
     cultivar_slug = cultivar.replace(" ", "_")
     path_slug     = path_name.replace(" ", "_") if path_name else cultivar_slug
@@ -1368,82 +1476,30 @@ def arc_export_save():
     xml += f'</EmotionalArc>\n'
 
     filename = f"arc_{arc_id}.xml"
-    filepath = os.path.join(exports_dir, filename)
+    filepath = os.path.join(arcs_dir, filename)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(xml)
 
+    rel_path = os.path.relpath(filepath, mccf_root)
     return jsonify({"status": "saved", "filename": filename,
-                    "path": filepath, "rows": len(rows)})
+                    "path": rel_path, "rows": len(rows)})
 
 
-@app.route("/arc/playback", methods=["GET"])
-def arc_playback_list():
-    """
-    GET /arc/playback
-
-    List arc XML files in exports/ directory, newest-first.
-    Parses each file for metadata the loader needs to populate its dropdown.
-
-    Response shape:
-    {
-      "files": [
-        {
-          "filename":    "arc_Walktotemple_2026-05-16T....xml",
-          "cultivar":    "Cindy",
-          "path_name":   "Walktotemple",
-          "scene_name":  "garden_001",
-          "steps_seen":  2,
-          "first_waypoint": { "pos_x": 29.2, "pos_y": 0.0, "pos_z": 22.4 },
-          "mtime":       1234567890.0
-        }, ...
-      ]
-    }
-    """
-    import os, xml.etree.ElementTree as ET
-
-    exports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
-    os.makedirs(exports_dir, exist_ok=True)
-
-    files = []
-    for fname in sorted(os.listdir(exports_dir), reverse=True):
-        if not fname.endswith(".xml") or not fname.startswith("arc_"):
-            continue
-        fpath = os.path.join(exports_dir, fname)
-        mtime = os.path.getmtime(fpath)
-        meta = {
-            "filename":       fname,
-            "cultivar":       "",
-            "path_name":      "",
-            "scene_name":     "",
-            "steps_seen":     0,
-            "first_waypoint": None,
-            "mtime":          mtime,
-        }
-        try:
-            tree = ET.parse(fpath)
-            root = tree.getroot()
-            # <EmotionalArc scene="garden_001">
-            meta["scene_name"] = root.get("scene", "")
-            cultivar_el = root.find("Cultivar")
-            if cultivar_el is not None:
-                meta["cultivar"]  = cultivar_el.get("agentname", "")
-                meta["path_name"] = cultivar_el.get("path_name", "").replace("_", " ")
-                wps = cultivar_el.findall("Waypoint")
-                meta["steps_seen"] = len(wps)
-                if wps:
-                    first = wps[0]
-                    meta["first_waypoint"] = {
-                        "pos_x": float(first.get("pos_x", 0)),
-                        "pos_y": float(first.get("pos_y", 0)),
-                        "pos_z": float(first.get("pos_z", 0)),
-                    }
-        except Exception:
-            pass  # malformed XML — include with blank meta, don't crash
-        files.append(meta)
-
-    # Sort newest-first by mtime
-    files.sort(key=lambda f: f["mtime"], reverse=True)
-    return jsonify({"files": files})
+# NOTE: GET /arc/playback used to be defined here (Day 67 directory
+# redesign). Removed — it was a second, independent implementation of the
+# exact same URL that mccf_playback.py's playback_bp already registers
+# (see register_playback_api() call above). Two competing route
+# registrations for one URL is exactly the "which one wins is whatever
+# Flask/Werkzeug decides silently" bug that produced the legacy
+# exports_dir/[] response for weeks of live testing — this file's version
+# never actually ran once mccf_playback.py was wired in.
+# The listing logic now lives in mccf_playback.py's PlaybackManager.list_files()
+# / _iter_arc_files(), which was updated to walk the same nested
+# scenes/<scene_name>/arcs/<take_name>/ layout that arc_export_save() (below)
+# writes to. It has to live there rather than here anyway, since
+# /arc/playback/start, /start/all, /step, /stop, and /reset are also only
+# defined in mccf_playback.py and need to agree with the listing about
+# where arc files actually are.
 
 
 @app.route("/arc/schema", methods=["GET"])
@@ -1511,30 +1567,14 @@ def arc_schema():
         return jsonify({"error": str(e), "fallback": True}), 500
 
 
-@app.route("/exports", methods=["GET"])
-def list_exports():
-    import os
-    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
-    if not os.path.exists(exports_dir):
-        return jsonify({"files": []})
-    files = []
-    for f in sorted(os.listdir(exports_dir), reverse=True):
-        if f.endswith(".tsv"):
-            path = os.path.join(exports_dir, f)
-            size = os.path.getsize(path)
-            files.append({"filename": f, "size": size})
-    return jsonify({"files": files})
-
-
-@app.route("/exports/<filename>", methods=["DELETE"])
-def delete_export(filename):
-    import os
-    exports_dir = os.path.join(os.path.dirname(__file__), "exports")
-    filepath = os.path.join(exports_dir, filename)
-    if not os.path.exists(filepath):
-        return jsonify({"status": "not_found"}), 404
-    os.remove(filepath)
-    return jsonify({"status": "deleted", "filename": filename})
+# NOTE: the legacy flat exports/ TSV endpoints (`GET /exports`, `DELETE
+# /exports/<filename>`) were removed here as part of the Day 67 directory
+# redesign cleanup. Confirmed no caller in either mccf_scene_composer.html
+# or mccf_x3d_loader.html referenced them before removal. Arc data now lives
+# exclusively under scenes/<scene_name>/arcs/<take_name>/ — see arc_export_save()
+# and arc_playback_list() above. If a stray exports/ folder still exists on
+# disk from before this cleanup, it is no longer read or written by anything
+# in this file and can be deleted manually.
 
 
 @app.route("/export/x3d", methods=["GET"])
@@ -2146,10 +2186,8 @@ def couplers_tick():
     # Load network topology from scene XML
     network = []
     if scene_name:
-        scenes_dir = _os_tick.path.join(
-            _os_tick.path.dirname(_os_tick.path.abspath(__file__)), 'scenes')
         for candidate in [scene_name + '_scene.xml', scene_name + '.xml']:
-            cpath = _os_tick.path.join(scenes_dir, candidate)
+            cpath = _scene_filepath(candidate)
             if _os_tick.path.exists(cpath):
                 try:
                     with open(cpath, encoding='utf-8') as f:
@@ -2383,15 +2421,25 @@ _ZONE_COMMAND_VOCAB = {
 # Per-zone memory: {scene_name: {zone_id: [event_dict, ...]}}
 _zone_memory: dict = {}
 
+def _zone_memory_path(scene_name: str) -> str:
+    """
+    Resolve a scene's zone-memory file to scenes/<scene_name>/zone_memory.json
+    (Day 67 directory redesign — this is per-scene instance data, same
+    category as the scene wrapper itself, so it lives alongside it rather
+    than flat at the scenes/ root under a scene-prefixed filename.)
+    """
+    scene_dir = _os_zc.path.join(
+        _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
+        'scenes', _safe_path_component(scene_name)
+    )
+    return _os_zc.path.join(scene_dir, 'zone_memory.json')
+
 def _get_zone_memory(scene_name: str, zone_id: str) -> list:
     if scene_name not in _zone_memory:
         _zone_memory[scene_name] = {}
     if zone_id not in _zone_memory[scene_name]:
         # Try loading from disk
-        mem_path = _os_zc.path.join(
-            _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
-            'scenes', f'{scene_name}_zone_memory.json'
-        )
+        mem_path = _zone_memory_path(scene_name)
         if _os_zc.path.exists(mem_path):
             try:
                 with open(mem_path, encoding='utf-8') as f:
@@ -2410,11 +2458,9 @@ def _append_zone_memory(scene_name: str, zone_id: str,
     if len(mem) > capacity:
         mem[:] = mem[-capacity:]
     # Persist to disk
-    mem_path = _os_zc.path.join(
-        _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
-        'scenes', f'{scene_name}_zone_memory.json'
-    )
+    mem_path = _zone_memory_path(scene_name)
     try:
+        _os_zc.makedirs(_os_zc.path.dirname(mem_path), exist_ok=True)
         with open(mem_path, 'w', encoding='utf-8') as f:
             _json_zc.dump(_zone_memory[scene_name], f, indent=2)
     except Exception:
@@ -2660,10 +2706,7 @@ def zone_memory_clear():
         _zone_memory[scene_name] = {}
         cleared = 'all'
     # Clear from disk too
-    mem_path = _os_zc.path.join(
-        _os_zc.path.dirname(_os_zc.path.abspath(__file__)),
-        'scenes', f'{scene_name}_zone_memory.json'
-    )
+    mem_path = _zone_memory_path(scene_name)
     if _os_zc.path.exists(mem_path):
         try:
             _os_zc.remove(mem_path)

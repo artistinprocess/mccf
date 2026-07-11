@@ -5,7 +5,9 @@ Implements V3 Spec item 6 (Playback): replay a recorded EmotionalArc XML
 export through the field without calling the LLM.
 
 What it does:
-    Reads arc export files from exports/ directory.
+    Reads arc export files from scenes/<scene_name>/arcs/<take_name>/
+    (Day 67 directory redesign — previously a flat exports/ directory,
+    now retired; see _scenes_root()/_iter_arc_files() below).
     Extracts waypoints in stepno order (handles any number of waypoints).
     Pushes each waypoint's channel state (E, B, P, S) to the named
     cultivar agent in the CoherenceField at a configurable pace.
@@ -77,7 +79,6 @@ from flask import Blueprint, request, jsonify
 # ---------------------------------------------------------------------------
 
 DEFAULT_PACE    = 3.0    # seconds per waypoint
-EXPORTS_DIR_NAME = "exports"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,11 +90,53 @@ def _strip_ns(xml_string: str) -> str:
     clean = re.sub(r'</(\w+):(\w+)', r'</\2', clean)
     return clean
 
-def _exports_dir() -> str:
+def _scenes_root() -> str:
+    """
+    Day 67 directory redesign: arc files live under scenes/<scene_name>/
+    arcs/<take_name>/, written by arc_export_save() in mccf_api.py. This
+    replaces the old flat exports/ directory that this module was built
+    against (Day 17) — exports/ is retired and nothing writes to it anymore,
+    so any lookup against it will always come back empty regardless of what
+    the author has actually recorded.
+    """
     return os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        EXPORTS_DIR_NAME
+        'scenes'
     )
+
+def _iter_arc_files(scene_filter: str = None, take_filter: str = None):
+    """
+    Walk scenes/<scene>/arcs/<take>/arc_*.xml, yielding
+    (filepath, fname, scene_dir_name, take_dir_name) tuples, newest-first
+    within each take directory. Mirrors arc_playback_list()'s walk in
+    mccf_api.py exactly — same filename filter (arc_ prefix, .xml suffix),
+    same directory shape — so both stay in agreement about what counts as
+    an arc file and where it lives.
+    """
+    scenes_root = _scenes_root()
+    if not os.path.isdir(scenes_root):
+        return
+    scene_dirs = [scene_filter] if scene_filter else \
+        [d for d in os.listdir(scenes_root)
+         if os.path.isdir(os.path.join(scenes_root, d))]
+    for scene_dir_name in scene_dirs:
+        arcs_root = os.path.join(scenes_root, scene_dir_name, 'arcs')
+        if not os.path.isdir(arcs_root):
+            continue
+        take_dirs = [take_filter] if take_filter else os.listdir(arcs_root)
+        for take_dir_name in take_dirs:
+            take_path = os.path.join(arcs_root, take_dir_name)
+            if not os.path.isdir(take_path):
+                continue
+            fnames = sorted(
+                [f for f in os.listdir(take_path)
+                 if f.endswith('.xml') and f.startswith('arc_')],
+                key=lambda f: os.path.getmtime(os.path.join(take_path, f)),
+                reverse=True
+            )
+            for fname in fnames:
+                yield (os.path.join(take_path, fname), fname,
+                       scene_dir_name, take_dir_name)
 
 # ---------------------------------------------------------------------------
 # ArcWaypoint — one step in a playback sequence
@@ -494,20 +537,21 @@ class PlaybackManager:
         cultivars = arc_data.get("cultivars", [])
         return cultivars[0] if cultivars else base or filename
 
-    def list_files(self) -> list:
-        """List arc XML files in exports/ directory."""
-        exports = _exports_dir()
-        if not os.path.isdir(exports):
-            return []
+    def list_files(self, scene_name: str = None, take_name: str = None) -> list:
+        """
+        List arc XML files under scenes/<scene>/arcs/<take>/, optionally
+        scoped to one scene and/or one take. Omitting scene_name lists
+        every arc across every scene (parity with the old exports/-wide
+        behavior, useful for an admin view) — callers driving actual
+        playback (the Loader) are expected to pass scene_name.
+        """
         files = []
-        for fname in sorted(os.listdir(exports), reverse=True):
-            if not fname.endswith(".xml"):
-                continue
-            fpath = os.path.join(exports, fname)
-            size  = os.path.getsize(fpath)
+        for fpath, fname, scene_dir_name, take_dir_name in _iter_arc_files(scene_name, take_name):
+            size = os.path.getsize(fpath)
             # Quick peek at cultivar name and step count
             cultivar = ""
             steps    = 0
+            raw = ""
             try:
                 with open(fpath, encoding="utf-8") as f:
                     raw = f.read(2000)  # read first 2KB only
@@ -519,14 +563,10 @@ class PlaybackManager:
                 pass
             # Extract path_name: prefer XML attribute, fall back to filename parse
             path_name = ""
-            scene_name = ""
             try:
                 pn_match = re.search(r'path_name="([^"]+)"', raw)
                 if pn_match:
                     path_name = pn_match.group(1)
-                sn_match = re.search(r'<EmotionalArc[^>]+scene="([^"]+)"', raw)
-                if sn_match:
-                    scene_name = sn_match.group(1)
             except Exception:
                 pass
             if not path_name:
@@ -550,30 +590,47 @@ class PlaybackManager:
                 "size":          size,
                 "cultivar":      cultivar,
                 "path_name":     path_name,
-                "scene_name":    scene_name,
+                # scene_name/take_name come from the directory itself, not a
+                # trusted XML attribute — same "scoping is the directory
+                # listing" principle as mccf_api.py's arc_playback_list().
+                "scene_name":    scene_dir_name,
+                "take_name":     take_dir_name,
                 "steps_seen":    steps,
                 "first_waypoint": first_wp,
+                "mtime":         os.path.getmtime(fpath),
             })
 
-        # Deduplicate: keep only the newest file per path_name.
-        # Files are already sorted newest-first (reverse=True above), so the
-        # first occurrence of each path_name is the one to keep.
-        seen_paths: set = set()
+        # Dedup: keep only the newest file per (scene, take, path_name) —
+        # rescoped from the old global path_name dedup, which would have
+        # silently dropped legitimate arcs whenever two different scenes
+        # happened to share a path_name. Within one take, still keep only
+        # the latest recording of a given path.
+        files.sort(key=lambda f: f["mtime"], reverse=True)
+        seen_keys: set = set()
         deduped = []
         for entry in files:
-            key = entry["path_name"].strip().lower()
-            if key not in seen_paths:
-                seen_paths.add(key)
+            key = (entry["scene_name"], entry["take_name"], entry["path_name"].strip().lower())
+            if key not in seen_keys:
+                seen_keys.add(key)
                 deduped.append(entry)
         return deduped
 
     def start(self, filename: str, pace: float = DEFAULT_PACE,
               loop: bool = False, auto: bool = True,
-              session_id: str = None) -> dict:
-        exports = _exports_dir()
-        filepath = os.path.join(exports, filename)
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Export file not found: {filename}")
+              session_id: str = None, scene_name: str = None,
+              take_name: str = None) -> dict:
+        # The Loader only ever sends a bare filename (see pbPlay() in
+        # mccf_x3d_loader.html), so resolve it by searching the nested tree.
+        # scene_name/take_name narrow the search when the caller has them —
+        # optional, since arc filenames carry a per-second timestamp and are
+        # effectively unique in practice even across scenes.
+        filepath = None
+        for fpath, fname, _sd, _td in _iter_arc_files(scene_name, take_name):
+            if fname == filename:
+                filepath = fpath
+                break
+        if filepath is None:
+            raise FileNotFoundError(f"Arc file not found under scenes/: {filename}")
 
         arc_data = parse_arc_file(filepath)
         if not arc_data["waypoints"]:
@@ -610,13 +667,17 @@ class PlaybackManager:
         return result
 
     def start_all(self, pace: float = DEFAULT_PACE,
-                  loop: bool = False, auto: bool = False) -> dict:
+                  loop: bool = False, auto: bool = False,
+                  scene_name: str = None, take_name: str = None) -> dict:
         """
-        Start all arc files in exports/ simultaneously.
-        Uses newest file per path_name (same dedup as list_files).
-        Returns { sessions: {session_id: state}, started: [session_id, ...] }
+        Start all arc files simultaneously, optionally scoped to one scene
+        (and take). Uses newest file per (scene, take, path_name) — same
+        dedup as list_files(). scene_name should always be passed by the
+        Loader now that arcs are scene-nested; omitting it starts every arc
+        across every scene at once, which is almost never what "Play All"
+        means once more than one scene has recorded arcs.
         """
-        files = self.list_files()
+        files = self.list_files(scene_name=scene_name, take_name=take_name)
         started = {}
         for f in files:
             try:
@@ -626,6 +687,8 @@ class PlaybackManager:
                     loop=loop,
                     auto=auto,
                     session_id=f.get("path_name") or None,
+                    scene_name=f.get("scene_name"),
+                    take_name=f.get("take_name"),
                 )
                 sid = state.get("session_id", f.get("path_name", f["filename"]))
                 started[sid] = state
@@ -729,10 +792,17 @@ def _mgr() -> PlaybackManager:
 
 @playback_bp.route("/arc/playback", methods=["GET"])
 def list_playback_files():
-    """List available arc export files."""
+    """
+    List available arc files.
+    ?scene_name=X          — scope to one scene's arcs/ tree
+    ?scene_name=X&take_name=Y — scope to one scene, one take
+    Omitting scene_name lists every arc across every scene.
+    """
+    scene_name = request.args.get("scene_name", "").strip() or None
+    take_name  = request.args.get("take_name", "").strip() or None
     return jsonify({
-        "files":       _mgr().list_files(),
-        "exports_dir": _exports_dir(),
+        "files":       _mgr().list_files(scene_name=scene_name, take_name=take_name),
+        "scenes_dir":  _scenes_root(),
     })
 
 
@@ -775,17 +845,22 @@ def start_playback():
 @playback_bp.route("/arc/playback/start/all", methods=["POST"])
 def start_all_playback():
     """
-    Start ALL arc files in exports/ simultaneously.
+    Start ALL arc files simultaneously, optionally scoped to one scene.
 
-    Body (optional): { "pace": 3.0, "loop": false, "auto": false }
+    Body (optional): { "pace": 3.0, "loop": false, "auto": false,
+                        "scene_name": "newDirectoryTestScene",
+                        "take_name": "2026-07-11T2042" }
     Returns: { sessions: { session_id: state, ... }, started: [...] }
     """
     data = request.get_json() or {}
     pace = float(data.get("pace", DEFAULT_PACE))
     loop = bool(data.get("loop", False))
     auto = bool(data.get("auto", False))
+    scene_name = (data.get("scene_name") or "").strip() or None
+    take_name  = (data.get("take_name") or "").strip() or None
 
-    result = _mgr().start_all(pace=pace, loop=loop, auto=auto)
+    result = _mgr().start_all(pace=pace, loop=loop, auto=auto,
+                               scene_name=scene_name, take_name=take_name)
     return jsonify(result)
 
 

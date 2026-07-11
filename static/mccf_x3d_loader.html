@@ -5,15 +5,22 @@
 <title>MCCF X3D Scene</title>
 <script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
 <style>
-body { margin: 0; background: #0a0a0f; font-family: monospace; }
-x3d-canvas { width: 100vw; height: 88vh; display: block; }
-#controls {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  background: rgba(0,0,0,0.88);
-  padding: 6px 14px;
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-  z-index: 100;
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; background: #0a0a0f; font-family: monospace; overflow: hidden; }
+#top-bar {
+  flex: 0 0 auto; height: 34px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px; background: rgba(10,12,18,0.95); border-bottom: 1px solid #1c2238; z-index: 110;
 }
+#top-bar .hdr-left { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+#top-bar .hdr-scene { color: #8a9aaa; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status { color: #6a7890; font-size: 11px; white-space: nowrap; }
+#poll-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #333; display: inline-block; margin-right: 4px;
+  transition: background 0.2s;
+}
+#stage { flex: 1 1 auto; position: relative; min-height: 0; }
+x3d-canvas { width: 100%; height: 100%; display: block; }
 button {
   background: #1a2030; color: #4af0a8;
   border: 1px solid #4af0a8; border-radius: 3px;
@@ -22,20 +29,16 @@ button {
 }
 button:hover { background: #4af0a8; color: #111; }
 button.active { background: #4af0a8; color: #111; }
-#status { color: #6a7890; font-size: 11px; margin-left: auto; }
-#poll-indicator {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #333; display: inline-block; margin-right: 4px;
-  transition: background 0.2s;
-}
 #field-overlay {
-  position: fixed; top: 8px; right: 8px;
-  background: rgba(0,0,0,0.75);
-  border: 1px solid #2a3545;
-  padding: 8px 12px;
+  position: absolute; top: 0; right: 0; bottom: 0; width: 220px;
+  background: rgba(6,8,14,0.94);
+  border-left: 1px solid #2a3545;
+  padding: 10px 12px;
   font-size: 10px; color: #6a8090;
-  border-radius: 3px; min-width: 180px; z-index: 100;
+  overflow-y: auto; z-index: 120;
+  transform: translateX(100%); transition: transform 0.15s ease;
 }
+#field-overlay.open { transform: translateX(0); }
 #field-overlay .row { display: flex; justify-content: space-between; margin: 2px 0; }
 #field-overlay .val { color: #a0c0d0; }
 .tension-low { color: #4a8adf; }
@@ -141,43 +144,52 @@ button.active { background: #4af0a8; color: #111; }
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-#playback-panel {
-  position: fixed; top: 8px; left: 8px;
-  background: rgba(0,0,0,0.82);
-  border: 1px solid #2a3545;
-  padding: 10px 12px;
-  font-size: 12px; color: #a0b8c8;
-  border-radius: 4px; min-width: 220px;
-  max-width: 340px; z-index: 100;
+/* ── Info strip — live playback readouts (step info / channels / Q&A), always visible ── */
+#info-strip {
+  flex: 0 0 auto; background: rgba(8,10,16,0.92); border-top: 1px solid #1c2238;
+  padding: 5px 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  font-size: 12px; color: #9ab0b0; min-height: 18px;
 }
-#playback-panel .ph { color:#7ab8f5; font-size:13px; margin-bottom:6px; font-weight:bold; }
-#playback-panel select, #playback-panel input[type=number] {
-  width:100%; background:#0d1520; color:#c0d8e8;
-  border:1px solid #2a3545; border-radius:3px;
-  padding:3px 5px; font-family:monospace; font-size:12px;
-  margin-bottom:5px; box-sizing:border-box;
-}
-#playback-panel .pb-row { display:flex; gap:4px; margin-bottom:5px; }
-#playback-panel .pb-row button { flex:1; font-size:12px; padding:4px 4px; }
-#pb-step-info {
-  margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
-  font-size:13px; color:#9ab0b0; min-height:40px;
-}
-#pb-qr {
-  margin-top:6px; border-top:1px solid #1c2538; padding-top:6px;
-  display:none;
-}
-#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; white-space:pre-wrap; max-height:260px; overflow-y:auto; }
-#pb-response  { color:#c0d8e8; line-height:1.5; font-size:13px;
-                max-height:120px; overflow-y:auto; }
-#pb-channels  { display:flex; gap:6px; margin-top:4px; }
-#pb-channels span { font-size:11px; }
+#pb-step-info { flex: 1 1 auto; min-width: 120px; }
+#pb-channels  { display: flex; gap: 6px; flex: 0 0 auto; }
+#pb-channels span { font-size: 11px; }
 .pc-E { color:#f07060; } .pc-B { color:#60a8f0; }
 .pc-P { color:#f0c060; } .pc-S { color:#60f0a8; }
-/* ── Sound Panel ──────────────────────────────── */
-#soundPanel {
-  margin-top:6px; border-top:1px solid #2a3a4a; padding-top:6px;
+#pb-qr {
+  display: none; flex: 1 1 100%;
+  border-top: 1px solid #1c2538; padding-top: 6px; margin-top: 2px;
 }
+#pb-question { color:#f0c060; margin-bottom:4px; font-style:italic; font-size:13px; white-space:pre-wrap; max-height:140px; overflow-y:auto; }
+#pb-response  { color:#c0d8e8; line-height:1.5; font-size:13px; max-height:100px; overflow-y:auto; }
+/* ── Transport bar — all playback controls in one DAW-style row ── */
+#controls {
+  flex: 0 0 auto;
+  background: rgba(0,0,0,0.92);
+  border-top: 1px solid #1c2238;
+  padding: 6px 10px;
+  display: flex; gap: 6px; flex-wrap: nowrap; align-items: center;
+  overflow-x: auto;
+  z-index: 100;
+}
+#controls .tgroup { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; white-space: nowrap; }
+#controls .tdiv { width: 1px; height: 20px; background: #2a3545; flex: 0 0 auto; margin: 0 2px; }
+#controls .tlabel { font-size: 10px; color: #6a8090; white-space: nowrap; }
+#controls select, #controls input[type=number] {
+  background: #0d1520; color: #c0d8e8;
+  border: 1px solid #2a3545; border-radius: 3px;
+  padding: 3px 5px; font-family: monospace; font-size: 11px;
+}
+#controls select { max-width: 150px; }
+#controls input[type=number] { width: 48px; }
+#controls label { font-size: 11px; color: #6a8090; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+#controls button { white-space: nowrap; }
+/* ── Audio drawer — collapsed by default, opens above the transport bar ── */
+#audio-drawer {
+  flex: 0 0 auto; display: none;
+  background: rgba(8,10,16,0.95); border-top: 1px solid #1c2238;
+  padding: 8px 14px;
+}
+#audio-drawer.open { display: block; }
 #soundPanel .sp-title {
   font-size:10px; font-weight:700; letter-spacing:0.08em;
   color:#7ab8d4; text-transform:uppercase; margin-bottom:4px;
@@ -232,80 +244,52 @@ button.active { background: #4af0a8; color: #111; }
 </head>
 <body>
 
-<x3d-canvas id="x3d" update="auto" contentScale="auto"></x3d-canvas>
-
-<div id="field-overlay">
-  <div style="color:#7ab8f5;margin-bottom:4px;font-size:11px;">⬡ MCCF FIELD</div>
-  <div class="row"><span>coherence</span><span class="val" id="ov-coh">—</span></div>
-  <div class="row"><span>echo risk</span><span class="val" id="ov-echo">—</span></div>
-  <div class="row"><span>episodes</span><span class="val" id="ov-ep">—</span></div>
-  <div class="row"><span>agents</span><span class="val" id="ov-agents">—</span></div>
-  <div class="row"><span>tension</span><span class="val" id="ov-tension">—</span></div>
-  <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
-  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
-  <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
-  <div style="color:#f0c060;font-size:11px;margin-top:4px;border-top:1px solid #1c2238;padding-top:4px;" id="sai-test">SAI test: not run</div>
-  <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
-    padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
-    color:#f0c060;cursor:pointer;">▶ Test SAI</button>
-  <!-- ϕ/ϵ runtime display -->
-  <div id="runtime-panel">
-    <span id="runtime-toggle" onclick="toggleRuntime()">▶ ϕ/ϵ state</span>
-    <div id="runtime-agents" style="display:none;"></div>
+<div id="top-bar">
+  <div class="hdr-left">
+    <span class="hdr-scene" id="hdr-scene-name">— no scene loaded —</span>
+    <span id="status"><span id="poll-indicator"></span>Loading…</span>
   </div>
-  <!-- Trust panel -->
-  <div id="trust-panel">
-    <span id="trust-toggle" onclick="toggleTrust()">▶ trust</span>
-    <div id="trust-rows" style="display:none;"></div>
+  <button id="field-toggle-btn" onclick="toggleFieldDrawer()">⬡ Field</button>
+</div>
+
+<div id="stage">
+  <x3d-canvas id="x3d" update="auto" contentScale="auto"></x3d-canvas>
+
+  <div id="field-overlay">
+    <div class="row"><span>coherence</span><span class="val" id="ov-coh">—</span></div>
+    <div class="row"><span>echo risk</span><span class="val" id="ov-echo">—</span></div>
+    <div class="row"><span>episodes</span><span class="val" id="ov-ep">—</span></div>
+    <div class="row"><span>agents</span><span class="val" id="ov-agents">—</span></div>
+    <div class="row"><span>tension</span><span class="val" id="ov-tension">—</span></div>
+    <div style="margin-top:4px;color:#aab0be;font-size:11px;" id="ov-poll">polling…</div>
+    <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="x3d-diag">hothouse: waiting…</div>
+    <div style="color:#aab0be;font-size:11px;margin-top:2px;" id="light-diag">lighting: waiting…</div>
+    <div style="color:#f0c060;font-size:11px;margin-top:4px;border-top:1px solid #1c2238;padding-top:4px;" id="sai-test">SAI test: not run</div>
+    <button onclick="runSAITest()" style="margin-top:4px;font-family:var(--mono);font-size:10px;
+      padding:2px 6px;border:1px solid #1c2238;border-radius:3px;background:none;
+      color:#f0c060;cursor:pointer;">▶ Test SAI</button>
+    <!-- ϕ/ϵ runtime display -->
+    <div id="runtime-panel">
+      <span id="runtime-toggle" onclick="toggleRuntime()">▶ ϕ/ϵ state</span>
+      <div id="runtime-agents" style="display:none;"></div>
+    </div>
+    <!-- Trust panel -->
+    <div id="trust-panel">
+      <span id="trust-toggle" onclick="toggleTrust()">▶ trust</span>
+      <div id="trust-rows" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Greek Chorus overlay — text injected by displayChorus() -->
+  <div id="chorus-overlay">
+    <div class="chorus-zone" id="chorus-zone-label"></div>
+    <div id="chorus-text"></div>
+    <span class="chorus-dismiss" onclick="dismissChorus()">✕ dismiss</span>
   </div>
 </div>
 
-<div id="playback-panel">
-  <div class="ph">⏵ PLAYBACK</div>
-  <div style="font-size:10px;color:#6a8090;margin-bottom:2px;">X3D Scene</div>
-  <select id="x3d-file" onchange="x3dFileChanged()">
-    <option value="">— select scene —</option>
-  </select>
-  <div style="display:flex;gap:4px;margin-bottom:5px;">
-    <button onclick="x3dLoadFiles()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#7ab8f5;cursor:pointer;">&#8635; Refresh</button>
-  </div>
-  <div style="font-size:10px;color:#6a8090;margin-bottom:2px;">Arc</div>
-  <select id="pb-file" onchange="pbFileChanged()">
-    <option value="">— select arc file —</option>
-  </select>
-  <div style="display:flex;gap:4px;margin-bottom:5px;">
-    <button onclick="pbLoadFiles()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#7ab8f5;cursor:pointer;">&#8635; Refresh</button>
-    <button onclick="pbClearSelect()" style="flex:1;background:none;border:1px solid #2a3545;border-radius:3px;padding:2px 6px;font-family:monospace;font-size:11px;color:#f06060;cursor:pointer;">&#10005; Clear</button>
-  </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
-    <label style="font-size:12px;color:#6a8090;white-space:nowrap;margin:0;">pace (s)</label>
-    <input type="number" id="pb-pace" value="3" min="0.5" max="30" step="0.5" style="width:60px;"/>
-    <label style="font-size:12px;color:#6a8090;white-space:nowrap;margin:0;">
-      <input type="checkbox" id="pb-loop" style="width:auto;margin:0 3px 0 0;"/>loop
-    </label>
-  </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
-    <label style="font-size:12px;color:#6a8090;white-space:nowrap;margin:0;">
-      <input type="checkbox" id="pb-voice" style="width:auto;margin:0 3px 0 0;" onchange="pbVoiceChanged()"/>voice
-    </label>
-  </div>
-  <div class="pb-row">
-    <button id="pb-play-btn" onclick="pbPlay()" style="border-color:#4af0a8;color:#4af0a8;">&#9654; Play Scene Arc</button>
-    <button id="pb-play-all-btn" onclick="pbPlayAll()" style="border-color:#a0f060;color:#a0f060;">&#9654;&#9654; Play All</button>
-    <button id="pb-step-btn" onclick="pbStep()" style="border-color:#7ab8f5;color:#7ab8f5;">&#9654;&#9654; Step</button>
-    <button id="pb-stop-btn" onclick="pbStop()" style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646; Stop</button>
-    <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;">&#8635; Reset + Replay</button>
-  </div>
-  <div class="pb-row" style="margin-top:4px;align-items:center;gap:4px;">
-    <span style="font-size:10px;color:#6a8090;">Jump</span>
-    <select id="jump-agent" style="width:110px;font-size:11px;" onfocus="populateJumpAgents()"></select>
-    <input id="jump-step" type="number" min="1" value="1" style="width:48px;font-size:11px;">
-    <button onclick="pbJumpToWaypoint(document.getElementById('jump-agent').value, document.getElementById('jump-step').value)"
-      style="border-color:#e0a0f0;color:#e0a0f0;background:none;border:1px solid #e0a0f0;border-radius:3px;padding:3px 6px;font-family:monospace;font-size:11px;cursor:pointer;">&#8618; Jump &amp; Fire</button>
-  </div>
-  <div style="margin-bottom:5px;">
-    <button onclick="resetToStartPosition()" style="width:100%;border-color:#c080f0;color:#c080f0;background:none;border:1px solid #c080f0;border-radius:3px;padding:3px 6px;font-family:monospace;font-size:11px;cursor:pointer;">&#8602; Reset Position</button>
-  </div>
+<!-- Live playback readouts — always visible, not tucked in a drawer -->
+<div id="info-strip">
   <div id="pb-step-info">No arc loaded.</div>
   <div id="pb-channels">
     <span class="pc-E">E —</span>
@@ -317,10 +301,12 @@ button.active { background: #4af0a8; color: #111; }
     <div id="pb-question"></div>
     <div id="pb-response"></div>
   </div>
-  <!-- ── Sound Panel ── -->
+</div>
+
+<!-- Zone Audio — collapsed by default, opened from the transport bar -->
+<div id="audio-drawer">
   <div id="soundPanel">
     <div class="sp-title">&#9836; Zone Audio</div>
-    <!-- Session C: Scene-level track display — populated by spLoadSceneSound() -->
     <div style="background:#0a1420;border:1px solid #1a2a3a;border-radius:3px;padding:4px 6px;margin-bottom:5px;">
       <div style="font-size:9px;color:#4a7090;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:3px;">Scene Tracks (baked in X3D)</div>
       <div style="display:flex;gap:4px;align-items:center;margin-bottom:2px;">
@@ -352,24 +338,63 @@ button.active { background: #4af0a8; color: #111; }
   </div>
 </div>
 
-<!-- Greek Chorus overlay — text injected by displayChorus() -->
-<div id="chorus-overlay">
-  <div class="chorus-zone" id="chorus-zone-label"></div>
-  <div id="chorus-text"></div>
-  <span class="chorus-dismiss" onclick="dismissChorus()">✕ dismiss</span>
-</div>
-
+<!-- Transport bar — every playback control in one DAW-style row -->
 <div id="controls">
-  <span style="color:#6a7890;font-size:11px;">Viewpoints:</span>
-  <button onclick="gotoVP('VP_Overview')" id="btn-VP_Overview">Overview</button>
-  <button onclick="gotoVP('VP_Origin')" id="btn-VP_Origin">Origin</button>
-  <span id="vp-zone-btns"></span>
-  <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
+  <div class="tgroup">
+    <span class="tlabel">Scene</span>
+    <select id="x3d-file" onchange="x3dFileChanged()">
+      <option value="">— select scene —</option>
+    </select>
+    <button onclick="x3dLoadFiles()" title="Refresh scene list">&#8635;</button>
+  </div>
+  <div class="tdiv"></div>
+  <div class="tgroup">
+    <span class="tlabel">Take</span>
+    <select id="pb-take" onchange="pbTakeChanged()">
+      <option value="">— all takes —</option>
+    </select>
+  </div>
+  <div class="tdiv"></div>
+  <div class="tgroup">
+    <span class="tlabel">Arc</span>
+    <select id="pb-file" onchange="pbFileChanged()">
+      <option value="">— select arc file —</option>
+    </select>
+    <button onclick="pbLoadFiles()" title="Refresh arc list">&#8635;</button>
+    <button onclick="pbClearSelect()" title="Clear arc" style="border-color:#f06060;color:#f06060;">&#10005;</button>
+  </div>
+  <div class="tdiv"></div>
+  <div class="tgroup">
+    <button id="pb-play-btn" onclick="pbPlay()" style="border-color:#4af0a8;color:#4af0a8;">&#9654; Arc</button>
+    <button id="pb-play-all-btn" onclick="pbPlayAll()" style="border-color:#a0f060;color:#a0f060;">&#9654;&#9654; All</button>
+    <button id="pb-step-btn" onclick="pbStep()" style="border-color:#7ab8f5;color:#7ab8f5;">Step</button>
+    <button id="pb-stop-btn" onclick="pbStop()" style="border-color:#f0c060;color:#f0c060;">&#9646;&#9646;</button>
+    <button id="pb-reset-btn" onclick="pbReset()" style="border-color:#a0a0a0;color:#a0a0a0;" title="Reset and replay">&#8635;</button>
+  </div>
+  <div class="tdiv"></div>
+  <div class="tgroup">
+    <span class="tlabel">pace</span>
+    <input type="number" id="pb-pace" value="3" min="0.5" max="30" step="0.5"/>
+    <label><input type="checkbox" id="pb-loop"/>loop</label>
+    <label><input type="checkbox" id="pb-voice" onchange="pbVoiceChanged()"/>voice</label>
+  </div>
+  <div class="tdiv"></div>
+  <div class="tgroup">
+    <span class="tlabel">Jump</span>
+    <select id="jump-agent" style="width:100px;" onfocus="populateJumpAgents()"></select>
+    <input id="jump-step" type="number" min="1" value="1" style="width:40px;">
+    <button onclick="pbJumpToWaypoint(document.getElementById('jump-agent').value, document.getElementById('jump-step').value)"
+      style="border-color:#e0a0f0;color:#e0a0f0;">&#8618; Fire</button>
+  </div>
+  <div class="tdiv"></div>
+  <button onclick="resetToStartPosition()" style="border-color:#c080f0;color:#c080f0;">&#8602; Reset Pos</button>
+  <div class="tdiv"></div>
+  <span id="vp-zone-btns" class="tgroup"></span>
+  <div class="tdiv"></div>
   <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
-  <span id="status"><span id="poll-indicator"></span>Loading…</span>
-  <span style="color:#334;font-size:10px;margin-left:8px;">|</span>
-  <span style="color:#6a7890;font-size:11px;">Cam:</span>
   <span id="cam-telemetry" style="font-family:monospace;font-size:11px;color:#7fd8a0;margin-left:4px;">—</span>
+  <div style="flex:1 1 auto;min-width:8px;"></div>
+  <button id="audio-toggle-btn" onclick="toggleAudioDrawer()">&#9836; Audio</button>
 </div>
 
 <script>
@@ -378,7 +403,59 @@ const POLL_MS     = 750;
 const HOTHOUSE_MS = 1000;
 const LIGHTING_MS = 2000;
 
-const canvas = document.getElementById('x3d');
+function toggleFieldDrawer() {
+  var d = document.getElementById('field-overlay');
+  var btn = document.getElementById('field-toggle-btn');
+  var open = d.classList.toggle('open');
+  btn.classList.toggle('active', open);
+}
+function toggleAudioDrawer() {
+  var d = document.getElementById('audio-drawer');
+  var btn = document.getElementById('audio-toggle-btn');
+  var open = d.classList.toggle('open');
+  btn.classList.toggle('active', open);
+}
+
+
+let canvas = document.getElementById('x3d');
+// x3dFileChanged() replaces this element on every genuine scene switch (see there
+// for why), so every listener it needs has to be re-attachable, not just attached
+// once at page load. This function is that attach step — called once here for the
+// initial element, and again from x3dFileChanged after each replacement.
+function _bindCanvasEvents(el) {
+  el.addEventListener('load', () => {
+    // Guard — ignore the initial empty canvas load before any X3D file is selected
+    var _sel = document.getElementById('x3d-file');
+    if (!_sel || !_sel.value) {
+      setStatus('Ready — select a scene');
+      _resumeAudioContext();
+      return;
+    }
+    setStatus('Scene loaded');
+    buildVPButtons();
+    startPolling();
+    spInit();
+    _resumeAudioContext();
+    // Manual EventCues fire after _parseSceneZoneData completes (see fireManualCues call there)
+    try {
+      const arcChannel = new BroadcastChannel('mccf_arc');
+      arcChannel.onmessage = (e) => {
+        if (e.data?.type === 'mccf_arc_cv') applyArcCV(e.data.data);
+      };
+    } catch(e) {}
+  });
+  el.addEventListener('error', () => setStatus('Load error — check console'));
+  // Fetch and cache the scene XML when the X3D scene loads
+  el.addEventListener('load', function() {
+    var src = el.getAttribute('src');
+    if (!src) return;  // skip empty canvas load before any scene is selected
+    fetch(src)
+      .then(function(r){ if(r.ok) return r.text(); throw new Error('fetch failed'); })
+      .then(function(txt){ window._loadedSceneXml = txt; _pbSceneVoiceMap = null; })
+      .catch(function(e){ console.warn('Could not cache scene XML:', e); });
+  });
+}
+_bindCanvasEvents(canvas);
 
 // ── Live camera telemetry (Day 64) ──────────────────────────────────────────
 // Reads the currently BOUND Viewpoint's own position/orientation fields — the
@@ -467,30 +544,6 @@ function buildVPButtons() {
       });
   } catch(e) { console.warn('buildVPButtons:', e); }
 }
-
-canvas.addEventListener('load', () => {
-  // Guard — ignore the initial empty canvas load before any X3D file is selected
-  var _sel = document.getElementById('x3d-file');
-  if (!_sel || !_sel.value) {
-    setStatus('Ready — select a scene');
-    _resumeAudioContext();
-    return;
-  }
-  setStatus('Scene loaded');
-  buildVPButtons();
-  startPolling();
-  spInit();
-  _resumeAudioContext();
-  // Manual EventCues fire after _parseSceneZoneData completes (see fireManualCues call there)
-  try {
-    const arcChannel = new BroadcastChannel('mccf_arc');
-    arcChannel.onmessage = (e) => {
-      if (e.data?.type === 'mccf_arc_cv') applyArcCV(e.data.data);
-    };
-  } catch(e) {}
-});
-
-canvas.addEventListener('error', () => setStatus('Load error — check console'));
 
 // --- Polling toggle ---
 function togglePolling() {
@@ -1192,50 +1245,106 @@ var BEHAVIOR_TIMER_BASES = [
   'WalkTimer','RunTimer','JumpTimer','KickTimer'
 ];
 
+// Full set of arc metadata for the currently-loaded scene, across every
+// take — fetched once per scene switch (or manual refresh), then filtered
+// client-side by the Take dropdown rather than re-fetched per take, since
+// the whole set is small and already scene-scoped by the backend call.
+var _pbSceneArcFiles = [];
+
+function _pbCurrentSceneName() {
+  var sel = document.getElementById('x3d-file');
+  if (!sel || !sel.value) return '';
+  return sel.value.replace(/\.x3d$/i, '');
+}
+
 async function pbLoadFiles() {
   try {
-    const r = await fetch(API + '/arc/playback');
+    var sceneName = _pbCurrentSceneName();
+    var url = API + '/arc/playback';
+    if (sceneName) url += '?scene_name=' + encodeURIComponent(sceneName);
+    const r = await fetch(url);
     const data = await r.json();
-    const sel = document.getElementById('pb-file');
-    if (!sel) return;
-    // Clear all options except the placeholder, then rebuild
-    while (sel.options.length > 1) sel.remove(1);
-    (data.files || []).forEach(function(f) {
-      const opt = document.createElement('option');
-      opt.value = f.filename;
-      opt.dataset.sceneName = f.scene_name || '';
-      // Prefer server-supplied path_name over cultivar name
-      var label;
-      if (f.path_name && f.path_name !== f.cultivar) {
-        label = f.path_name.replace(/_/g,' ');
-      } else if (f.label) {
-        label = f.label;
-      } else {
-        // Parse from filename: arc_{anything}_{timestamp}.xml
-        var base = (f.filename||'').replace(/^arc_/,'').replace(/\.xml$/,'');
-        var tsMatch = base.match(/^(.*?)_([0-9]{8,}|[0-9]{4}-[0-9]{2}-[0-9]{2}.*)$/);
-        label = tsMatch ? tsMatch[1].replace(/_/g,' ') : base.replace(/_/g,' ');
-      }
-      // Append cultivar in brackets if it differs from path label
-      var cultivarSuffix = (f.cultivar && f.cultivar.replace(/_/g,' ').toLowerCase() !== label.toLowerCase())
-        ? ' ['+f.cultivar+']' : '';
-      opt.textContent = label + cultivarSuffix
-        + (f.steps_seen ? ' ('+f.steps_seen+'wp)' : '');
-      sel.appendChild(opt);
-    });
-    // Auto-select the newest arc (first in list, server returns newest-first)
-    if (sel.options.length > 1) {
-      sel.selectedIndex = 1;
-      pbFileChanged();
+    _pbSceneArcFiles = data.files || [];
+
+    // Populate the Take dropdown from distinct take_name values, newest-first
+    // by each take's most recent file.
+    var takeSel = document.getElementById('pb-take');
+    if (takeSel) {
+      while (takeSel.options.length > 1) takeSel.remove(1);
+      var takeMtimes = {};
+      _pbSceneArcFiles.forEach(function(f) {
+        var t = f.take_name || '';
+        if (!t) return;
+        if (!(t in takeMtimes) || f.mtime > takeMtimes[t]) takeMtimes[t] = f.mtime;
+      });
+      var takeNames = Object.keys(takeMtimes).sort(function(a,b){ return takeMtimes[b]-takeMtimes[a]; });
+      takeNames.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        takeSel.appendChild(opt);
+      });
+      // Auto-select the newest take rather than leaving "— all takes —" —
+      // this is what actually keeps the Arc dropdown scoped to one scene's
+      // one take by default, rather than merely "not some other scene's."
+      takeSel.selectedIndex = takeNames.length ? 1 : 0;
     }
-    cacheSceneContext(data.files || []);
-    // Cache first waypoint of first arc for reset fallback
-    if (data.files && data.files[0] && data.files[0].first_waypoint) {
-      window._pbFirstWaypoint = data.files[0].first_waypoint;
-    }
+
+    _pbPopulateArcDropdown(takeSel ? takeSel.value : '');
+
+    cacheSceneContext(_pbSceneArcFiles);
   } catch(e) {
     var el = document.getElementById('pb-step-info');
     if (el) el.textContent = 'Could not load files.';
+  }
+}
+
+function pbTakeChanged() {
+  var takeSel = document.getElementById('pb-take');
+  _pbPopulateArcDropdown(takeSel ? takeSel.value : '');
+}
+
+function _pbPopulateArcDropdown(takeFilter) {
+  const sel = document.getElementById('pb-file');
+  if (!sel) return;
+  while (sel.options.length > 1) sel.remove(1);
+  var files = takeFilter
+    ? _pbSceneArcFiles.filter(function(f){ return f.take_name === takeFilter; })
+    : _pbSceneArcFiles;
+  files.forEach(function(f) {
+    const opt = document.createElement('option');
+    opt.value = f.filename;
+    opt.dataset.sceneName = f.scene_name || '';
+    opt.dataset.takeName  = f.take_name  || '';
+    // Prefer server-supplied path_name over cultivar name
+    var label;
+    if (f.path_name && f.path_name !== f.cultivar) {
+      label = f.path_name.replace(/_/g,' ');
+    } else if (f.label) {
+      label = f.label;
+    } else {
+      // Parse from filename: arc_{anything}_{timestamp}.xml
+      var base = (f.filename||'').replace(/^arc_/,'').replace(/\.xml$/,'');
+      var tsMatch = base.match(/^(.*?)_([0-9]{8,}|[0-9]{4}-[0-9]{2}-[0-9]{2}.*)$/);
+      label = tsMatch ? tsMatch[1].replace(/_/g,' ') : base.replace(/_/g,' ');
+    }
+    // Append cultivar in brackets if it differs from path label
+    var cultivarSuffix = (f.cultivar && f.cultivar.replace(/_/g,' ').toLowerCase() !== label.toLowerCase())
+      ? ' ['+f.cultivar+']' : '';
+    opt.textContent = label + cultivarSuffix
+      + (f.steps_seen ? ' ('+f.steps_seen+'wp)' : '');
+    sel.appendChild(opt);
+  });
+  // Auto-select the newest arc (first in list, server returns newest-first)
+  if (sel.options.length > 1) {
+    sel.selectedIndex = 1;
+    pbFileChanged();
+  } else {
+    pbFileChanged(); // clears display state — nothing to select
+  }
+  // Cache first waypoint of first arc for reset fallback
+  if (files[0] && files[0].first_waypoint) {
+    window._pbFirstWaypoint = files[0].first_waypoint;
   }
 }
 
@@ -3629,7 +3738,16 @@ async function _pbPlayAllInner() {
     var r = await fetch(API + '/arc/playback/start/all', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({pace: pace, loop: loop, auto: false}),
+      // scene_name (and take_name, if a specific take is selected rather than
+      // "— all takes —") keep Play All scoped to this Loader's loaded scene.
+      // Without these, start/all would start every arc across every scene —
+      // harmless while arc discovery was broken, but a real footgun now that
+      // it isn't.
+      body: JSON.stringify({
+        pace: pace, loop: loop, auto: false,
+        scene_name: _pbCurrentSceneName(),
+        take_name: (document.getElementById('pb-take') || {}).value || ''
+      }),
       signal: AbortSignal.timeout(30000)
     });
     console.log('pbPlayAll: start/all status =', r.status);
@@ -4813,16 +4931,6 @@ function pbUpdateDisplayFinal(state, fireChorus) {
   }
 }
 
-// Fetch and cache the scene XML when the X3D scene loads
-canvas.addEventListener('load', function() {
-  var src = canvas.getAttribute('src');
-  if (!src) return;  // skip empty canvas load before any scene is selected
-  fetch(src)
-    .then(function(r){ if(r.ok) return r.text(); throw new Error('fetch failed'); })
-    .then(function(txt){ window._loadedSceneXml = txt; _pbSceneVoiceMap = null; })
-    .catch(function(e){ console.warn('Could not cache scene XML:', e); });
-});
-
 function resetToStartPosition() {
   _refreshAvatarNodeNames();
   // Prefer scene definition XML (has EmotionalArc+StartPosition)
@@ -4993,19 +5101,68 @@ async function x3dLoadFiles() {
   }
 }
 
+// Bumped once per x3dFileChanged() call. The two setTimeout callbacks below
+// capture their own copy at schedule time and bail if a newer scene switch
+// has happened before they fire — otherwise they read whatever scene happens
+// to be selected *when the timer goes off*, not the one that scheduled them,
+// and can fire 404s / stale data against a scene that's no longer active.
+var _x3dLoadGen = 0;
+
 function x3dFileChanged() {
   var sel = document.getElementById('x3d-file');
   if (!sel) return;
   var fname = sel.value;
   if (!fname) return;
-  var canvas = document.getElementById('x3d');
-  if (!canvas) return;
-  // Cache-bust: without this, re-exporting a scene under the same filename (e.g.
-  // CameraTestAll.x3d during iterative proto testing) can silently load a stale
-  // cached copy — the file on disk is current but the browser serves the old one for
-  // the same URL. Same fix already applied to the Events Editor iframe's ?v= param.
-  canvas.src = API + '/static/x3d/' + fname + '?t=' + Date.now();
+  var myGen = ++_x3dLoadGen;
+  var hdrName = document.getElementById('hdr-scene-name');
+  if (hdrName) hdrName.textContent = fname;
+  // Repeatedly writing .src on the same <x3d-canvas> spins up a fresh WebGL/X_ITE
+  // context on every load without releasing the previous one — this is the same
+  // leak already found and fixed in the Events Editor's own viewport (see
+  // loadX3DViewport there for the longer explanation). Replacing the element
+  // itself forces the browser to actually release the old context on removal.
+  // `canvas` is `let`-declared and referenced by every other function in this file
+  // via closure, not re-fetched — reassigning it here is enough to propagate the
+  // new element everywhere without touching those ~70 other call sites.
+  var fresh = canvas.cloneNode(false);
+  fresh.removeAttribute('src');
+  canvas.parentNode.replaceChild(fresh, canvas);
+  canvas = fresh;
+  _bindCanvasEvents(canvas);
+  // Trial fix (Day 67): setting .src in the same tick as replaceChild() was
+  // seen aborting the new element's own load (DOMException: operation was
+  // aborted) — one theory is the old element's WebGL/X_ITE context teardown
+  // (the whole reason we replace the element rather than just rewriting .src)
+  // isn't fully synchronous, and the new element's load races against it.
+  // Deferring by one frame gives that teardown a tick to finish first. If the
+  // abort recurs even with this in place, that theory is wrong — revert this
+  // rAF wrapper and look elsewhere rather than assuming a longer delay helps.
+  requestAnimationFrame(function() {
+    // Cache-bust: without this, re-exporting a scene under the same filename (e.g.
+    // CameraTestAll.x3d during iterative proto testing) can silently load a stale
+    // cached copy — the file on disk is current but the browser serves the old one for
+    // the same URL. Same fix already applied to the Events Editor iframe's ?v= param.
+    canvas.src = API + '/static/x3d/' + fname + '?t=' + Date.now();
+  });
   console.log('x3dFileChanged: loaded', fname);
+  // Clear last scene's dialogue display — otherwise the previous scene's last
+  // Q&A stays visible until the new scene's own Play run overwrites it, making
+  // it look like it belongs to the scene that just loaded.
+  var _pbQ = document.getElementById('pb-question');
+  var _pbR = document.getElementById('pb-response');
+  if (_pbQ) _pbQ.textContent = '';
+  if (_pbR) _pbR.textContent = '';
+  // Day 67 fix, superseded (Day 67, later): previously this block just
+  // forced the arc dropdown back to unselected on every scene switch as a
+  // safety clamp, because /arc/playback returned every arc from every scene
+  // and nothing re-filtered it. Now that /arc/playback is scene-scoped
+  // server-side (directory redesign — arcs live under scenes/<name>/arcs/),
+  // the real fix is to re-fetch the list scoped to the scene that just
+  // loaded, not merely clear the old selection. pbLoadFiles() handles both:
+  // it re-populates the Take dropdown and the Arc dropdown for this scene
+  // and auto-selects the newest of each, so there's no window where a
+  // stale, wrong-scene arc could be selected even transiently.
+  pbLoadFiles();
   // New scene — clear per-scene caches so stale data from previous scene
   // doesn't bleed into pivot and dwell zone lookups.
   _agentWaypointCache = {};
@@ -5026,12 +5183,16 @@ function x3dFileChanged() {
   }).then(function(r){ return r.json(); })
     .then(function(d){ console.log('Chorus config:', JSON.stringify(d)); })
     .catch(function(){});
-  // Parse zone commands and actor types from scene XML after scene loads
-  setTimeout(_parseSceneZoneData, 500);
+  // Parse zone commands and actor types from scene XML after scene loads.
+  // Guarded by _x3dLoadGen (see declaration above) — if another scene switch
+  // happened before this fires, both callbacks read the CURRENT select value
+  // live, not the one that scheduled them, and would otherwise run against
+  // whatever scene is selected 500ms/1800ms from now rather than this one.
+  setTimeout(function() { if (myGen === _x3dLoadGen) _parseSceneZoneData(); }, 500);
   // Day 47: reload SceneSound labels for the new scene on scene switch.
   // Delay lets the X3D scene initialize before SAI. No auto-start —
   // tracks start only from Play button.
-  setTimeout(spLoadSceneSound, 1800);
+  setTimeout(function() { if (myGen === _x3dLoadGen) spLoadSceneSound(); }, 1800);
 }
 
 window.addEventListener('load', function() {

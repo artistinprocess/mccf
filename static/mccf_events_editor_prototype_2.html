@@ -59,33 +59,6 @@ header {
 }
 .logo span { color: var(--dim); font-weight: 400; }
 
-/* Tab row */
-.tab-row {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 2px;
-  flex-shrink: 0;
-  height: 32px;
-  z-index: 10;
-}
-.tab {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  padding: 4px 12px;
-  border: none;
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent4); border-bottom-color: var(--accent4); }
-
 /* ── VIEWPORT ROW: stage | x3d viewport | inspector ── */
 .viewport-row {
   display: grid;
@@ -630,17 +603,6 @@ x3d-canvas {
 <header>
   <div class="logo">MCCF <span>/ Events Editor</span></div>
 </header>
-
-<div class="tab-row">
-  <button class="tab">Scene</button>
-  <button class="tab">Zones</button>
-  <button class="tab">Agents</button>
-  <button class="tab">Waypoints</button>
-  <button class="tab">Paths</button>
-  <button class="tab active">Events</button>
-  <button class="tab">Network</button>
-  <button class="tab">Export</button>
-</div>
 
 <!-- ── TOP: Stage | X3D Viewport | Inspector ── -->
 <div class="viewport-row">
@@ -1857,10 +1819,38 @@ function loadX3DViewport(url) {
   var status = document.getElementById('vp-status');
   if (!x3d) return;
 
+  // Guard against redundant reloads. <x3d-canvas cache="false"> spins up a fresh
+  // WebGL context on every src change and nothing here disposes the previous one —
+  // Scene Composer's setMode() re-sends mccf_scene_data (with x3dUrl set) on every
+  // Events-tab revisit, not just the first load, so without this guard each revisit
+  // stacked another live context on top of the last, unreleased, until the tab
+  // crashed. Explicit force-reloads (refreshViewport's cache-busting ?t= param)
+  // bypass this function entirely by writing to x3d's src attribute directly, so
+  // they're unaffected by this guard.
+  var currentSrc = (x3d.getAttribute('src') || '').split('?')[0];
+  var newSrc     = (url || '').split('?')[0];
+  if (currentSrc === newSrc && currentSrc !== '') {
+    x3d.style.display = 'block';
+    if (canvas) canvas.style.display = 'none';
+    if (ph)     ph.style.display     = 'none';
+    return;
+  }
+
   // Show X3D canvas, hide placeholder and atmosphere canvas
   x3d.style.display = 'block';
   if (canvas) canvas.style.display = 'none';
   if (ph)     ph.style.display     = 'none';
+
+  // Genuine URL change (re-Export while this tab stays open, different scene, etc.):
+  // per the guard comment above, writing a new src to the *same* <x3d-canvas> element
+  // does not release the previous WebGL/X_ITE context — it only stops being visible.
+  // Replacing the element outright forces the browser to actually tear down the old
+  // context when it's removed, instead of leaving it running (and audible) alongside
+  // the new one.
+  var freshX3d = x3d.cloneNode(false);
+  freshX3d.removeAttribute('src');
+  x3d.parentNode.replaceChild(freshX3d, x3d);
+  x3d = freshX3d;
 
   // Set src — x3d-canvas reloads on src change
   x3d.setAttribute('src', url);
