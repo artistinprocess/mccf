@@ -274,7 +274,7 @@ def _call_ollama(config: ChorusConfig, transcript: str, cv: dict) -> str:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read())
     return (data.get("response") or "").strip()
 
@@ -302,7 +302,7 @@ def _call_openai(config: ChorusConfig, transcript: str, cv: dict) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read())
     return (data["choices"][0]["message"]["content"] or "").strip()
 
@@ -352,8 +352,48 @@ class ChorusManager:
             self._config = config
             if config:
                 print(f"  Chorus: configured for zone={config.zone_id} llm={config.llm} display={config.display}")
+                self._warm_up(config)
             else:
                 print("  Chorus: cleared (mute scene)")
+
+    def _warm_up(self, config: ChorusConfig):
+        """
+        Fire a trivial, throwaway generate call in the background as soon as a
+        Chorus-bearing scene loads, so the model is already resident by the
+        time a real arc completes and fire_chorus_from_transcript() is called.
+        Ollama unloads idle models from memory; the first call after that is
+        paid in model-load time (observed ~18s on this machine) on top of
+        actual generation — easily enough to blow a fire-time-only timeout.
+        This costs nothing toward the real response: result is discarded.
+        Never blocks set_config(); never raises.
+        """
+        if config.is_mute or config.is_stub:
+            return
+        llm = config.llm.lower()
+        if not llm.startswith("ollama:"):
+            return  # only Ollama pays a cold-load cost worth pre-paying here
+
+        def _ping():
+            import urllib.request, json
+            try:
+                _, model = config.llm.split(":", 1)
+                payload = json.dumps({
+                    "model": model, "prompt": "hi", "stream": False,
+                    "options": {"num_predict": 1},
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    "http://localhost:11434/api/generate", data=payload,
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                t0 = time.time()
+                urllib.request.urlopen(req, timeout=120)
+                print(f"  Chorus: warm-up ping for {model} done in {time.time()-t0:.1f}s")
+            except Exception as e:
+                # Warm-up is best-effort — a failure here just means the real
+                # fire pays the cold-load cost itself; not worth surfacing.
+                print(f"  Chorus: warm-up ping failed (non-fatal): {e}")
+
+        threading.Thread(target=_ping, daemon=True).start()
 
     def get_config(self) -> Optional[ChorusConfig]:
         with self._lock:

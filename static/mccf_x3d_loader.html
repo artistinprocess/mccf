@@ -5230,12 +5230,16 @@ var _chorusPollTimer = null;
 
 /**
  * startChorusPoll() — called from pbUpdateDisplayFinal() at arc-complete.
- * Polls /chorus/state until a new response arrives (up to 90 s).
+ * Polls /chorus/state until a new response arrives (up to 150 s).
  * Async: LLM latency is covered while audience watches the final pose.
+ * 150s gives headroom above the backend's 120s Ollama call timeout
+ * (mccf_chorus.py _call_ollama) — this must stay >= that value or a
+ * legitimately slow-but-successful response can arrive after the
+ * frontend has already given up polling for it.
  */
 function startChorusPoll() {
   stopChorusPoll();
-  var deadline = Date.now() + 90000;
+  var deadline = Date.now() + 150000;
   _chorusPollTimer = setInterval(function() {
     if (Date.now() > deadline) { stopChorusPoll(); return; }
     fetch(API + '/chorus/state', {signal: AbortSignal.timeout(2000)})

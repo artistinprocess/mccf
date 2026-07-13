@@ -1184,7 +1184,16 @@ function setMode(m){
     // completely; onload below reloads it fresh next time Events is opened.
     if(prevMode==='events' && evFrame.getAttribute('src')){
       evFrame.dataset.src = evFrame.getAttribute('src');
-      evFrame.src = 'about:blank';
+      // Day 68: one last cue snapshot before the src blank below makes this
+      // iframe permanently unable to answer mccf_request_cues until Events
+      // is revisited (see _lastKnownEventTracks). Delaying the actual blank
+      // by 250ms (rather than the general 3s _requestCuesAndExport budget)
+      // is safe here specifically because the iframe was just active a
+      // moment ago (prevMode==='events'), not a cold/uncertain load — the
+      // reply lands through the same central message listener above, which
+      // updates the cache regardless of who asked.
+      try { evFrame.contentWindow.postMessage({ type: 'mccf_request_cues' }, '*'); } catch(e) {}
+      setTimeout(function(){ evFrame.src = 'about:blank'; }, 250);
     }
   }
   drawScene();
@@ -1310,6 +1319,14 @@ function _sendCuesToEventsEditor(tracksJson) {
 }
 
 var _pendingCueExport = null;
+// Day 68: persists the most recent cue data the Composer has actually heard
+// from the Events Editor, from ANY source (a live request/reply, or the
+// Editor's own unsolicited "Export cues" push). This is what
+// _requestCuesAndExport() falls back to when the iframe can't answer live
+// (most commonly: it's been torn down to about:blank after leaving the
+// Events tab — see setMode()). null means "never heard from it this
+// session" — the one case where there's genuinely nothing to fall back to.
+var _lastKnownEventTracks = null;
 window.addEventListener('message', function(evt) {
   if (!evt.data) return;
   // Events Editor finished loading and registered its listener — send scene data now
@@ -1322,6 +1339,7 @@ window.addEventListener('message', function(evt) {
   if (evt.data.type === 'mccf_save_cues') {
     var tracks = evt.data.tracks || [];
     console.log('[Composer] mccf_save_cues received — tracks:', tracks.length, 'cues:', tracks.reduce(function(n,t){return n+(t.cues||[]).length;},0));
+    _lastKnownEventTracks = tracks;
     _sendToLauncherWithTracks(tracks, true);
     return;
   }
@@ -1331,22 +1349,50 @@ window.addEventListener('message', function(evt) {
     return;
   }
   if (evt.data.type !== 'mccf_cue_data') return;
+  // Cache every reply, not just ones a caller is actively waiting on — this
+  // is what lets the teardown-time snapshot below (setMode) update the
+  // cache even though nothing is awaiting its specific reply.
+  _lastKnownEventTracks = evt.data.tracks || [];
   if (typeof _pendingCueExport === 'function') {
     var cb = _pendingCueExport;
     _pendingCueExport = null;
-    cb(evt.data.tracks || []);
+    cb(_lastKnownEventTracks);
   }
 });
 
 function _requestCuesAndExport(callback) {
   var frame = _eventsFrame();
-  if (!frame || !frame.contentWindow) { callback([]); return; }
+  if (!frame || !frame.contentWindow) {
+    callback(_lastKnownEventTracks !== null ? _lastKnownEventTracks : []);
+    return;
+  }
   _pendingCueExport = callback;
   try { frame.contentWindow.postMessage({ type: 'mccf_request_cues' }, '*'); }
   catch(e) { _pendingCueExport = null; callback([]); }
+  // Day 68 fix: was 500ms, and used to export with 0 cues silently on
+  // timeout — that clobbered a good prior export from the Events tab's own
+  // race-free path (_sendToLauncherWithTracks) more than once. Widened to
+  // 3s. On timeout, fall back to the cached copy (_lastKnownEventTracks)
+  // rather than aborting unconditionally — this is the common case once
+  // Events has been visited and left this session (its iframe gets torn
+  // down to about:blank on tab-leave, so it can never answer live again
+  // until revisited — see setMode()). Only a genuine null cache (never
+  // heard from the Events Editor at all this session) still aborts, since
+  // that's the one case with truly nothing safe to save.
   setTimeout(function() {
-    if (_pendingCueExport) { _pendingCueExport = null; callback([]); }
-  }, 500);
+    if (_pendingCueExport) {
+      _pendingCueExport = null;
+      if (_lastKnownEventTracks !== null) {
+        console.warn('[Composer] mccf_request_cues timed out — using cached cues from earlier this session (may not reflect edits made since Events was last open).');
+        toast('Cue request timed out — saved using cached cues (open Events tab to refresh if you\'ve edited cues since).', true);
+        callback(_lastKnownEventTracks);
+      } else {
+        console.warn('[Composer] mccf_request_cues timed out — no cached cues available either. Aborting save (file left unchanged).');
+        toast('Save aborted: cue request timed out and no cached cues available. Open the Events tab once, then retry.', true);
+        callback(null);
+      }
+    }
+  }, 3000);
 }
 
 
@@ -1873,6 +1919,7 @@ function saveHanimSrc(){
   // Auto-save so the hanim_src survives tab switches and scene reloads.
   // Use _requestCuesAndExport to preserve any event cues already in the editor.
   _requestCuesAndExport(function(_eventTracks){
+    if (_eventTracks === null) return; // timed out — _requestCuesAndExport already warned; don't save
     _doExportSceneXML(_eventTracks);
     toast('Avatar assignment saved for '+name);
   });
@@ -3492,6 +3539,7 @@ function deleteNetLink(i) {
 function exportSceneXML(){
   // Request current cues from Events Editor, then build XML
   _requestCuesAndExport(function(_eventTracks) {
+    if (_eventTracks === null) return; // timed out — _requestCuesAndExport already warned; don't save
     _doExportSceneXML(_eventTracks);
   });
 }
