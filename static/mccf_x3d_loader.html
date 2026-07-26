@@ -1669,6 +1669,25 @@ var _pbLastArcFiles = [];       // kept for legacy/debug; not used for Chorus fi
 var _chorusTranscript = [];     // [{label, speaker, text}] — accumulated live during playback
 var _chorusFinalCV   = {};      // {E,B,P,S} — CV from the last waypoint of the last agent to complete
 var _pbCultivarSessionMap = {}; // {cultivarSafeName: session_id} — set by pbPlayAll
+// Day 77: which path/order group each agent is CURRENTLY on. Set once, right
+// before that group's activation begins (_pbPlayAllInner's per-group loop);
+// read by every function below that constructs a Timer_/Arrival_/Dwell_ DEF
+// name for the "current" segment of an agent's movement. Correct because group
+// processing is strictly sequential — _pbWaitForGroup blocks until group N
+// fully completes before group N+1 starts, so exactly one order is ever
+// "current" for a given agent at any moment. This avoids threading an explicit
+// order parameter through the whole TTS/dialogue call chain (pbReleaseDwell's
+// callers are deep inside display/speech logic with no natural order context)
+// while still fixing the actual bug: those DEF names used to be constructed
+// bare (Timer_Cindy_1, Arrival_Cindy) regardless of which of an agent's
+// multiple paths was actually active, always resolving to path order=1's
+// nodes even while a later group was supposed to be running.
+var _pbAgentCurrentOrder = {};
+function _pbOrderSuffix(order) {
+  var o = parseInt(order) || 1;
+  return (o === 1) ? '' : ('_' + o);  // must match mccf_scene_composer.html's
+                                        // buildInterpNodes/buildInterpRoutes suffix exactly
+}
 
 function pbReleaseDwell(agentSafeName) {
   console.log('pbReleaseDwell: ENTERED for', agentSafeName, 'seg=', _x3dLastArrivedSeg[agentSafeName]||0, '_pbArcComplete=', !!_pbArcComplete[agentSafeName]);
@@ -1696,16 +1715,18 @@ function pbReleaseDwell(agentSafeName) {
     // Wait dwell interval (Dwell_X_1 cycleInterval) then fire Arrival_X.startFromLoader.
     // Dwell_X_1 node NOT started here — reserved for after seg=1 arrives.
     if (seg === 0) {
-      var dwell0Name = 'Dwell_' + agentSafeName + '_1';
+      var _suf0 = _pbOrderSuffix(_pbAgentCurrentOrder[agentSafeName]);
+      var dwell0Name = 'Dwell_' + agentSafeName + _suf0 + '_1';
       var dwell0Node = null;
       try { dwell0Node = scene.getNamedNode(dwell0Name); } catch(e) {}
       var dwell0Interval = dwell0Node ? (dwell0Node.cycleInterval || 2.0) : 2.0;
       var _agentForStart = agentSafeName;
+      var _arrForStart = 'Arrival_' + agentSafeName + _suf0;
       console.log('pbReleaseDwell: WP1 complete — waiting', dwell0Interval,
-                  's then firing startFromLoader for', agentSafeName);
+                  's then firing startFromLoader for', agentSafeName, 'order', _pbAgentCurrentOrder[agentSafeName]||1);
       setTimeout(function() {
         try {
-          var arr = canvas.browser.currentScene.getNamedNode('Arrival_' + _agentForStart);
+          var arr = canvas.browser.currentScene.getNamedNode(_arrForStart);
           if (arr) {
             // Read scene time from Timer_1 node directly — canvas.browser.currentTime
             // returns 0 in X_ITE when called from JS context. Timer.time is the live
@@ -1725,7 +1746,7 @@ function pbReleaseDwell(agentSafeName) {
             console.log('pbReleaseDwell: startFromLoader fired for', _agentForStart, 'at t=', tNow, 'src=', _tSrc);
             // Walk starts when Timer_1 isActive=true fires — handled by _wirePathTimerBehavior.
           } else {
-            console.warn('pbReleaseDwell: Arrival_' + _agentForStart + ' not found');
+            console.warn('pbReleaseDwell: ' + _arrForStart + ' not found');
           }
         } catch(e) { console.warn('pbReleaseDwell startFromLoader error:', e); }
       }, Math.round(dwell0Interval * 1000));
@@ -1733,7 +1754,7 @@ function pbReleaseDwell(agentSafeName) {
     }
 
     // seg>0: segment just arrived — start Dwell, then advance.
-    var dwellNodeName = 'Dwell_' + agentSafeName + '_' + seg;
+    var dwellNodeName = 'Dwell_' + agentSafeName + _pbOrderSuffix(_pbAgentCurrentOrder[agentSafeName]) + '_' + seg;
     var dwellNode = null;
     try { dwellNode = scene.getNamedNode(dwellNodeName); } catch(e) {}
 
@@ -1800,18 +1821,19 @@ function _pbAdvanceSeg(agentSafeName, completedSeg) {
   try {
     var scene2 = canvas.browser.currentScene;
     if (!scene2) return;
+    var _suf = _pbOrderSuffix(_pbAgentCurrentOrder[agentSafeName]);
 
     // Peek: does next timer exist?
-    var nextTimerName = 'Timer_' + agentSafeName + '_' + (completedSeg + 1);
+    var nextTimerName = 'Timer_' + agentSafeName + _suf + '_' + (completedSeg + 1);
     var nextTimer = null;
     try { nextTimer = scene2.getNamedNode(nextTimerName); } catch(e) {}
 
     if (nextTimer) {
       var arr = null;
-      try { arr = scene2.getNamedNode('Arrival_' + agentSafeName); } catch(e) {}
+      try { arr = scene2.getNamedNode('Arrival_' + agentSafeName + _suf); } catch(e) {}
       if (arr) {
         arr.advanceSeg = completedSeg;
-        console.log('_pbAdvanceSeg: advanceSeg=' + completedSeg + ' sent to Arrival_' + agentSafeName);
+        console.log('_pbAdvanceSeg: advanceSeg=' + completedSeg + ' sent to Arrival_' + agentSafeName + _suf);
         // WalkTimer is switched on by segmentArrived callback when the next
         // segment fires — do NOT switch here to avoid a race with the dwell DefaultTimer.
       }
@@ -1869,7 +1891,7 @@ function _x3dNow(agentSafeName) {
     if (agentSafeName && canvas.browser.currentScene) {
       var sc = canvas.browser.currentScene;
       try {
-        var dw = sc.getNamedNode('Dwell_' + agentSafeName + '_1');
+        var dw = sc.getNamedNode('Dwell_' + agentSafeName + _pbOrderSuffix(_pbAgentCurrentOrder[agentSafeName]) + '_1');
         if (dw && dw.startTime > 0 && dw.cycleInterval > 0) {
           var dwEnd = dw.startTime + dw.cycleInterval;
           if (dwEnd > 1.0) return dwEnd;
@@ -1884,7 +1906,7 @@ function _x3dNow(agentSafeName) {
       for (var i = 0; i < activeKeys.length; i++) {
         var suffix = activeKeys[i].replace(/^Avatar_/, '');
         try {
-          var tn = scene.getNamedNode('Timer_' + suffix + '_1');
+          var tn = scene.getNamedNode('Timer_' + suffix + _pbOrderSuffix(_pbAgentCurrentOrder[suffix]) + '_1');
           if (tn && tn.time > 0) return tn.time;
         } catch(e3) {}
       }
@@ -2251,13 +2273,24 @@ function _fireCameraEventCue(cue) {
 }
 
 // Bind a named Viewpoint node (VP_Overview, VP_w2_Eye, etc.)
+// Day 77: VP_{subject}_Eye/Side now live inside the avatar's own Inline scope
+// (Character-Creator-authored rig, per the Avatar Camera Rig Manifest doc), not at
+// the outer scene scope Composer used to generate them at directly — so they need
+// getImportedNode, the same mechanism already established and working for behavior
+// timers (see pbActivateX3DTimers's own comment: "getNamedNode... does not resolve
+// IMPORT'd nodes in X_ITE 11.6.x+"). Falls back to getNamedNode for anything that's
+// still genuinely at outer scope (VP_Overview, VP_Origin, named scene viewpoints) —
+// tries import first since that's now the common case for agent-attached types,
+// not because outer-scope lookup stopped being valid for the things that still are.
 function _bindNamedViewpoint(vpName, wantJump) {
   var attempts = 0;
   function tryBind() {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var vpNode = scene.getNamedNode(vpName);
+      var vpNode = null;
+      try { vpNode = scene.getImportedNode(vpName); } catch(ie) {}
+      if (!vpNode) { try { vpNode = scene.getNamedNode(vpName); } catch(ne) {} }
       if (vpNode) {
         try {
           var jumpField = vpNode.getField('jump');
@@ -2462,23 +2495,17 @@ function _executeStaticCameraShot(cue) {
       if (camXform && vpFree) {
         // Write both translation and rotation to CAM_Free_Transform.
         // VP_Free sits at local origin with identity pose — the Transform carries everything.
-        var writeErr = [];
-        try {
-          camXform.getField('translation').setValue(new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]));
-        } catch(e1) {
-          writeErr.push('translation getField: ' + e1.message);
-          try { camXform.translation = new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]); }
-          catch(e2) { writeErr.push('translation direct: ' + e2.message); }
-        }
-        try {
-          camXform.getField('rotation').setValue(new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]));
-        } catch(e3) {
-          writeErr.push('rotation getField: ' + e3.message);
-          try { camXform.rotation = new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]); }
-          catch(e4) { writeErr.push('rotation direct: ' + e4.message); }
-        }
-        if (writeErr.length) console.warn('[EventCues] camera: SAI write errors:', writeErr);
-        else console.log('[EventCues] camera: CAM_Free_Transform written OK — binding VP_Free');
+        // Day 77: was .getField('translation'/'rotation').setValue(...) wrapped in a
+        // try/catch that fell back to direct assignment only if an exception was
+        // thrown. That doesn't actually guard against the documented failure mode
+        // (Camera Spec v1.3 §4) — getField().setValue() can silently fail to
+        // register a value with no exception at all, so the fallback would never
+        // trigger on the specific case it needed to. Direct assignment first, no
+        // fallback needed — matches the pattern already proven everywhere else in
+        // this file.
+        camXform.translation = new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]);
+        camXform.rotation    = new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]);
+        console.log('[EventCues] camera: CAM_Free_Transform written OK — binding VP_Free');
         var _camLog = 'subj=' + (cue.subject || 'origin')
           + ' pos=[' + camPos.map(function(v){return v.toFixed(2);}).join(',') + ']'
           + ' orient=[' + orient.map(function(v){return v.toFixed(3);}).join(',') + ']'
@@ -2564,7 +2591,12 @@ function _executeAgentOrbit(cue) {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var orbitProto = scene.getNamedNode('CAM_OrbitProto_' + subjectSafe);
+      var orbitProto = null;
+      // Day 77: CAM_OrbitProto_{subject} now lives inside the avatar's own Inline
+      // scope (Character-Creator-authored rig), same reasoning and same fallback
+      // order as _bindNamedViewpoint's update above.
+      try { orbitProto = scene.getImportedNode('CAM_OrbitProto_' + subjectSafe); } catch(ie) {}
+      if (!orbitProto) { try { orbitProto = scene.getNamedNode('CAM_OrbitProto_' + subjectSafe); } catch(ne) {} }
 
       if (orbitProto) {
 
@@ -2583,8 +2615,17 @@ function _executeAgentOrbit(cue) {
         orbitProto.cycleInterval = duration;
         orbitProto.loop          = doLoop;
 
-        orbitProto.getField('initialTranslation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
-        orbitProto.getField('initialRotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+        // Day 77: was .getField('initialTranslation').setValue(...) — the exact SAI
+        // pattern Camera Spec v1.3 §4 already proved unreliable, and the same fix
+        // applied everywhere else this session. Every OTHER field in this function
+        // already used direct assignment (cycleInterval, loop, the keyValue/
+        // oriKeyValue array writes above) — only these two were left on the old
+        // pattern, likely explaining "camera moves slightly but never reaches its
+        // first position": set_bind would still correctly switch which viewpoint is
+        // bound, but the starting pose could silently fail to register, leaving the
+        // camera at a stale position until the keyframe animation gradually moved it.
+        orbitProto.initialTranslation = new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]);
+        orbitProto.initialRotation    = new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]);
 
         requestAnimationFrame(function() {
           orbitProto.set_bind = true;
@@ -2672,7 +2713,11 @@ function _executeAgentTrack(cue) {
     attempts++;
     try {
       var scene = canvas.browser.currentScene;
-      var trackProto = scene.getNamedNode('CAM_TrackProto_' + subjectSafe);
+      var trackProto = null;
+      // Day 77: CAM_TrackProto_{subject} now lives inside the avatar's own Inline
+      // scope — same fix as _executeAgentOrbit above.
+      try { trackProto = scene.getImportedNode('CAM_TrackProto_' + subjectSafe); } catch(ie) {}
+      if (!trackProto) { try { trackProto = scene.getNamedNode('CAM_TrackProto_' + subjectSafe); } catch(ne) {} }
 
       if (trackProto) {
 
@@ -2691,8 +2736,10 @@ function _executeAgentTrack(cue) {
         trackProto.cycleInterval = duration;
         trackProto.loop          = doLoop;
 
-        trackProto.getField('initialTranslation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
-        trackProto.getField('initialRotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+        // Day 77: same fix as agent_orbit's equivalent lines above — was
+        // .getField('initialTranslation').setValue(...), the unreliable pattern.
+        trackProto.initialTranslation = new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]);
+        trackProto.initialRotation    = new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]);
 
         requestAnimationFrame(function() {
           trackProto.set_bind = true;
@@ -2892,8 +2939,11 @@ function _executeMoveShot(cue) {
 
         // Snap camera to move start position then bind VP_Free (TELEPORT, instantaneous).
         // This is intentional — the authored start values are where the shot begins.
-        camXform.getField('translation').setValue(new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]));
-        camXform.getField('rotation').setValue(new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]));
+        // Day 77: was .getField('translation'/'rotation').setValue(...) — the exact
+        // unreliable pattern the comment above this block already claimed had been
+        // replaced everywhere in this function. These two lines were simply missed.
+        camXform.translation = new X3D.SFVec3f(posKeys[0], posKeys[1], posKeys[2]);
+        camXform.rotation    = new X3D.SFRotation(oriKeys[0], oriKeys[1], oriKeys[2], oriKeys[3]);
 
         requestAnimationFrame(function() {
           vpFree.set_bind = true;
@@ -3042,12 +3092,19 @@ function _wirePathTimerBehavior(safeName, gen) {
   try { scene = canvas.browser.currentScene; } catch(e) { return; }
   if (!scene) return;
 
-  // Probe for Timer_N_1 through Timer_N_8 — wire whichever exist.
-  // No need to know segCount in advance.
+  // Day 77: probe Timer_{agent}{orderSuffix}_1 through _8 — was bare
+  // Timer_{agent}_N before, which for an agent's SECOND (or later) group
+  // found that agent's group-1 timer (still present in the scene graph,
+  // just finished and inactive) instead of the real, currently-running
+  // order-suffixed one — wiring walk/idle behavior to a dead node that
+  // would never fire isActive/fraction_changed again. Same
+  // _pbAgentCurrentOrder lookup as pbActivateX3DTimers/_pbAdvanceSeg/
+  // pbReleaseDwell use for the same reason.
+  var _suf = _pbOrderSuffix(_pbAgentCurrentOrder[safeName]);
   var MAX_SEGS = 8;
   for (var seg = 1; seg <= MAX_SEGS; seg++) {
     (function(s) {
-      var timerName = 'Timer_' + safeName + '_' + s;
+      var timerName = 'Timer_' + safeName + _suf + '_' + s;
       var timerNode;
       try { timerNode = scene.getNamedNode(timerName); } catch(e) {}
       if (!timerNode) {
@@ -3059,7 +3116,7 @@ function _wirePathTimerBehavior(safeName, gen) {
       var isActiveField;
       try { isActiveField = timerNode.getField('isActive'); } catch(e) {}
       if (isActiveField && typeof isActiveField.addFieldCallback === 'function') {
-        isActiveField.addFieldCallback('bhWalk_' + safeName + '_' + s + '_' + gen, function(value) {
+        isActiveField.addFieldCallback('bhWalk_' + safeName + _suf + '_' + s + '_' + gen, function(value) {
           if (_pbCbGeneration !== gen) return;
           if (value === true || value === 'true' || value === 1) {
             console.log('Timer ' + timerName + ' isActive=true → pivot then WalkTimer');
@@ -3082,7 +3139,7 @@ function _wirePathTimerBehavior(safeName, gen) {
       try { fracField = timerNode.getField('fraction_changed'); } catch(e) {}
       if (fracField && typeof fracField.addFieldCallback === 'function') {
         var _arrived = false;  // one-shot per timer run
-        fracField.addFieldCallback('bhIdle_' + safeName + '_' + s + '_' + gen, function(value) {
+        fracField.addFieldCallback('bhIdle_' + safeName + _suf + '_' + s + '_' + gen, function(value) {
           if (_pbCbGeneration !== gen) return;
           var f = parseFloat(value);
           if (f >= 0.99 && !_arrived) {
@@ -3108,19 +3165,22 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
   // Uses cultivar names from arc playback state — does NOT enumerate scene.namedNodes
   // because X_ITE SAI does not expose Script DEF nodes via namedNodes enumeration.
   // getNamedNode('Arrival_Cindy') works; Object.keys(scene.namedNodes) misses Script nodes.
+  //
+  // Day 77: now called ONCE PER ORDER GROUP (from _pbPlayAllInner's group loop),
+  // not once upfront for every cultivar in the whole scene — an agent with
+  // multiple paths needs THIS function to run again for each of its later
+  // groups, wiring Arrival_{agent}_{order}'s callback and arming
+  // Timer_{agent}_{order}_1, not just its first path's bare names every time.
+  // _x3dTimerActive/window._pbPollingSegment resets moved OUT of this function
+  // to _pbPlayAllInner's one-time-per-Play-All reset block — resetting them
+  // here would have wiped group 1's still-active polling/tracking state the
+  // moment group 2 called this function again within the SAME play session.
   console.log('pbActivateX3DTimers: entered, cultivars =', cultivars);
   if (!canvas || !canvas.browser) { console.warn('pbActivateX3DTimers: no browser'); return; }
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) { console.warn('pbActivateX3DTimers: no currentScene'); return; }
-    _x3dTimerActive = {};
-    // Kill any polls from a previous play before wiring new ones
-    if (window._pbPollingSegment) {
-      Object.keys(window._pbPollingSegment).forEach(function(k) {
-        window._pbPollingSegment[k] = false;
-      });
-    }
-    window._pbPollingSegment = {};
+    if (!window._pbPollingSegment) window._pbPollingSegment = {};
 
     if (!cultivars || cultivars.length === 0) {
       console.warn('pbActivateX3DTimers: no cultivars passed — cannot wire Arrival_ or start Timers');
@@ -3129,8 +3189,9 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
 
     cultivars.forEach(function(cultivarName) {
       var safeName = cultivarName.replace(/[^A-Za-z0-9_]/g, '_');
-      var arrNodeName = 'Arrival_' + safeName;
-      var timerNodeName = 'Timer_' + safeName + '_1';
+      var _suf = _pbOrderSuffix(_pbAgentCurrentOrder[safeName]);
+      var arrNodeName = 'Arrival_' + safeName + _suf;
+      var timerNodeName = 'Timer_' + safeName + _suf + '_1';
       var avatarName = 'Avatar_' + safeName;
       // Session id for this cultivar — null means single-arc (use pbStep)
       var sid = (cultivarSessionMap && cultivarSessionMap[cultivarName]) || null;
@@ -3330,14 +3391,23 @@ function pbStopX3DTimers() {
       if (scene) {
         Object.keys(_x3dTimerActive).forEach(function(avatarName) {
           var suffix = avatarName.replace(/^Avatar_/, '');
-          // Disable up to 8 segments worth of timers and dwells
-          for (var i = 1; i <= 8; i++) {
-            ['Timer_'+suffix+'_'+i, 'Dwell_'+suffix+'_'+i].forEach(function(nodeName) {
-              try {
-                var n = scene.getNamedNode(nodeName);
-                if (n) n.enabled = false;
-              } catch(e) {}
-            });
+          // Day 77: sweep every possible order group (1-8), not just the bare
+          // (order=1) name — this is a full stop/cleanup, and an agent could
+          // have any of its later paths active when Stop is pressed, not just
+          // its first. Over-trying nonexistent nodes is harmless (try/catch);
+          // under-cleaning would leave a later group's timer still running
+          // after Stop.
+          for (var ord = 1; ord <= 8; ord++) {
+            var _stopSuf = _pbOrderSuffix(ord);
+            // Disable up to 8 segments worth of timers and dwells
+            for (var i = 1; i <= 8; i++) {
+              ['Timer_'+suffix+_stopSuf+'_'+i, 'Dwell_'+suffix+_stopSuf+'_'+i].forEach(function(nodeName) {
+                try {
+                  var n = scene.getNamedNode(nodeName);
+                  if (n) n.enabled = false;
+                } catch(e) {}
+              });
+            }
           }
         });
       }
@@ -3562,11 +3632,13 @@ async function pbPlay() {
         _agentZone[_wp1c] = _wp1z;
         _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1);
       }
+      _fireWpArrivalEventCues(_wp1);  // Day 77: same WP1 gap as pbPlayAll — never fired before
       _fireCouplerTick();
     } else {
       // JS-lerp mode: poll drives display
       pbUpdateDisplay(data.state||data);
       _seedArcRecord(data.state||data);
+      _fireWpArrivalEventCues((data.state||data).current_waypoint || {});
       _fireCouplerTick();
       pbStartPolling(pace);
       pbActivateX3DTimers(cultivars, null);
@@ -3594,6 +3666,14 @@ function _validateAndBuildOrderGroups(sceneDoc, cultivarList) {
   }
 
   var groups = {};         // {orderInt: [safeName, ...]}
+  // Day 77: {safeName + '::' + orderInt: normalizedPathName} — needed because the
+  // server creates one playback session PER PATH (session_id derives from the
+  // arc file's path_name), so an agent with multiple paths has multiple
+  // sessions. A cultivar-name-only session map can only ever hold one of them.
+  // This lets the per-group loop in _pbPlayAllInner correlate "this session"
+  // to "this agent's path for THIS specific order" by matching path names,
+  // not just agent names.
+  var pathNames = {};
   var errors = [];
 
   pathEls.forEach(function(pEl) {
@@ -3616,6 +3696,7 @@ function _validateAndBuildOrderGroups(sceneDoc, cultivarList) {
     var safeName = agent.replace(/[^A-Za-z0-9_]/g, '_');
     if (!groups[orderInt]) groups[orderInt] = [];
     if (groups[orderInt].indexOf(safeName) === -1) groups[orderInt].push(safeName);
+    pathNames[safeName + '::' + orderInt] = name.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
   });
 
   if (errors.length) {
@@ -3635,7 +3716,7 @@ function _validateAndBuildOrderGroups(sceneDoc, cultivarList) {
   }
 
   console.log('_validateAndBuildOrderGroups: groups =', JSON.stringify(groups));
-  return groups;
+  return { groups: groups, pathNames: pathNames };
 }
 
 // ─────────────────────────────────────────────
@@ -3705,6 +3786,11 @@ async function _pbPlayAllInner() {
     Object.keys(window._pbPollingSegment).forEach(function(k){ window._pbPollingSegment[k] = false; });
   }
   window._pbPollingSegment = {};
+  _x3dTimerActive = {};       // Day 77: moved here from inside pbActivateX3DTimers,
+                               // which is now called once per order group rather than
+                               // once for the whole play — resetting it there would
+                               // have wiped an earlier group's still-active state.
+  _pbAgentCurrentOrder = {};  // Day 77: fresh for this Play All click
   _pbStepInFlight = {};
   _pbArcComplete = {};
   _pbExpectedAgents = 0;
@@ -3846,6 +3932,7 @@ async function _pbPlayAllInner() {
     var xFname2 = xSel2 ? xSel2.value : '';
     var sceneName2 = xFname2.replace(/\.x3d$/i, '');
     var orderGroups = null;
+    var _pathNamesByAgentOrder = {};  // Day 77: {safeName::order -> normalizedPathName}
 
     var validatorRan = false;
     if (sceneName2) {
@@ -3855,7 +3942,9 @@ async function _pbPlayAllInner() {
         if (sceneXmlResp.ok) {
           var sceneXmlText = await sceneXmlResp.text();
           var sceneDoc = new DOMParser().parseFromString(sceneXmlText, 'text/xml');
-          orderGroups = _validateAndBuildOrderGroups(sceneDoc, allCultivars);
+          var _ogResult = _validateAndBuildOrderGroups(sceneDoc, allCultivars);
+          orderGroups = _ogResult ? _ogResult.groups : null;
+          if (_ogResult) _pathNamesByAgentOrder = _ogResult.pathNames;
           validatorRan = true;
         } else {
           console.warn('pbPlayAll: scene XML fetch failed (' + sceneXmlResp.status + ') — skipping waypointOrder validation, firing simultaneously');
@@ -3872,16 +3961,24 @@ async function _pbPlayAllInner() {
       return;
     }
 
-    // Activate X3D timers (registers Arrival_ callbacks and arms avatars)
+    // _pbCbGeneration bump needed either way — callback keys use it for uniqueness
+    // across repeated Play/Reset cycles.
     _pbCbGeneration++;
     console.log('pbPlayAll: _pbCbGeneration now', _pbCbGeneration);
-    pbActivateX3DTimers(allCultivars, cultivarSessionMap);
-    console.log('pbPlayAll: after pbActivateX3DTimers — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
 
     if (orderGroups) {
       // ── Ordered group sequencer ────────────────────────────────────────
       // Fire groups in ascending order. Each group starts all its agents
       // simultaneously, then waits for ALL _pbArcComplete before next group.
+      //
+      // Day 77: activation moved INSIDE this loop, called once per group with
+      // only that group's agents — was previously called once, upfront, for
+      // every cultivar in the whole scene, which only ever wired an agent's
+      // FIRST path (bare Arrival_/Timer_ names) and never re-armed anything
+      // for that same agent's later groups. Session resolution also moved
+      // here and made path-aware: the server creates one session PER PATH,
+      // so an agent with multiple paths has multiple sessions, and a plain
+      // cultivar-name lookup can only ever find one of them.
       var sortedOrders = Object.keys(orderGroups).map(Number).sort(function(a,b){return a-b;});
       console.log('pbPlayAll: order sequence =', sortedOrders);
 
@@ -3890,12 +3987,58 @@ async function _pbPlayAllInner() {
         var groupNames = orderGroups[currentOrder];
         console.log('pbPlayAll: firing group order=' + currentOrder + ' agents=' + groupNames.join(','));
 
-        // Find session IDs for this group's cultivars
+        // Resolve THIS group's agent->session mapping fresh. Match each
+        // candidate session (by its cultivars list) against this group's known
+        // path name (normalized the same way on both sides); fall back to "the
+        // only session this agent has" when there's no path-name info to match
+        // against (single-path agents, or older scenes without a name match).
         var groupSids = [];
         groupNames.forEach(function(safeName) {
-          var sid = _pbCultivarSessionMap[safeName];
-          if (sid && groupSids.indexOf(sid) === -1) groupSids.push(sid);
+          _pbAgentCurrentOrder[safeName] = currentOrder;
+          var wantPathNorm = _pathNamesByAgentOrder[safeName + '::' + currentOrder] || '';
+          var candidateSids = sessionIds.filter(function(sid) {
+            var stateData = sessions[sid].state || sessions[sid];
+            var cultivars = stateData.cultivars || [];
+            return cultivars.indexOf(safeName) !== -1 ||
+              cultivars.map(function(c){return c.replace(/[^A-Za-z0-9_]/g,'_');}).indexOf(safeName) !== -1;
+          });
+          var resolvedSid = null;
+          if (wantPathNorm) {
+            resolvedSid = candidateSids.find(function(sid) {
+              return sid.replace(/[^A-Za-z0-9]/g,'').toLowerCase().indexOf(wantPathNorm) !== -1;
+            }) || null;
+          }
+          if (!resolvedSid) {
+            // No path-name match (or nothing to match against) — fall back to
+            // the only candidate if there's exactly one; ambiguous otherwise.
+            if (candidateSids.length === 1) resolvedSid = candidateSids[0];
+            else if (candidateSids.length > 1) {
+              console.warn('pbPlayAll: ambiguous session for', safeName, 'order', currentOrder,
+                '— candidates:', candidateSids, '— path name match failed, picking first');
+              resolvedSid = candidateSids[0];
+            }
+          }
+          if (resolvedSid) {
+            _pbCultivarSessionMap[safeName] = resolvedSid;
+            if (groupSids.indexOf(resolvedSid) === -1) groupSids.push(resolvedSid);
+          } else {
+            console.warn('pbPlayAll: could not resolve any session for', safeName, 'order', currentOrder);
+          }
         });
+
+        // Fresh start for this group — without this reset, an agent's second
+        // (or later) path would inherit stale _pbArcComplete=true /
+        // _x3dLastArrivedSeg from its PREVIOUS group, and _pbWaitForGroup
+        // below would return immediately without actually waiting.
+        groupNames.forEach(function(safeName) {
+          _pbArcComplete[safeName] = false;
+          _x3dLastArrivedSeg[safeName] = 0;
+        });
+
+        // Wire callbacks + arm first timer for just this group's agents.
+        pbActivateX3DTimers(groupNames, _pbCultivarSessionMap);
+        console.log('pbPlayAll: after pbActivateX3DTimers for group', currentOrder,
+                    '— _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
 
         // Display WP1, seed phi, fire zone commands for this group
         groupSids.forEach(function(sid) {
@@ -3916,6 +4059,9 @@ async function _pbPlayAllInner() {
             }
           }
           if (_wp1c && _wp1z) { _agentZone[_wp1c] = _wp1z; _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1); }
+          // Day 77: WP1 never fired EventCues at all — this direct pbUpdateDisplay
+          // call never went through pbStepSession, the only place this used to run.
+          _fireWpArrivalEventCues(_wp1);
         });
         _fireCouplerTick();
         // pbUpdateDisplay above triggers: TTS → pbReleaseDwell → startFromLoader → Timer_1.
@@ -3931,7 +4077,11 @@ async function _pbPlayAllInner() {
       }
 
     } else {
-      // No scene XML / validation skipped — fall back to simultaneous firing
+      // No scene XML / validation skipped — fall back to simultaneous firing.
+      // No order-group structure here, so activation stays a single upfront
+      // call for every cultivar, same as before Day 77 — this fallback path
+      // has no per-agent multi-path distinction to make.
+      pbActivateX3DTimers(allCultivars, cultivarSessionMap);
       console.log('pbPlayAll: no orderGroups (scene XML unavailable) — firing all simultaneously');
       sessionIds.forEach(function(sid) {
         var stateData = sessions[sid].state || sessions[sid];
@@ -3957,6 +4107,7 @@ async function _pbPlayAllInner() {
           }
         }
         if (_wp1c && _wp1z) { _agentZone[_wp1c] = _wp1z; _fireZoneCommand(_wp1c, _wp1z, 'OnEnter', _wp1.stepno||1); }
+        _fireWpArrivalEventCues(_wp1);  // Day 77: same WP1 gap as the ordered-group path above
       });
       _fireCouplerTick();
     }
@@ -3974,6 +4125,31 @@ async function _pbPlayAllInner() {
 // Called from Arrival_ callbacks when concurrent arcs are active.
 // Routes the step to the correct server session by session_id.
 // Null sessionId falls back to stepping ALL sessions (single-arc compat).
+
+// Day 77: extracted from inline code that only ever ran inside pbStepSession
+// (i.e. only on segmentArrived — waypoint 2 onward). WP1 is displayed via a
+// direct pbUpdateDisplay() call in several places (the Play-All group loop,
+// pbPlay's own WP1 display) that never went through pbStepSession at all —
+// meaning no EventCue, camera or otherwise, could ever fire on a WP1 arrival,
+// confirmed structurally, not guessed at: this whole block simply didn't
+// exist in the WP1 code path. Callers now invoke this directly wherever a
+// waypoint arrival should be able to trigger EventCues, including WP1.
+function _fireWpArrivalEventCues(stepWp) {
+  var _stepCultivar = stepWp.cultivar || '';
+  var _wpArrId = stepWp.name || stepWp.id || stepWp.label || '';
+  console.log('[EventCues] WP arrival trigger: "' + _wpArrId + ' arrive"', '— cues loaded:', _eventCues.length, '— stepWp:', JSON.stringify({name:stepWp.name,id:stepWp.id,label:stepWp.label}));
+  if (!_wpArrId) return;
+  // Record which step this cultivar has now arrived at, so _resolveSubjectPos
+  // can look up the correct position rather than the highest pre-loaded step.
+  if (_stepCultivar && stepWp.stepno !== undefined) {
+    var _arrSafe = _stepCultivar.replace(/[^A-Za-z0-9_]/g, '_');
+    _agentCurrentStep[_arrSafe] = stepWp.stepno;
+    console.log('[EventCues] _agentCurrentStep[' + _arrSafe + '] = ' + stepWp.stepno);
+  }
+  var _arrCandidates = _resolveWpTriggerNames(stepWp);
+  console.log('[EventCues] firing trigger candidates:', JSON.stringify(_arrCandidates.map(function(n){ return n + ' arrive'; })));
+  _arrCandidates.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
+}
 
 async function pbStepSession(sessionId) {
   var flagKey = sessionId || '__all__';
@@ -4019,20 +4195,7 @@ async function pbStepSession(sessionId) {
       _agentZone[_stepCultivar] = _stepZone;
     }
     // Fire EventCues whose trigger matches this WP arrival
-    var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
-    console.log('[EventCues] WP arrival trigger: "' + _wpArrId + ' arrive"', '— cues loaded:', _eventCues.length, '— stepWp:', JSON.stringify({name:_stepWp.name,id:_stepWp.id,label:_stepWp.label}));
-    if (_wpArrId) {
-      // Record which step this cultivar has now arrived at, so _resolveSubjectPos
-      // can look up the correct position rather than the highest pre-loaded step.
-      if (_stepCultivar && _stepWp.stepno !== undefined) {
-        var _arrSafe = _stepCultivar.replace(/[^A-Za-z0-9_]/g, '_');
-        _agentCurrentStep[_arrSafe] = _stepWp.stepno;
-        console.log('[EventCues] _agentCurrentStep[' + _arrSafe + '] = ' + _stepWp.stepno);
-      }
-      var _arrCandidates = _resolveWpTriggerNames(_stepWp);
-      console.log('[EventCues] firing trigger candidates:', JSON.stringify(_arrCandidates.map(function(n){ return n + ' arrive'; })));
-      _arrCandidates.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
-    }
+    _fireWpArrivalEventCues(_stepWp);
     _fireCouplerTick();
   } catch(e) { console.warn('pbStepSession error:', e); }
   finally { _pbStepInFlight[flagKey] = false; }
@@ -4572,17 +4735,7 @@ async function pbStep() {
       _agentZone[_stepCultivar] = _stepZone;
     }
     // Fire EventCues whose trigger matches this WP arrival
-    var _wpArrId = _stepWp.name || _stepWp.id || _stepWp.label || '';
-    if (_wpArrId) {
-      // Record current step for _resolveSubjectPos (mirrors pbStepSession logic)
-      if (_stepCultivar && _stepWp.stepno !== undefined) {
-        var _arrSafe2 = _stepCultivar.replace(/[^A-Za-z0-9_]/g, '_');
-        _agentCurrentStep[_arrSafe2] = _stepWp.stepno;
-        console.log('[EventCues] _agentCurrentStep[' + _arrSafe2 + '] = ' + _stepWp.stepno + ' (pbStep)');
-      }
-      var _arrCandidates2 = _resolveWpTriggerNames(_stepWp);
-      _arrCandidates2.forEach(function(n) { fireEventCuesForTrigger(n + ' arrive'); });
-    }
+    _fireWpArrivalEventCues(_stepWp);
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
   } catch(e) { console.warn('pbStep: request failed:', e.message); }
   finally { _pbStepInFlight['__single__'] = false; }
@@ -4678,14 +4831,36 @@ function _pbResetViaKillScript() {
     }
     var found = false;
     agentSuffixes.forEach(function(suffix) {
+      // Day 77: reset position using ONLY order=1's Kill_ script — firing
+      // resetPos on a later order's Kill_ script too would create ambiguity
+      // about which path's starting position should win (each Kill_ script
+      // has its own hardcoded first-waypoint position for its OWN path).
+      // Order=1's start is correct here: "reset" means "back to the
+      // beginning of the whole performance," not wherever the agent's
+      // current path happens to start.
       var nodeName = 'Kill_' + suffix;
       try {
         var killNode = scene.getNamedNode(nodeName);
-        if (!killNode) return;
-        killNode.resetPos = true;
-        found = true;
-        console.log('pbReset: fired resetPos on', nodeName);
+        if (killNode) {
+          killNode.resetPos = true;
+          found = true;
+          console.log('pbReset: fired resetPos on', nodeName);
+        }
       } catch(e) { console.warn('pbReset: Kill_ resetPos failed on', nodeName, e); }
+
+      // Still stop any OTHER order's timers that might currently be running
+      // (killAll only, never resetPos) — otherwise a still-active later-path
+      // timer keeps writing translation and fights the reset position.
+      for (var ord = 2; ord <= 8; ord++) {
+        var otherName = 'Kill_' + suffix + _pbOrderSuffix(ord);
+        try {
+          var otherKill = scene.getNamedNode(otherName);
+          if (otherKill) {
+            otherKill.killAll = true;
+            console.log('pbReset: fired killAll on', otherName);
+          }
+        } catch(e) {}
+      }
     });
     if (!found) {
       console.warn('pbReset: no Kill_ scripts found — falling back to JS resetToStartPosition');

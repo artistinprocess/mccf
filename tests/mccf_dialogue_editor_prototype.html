@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCCF Dialogue Editor — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #07090d;
+  --s1:      #0c0f16;
+  --s2:      #12161f;
+  --s3:      #181d28;
+  --border:  #1e2535;
+  --accent:  #4af0a8;
+  --warm:    #f0c060;
+  --cool:    #60a8f0;
+  --danger:  #f06060;
+  --purple:  #a060f0;
+  --text:    #b8c8e0;
+  --dim:     #7a8aaa;
+  --E: #f06060; --B: #60a8f0; --P: #f0c060; --S: #4af0a8;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  grid-template-columns: 300px 1fr 300px;
+  grid-template-areas: "hdr hdr hdr" "left main right";
+  overflow: hidden;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── header ── */
+#hdr {
+  grid-area: hdr;
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+}
+#hdr .logo {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+#hdr .logo span { color: var(--dim); font-weight: 600; font-size: 12px; margin-left: 6px; }
+#hdr .spacer { flex: 1; }
+.pill-btn {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.pill-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pill-btn.primary { background: var(--accent); color: #06110c; border-color: var(--accent); font-weight: 600; }
+.pill-btn.primary:hover { opacity: .88; color: #06110c; }
+.pill-btn:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+/* ── left: line list ── */
+#left {
+  grid-area: left;
+  background: var(--s1);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#left-head { padding: 12px 14px 8px; display: flex; align-items: center; justify-content: space-between; }
+#left-head h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; }
+#line-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+.line-card {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color .12s;
+}
+.line-card:hover { border-color: #2a3348; }
+.line-card.active { border-color: var(--accent); background: #10231b; }
+.line-card .lc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.line-card .lc-actor { font-weight: 600; color: var(--text); font-size: 12px; }
+.line-card .lc-type { font-size: 10px; color: var(--dim); }
+.line-card .lc-text { font-size: 11.5px; color: var(--dim); line-height: 1.4; max-height: 2.8em; overflow: hidden; }
+.badge {
+  font-size: 9.5px;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.badge-trigger { background: #16202f; color: var(--cool); }
+.badge-trigger.declared { color: var(--warm); }
+.badge-trigger.sensed { color: var(--purple); }
+.badge-trigger.legacy { color: var(--dim); font-style: italic; }
+.badge-trigger.arc-complete { color: var(--danger); }
+.lc-flags { display: flex; gap: 4px; margin-top: 5px; }
+.flag-dot { width: 6px; height: 6px; border-radius: 50%; }
+.flag-dot.blocking { background: var(--danger); }
+.flag-dot.static { background: var(--dim); }
+.flag-dot.improv { background: var(--accent); }
+.flag-dot.has-audio { background: var(--cool); }
+
+/* ── main: editor ── */
+#main { grid-area: main; overflow-y: auto; padding: 20px 26px 40px; }
+#main .empty { color: var(--dim); font-size: 13px; padding-top: 60px; text-align: center; }
+.field-row { display: flex; gap: 12px; margin-bottom: 14px; }
+.field { flex: 1; }
+.field label {
+  display: block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--dim);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+select, input[type=text], input[type=number], textarea {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+textarea { resize: vertical; line-height: 1.5; }
+.toggle-group { display: flex; gap: 6px; }
+.toggle-btn {
+  flex: 1;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+.toggle-btn.on { background: #10231b; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.checkbox-row input { width: 15px; height: 15px; accent-color: var(--danger); }
+.section-title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  margin: 22px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.section-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.hint { font-size: 11px; color: var(--dim); margin-top: 5px; line-height: 1.5; }
+.provenance-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.prov-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+}
+.prov-algorithmic { background: #1c2a3d; color: var(--cool); }
+.prov-authored { background: #1c2a1c; color: var(--accent); }
+.prov-llm { background: #2a1c3d; color: var(--purple); }
+.tag-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag-chip {
+  font-size: 11px; padding: 4px 9px; border-radius: 5px;
+  background: var(--s3); border: 1px solid var(--border); color: var(--text);
+  cursor: pointer;
+}
+.tag-chip:hover { border-color: var(--warm); color: var(--warm); }
+.audio-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.audio-path { font-size: 11.5px; color: var(--dim); flex: 1; word-break: break-all; }
+.audio-path.set { color: var(--cool); }
+
+/* ── right: preview panel ── */
+#right {
+  grid-area: right;
+  background: var(--s1);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px 16px 30px;
+}
+#right h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; margin-bottom: 12px; }
+.meter { margin-bottom: 14px; }
+.meter-label { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px; }
+.meter-label .mv { font-weight: 600; color: var(--text); }
+.meter-track { height: 6px; background: var(--s3); border-radius: 3px; overflow: hidden; position: relative; }
+.meter-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+.valence-track { position: relative; }
+.valence-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.channels { display: flex; gap: 6px; margin-bottom: 16px; }
+.ch-col { flex: 1; text-align: center; }
+.ch-bar-track { height: 60px; width: 100%; background: var(--s3); border-radius: 4px; display: flex; align-items: flex-end; overflow: hidden; }
+.ch-bar-fill { width: 100%; border-radius: 4px 4px 0 0; transition: height .3s; }
+.ch-label { font-size: 10px; margin-top: 4px; color: var(--dim); }
+.ch-val { font-size: 10.5px; font-weight: 600; }
+.suggested-tag-box {
+  background: var(--s2); border: 1px solid var(--border); border-radius: 7px;
+  padding: 12px; margin-top: 6px; margin-bottom: 18px;
+}
+.suggested-tag-box .stb-tag { font-family: var(--display); font-weight: 700; font-size: 15px; color: var(--warm); }
+.suggested-tag-box .stb-none { color: var(--dim); font-style: italic; font-size: 12px; }
+.disclaimer {
+  font-size: 10.5px; color: var(--dim); line-height: 1.5; margin-top: 10px;
+  padding: 9px 10px; background: #150f08; border: 1px solid #2a2010; border-radius: 6px;
+}
+.disclaimer b { color: var(--warm); }
+
+/* ── modal ── */
+#modal-overlay {
+  position: fixed; inset: 0; background: rgba(4,6,10,.75);
+  display: none; align-items: center; justify-content: center; z-index: 50;
+}
+#modal-overlay.show { display: flex; }
+#modal {
+  background: var(--s1); border: 1px solid var(--border); border-radius: 10px;
+  width: 640px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column;
+}
+#modal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+#modal-head h3 { font-family: var(--display); font-size: 15px; font-weight: 700; }
+#modal-body { padding: 16px 18px; overflow-y: auto; }
+#modal-body textarea { min-height: 220px; font-size: 12px; line-height: 1.6; }
+#modal-body p { font-size: 12px; color: var(--dim); line-height: 1.6; margin-bottom: 10px; }
+#modal-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+.close-x { background: none; border: none; color: var(--dim); font-size: 18px; cursor: pointer; line-height: 1; }
+.close-x:hover { color: var(--danger); }
+
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-rows: 52px auto 1fr auto; grid-template-areas: "hdr" "left" "main" "right"; overflow-y: auto; height: auto; min-height: 100vh; }
+  #left, #right { max-height: 260px; }
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="logo">MCCF <span>Dialogue Editor — prototype, not wired to a server</span></div>
+  <div class="spacer"></div>
+  <button class="pill-btn" onclick="openExportModal()">↑ Export for Kate</button>
+  <button class="pill-btn" onclick="openImportModal()">↓ Import tagged</button>
+  <button class="pill-btn primary" onclick="addLine()">+ New line</button>
+</div>
+
+<div id="left">
+  <div id="left-head"><h2>Dialogue — garden_002</h2></div>
+  <div id="line-list"></div>
+</div>
+
+<div id="main"></div>
+
+<div id="right"></div>
+
+<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div id="modal-head"><h3 id="modal-title"></h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div id="modal-body"></div>
+    <div id="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+// In-memory data model only — same convention as the Day 71 prototypes
+// (mccf_timeline_dialogue_prototype_v2.html): reacts to the shape of the
+// real dialogue-xml.js schema, not wired to /scene/load/scene or
+// /voice/preview. Seeded with the Cindy/Jack pool scene used as the test
+// fixture throughout this session for continuity.
+// ─────────────────────────────────────────────────────────────────────────
+
+const CORE_TAGS = ['happy','sad','excited','angry','whisper','annoyed','appalled','thoughtful','surprised','cute','dismissive'];
+const NONVERBAL_TAGS = ['laughs','chuckles','sighs','clears throat','exhales sharply','inhales deeply','muttering','gasp','swallows','short pause','long pause'];
+const ACTORS = ['Cindy','Jack','MotherGoddess'];
+
+let lines = [
+  {
+    id: 'line_cindy_001', actor: 'Cindy', type: 'Question', mode: 'improv', blocking: false,
+    trigger: { type: 'scene-start' },
+    text: 'How does the water feel today?',
+    ttsText: '', tagSource: null, audioFile: '', audioSource: ''
+  },
+  {
+    id: 'line_cindy_002', actor: 'Cindy', type: 'Response', mode: 'static', blocking: true,
+    trigger: { type: 'sensed', lineId: 'line_cindy_001' },
+    text: "Cool. Cooler than I expected.",
+    ttsText: '[thoughtful] Cool... cooler than I expected.', tagSource: 'authored', audioFile: '', audioSource: ''
+  },
+  {
+    id: 'line_jack_001', actor: 'Jack', type: 'Statement', mode: 'static', blocking: false,
+    trigger: { type: 'zone', zone: 'Pool' },
+    text: 'He always did like the water more than the rest of us.',
+    ttsText: '[thoughtful] He always did like the water more than the rest of us.',
+    tagSource: 'llm-interpreted:Kate', audioFile: 'media/dialogue/garden_002/line_jack_001.wav', audioSource: 'elevenlabs'
+  },
+  {
+    id: 'line_jack_002', actor: 'Jack', type: 'Statement', mode: 'static', blocking: false,
+    trigger: { type: 'declared', time: 58 },
+    text: 'Did you feel that?',
+    ttsText: '', tagSource: null, audioFile: '', audioSource: ''
+  },
+  {
+    id: 'line_mg_001', actor: 'MotherGoddess', type: 'Statement', mode: 'improv', blocking: false,
+    trigger: { type: 'arc-complete', zone: 'Pool' },
+    text: 'They will not remember this conversation the same way.',
+    ttsText: '', tagSource: null, audioFile: '', audioSource: '',
+    _isChorus: true
+  }
+];
+
+let selectedId = lines[0].id;
+
+function uid(prefix) { return prefix + '_' + Math.random().toString(36).slice(2,7); }
+
+// ── trigger helpers ────────────────────────────────────────────────────
+const TRIGGER_TYPES = [
+  { type: 'scene-start',     label: 'Scene start' },
+  { type: 'zone',            label: 'Zone entered' },
+  { type: 'touch',           label: 'Touch sensor' },
+  { type: 'sensed',          label: 'Another line arrives' },
+  { type: 'declared',        label: 'Fixed clock time' },
+  { type: 'arc-complete',    label: 'Arc complete (Chorus) — planned, not yet in dispatcher' },
+  { type: 'legacy-waypoint', label: 'Legacy waypoint arrival (read-only)' },
+];
+
+function triggerBadgeClass(t) {
+  if (t.type === 'declared') return 'declared';
+  if (t.type === 'sensed') return 'sensed';
+  if (t.type === 'legacy-waypoint') return 'legacy';
+  if (t.type === 'arc-complete') return 'arc-complete';
+  return '';
+}
+function triggerBadgeText(t) {
+  switch(t.type) {
+    case 'scene-start': return 'scene-start';
+    case 'zone': return 'zone: ' + (t.zone||'?');
+    case 'touch': return 'touch: ' + (t.sensor||'?');
+    case 'sensed': return 'sensed: ' + (t.lineId||'?');
+    case 'declared': return 'T=' + (t.time!=null?t.time:'?') + 's';
+    case 'arc-complete': return 'arc-complete' + (t.zone?(': '+t.zone):'');
+    case 'legacy-waypoint': return 'legacy: ' + (t.waypoint||'?');
+    default: return t.type;
+  }
+}
+
+// ── rendering: line list ───────────────────────────────────────────────
+function renderList() {
+  const el = document.getElementById('line-list');
+  el.innerHTML = lines.map(l => `
+    <div class="line-card ${l.id===selectedId?'active':''}" onclick="selectLine('${l.id}')">
+      <div class="lc-top">
+        <span class="lc-actor">${esc(l.actor)}</span>
+        <span class="lc-type">${l.type}</span>
+        <span style="flex:1"></span>
+        <span class="badge badge-trigger ${triggerBadgeClass(l.trigger)}">${esc(triggerBadgeText(l.trigger))}</span>
+      </div>
+      <div class="lc-text">${esc(l.text || '(empty)')}</div>
+      <div class="lc-flags">
+        ${l.blocking ? '<span class="flag-dot blocking" title="blocking"></span>' : ''}
+        <span class="flag-dot ${l.mode}" title="${l.mode}"></span>
+        ${l.audioFile ? '<span class="flag-dot has-audio" title="has audio"></span>' : ''}
+        ${l._isChorus ? '<span style="font-size:9px;color:var(--purple);margin-left:2px">CHORUS</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── rendering: editor ───────────────────────────────────────────────────
+function renderEditor() {
+  const main = document.getElementById('main');
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) { main.innerHTML = '<div class="empty">Select a line, or create a new one.</div>'; return; }
+
+  main.innerHTML = `
+    <div class="section-title">Line</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Actor</label>
+        <select onchange="updateField('actor', this.value)">
+          ${ACTORS.map(a => `<option ${a===l.actor?'selected':''}>${a}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select onchange="updateField('type', this.value)">
+          ${['Question','Response','Statement'].map(t => `<option ${t===l.type?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Mode</label>
+        <div class="toggle-group">
+          <div class="toggle-btn ${l.mode==='static'?'on':''}" onclick="updateField('mode','static')">static</div>
+          <div class="toggle-btn ${l.mode==='improv'?'on':''}" onclick="updateField('mode','improv')">improv</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="blocking-cb" ${l.blocking?'checked':''} onchange="updateField('blocking', this.checked)">
+          <label for="blocking-cb" style="text-transform:none;font-size:12.5px;color:var(--text);font-weight:400">Blocking — halts the scene until this line resolves</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Trigger</label>
+        <select onchange="updateTriggerType(this.value)" ${l.trigger.type==='legacy-waypoint'?'disabled':''}>
+          ${TRIGGER_TYPES.map(t => `<option value="${t.type}" ${t.type===l.trigger.type?'selected':''}>${t.label}</option>`).join('')}
+        </select>
+        ${renderTriggerParam(l)}
+        ${l.trigger.type==='legacy-waypoint' ? '<div class="hint">Migrated from the old waypoint-nested schema — fires on arrival at <b>'+esc(l.trigger.waypoint)+'</b>, exactly as before. Pick a new trigger deliberately to move it off legacy behavior — it is never reinterpreted automatically.</div>' : ''}
+        ${l.trigger.type==='arc-complete' ? '<div class="hint">Chorus-style trigger, decided this session — not implemented in the dispatcher yet. Shown here so the editor UI is ready when it lands.</div>' : ''}
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Text</label>
+        <textarea rows="3" oninput="updateField('text', this.value)">${esc(l.text)}</textarea>
+        <div class="hint">Clean, untagged — what sentiment analysis reads. Never contains delivery tags.</div>
+      </div>
+    </div>
+
+    <div class="section-title">Delivery — ElevenLabs tags</div>
+    <div class="field-row">
+      <div class="field">
+        <label>ttsText</label>
+        <textarea rows="3" oninput="onTtsTextEdit(this.value)" placeholder="falls back to Text above if left empty">${esc(l.ttsText)}</textarea>
+        <div class="provenance-row">
+          ${l.tagSource ? `<span class="prov-badge ${provClass(l.tagSource)}">${esc(provLabel(l.tagSource))}</span>` : '<span class="hint">no tag source yet</span>'}
+        </div>
+        <div class="tag-toolbar">
+          ${CORE_TAGS.map(t => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
+        </div>
+        <div class="tag-toolbar">
+          ${NONVERBAL_TAGS.map(t => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Audio</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Source</label>
+        <select onchange="updateField('audioSource', this.value)">
+          <option value="" ${!l.audioSource?'selected':''}>— none yet —</option>
+          <option value="elevenlabs" ${l.audioSource==='elevenlabs'?'selected':''}>ElevenLabs (draft convenience)</option>
+          <option value="recorded" ${l.audioSource==='recorded'?'selected':''}>Recorded — real voice actor</option>
+          <option value="other-engine" ${l.audioSource==='other-engine'?'selected':''}>Other engine</option>
+        </select>
+        <div class="audio-row">
+          <span class="audio-path ${l.audioFile?'set':''}">${l.audioFile || '(no audio file linked)'}</span>
+          <button class="pill-btn" onclick="mockGenerateAudio()">Generate draft (demo)</button>
+        </div>
+        <div class="hint">Joined to this line purely by its <b>id</b> — same key regardless of which engine, or a hired actor, produced the file. Draft TTS is an editing convenience, never a permanent dependency.</div>
+      </div>
+    </div>
+  `;
+}
+
+function provClass(src) {
+  if (src === 'algorithmic') return 'prov-algorithmic';
+  if (src === 'authored') return 'prov-authored';
+  return 'prov-llm';
+}
+function provLabel(src) {
+  if (src === 'algorithmic') return 'algorithmic suggestion';
+  if (src === 'authored') return 'authored by you';
+  return src.replace('llm-interpreted:', 'interpreted by ');
+}
+
+function renderTriggerParam(l) {
+  const t = l.trigger;
+  if (t.type === 'zone') return `<div style="margin-top:8px"><input type="text" value="${esc(t.zone||'')}" placeholder="zone id" oninput="updateTriggerParam('zone', this.value)"></div>`;
+  if (t.type === 'touch') return `<div style="margin-top:8px"><input type="text" value="${esc(t.sensor||'')}" placeholder="sensor name" oninput="updateTriggerParam('sensor', this.value)"></div>`;
+  if (t.type === 'declared') return `<div style="margin-top:8px"><input type="number" value="${t.time!=null?t.time:''}" placeholder="seconds" oninput="updateTriggerParam('time', parseFloat(this.value))"></div>`;
+  if (t.type === 'sensed') return `<div style="margin-top:8px">
+    <select onchange="updateTriggerParam('lineId', this.value)">
+      ${lines.filter(x=>x.id!==l.id).map(x => `<option value="${x.id}" ${x.id===t.lineId?'selected':''}>${x.id} — ${esc((x.text||'').slice(0,30))}</option>`).join('')}
+    </select></div>`;
+  if (t.type === 'arc-complete') return `<div style="margin-top:8px"><input type="text" value="${esc(t.zone||'')}" placeholder="zone id (optional)" oninput="updateTriggerParam('zone', this.value)"></div>`;
+  return '';
+}
+
+// ── rendering: preview panel ───────────────────────────────────────────
+function renderPreview() {
+  const right = document.getElementById('right');
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) { right.innerHTML = '<h2>Emotional preview</h2><div class="hint">Select a line first.</div>'; return; }
+
+  const p = l._preview || null;
+
+  right.innerHTML = `
+    <h2>Emotional preview</h2>
+    <button class="pill-btn primary" style="width:100%;margin-bottom:16px" onclick="runPreview()">▶ Preview this line</button>
+
+    ${p ? `
+      <div class="meter">
+        <div class="meter-label"><span>valence</span><span class="mv">${p.sentiment.toFixed(2)}</span></div>
+        <div class="meter-track valence-track"><div class="valence-mid"></div>
+          <div class="meter-fill" style="width:${Math.abs(p.sentiment)*50}%; margin-left:${p.sentiment<0?(50+p.sentiment*50):50}%; background:${p.sentiment<0?'var(--danger)':'var(--accent)'}"></div>
+        </div>
+      </div>
+      <div class="meter">
+        <div class="meter-label"><span>arousal (proxy)</span><span class="mv">${p.arousal.toFixed(2)}</span></div>
+        <div class="meter-track"><div class="meter-fill" style="width:${p.arousal*100}%;background:var(--E)"></div></div>
+      </div>
+      <div class="meter">
+        <div class="meter-label"><span>engagement (proxy)</span><span class="mv">${p.engagement.toFixed(2)}</span></div>
+        <div class="meter-track"><div class="meter-fill" style="width:${p.engagement*100}%;background:var(--cool)"></div></div>
+      </div>
+
+      <div class="channels">
+        ${['E','B','P','S'].map(ch => `
+          <div class="ch-col">
+            <div class="ch-bar-track"><div class="ch-bar-fill" style="height:${(p.weights[ch]*100).toFixed(0)}%;background:var(--${ch})"></div></div>
+            <div class="ch-label">${ch}</div>
+            <div class="ch-val" style="color:var(--${ch})">${p.weights[ch].toFixed(2)}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="suggested-tag-box">
+        <div style="font-size:10.5px;color:var(--dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Suggested tag</div>
+        ${p.tag ? `<span class="stb-tag">[${p.tag}]</span>` : '<span class="stb-none">no strong signal — natural delivery</span>'}
+        <div style="margin-top:10px"><button class="pill-btn" style="width:100%" onclick="acceptSuggestedTag()">Insert into ttsText</button></div>
+      </div>
+    ` : `<div class="hint" style="padding:20px 0">Run a preview to see this line's computed arc.</div>`}
+
+    <div class="disclaimer">
+      <b>Demo values only.</b> This prototype computes a simplified mock
+      score client-side, not the real tuned <code>_estimate_sentiment</code>/
+      <code>_decompose_to_channels</code> functions. The real
+      <code>/voice/preview</code> endpoint also has a known open calibration
+      bug (arousal proxy, hedging-language mismatch) not yet fixed — see the
+      Day 72 seed doc §4. Don't read exact numbers here as meaningful,
+      just the layout.
+    </div>
+  `;
+}
+
+// ── mock preview computation (NOT the real algorithm — see disclaimer) ──
+function runPreview() {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l || !l.text.trim()) return;
+  const words = l.text.toLowerCase().split(/\W+/).filter(Boolean);
+  const posHit = words.filter(w => ['good','great','glad','hope','together','warm','safe','yes'].includes(w)).length;
+  const negHit = words.filter(w => ['no','fear','hurt','wrong','danger','cold','afraid'].includes(w)).length;
+  const qHit = l.text.includes('?') ? 1 : 0;
+  const sentiment = Math.max(-1, Math.min(1, (posHit - negHit) / Math.max(1, words.length/4)));
+  const arousal = Math.max(0.15, Math.min(0.95, 0.3 + (words.length%7)/10 + qHit*0.15));
+  const engagement = Math.max(0.2, Math.min(0.95, 0.4 + Math.abs(sentiment)*0.4));
+  const weights = {
+    E: clamp01(0.25 + sentiment*0.15 + (words.includes('feel')?0.1:0)),
+    B: clamp01(0.25 + (words.includes('do')||words.includes('act')?0.1:0)),
+    P: clamp01(0.25 + (words.includes('will')||words.includes('going')?0.08:0)),
+    S: clamp01(0.25 + (words.includes('we')||words.includes('together')?0.12:0)),
+  };
+  const tag = deriveTagDemo(sentiment, arousal, engagement);
+  l._preview = { sentiment, arousal, engagement, weights, tag };
+  renderPreview();
+}
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+// mirrors the real decision tree's shape for demo purposes — same branches,
+// not the same (buggy) inputs, so this shouldn't be mistaken for a fixed
+// version of the real endpoint.
+function deriveTagDemo(valence, arousal, engagement) {
+  if (engagement < 0.35 && Math.abs(valence) < 0.15) return 'dismissive';
+  if (arousal < 0.35) return 'whisper';
+  if (valence <= -0.5) return arousal >= 0.6 ? 'angry' : (arousal >= 0.45 ? 'appalled' : 'sad');
+  if (valence <= -0.15) return 'annoyed';
+  if (valence >= 0.5) return arousal >= 0.6 ? 'excited' : 'happy';
+  if (valence >= 0.15) return arousal < 0.45 ? 'thoughtful' : 'happy';
+  if (arousal >= 0.7) return 'surprised';
+  if (arousal < 0.45) return 'thoughtful';
+  return null;
+}
+
+function acceptSuggestedTag() {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l || !l._preview) return;
+  const tag = l._preview.tag;
+  l.ttsText = (tag ? `[${tag}] ` : '') + l.text;
+  l.tagSource = 'algorithmic';
+  renderAll();
+}
+
+// ── interactions ────────────────────────────────────────────────────────
+function selectLine(id) { selectedId = id; renderAll(); }
+
+function updateField(field, value) {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  l[field] = value;
+  renderAll();
+}
+
+function onTtsTextEdit(value) {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  l.ttsText = value;
+  l.tagSource = 'authored'; // editing by hand promotes provenance, same rule as the real design
+  renderAll();
+}
+
+function insertTag(tag) {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  l.ttsText = (l.ttsText ? l.ttsText + ' ' : '') + `[${tag}]`;
+  l.tagSource = 'authored';
+  renderAll();
+}
+
+function updateTriggerType(type) {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  if (type === 'scene-start') l.trigger = { type };
+  else if (type === 'zone') l.trigger = { type, zone: '' };
+  else if (type === 'touch') l.trigger = { type, sensor: '' };
+  else if (type === 'sensed') l.trigger = { type, lineId: (lines.find(x=>x.id!==l.id)||{}).id || '' };
+  else if (type === 'declared') l.trigger = { type, time: 0 };
+  else if (type === 'arc-complete') l.trigger = { type, zone: '' };
+  renderAll();
+}
+function updateTriggerParam(key, value) {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  l.trigger[key] = value;
+  renderAll();
+}
+
+function mockGenerateAudio() {
+  const l = lines.find(x => x.id === selectedId);
+  if (!l) return;
+  if (!l.audioSource) l.audioSource = 'elevenlabs';
+  l.audioFile = `media/dialogue/garden_002/${l.id}.wav`;
+  renderAll();
+}
+
+function addLine() {
+  const id = uid('line_new');
+  lines.push({
+    id, actor: 'Cindy', type: 'Statement', mode: 'improv', blocking: false,
+    trigger: { type: 'scene-start' }, text: '', ttsText: '', tagSource: null,
+    audioFile: '', audioSource: ''
+  });
+  selectedId = id;
+  renderAll();
+}
+
+function renderAll() { renderList(); renderEditor(); renderPreview(); }
+
+// ── Kate export / import ───────────────────────────────────────────────
+function buildTranscript() {
+  return lines.map(l => `[${l.id}] ${l.actor}: "${l.text}"`).join('\n');
+}
+
+function openExportModal() {
+  document.getElementById('modal-title').textContent = 'Export for Kate';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Same bracket format Chorus's own transcript builder uses — paste this into a prompt, along with instructions to return each line with delivery tags inserted, ids preserved.</p>
+    <textarea readonly>${esc(buildTranscript())}</textarea>
+  `;
+  document.getElementById('modal-foot').innerHTML = `<button class="pill-btn primary" onclick="closeModal()">Done</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function openImportModal() {
+  document.getElementById('modal-title').textContent = 'Import tagged dialogue';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Paste the tagged reply back. Matches by <code>[line_id]</code> first; falls back to exact text match if an id gets dropped. Anything matched gets stamped <code>tagSource="llm-interpreted:&lt;name&gt;"</code>.</p>
+    <div class="field" style="margin-bottom:10px"><label>Interpreter name</label><input type="text" id="import-name" value="Kate" style="width:100%"></div>
+    <textarea id="import-text" placeholder='[line_cindy_001] Cindy: [thoughtful] How does the water feel today?'></textarea>
+  `;
+  document.getElementById('modal-foot').innerHTML = `<button class="pill-btn primary" onclick="doImport()">Import</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function doImport() {
+  const name = document.getElementById('import-name').value.trim() || 'Kate';
+  const raw = document.getElementById('import-text').value;
+  let matched = 0;
+  raw.split('\n').forEach(rowLine => {
+    const m = rowLine.match(/^\[([^\]]+)\]\s*[^:]+:\s*(.+)$/);
+    if (!m) return;
+    const id = m[1].trim();
+    const taggedText = m[2].trim().replace(/^"|"$/g, '');
+    const target = lines.find(x => x.id === id);
+    if (target) {
+      target.ttsText = taggedText;
+      target.tagSource = 'llm-interpreted:' + name;
+      matched++;
+    }
+  });
+  closeModal();
+  renderAll();
+  if (matched) toast(matched + ' line(s) tagged by ' + name);
+  else toast('No matching line ids found in pasted text', true);
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('show'); }
+
+function toast(msg, isErr) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:${isErr?'#2a1414':'#0f2419'};color:${isErr?'var(--danger)':'var(--accent)'};border:1px solid ${isErr?'var(--danger)':'var(--accent)'};padding:9px 16px;border-radius:7px;font-size:12.5px;z-index:100`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+renderAll();
+</script>
+</body>
+</html>

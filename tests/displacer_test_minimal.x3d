@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<X3D profile='Interchange' version='4.1'>
+  <head>
+    <component name='EnvironmentalSensor' level='1'/>
+    <component name='HAnim' level='1'/>
+    <component name='Interpolation' level='1'/>
+    <meta name='title' content='displacer_test_minimal.x3d'/>
+    <meta name='description' content='Minimal HAnimDisplacer test. One joint, one segment, one displacer, AnimationAdapter chain. Tests whether X_ITE fires per-segment displacer deformation.'/>
+    <meta name='created' content='2026-05-29'/>
+  </head>
+  <Scene>
+
+    <!--
+      TEST GEOMETRY: A flat 2x2 grid of 9 vertices (3x3).
+      In rest pose it is a flat plane lying in XZ.
+      The HAnimDisplacer targets vertex index 4 (center vertex).
+      When weight=1.0, vertex 4 should move +0.3 in Y (visibly pop up).
+
+      Vertex layout (top view, Y=0):
+        0(-1,0,-1)  1(0,0,-1)  2(1,0,-1)
+        3(-1,0, 0)  4(0,0, 0)  5(1,0, 0)   (vertex 4 is center)
+        6(-1,0, 1)  7(0,0, 1)  8(1,0, 1)
+
+      Faces (CCW):
+        0-1-4-3, 1-2-5-4, 3-4-7-6, 4-5-8-7
+    -->
+
+    <!-- ═══════════════════════════════════════════════
+         BACKGROUND + VIEWPOINT
+    ═══════════════════════════════════════════════ -->
+    <Background skyColor='0.15 0.15 0.2'/>
+
+    <Viewpoint
+      DEF='MainView'
+      description='Looking at test plane'
+      position='0 2 4'
+      orientation='1 0 0 -0.4'/>
+
+    <!-- ═══════════════════════════════════════════════
+         REFERENCE AXES  (thin colored lines — helps confirm scene loaded)
+         X=red  Y=green  Z=blue
+    ═══════════════════════════════════════════════ -->
+    <Shape>
+      <Appearance><Material emissiveColor='1 0 0'/></Appearance>
+      <IndexedLineSet coordIndex='0 1 -1'>
+        <Coordinate point='-2 0 0  2 0 0'/>
+      </IndexedLineSet>
+    </Shape>
+    <Shape>
+      <Appearance><Material emissiveColor='0 1 0'/></Appearance>
+      <IndexedLineSet coordIndex='0 1 -1'>
+        <Coordinate point='0 0 0  0 2 0'/>
+      </IndexedLineSet>
+    </Shape>
+    <Shape>
+      <Appearance><Material emissiveColor='0 0.4 1'/></Appearance>
+      <IndexedLineSet coordIndex='0 1 -1'>
+        <Coordinate point='0 0 -2  0 0 2'/>
+      </IndexedLineSet>
+    </Shape>
+
+    <!-- ═══════════════════════════════════════════════
+         ANIMATION INFRASTRUCTURE
+         AnimationAdapter pattern from ManyClocks:
+           ScalarInterpolator key="0 0.25 0.5 0.75 1"
+                          keyValue="0 0.5 1 0.5 0"
+           Setting set_fraction = weight * 0.5 gives output = weight
+           (because at fraction=0.5, keyValue=1.0; at fraction=0.0, keyValue=0.0;
+            so the mapping is linear 0→0 at fraction 0, 1→1 at fraction 0.5)
+    ═══════════════════════════════════════════════ -->
+
+    <!-- REFERENCE SHAPE: plain Shape, no HAnim, offset +3 in X, orange.
+         If this is visible but the HAnim version is not,
+         X_ITE is suppressing HAnimHumanoid per-segment geometry. -->
+    <Transform translation="3 0 0">
+      <Shape>
+        <Appearance>
+          <Material diffuseColor="1.0 0.5 0.1" emissiveColor="0.3 0.15 0.0"/>
+        </Appearance>
+        <IndexedFaceSet
+          coordIndex="0 1 4 3 -1  1 2 5 4 -1  3 4 7 6 -1  4 5 8 7 -1"
+          solid="false">
+          <Coordinate point="-1 0 -1  0 0 -1  1 0 -1  -1 0 0  0 0 0  1 0 0  -1 0 1  0 0 1  1 0 1"/>
+        </IndexedFaceSet>
+      </Shape>
+    </Transform>
+
+    <TimeSensor DEF='TestClock'
+      cycleInterval='1'
+      loop='true'
+      enabled='false'/>
+
+    <ScalarInterpolator DEF='AnimationAdapter_CenterPop'
+      key='0 0.25 0.5 0.75 1'
+      keyValue='0 0.5 1 0.5 0'/>
+
+    <!-- ═══════════════════════════════════════════════
+         HANIM HUMANOID
+         Minimal: humanoid_root → test_segment
+         No skinCoord, no skinNormal — pure per-segment coord approach.
+    ═══════════════════════════════════════════════ -->
+    <HAnimHumanoid DEF='TestHumanoid'
+      name='TestHumanoid'
+      version='2.0'
+      loa='4'>
+
+      <HAnimJoint DEF='hanim_humanoid_root'
+        containerField='skeleton'
+        name='humanoid_root'
+        center='0 0 0'>
+
+        <HAnimSegment DEF='hanim_test_segment'
+          name='test_segment'>
+
+          <!-- Segment-level Coordinate with containerField='coord'.
+               This is what HAnimDisplacer targets in X_ITE LOA-4 pattern.
+               The Shape's IFS references it via USE. -->
+          <Coordinate DEF='TestCoord'
+            containerField='coord'
+            point='
+              -1 0 -1   0 0 -1   1 0 -1
+              -1 0  0   0 0  0   1 0  0
+              -1 0  1   0 0  1   1 0  1'/>
+
+          <!-- The test shape: flat 3x3 grid -->
+          <Shape>
+            <Appearance>
+              <Material
+                diffuseColor='0.2 0.6 1.0'
+                specularColor='0.5 0.5 0.5'
+                shininess='0.3'
+                transparency='0.0'/>
+            </Appearance>
+            <IndexedFaceSet DEF='TestMesh'
+              coordIndex='
+                0 1 4 3 -1
+                1 2 5 4 -1
+                3 4 7 6 -1
+                4 5 8 7 -1'
+              texCoordIndex='
+                0 1 4 3 -1
+                1 2 5 4 -1
+                3 4 7 6 -1
+                4 5 8 7 -1'
+              solid='false'
+              normalPerVertex='false'>
+              <TextureCoordinate point='
+                0.0 1.0  0.5 1.0  1.0 1.0
+                0.0 0.5  0.5 0.5  1.0 0.5
+                0.0 0.0  0.5 0.0  1.0 0.0'/>
+              <Coordinate USE='TestCoord'/>
+            </IndexedFaceSet>
+          </Shape>
+
+          <!--
+            THE DISPLACER UNDER TEST.
+            coordIndex='4' — center vertex only.
+            displacements='0 0.3 0' — push it 0.3m up in Y.
+            weight='0' at rest. SAI will drive this via AnimationAdapter.
+
+            If X_ITE fires per-segment displacer deformation, the center
+            vertex should visibly rise when weight is driven to 1.0.
+          -->
+          <HAnimDisplacer DEF='Displacer_CenterPop'
+            name='CenterPop'
+            coordIndex='4'
+            displacements='0 0.3 0'
+            weight='0'/>
+
+        </HAnimSegment>
+      </HAnimJoint>
+
+      <!-- Required HAnimHumanoid field listings -->
+      <HAnimJoint USE='hanim_humanoid_root' containerField='joints'/>
+      <HAnimSegment USE='hanim_test_segment' containerField='segments'/>
+
+    </HAnimHumanoid>
+
+    <!-- ═══════════════════════════════════════════════
+         ROUTES
+         (ROUTEs last, per X_ITE requirement)
+    ═══════════════════════════════════════════════ -->
+
+    <!-- DIAGNOSTIC: OrientationInterpolator driven by clock -> joint rotation -->
+    <!-- If the joint rocks, clock is ticking and ROUTEs work in general -->
+    <OrientationInterpolator DEF='TestJointRock'
+      key='0 0.25 0.5 0.75 1'
+      keyValue='0 0 1 0  1 0 0 0.8  0 0 1 0  1 0 0 -0.8  0 0 1 0'/>
+
+    <!-- Clock drives AnimationAdapter -->
+    <ROUTE fromNode='TestClock' fromField='fraction_changed'
+           toNode='AnimationAdapter_CenterPop' toField='set_fraction'/>
+
+    <!-- AnimationAdapter drives displacer weight -->
+    <ROUTE fromNode='AnimationAdapter_CenterPop' fromField='value_changed'
+           toNode='Displacer_CenterPop' toField='weight'/>
+
+    <!-- Joint rock: clock -> interpolator -> joint rotation -->
+    <ROUTE fromNode='TestClock' fromField='fraction_changed'
+           toNode='TestJointRock' toField='set_fraction'/>
+    <ROUTE fromNode='TestJointRock' fromField='value_changed'
+           toNode='hanim_humanoid_root' toField='set_rotation'/>
+
+    <!-- DIAGNOSTIC: direct clock fraction -> displacer weight, bypasses adapter -->
+    <!-- fraction_changed goes 0->1 so weight will ramp 0->1 each cycle -->
+    <ROUTE fromNode='TestClock' fromField='fraction_changed'
+           toNode='Displacer_CenterPop' toField='weight'/>
+
+  </Scene>
+</X3D>

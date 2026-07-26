@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 3.0//EN" "http://www.web3d.org/specifications/x3d-3.0.dtd">
+<X3D profile='Immersive' >
+<head>
+ <meta name='Vizthumbnail' content='Thumb_Spotlight_x3d2917701783971829.jpg'/>
+ <meta name='ExportTime' content='14:43:49'/>
+ <meta name='ExportDate' content='7/13/2026'/>
+ <meta name='VivatyStudioVersion' content='738'/>
+ <meta name='VivatyStudioSource' content='spotlight.fxw'/>
+</head>
+<Scene>
+<WorldInfo
+ title='Spotlight'
+ info='"This Web3D Content was created with Vivaty Studio, a Web3D authoring tool"
+ "www.mediamachines.com"'/>
+<Transform DEF='dad_Light1'
+ translation='0 0 .02288'>
+ <SpotLight DEF='Light1'
+  containerField='children'
+  ambientIntensity='0'
+  intensity='1'
+  radius='100'
+  cutOffAngle='.7854'
+  beamWidth='.3927'
+  attenuation='1 0 0'
+  color='1 1 1'
+  on='true'/>
+</Transform>
+</Scene>
+</X3D>

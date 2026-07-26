@@ -189,8 +189,16 @@ def _safe_path_component(s):
 @app.route('/scene/save/zones', methods=['POST'])
 def save_zone_xml():
     """
+    LEGACY — superseded by POST /zone/template below (Directory Redesign §5.2).
+
     Write zone XML from Scene Composer to zones/<filename>.
-    Called by exportZoneXML() in mccf_scene_composer.html.
+    Historically called by exportZoneXML() with a scene-prefixed filename
+    (e.g. "garden_001_zones.xml"), duplicating data that already lives in the
+    scene wrapper's <Zones> block — confirmed nothing reads this file back,
+    including the X3D-generation path (see /scene/x3d/upload above, which
+    only ever writes content the client already built, never reads zones/).
+    Left in place, unchanged, so nothing already relying on it breaks; new
+    zone-template work should use /zone/template instead.
     Body: { filename: "garden_001_zones.xml", content: "<ZoneSet>...</ZoneSet>" }
     """
     data = request.get_json() or {}
@@ -206,6 +214,137 @@ def save_zone_xml():
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
     return jsonify({'status': 'ok', 'path': f'zones/{filename}'})
+
+
+@app.route('/zone/template', methods=['POST'])
+def save_zone_template():
+    """
+    Save a genuinely reusable zone template to zones/<name>.xml — Directory
+    Redesign §5.2: same role as cultivars/<name>.xml (see the cultivar XML
+    loader further down this file for the sibling pattern this mirrors).
+
+    Generically named (no scene prefix) — one file per zone TYPE, not per
+    placement. A placed zone instance references this by name (template="...")
+    from the scene wrapper's own <Zones><Zone> block, which keeps the
+    per-placement data (position, radius, and any overridden fields).
+
+    Body: { name: "Giparu", content: "<ZoneTemplate name=\"Giparu\">...</ZoneTemplate>" }
+    """
+    data = request.get_json() or {}
+    name    = data.get('name', '').strip()
+    content = data.get('content', '').strip()
+    if not name or not content:
+        return jsonify({'status': 'error', 'error': 'name and content required'}), 400
+    safe_name = _safe_path_component(name)
+    zones_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zones')
+    os.makedirs(zones_dir, exist_ok=True)
+    filepath = os.path.join(zones_dir, safe_name + '.xml')
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'ok', 'path': f'zones/{safe_name}.xml', 'name': safe_name})
+
+
+@app.route('/zone/template/list', methods=['GET'])
+def list_zone_templates():
+    """
+    List and parse all zone templates in zones/*.xml into a single dict, the
+    same load-everything-up-front shape as the cultivar XML loader below
+    (see "Load cultivar XML definitions from cultivars/ directory").
+
+    Skips any leftover *_zones.xml files from the old per-scene writer above
+    (save_zone_xml) — those are scene-prefixed and not <ZoneTemplate> XML, so
+    they fail the root-tag check and are silently excluded rather than erroring.
+
+    Returns { templates: { "Giparu": { zone_type, descriptor, weights,
+                                        ambient_theme, chorus, sound, asset }, ... } }
+    """
+    import xml.etree.ElementTree as _ET
+    zones_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'zones')
+    templates = {}
+    if not os.path.isdir(zones_dir):
+        return jsonify({'templates': templates})
+
+    for fname in sorted(os.listdir(zones_dir)):
+        if not fname.endswith('.xml'):
+            continue
+        fpath = os.path.join(zones_dir, fname)
+        try:
+            tree = _ET.parse(fpath)
+            root = tree.getroot()
+            if root.tag != 'ZoneTemplate':
+                continue  # not a template file (e.g. legacy *_zones.xml) — skip
+            name = root.get('name') or os.path.splitext(fname)[0]
+
+            desc_el = root.find('Descriptor')
+            descriptor = (desc_el.text or '').strip() if desc_el is not None else ''
+
+            w_el = root.find('Weights')
+            weights = {ch: float(w_el.get(ch, 0.25)) for ch in ('E', 'B', 'P', 'S')} if w_el is not None \
+                else {'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
+
+            at_el = root.find('AmbientTheme')
+            ambient_theme = {
+                'scale': at_el.get('scale', 'major') if at_el is not None else 'major',
+                'tempo': at_el.get('tempo', 'medium') if at_el is not None else 'medium'
+            }
+
+            zone_type = root.get('zone_type', 'neutral')
+
+            chorus = None
+            c_el = root.find('Chorus')
+            if c_el is not None:
+                persona_el = c_el.find('Persona')
+                chorus = {
+                    'llm': c_el.get('llm', 'stub'),
+                    'tone': c_el.get('tone', 'oracular'),
+                    'max_tokens': int(c_el.get('max_tokens', 80)),
+                    'display': c_el.get('display', 'overlay'),
+                    'persona': (persona_el.text or '').strip() if persona_el is not None else ''
+                }
+
+            sound = None
+            sd_el = root.find('SoundDesign')
+            if sd_el is not None:
+                amb_el = sd_el.find('.//Track[@id="ambient"]')
+                dw_el  = sd_el.find('.//Track[@id="dwell"]')
+                if amb_el is not None:
+                    sound = {
+                        'url': amb_el.get('url', ''),
+                        'gain': float(amb_el.get('gain', 0.8)),
+                        'loop': amb_el.get('loop', 'true') != 'false',
+                        'filter': amb_el.get('filter') is not None,
+                        'filterFreq': int(amb_el.get('filterFreq', 900)),
+                        'filterQ': float(amb_el.get('filterQ', 1.0)),
+                        'dwellUrl': dw_el.get('url', '') if dw_el is not None else '',
+                        'dwellGain': float(dw_el.get('gain', 0.85)) if dw_el is not None else 0.85
+                    }
+
+            asset = None
+            a_el = root.find('Asset')
+            if a_el is not None:
+                asset = {
+                    'url': a_el.get('url', ''),
+                    'offsetX': float(a_el.get('offsetX', 0)),
+                    'offsetY': float(a_el.get('offsetY', 0)),
+                    'offsetZ': float(a_el.get('offsetZ', 0)),
+                    'rotationY': float(a_el.get('rotationY', 0)),
+                    'scale': float(a_el.get('scale', 1))
+                }
+
+            templates[name] = {
+                'zone_type': zone_type,
+                'descriptor': descriptor,
+                'weights': weights,
+                'ambient_theme': ambient_theme,
+                'chorus': chorus,
+                'sound': sound,
+                'asset': asset
+            }
+        except Exception as e:
+            print(f'[zone_template] failed to parse {fname}: {e}')
+            continue
+
+    return jsonify({'templates': templates})
 
 
 @app.route('/scene/save/scene', methods=['POST'])
@@ -326,18 +465,23 @@ def list_scenes_for_composer():
 @app.route('/media/list', methods=['GET'])
 def list_media_files():
     """
-    List audio files in static/media/ directory.
+    List audio files in static/x3d/X3DAssets/media/ directory.
     Used by Scene Composer sound pickers (GET /media/list).
     Returns { files: ["garden_theme.mp3", ...] } sorted alphabetically.
-    Same directory the X3D Loader references as media/filename.
+
+    Day 77: relocated from static/x3d/media/ to static/x3d/X3DAssets/media/
+    (the author's own directory reorganization) — matches the exported
+    scene's actual relative reference, X3DAssets/media/<subdir>/<file>, since
+    the X3D Loader doesn't reference this path itself; it only plays back
+    whatever URL Scene Composer already wrote into the exported scene file.
 
     Optional query params:
-      subdir=convolver  — scan static/media/convolver/ and prefix filenames
-                          with "convolver/" so the composer builds the
-                          correct url: media/convolver/file.wav
+      subdir=convolver  — scan static/x3d/X3DAssets/media/convolver/ and
+                          prefix filenames with "convolver/" so the composer
+                          builds the correct url: X3DAssets/media/convolver/file.wav
       ext=wav           — filter to a single extension (wav only, etc.)
     """
-    media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'media')
+    media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'X3DAssets', 'media')
     subdir = request.args.get('subdir', '').strip().strip('/')
     ext_filter = request.args.get('ext', '').strip().lower()
 
@@ -356,6 +500,37 @@ def list_media_files():
         and not f.startswith('.')
     ])
     return jsonify({'files': files, 'media_dir': scan_dir})
+
+
+@app.route('/x3d/assets/list', methods=['GET'])
+def list_x3d_assets():
+    """
+    List available X3D asset files in static/x3d/X3DAssets/.
+    Used by Scene Composer's zone editor to populate the "Inline Asset" dropdown,
+    so a zone can reference an existing X3D model (e.g. a fountain, statue) via
+    <Inline url="X3DAssets/<file>.x3d"/> nested inside the zone's Transform in
+    the exported scene — same relative-path convention as protos/ (see
+    buildCameraProtoDecls in mccf_scene_composer.html).
+
+    Non-recursive: only top-level .x3d files are listed. The texture/
+    subdirectory (referenced internally by asset files via their own relative
+    paths) is intentionally not scanned or exposed here — same split as
+    convolver/soundeffects staying separate from the flat media/ listing in
+    /media/list above.
+
+    Returns { files: ["fountain.x3d", ...] }
+    """
+    assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'X3DAssets')
+    if not os.path.isdir(assets_dir):
+        return jsonify({'files': [], 'assets_dir': assets_dir})
+
+    files = sorted([
+        f for f in os.listdir(assets_dir)
+        if os.path.isfile(os.path.join(assets_dir, f))
+        and f.lower().endswith('.x3d')
+        and not f.startswith('.')
+    ])
+    return jsonify({'files': files, 'assets_dir': assets_dir})
 
 
 @app.route('/scene/load/scene/raw', methods=['GET'])
@@ -390,7 +565,13 @@ def load_scene_xml():
         agents:        { name: { name, position, voice, color, weights, ... } },
         placedAgents:  { name: { name, position:[x,0,z], voice, color, ... } },
         waypoints:     { name: { name, label, zone, position:[x,0,z], qaLines:[...] } },
-        paths:         { name: { name, agent, waypoints:[wpName,...] } }
+        paths:         { name: { name, agent, waypoints:[wpName,...] } },
+        dialogueLines: [ { id, actor, type, mode, blocking, trigger, ttsText,
+                       tagSource, audioFile, audioSource, text }, ... ]
+                       — real <Dialogue><Line> entries if the scene has any,
+                       plus every legacy waypoint-nested Question/Response/
+                       Statement synthesized with trigger="legacy-waypoint:
+                       <name>". See docs/DIALOGUE_SCHEMA.md (Day 72, item 5a).
     }
     """
     import xml.etree.ElementTree as ET
@@ -525,6 +706,67 @@ def load_scene_xml():
                 'waypoints': wp_refs
             }
 
+    # ── dialogue: new scene-level <Dialogue> container + legacy migration ──
+    # Day 72, build schedule item 5a (full decoupling, not the incremental
+    # option). See docs/DIALOGUE_SCHEMA.md for the schema and migration
+    # rules this implements. A scene with no <Dialogue> element is not an
+    # error — it's a scene from before this schema existed; its dialogue
+    # lives nested inside <Waypoint> instead (already parsed into each
+    # waypoint's qaLines above) and is synthesized here with an explicit
+    # trigger="legacy-waypoint:<name>" rather than being silently
+    # reinterpreted as a real sensed/zone/declared trigger it never had.
+    #
+    # trigger is returned as its raw stored string (e.g. "declared:58"), not
+    # parsed into a {type, ...} object — that parsing lives client-side in
+    # dialogue-xml.js's parseTrigger(), so there's exactly one
+    # implementation of it instead of two that could drift apart.
+    #
+    # Day 73: tagSource/audioSource are returned the same way — raw strings
+    # (e.g. "llm-interpreted:Kate"), not parsed objects. Parsing them lives
+    # in dialogue-xml.js's parseTagSource()/parseAudioSource(), same reason
+    # as trigger. This endpoint previously returned ttsText but silently
+    # dropped tagSource/audioFile/audioSource entirely — a real gap (a tag
+    # with no recorded provenance, or an audio file with no recorded
+    # source, is exactly the ambiguity those fields exist to prevent), now
+    # fixed. None if the attribute is absent, for all four.
+    dialogue_lines = []
+
+    dialogue_el = root.find('Dialogue')
+    if dialogue_el is not None:
+        for line_el in dialogue_el.findall('Line'):
+            line_id = line_el.get('id', '').strip()
+            if not line_id:
+                continue
+            dialogue_lines.append({
+                'id':          line_id,
+                'actor':       line_el.get('actor', ''),
+                'type':        line_el.get('type', 'Statement'),
+                'mode':        line_el.get('mode', 'improv'),
+                'blocking':    line_el.get('blocking', 'false').lower() == 'true',
+                'trigger':     line_el.get('trigger', '').strip(),
+                'ttsText':     line_el.get('ttsText'),     # None if absent — see docs/DIALOGUE_SCHEMA.md
+                'tagSource':   line_el.get('tagSource'),   # None if absent — raw string, see above
+                'audioFile':   line_el.get('audioFile'),   # None if absent
+                'audioSource': line_el.get('audioSource'), # None if absent — raw string, see above
+                'text':        (line_el.text or '').strip(),
+            })
+
+    for wp_name, wp_data in waypoints.items():
+        for idx, qa in enumerate(wp_data['qaLines']):
+            dialogue_lines.append({
+                'id':          f'{wp_name}_{idx}',
+                'actor':       qa['speaker'],
+                'type':        qa['type'],
+                'mode':        'improv',
+                'blocking':    False,
+                'trigger':     f'legacy-waypoint:{wp_name}',
+                'ttsText':     None,  # legacy-migrated lines never carry these —
+                'tagSource':   None,  # see DIALOGUE_SCHEMA.md's migration section:
+                'audioFile':   None,  # none of the four Day-73 fields are touched
+                'audioSource': None,  # by the legacy-migration path, ever.
+                'text':        qa['text'],
+            })
+
     # Notify Chorus manager — parse scene XML for <Chorus> zone extension.
     try:
         cm = app.config.get('_chorus_manager')
@@ -534,12 +776,13 @@ def load_scene_xml():
         pass
 
     return jsonify({
-        'sceneConfig':  scene_config,
-        'zones':        zones_inferred,
-        'agents':       agents,
-        'placedAgents': placed_agents,
-        'waypoints':    waypoints,
-        'paths':        paths
+        'sceneConfig':    scene_config,
+        'zones':          zones_inferred,
+        'agents':         agents,
+        'placedAgents':   placed_agents,
+        'waypoints':      waypoints,
+        'paths':          paths,
+        'dialogueLines':  dialogue_lines
     })
 
 

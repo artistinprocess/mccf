@@ -498,7 +498,7 @@ x3d-canvas {
 .wp-marker-head {
   position: absolute;
   top: 0;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--purple);
   letter-spacing: 0.05em;
   white-space: nowrap;
@@ -873,15 +873,19 @@ var SHOT_PRESETS = {
                                                   // Preset/dropdown entry kept for when/if the
                                                   // free version is revisited.
 };
-var SHOT_ATTACHED = { agent_eye: true, agent_side: true };
-// agent_orbit is intentionally excluded from SHOT_ATTACHED — unlike eye/side it needs
-// framing fields (radius/height/start angle) and move-shot timing (loop/duration), since
-// it's a baked-but-animated shot: parented to the avatar (baked routing) yet continuously
-// driven by a TimeSensor (move-shot UI). It is included in SHOT_MOVES for the timing UI.
-// agent_track (Day 63) is the same hybrid shape — baked/parented but animated — except its
-// framing is a Start/End lateral sweep (like dolly/pan/tilt) rather than agent_orbit's fixed
-// 360° sweep, and per spec §3 it does NOT get the loop checkbox (loop is orbit/agent_orbit
-// only — other move shots, including this one, play once and hold last frame).
+var SHOT_ATTACHED = { agent_eye: true, agent_side: true, agent_orbit: true, agent_track: true };
+// Day 78: agent_orbit/agent_track folded into SHOT_ATTACHED. Previously excluded —
+// see the old comment this replaces — because they needed their own dedicated framing
+// fields (radius/height/start-angle for orbit; lateral offset/depth/height for track)
+// and, for orbit specifically, a loop checkbox. That's no longer true: Character
+// Creator now owns all of that (rig authoring, baked once per avatar file, per the
+// Day 77 Camera Model Revision's Character-Creator/Events split — CC owns the rig and
+// its initial position, Events keeps trigger/subject/timing only). Any values an
+// author sets in this inspector for these two shot types no longer have anywhere to
+// write to at runtime, so the fields are removed rather than left as dead controls.
+// agent_orbit/agent_track stay in SHOT_MOVES below — that set is still used for
+// preview/FOV-cone styling paths these two shot types no longer reach now that
+// they're attached, so leaving them in is harmless, not incorrect.
 var SHOT_MOVES    = { dolly_in:true, dolly_out:true, pan:true, tilt:true, orbit:true, crane_up:true, track:true, agent_orbit:true, agent_track:true };
 var SHOT_AGENT_ORBIT = { agent_orbit: true };
 var SHOT_AGENT_TRACK = { agent_track: true };
@@ -1044,7 +1048,8 @@ function drawStage() {
         ctx.setLineDash([2,3]); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = '#a880f0';
         ctx.font = '11px IBM Plex Mono'; ctx.textAlign = 'center';
-        ctx.fillText(cue.shot==='agent_eye'?'EYE':'SIDE', sx, sy + 23);
+        var _attLabel = {agent_eye:'EYE', agent_side:'SIDE', agent_orbit:'ORBIT', agent_track:'TRACK'}[cue.shot] || cue.shot.toUpperCase();
+        ctx.fillText(_attLabel, sx, sy + 23);
         ctx.textAlign = 'left';
       }
     }
@@ -1321,16 +1326,7 @@ function renderInspector() {
                 ? '<div class="insp-field"><div class="insp-label">fly duration (s)</div>'+sliderRow('flyDuration',0.3,8,0.1,flyDur,'s')+'</div>'
                 : '')
           : '')
-      + (!isNamedVP && isAgentTrack
-          ? '<div class="insp-section">framing</div>'
-            + '<div style="color:var(--dim);font-size:12px;padding:0 0 6px;line-height:1.6">'
-            + 'Parented inside agent Transform — offsets are local to the avatar, not world position. Follows the avatar if it moves.</div>'
-            + '<div class="insp-field"><div class="insp-label">lateral offset — start (m)</div>'+sliderRow('trackOffset',-10,10,0.1,trackOffset,'m')+'</div>'
-            + '<div class="insp-field"><div class="insp-label">lateral offset — end (m)</div>'+sliderRow('trackOffsetEnd',-10,10,0.1,trackOffsetEnd,'m')+'</div>'
-            + '<div class="insp-field"><div class="insp-label">depth — standoff (m)</div>'+sliderRow('trackDepth',0.5,15,0.1,trackDepth,'m')+'</div>'
-            + '<div class="insp-field"><div class="insp-label">height (m)</div>'+sliderRow('height',-1,15,0.1,ht,'m')+'</div>'
-            + '<div class="insp-field"><div class="insp-label">v. angle (°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
-          : (!isNamedVP && !isFreeCamera && !isAttached
+      + (!isNamedVP && !isFreeCamera && !isAttached
           ? '<div class="insp-section">framing</div>'
             + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
             + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
@@ -1343,17 +1339,29 @@ function renderInspector() {
             + (isDutch ? '<div class="insp-field"><div class="insp-label">roll (°)</div>'+sliderRow('roll',-45,45,1,roll,'°')+'</div>' : '')
             + (isCraneUp ? '<div class="insp-field"><div class="insp-label">arc depth (m)</div>'+sliderRow('arcDepth',0,15,0.1,arcDepth,'m')+'</div>' : '')
           : (!isNamedVP && isAttached
+              // Day 78: was hardcoded for eye/side only ('Binds VP_...Eye/Side') —
+              // agent_orbit/agent_track fold in here now too, but they bind a
+              // different node family (CAM_OrbitProto_{subject}/CAM_TrackProto_
+              // {subject}, per _executeAgentOrbit/_executeAgentTrack in the Loader),
+              // not a VP_{subject}_Eye/Side viewpoint. Framing/loop for these two are
+              // authored once in Character Creator now, not per-cue here.
               ? '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
-                + 'Position from agent Transform.<br>'
-                + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>'
-              : '')))
+                + (shot==='agent_orbit' || shot==='agent_track'
+                    ? 'Rig authored in Character Creator — radius/height/start-angle'
+                      +(shot==='agent_orbit'?'/loop':'')+' baked into the avatar file.<br>'
+                      + 'Binds CAM_'+(shot==='agent_orbit'?'Orbit':'Track')+'Proto_'+subject.replace(/\s+/g,'_')+'</div>'
+                    : 'Position from agent Transform.<br>'
+                      + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>')
+              : ''))
       + '<div class="insp-section">timing</div>'
-      // Day 63 fix: loop only applies to orbit/agent_orbit per spec §3 — other move
-      // shots ignore cue.loop and always play once, holding last frame. Previously
-      // gated on isMove (all move shots), which showed a checkbox that silently did
-      // nothing for dolly/pan/tilt/crane_up/track. Label also corrected — it's not
-      // orbit-specific wording once agent_orbit is included.
-      + ((shot === 'orbit' || isAgentOrbit) ? '<div class="insp-field"><div class="insp-label">loop</div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" '+(cue.loop?'checked':'')+' onchange="setCueProp(\'loop\',this.checked)"> repeat continuously</label></div>' : '')
+      // Day 63 fix: loop only applies to the free-form 'orbit' shot type per spec §3 —
+      // other move shots ignore cue.loop and always play once, holding last frame.
+      // Day 78: agent_orbit no longer gets this checkbox at all — its loop is now
+      // authored once in Character Creator, baked into the rig, not a per-cue
+      // override. 'orbit' (the older, still-live free/world-space formula shot,
+      // distinct from agent_orbit) keeps its own loop checkbox unchanged — this
+      // fold only touches the two agent-attached shot types.
+      + (shot === 'orbit' ? '<div class="insp-field"><div class="insp-label">loop</div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" '+(cue.loop?'checked':'')+' onchange="setCueProp(\'loop\',this.checked)"> repeat continuously</label></div>' : '')
       + '<div class="insp-field"><div class="insp-label">delay after trigger (s)</div>'+sliderRow('delay',0,10,0.5,delay,'s')+'</div>';
   } else if (track.type === 'light') {
     var ltOpts = LIGHTS_L.map(function(l){ return '<option value="'+l+'"'+(cue.node===l?' selected':'')+'>'+l+'</option>'; }).join('');
@@ -1520,8 +1528,11 @@ function _previewCameraShot() {
       var camPos = _prevComputeCamPos(subjectPos, distance, height, hAngle);
       var orient = _prevLookAtOrientation(camPos, subjectPos, vAngle);
 
-      camXform.getField('translation').setValue(new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]));
-      camXform.getField('rotation').setValue(new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]));
+      // Day 77 fix: getField().setValue() is the SAI pattern Camera System Spec
+      // v1.3 §4 confirmed unreliable during the Day 62 agent_orbit debugging —
+      // direct property assignment is the proven, standardized replacement.
+      camXform.translation = new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]);
+      camXform.rotation    = new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]);
       requestAnimationFrame(function() { vpFree.set_bind = true; });
 
       // Update corner label to show it's in preview mode
@@ -1784,35 +1795,38 @@ function exportCues() {
 function refreshViewport() {
   var btn = document.getElementById('vp-refresh-btn');
   if (btn) { btn.textContent = '↺ exporting…'; btn.style.color = 'var(--accent4)'; }
-  // Ask parent Composer to re-export X3D silently, then reload
+  var restoreBtn = function() { if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; } };
+  // Ask parent Composer to re-export X3D silently, then reload.
+  // Day 77: the reload itself now goes through loadX3DViewport(url, force=true)
+  // instead of writing to #vp-x3d's src attribute directly — the direct-write
+  // version bypassed the cloneNode-replace teardown entirely, so every refresh
+  // click (a routine, frequently-used action) stacked a fresh WebGL context on
+  // the same <x3d-canvas> element without ever releasing the previous one —
+  // reproducing the exact crash pattern the same-src guard was built to prevent,
+  // on a path that guard never covered. force=true skips only the "nothing
+  // changed, don't bother" shortcut; the actual teardown-and-recreate still runs.
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: 'mccf_export_x3d' }, '*');
-    // Reload after a short delay to let the server write the file
     setTimeout(function() {
       var x3d = document.getElementById('vp-x3d');
-      if (x3d && x3d.getAttribute('src')) {
-        var src = x3d.getAttribute('src');
-        x3d.setAttribute('src', '');
-        setTimeout(function() {
-          x3d.setAttribute('src', src + '?t=' + Date.now());
-          if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
-        }, 100);
+      var src = (x3d && x3d.getAttribute('src') || '').split('?')[0];
+      if (src) {
+        loadX3DViewport(src + '?t=' + Date.now(), true);
+        setTimeout(restoreBtn, 100);
       } else {
-        if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+        restoreBtn();
       }
     }, 1800);
   } else {
     // Standalone — just force-reload current src
     var x3d = document.getElementById('vp-x3d');
-    if (x3d && x3d.getAttribute('src')) {
-      var src = x3d.getAttribute('src').split('?')[0];
-      x3d.setAttribute('src', src + '?t=' + Date.now());
-    }
-    if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
+    var src = (x3d && x3d.getAttribute('src') || '').split('?')[0];
+    if (src) loadX3DViewport(src + '?t=' + Date.now(), true);
+    restoreBtn();
   }
 }
 
-function loadX3DViewport(url) {
+function loadX3DViewport(url, force) {
   var x3d    = document.getElementById('vp-x3d');
   var canvas = document.getElementById('vp-canvas');
   var ph     = document.getElementById('vp-placeholder');
@@ -1824,12 +1838,14 @@ function loadX3DViewport(url) {
   // Scene Composer's setMode() re-sends mccf_scene_data (with x3dUrl set) on every
   // Events-tab revisit, not just the first load, so without this guard each revisit
   // stacked another live context on top of the last, unreleased, until the tab
-  // crashed. Explicit force-reloads (refreshViewport's cache-busting ?t= param)
-  // bypass this function entirely by writing to x3d's src attribute directly, so
-  // they're unaffected by this guard.
+  // crashed. Explicit force-reloads (refreshViewport, force=true) intentionally
+  // bypass ONLY this early-return — they still go through the cloneNode-replace
+  // teardown below, same as any other genuine reload, just skipping the "nothing
+  // actually changed" shortcut since a re-export means the file on disk did change
+  // even though its URL (ignoring the cache-bust query param) looks the same.
   var currentSrc = (x3d.getAttribute('src') || '').split('?')[0];
   var newSrc     = (url || '').split('?')[0];
-  if (currentSrc === newSrc && currentSrc !== '') {
+  if (!force && currentSrc === newSrc && currentSrc !== '') {
     x3d.style.display = 'block';
     if (canvas) canvas.style.display = 'none';
     if (ph)     ph.style.display     = 'none';

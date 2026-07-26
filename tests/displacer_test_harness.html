@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>X_ITE Displacer Test - Minimal</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f0f14;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  h1 {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    padding: 8px 14px;
+    background: #1a1a22;
+    border-bottom: 1px solid #333;
+    color: #8af;
+  }
+  #main { display: flex; flex: 1; overflow: hidden; }
+  #canvas-wrap { flex: 1; position: relative; }
+  x3d-canvas { width: 100%; height: 100%; display: block; }
+  #panel {
+    width: 280px;
+    background: #12121a;
+    border-left: 1px solid #2a2a3a;
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    gap: 10px;
+    overflow-y: auto;
+  }
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: #556;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+  button {
+    background: #1e1e2e;
+    border: 1px solid #3a3a5a;
+    color: #cce;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 7px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    text-align: left;
+  }
+  button:hover { background: #2a2a40; border-color: #6688cc; }
+  button.active { background: #1a3060; border-color: #4488ff; color: #8af; }
+  .weight-row { display: flex; align-items: center; gap: 8px; }
+  .weight-row label { font-size: 11px; color: #aac; width: 80px; flex-shrink: 0; }
+  .weight-row input[type=range] { flex: 1; accent-color: #4488ff; }
+  .weight-row span { font-size: 11px; width: 32px; text-align: right; color: #8af; }
+  #log {
+    flex: 1;
+    background: #0a0a10;
+    border: 1px solid #222;
+    border-radius: 3px;
+    padding: 8px;
+    font-size: 10px;
+    line-height: 1.6;
+    overflow-y: auto;
+    min-height: 120px;
+  }
+  .log-ok   { color: #4c8; }
+  .log-err  { color: #f64; }
+  .log-info { color: #88a; }
+  .log-warn { color: #fa4; }
+  #status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #444;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  #status-dot.green { background: #4c8; box-shadow: 0 0 6px #4c8; }
+  #status-dot.red   { background: #f64; box-shadow: 0 0 6px #f64; }
+  #status-dot.amber { background: #fa4; box-shadow: 0 0 6px #fa4; }
+  .divider { border: none; border-top: 1px solid #222; margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<h1>
+  <span id="status-dot"></span>
+  X_ITE Displacer Test - Minimal
+</h1>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <x3d-canvas id="canvas" src="displacer_test_minimal.x3d"></x3d-canvas>
+  </div>
+
+  <div id="panel">
+    <div class="section-label">Scene Status</div>
+    <button onclick="probeScene()">Probe Scene Nodes</button>
+
+    <hr class="divider">
+
+    <div class="section-label">Test 1 - Direct weight via SAI</div>
+    <div class="weight-row">
+      <label>weight</label>
+      <input type="range" id="slider-direct" min="0" max="1" step="0.01" value="0"
+        oninput="setDirectWeight(parseFloat(this.value))">
+      <span id="val-direct">0.00</span>
+    </div>
+    <button onclick="setDirectWeight(0)">weight = 0</button>
+    <button onclick="setDirectWeight(0.5)">weight = 0.5</button>
+    <button onclick="setDirectWeight(1.0)">weight = 1.0</button>
+
+    <hr class="divider">
+
+    <div class="section-label">Test 2 - AnimationAdapter set_fraction</div>
+    <div class="weight-row">
+      <label>fraction</label>
+      <input type="range" id="slider-adapter" min="0" max="1" step="0.01" value="0"
+        oninput="setAdapterFraction(parseFloat(this.value))">
+      <span id="val-adapter">0.00</span>
+    </div>
+    <button onclick="setAdapterFraction(0)">fraction=0 (weight=0)</button>
+    <button onclick="setAdapterFraction(0.25)">fraction=0.25 (weight=0.5)</button>
+    <button onclick="setAdapterFraction(0.5)">fraction=0.5 (weight=1.0)</button>
+
+    <hr class="divider">
+
+    <div class="section-label">Test 3 - TimeSensor clock (production pattern)</div>
+    <button onclick="setClock(true)">Enable TestClock (startTime)</button>
+    <button onclick="setClock(false)">Disable TestClock (stopTime)</button>
+    <button onclick="pollWeight()">Poll weight 3s (reads every 200ms)</button>
+
+    <hr class="divider">
+
+    <div class="section-label">Test 4 — SAI Coord Write (Priority 1)</div>
+    <button onclick="testCoordWrite()">Move center vertex Y+0.3</button>
+    <button onclick="testCoordWriteMF()">Move center vertex (MFVec3f rebuild)</button>
+    <button onclick="testCoordReset()">Reset coord to rest</button>
+
+    <hr class="divider">
+
+    <div class="section-label">Log</div>
+    <div id="log"><span class="log-info">Waiting for scene...</span></div>
+  </div>
+</div>
+
+<script type="module">
+  // Exact pattern from mccf_api.py avatar/preview route.
+  // .mjs module import, X3D.getBrowser(canvas), canvas 'load' event.
+  import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@10.5.2/dist/x_ite.min.mjs';
+
+  const canvas = document.getElementById('canvas');
+  let _browser = null;
+  let _scene   = null;
+  let _ready   = false;
+
+  function log(msg, cls) {
+    cls = cls || 'log-info';
+    var div = document.getElementById('log');
+    var line = document.createElement('div');
+    line.className = cls;
+    var d = new Date();
+    var ts = d.toLocaleTimeString('en', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    line.textContent = '[' + ts + '] ' + msg;
+    div.appendChild(line);
+    div.scrollTop = div.scrollHeight;
+  }
+
+  function setDot(s) { document.getElementById('status-dot').className = s; }
+
+  canvas.addEventListener('load', function() {
+    try {
+      _browser = X3D.getBrowser(canvas);
+      _scene   = _browser.currentScene;
+      _ready   = true;
+      setDot('green');
+      log('SAI ready. Scene nodes: ' + _scene.rootNodes.length, 'log-ok');
+      probeScene();
+    } catch(e) {
+      setDot('red');
+      log('SAI init failed: ' + e.message, 'log-err');
+    }
+  });
+
+  canvas.addEventListener('error', function(e) {
+    setDot('red');
+    log('X_ITE load error: ' + (e.detail || e.message || JSON.stringify(e)), 'log-err');
+  });
+
+  // Expose functions to button onclick handlers (module scope workaround)
+  window.probeScene = function() {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    var nodes = [
+      'TestHumanoid', 'hanim_humanoid_root', 'hanim_test_segment',
+      'TestMesh', 'TestCoord', 'Displacer_CenterPop',
+      'AnimationAdapter_CenterPop', 'TestClock'
+    ];
+    log('-- Probing nodes --', 'log-info');
+    var allOk = true;
+    nodes.forEach(function(def) {
+      try {
+        var node = _scene.getNamedNode(def);
+        if (node) {
+          log('OK: ' + def, 'log-ok');
+        } else {
+          log('MISSING: ' + def + ' (null)', 'log-err');
+          allOk = false;
+        }
+      } catch(e) {
+        log('MISSING: ' + def + ' - ' + e.message, 'log-err');
+        allOk = false;
+      }
+    });
+    // Read current displacer weight
+    try {
+      var d = _scene.getNamedNode('Displacer_CenterPop');
+      if (d) log('Displacer weight = ' + d.weight, 'log-info');
+    } catch(e) {
+      log('Could not read displacer weight: ' + e.message, 'log-warn');
+    }
+    if (allOk) log('All nodes found OK', 'log-ok');
+  };
+
+  // TEST 1: Write directly to displacer.weight
+  // If center vertex pops up: per-segment displacer pathway is alive.
+  window.setDirectWeight = function(w) {
+    document.getElementById('slider-direct').value = w;
+    document.getElementById('val-direct').textContent = w.toFixed(2);
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    try {
+      var d = _scene.getNamedNode('Displacer_CenterPop');
+      if (!d) { log('Displacer_CenterPop not found', 'log-err'); return; }
+      d.weight = w;
+      log('d.weight = ' + w.toFixed(2) + ' (direct property write)', 'log-ok');
+      // Readback
+      setTimeout(function() {
+        try { log('  readback: ' + d.weight, 'log-info'); } catch(e) {}
+      }, 100);
+    } catch(e) {
+      log('setDirectWeight ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+  // TEST 2: AnimationAdapter set_fraction -> ROUTE -> displacer weight
+  window.setAdapterFraction = function(f) {
+    document.getElementById('slider-adapter').value = f;
+    document.getElementById('val-adapter').textContent = f.toFixed(2);
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    try {
+      var a = _scene.getNamedNode('AnimationAdapter_CenterPop');
+      if (!a) { log('AnimationAdapter_CenterPop not found', 'log-err'); return; }
+      a.set_fraction = new X3D.SFFloat(f);
+      log('adapter.set_fraction = ' + f.toFixed(2), 'log-ok');
+    } catch(e) {
+      log('setAdapterFraction ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+  // TEST 3: TimeSensor enable pattern (production pattern from mccf_api.py)
+  window.pollWeight = function() {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    log('-- Polling displacer weight for 3s --', 'log-info');
+    var count = 0;
+    var iv = setInterval(function() {
+      try {
+        var d = _scene.getNamedNode('Displacer_CenterPop');
+        var a = _scene.getNamedNode('AnimationAdapter_CenterPop');
+        var dw = d ? d.weight : 'null';
+        var af = a ? a.fraction_changed : 'null';
+        log('weight=' + dw + '  adapter.fraction_changed=' + af, 'log-info');
+      } catch(e) {
+        log('poll error: ' + e.message, 'log-err');
+      }
+      count++;
+      if (count >= 15) clearInterval(iv);
+    }, 200);
+  };
+
+  // TEST 4: SAI Coordinate write — does writing Coordinate.point move the rendered mesh?
+  // Two attempts:
+  //   A) Direct property mutation — pts[i] = new SFVec3f; coord.point = pts
+  //   B) Full MFVec3f reconstruction — in case X_ITE requires a fresh MFVec3f object
+
+  var _restPose = null; // cached rest pose, set on first read
+
+  function readRestPose() {
+    var coord = _scene.getNamedNode('TestCoord');
+    if (!coord) { log('TestCoord not found', 'log-err'); return null; }
+    // Cache rest pose on first call
+    if (!_restPose) {
+      var pts = coord.point;
+      _restPose = [];
+      for (var i = 0; i < pts.length; i++) {
+        _restPose.push(new X3D.SFVec3f(pts[i].x, pts[i].y, pts[i].z));
+      }
+      log('Rest pose cached: ' + _restPose.length + ' vertices', 'log-info');
+    }
+    return coord;
+  }
+
+  window.testCoordWrite = function() {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    try {
+      var coord = readRestPose();
+      if (!coord) return;
+      var pts = coord.point;
+      log('Coord has ' + pts.length + ' vertices', 'log-info');
+      // Move center vertex (index 4) up 0.3 in Y
+      pts[4] = new X3D.SFVec3f(0, 0.3, 0);
+      coord.point = pts;
+      log('coord.point written (index 4 -> 0, 0.3, 0)', 'log-ok');
+      // Readback
+      setTimeout(function() {
+        try {
+          var v = coord.point[4];
+          log('  readback [4]: ' + v.x.toFixed(3) + ', ' + v.y.toFixed(3) + ', ' + v.z.toFixed(3), 'log-info');
+          if (Math.abs(v.y - 0.3) < 0.001) {
+            log('  VALUE STUCK — check if mesh moved visually', 'log-warn');
+          }
+        } catch(e) { log('  readback err: ' + e.message, 'log-err'); }
+      }, 150);
+    } catch(e) {
+      log('testCoordWrite ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+  window.testCoordWriteMF = function() {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    try {
+      var coord = readRestPose();
+      if (!coord) return;
+      // Build a fresh MFVec3f from rest pose, then modify index 4
+      var verts = [];
+      for (var i = 0; i < _restPose.length; i++) {
+        if (i === 4) {
+          verts.push(new X3D.SFVec3f(0, 0.3, 0));
+        } else {
+          verts.push(new X3D.SFVec3f(_restPose[i].x, _restPose[i].y, _restPose[i].z));
+        }
+      }
+      coord.point = new X3D.MFVec3f(...verts);
+      log('coord.point = new MFVec3f(...) written (index 4 -> 0, 0.3, 0)', 'log-ok');
+      setTimeout(function() {
+        try {
+          var v = coord.point[4];
+          log('  readback [4]: ' + v.x.toFixed(3) + ', ' + v.y.toFixed(3) + ', ' + v.z.toFixed(3), 'log-info');
+        } catch(e) { log('  readback err: ' + e.message, 'log-err'); }
+      }, 150);
+    } catch(e) {
+      log('testCoordWriteMF ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+  window.testCoordReset = function() {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    if (!_restPose) { log('No rest pose cached — run a coord write test first', 'log-warn'); return; }
+    try {
+      var coord = _scene.getNamedNode('TestCoord');
+      coord.point = new X3D.MFVec3f(..._restPose.map(function(v) {
+        return new X3D.SFVec3f(v.x, v.y, v.z);
+      }));
+      log('coord.point reset to rest pose', 'log-ok');
+    } catch(e) {
+      log('testCoordReset ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+  window.setClock = function(enable) {
+    if (!_ready) { log('Scene not ready', 'log-warn'); return; }
+    try {
+      var t = _scene.getNamedNode('TestClock');
+      if (!t) { log('TestClock not found', 'log-err'); return; }
+      if (enable) {
+        t.startTime = _browser.currentTime;
+        t.enabled = true;
+        log('TestClock enabled (startTime + enabled=true)', 'log-ok');
+      } else {
+        t.stopTime = _browser.currentTime;
+        t.enabled = false;
+        log('TestClock disabled', 'log-info');
+      }
+    } catch(e) {
+      log('setClock ERROR: ' + e.message, 'log-err');
+    }
+  };
+
+</script>
+</body>
+</html>

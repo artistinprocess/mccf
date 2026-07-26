@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF field-map fixture — Door — Day 72, build schedule item 2.
+     This is the manifest from design doc §4.2, serialized per FIELD_MAP_FORMAT.md.
+     Placed here standalone for inspection; in a real proto this MetadataSet is a
+     child of the Actor type ProtoInterface via containerField="metadata". -->
+<MetadataSet name='fieldMap' DEF='FieldMap_Door'>
+  <MetadataString name='actorType' value='"Door"'/>
+  <MetadataSet name='field:hingeAngle'>
+    <MetadataString name='reach' value='"track-only"'/>
+  </MetadataSet>
+  <MetadataSet name='field:swingSpeed'>
+    <MetadataString name='reach' value='"affect-writable"'/>
+    <MetadataString name='channel' value='"tension"'/>
+    <MetadataString name='curve' value='"direct"'/>
+    <MetadataString name='arbitration' value='"blend"'/>
+    <MetadataString name='range' value='"0.6x – 1.3x nominal"'/>
+  </MetadataSet>
+</MetadataSet>

@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCCF Dialogue Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #07090d;
+  --s1:      #0c0f16;
+  --s2:      #12161f;
+  --s3:      #181d28;
+  --border:  #1e2535;
+  --accent:  #4af0a8;
+  --warm:    #f0c060;
+  --cool:    #60a8f0;
+  --danger:  #f06060;
+  --purple:  #a060f0;
+  --text:    #b8c8e0;
+  --dim:     #7a8aaa;
+  --E: #f06060; --B: #60a8f0; --P: #f0c060; --S: #4af0a8;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 300px 1fr 300px;
+  grid-template-areas: "hdr hdr hdr" "left main right";
+  overflow: hidden;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ── header ── */
+#hdr {
+  grid-area: hdr;
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 10px 16px;
+}
+#hdr .logo {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+#hdr .logo span { color: var(--dim); font-weight: 600; font-size: 12px; margin-left: 6px; }
+#hdr .spacer { flex: 1; }
+.pill-btn {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.pill-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pill-btn.primary { background: var(--accent); color: #06110c; border-color: var(--accent); font-weight: 600; }
+.pill-btn.primary:hover { opacity: .88; color: #06110c; }
+.pill-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+.pill-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pill-btn:disabled:hover { border-color: var(--border); color: var(--text); }
+.pill-btn:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.hdr-input {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  width: 130px;
+}
+.hdr-input::placeholder { color: var(--dim); }
+.hdr-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); white-space: nowrap; }
+.hdr-group { display: flex; align-items: center; gap: 5px; }
+
+/* ── validation badge ── */
+.val-badge {
+  font-size: 11px; padding: 5px 10px; border-radius: 6px; font-weight: 600;
+  white-space: nowrap; cursor: default;
+}
+.val-badge.ok { background: #0f2419; color: var(--accent); }
+.val-badge.err { background: #2a1414; color: var(--danger); cursor: pointer; }
+
+/* ── left: line list ── */
+#left {
+  grid-area: left;
+  background: var(--s1);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#left-head { padding: 12px 14px 8px; display: flex; align-items: center; justify-content: space-between; }
+#left-head h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; }
+#line-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+.line-card {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color .12s;
+  position: relative;
+}
+.line-card:hover { border-color: #2a3348; }
+.line-card.active { border-color: var(--accent); background: #10231b; }
+.line-card.invalid { border-color: var(--danger); }
+.line-card .lc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.line-card .lc-actor { font-weight: 600; color: var(--text); font-size: 12px; }
+.line-card .lc-type { font-size: 10px; color: var(--dim); }
+.line-card .lc-text { font-size: 11.5px; color: var(--dim); line-height: 1.4; max-height: 2.8em; overflow: hidden; }
+.badge {
+  font-size: 9.5px;
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.badge-trigger { background: #16202f; color: var(--cool); }
+.badge-trigger.declared { color: var(--warm); }
+.badge-trigger.sensed { color: var(--purple); }
+.badge-trigger.legacy { color: var(--dim); font-style: italic; }
+.badge-trigger.arc-complete { color: var(--danger); }
+.lc-flags { display: flex; gap: 4px; margin-top: 5px; align-items: center; }
+.flag-dot { width: 6px; height: 6px; border-radius: 50%; }
+.flag-dot.blocking { background: var(--danger); }
+.flag-dot.static { background: var(--dim); }
+.flag-dot.improv { background: var(--accent); }
+.flag-dot.has-audio { background: var(--cool); }
+.flag-dot.invalid-mark { background: var(--danger); width: 7px; height: 7px; }
+
+/* ── main: editor ── */
+#main { grid-area: main; overflow-y: auto; padding: 20px 26px 40px; }
+#main .empty { color: var(--dim); font-size: 13px; padding-top: 60px; text-align: center; }
+.field-row { display: flex; gap: 12px; margin-bottom: 14px; }
+.field { flex: 1; }
+.field label {
+  display: block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--dim);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+select, input[type=text], input[type=number], textarea {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+textarea { resize: vertical; line-height: 1.5; }
+.toggle-group { display: flex; gap: 6px; }
+.toggle-btn {
+  flex: 1;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+.toggle-btn.on { background: #10231b; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.checkbox-row input { width: 15px; height: 15px; accent-color: var(--danger); }
+.section-title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  margin: 22px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.section-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.hint { font-size: 11px; color: var(--dim); margin-top: 5px; line-height: 1.5; }
+.provenance-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.prov-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+}
+.prov-algorithmic { background: #1c2a3d; color: var(--cool); }
+.prov-authored { background: #1c2a1c; color: var(--accent); }
+.prov-llm { background: #2a1c3d; color: var(--purple); }
+.tag-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag-chip {
+  font-size: 11px; padding: 4px 9px; border-radius: 5px;
+  background: var(--s3); border: 1px solid var(--border); color: var(--text);
+  cursor: pointer;
+}
+.tag-chip:hover { border-color: var(--warm); color: var(--warm); }
+.audio-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.audio-path { font-size: 11.5px; color: var(--dim); flex: 1; word-break: break-all; }
+.audio-path.set { color: var(--cool); }
+.line-errors {
+  background: #2a1414; border: 1px solid #4a2020; border-radius: 7px;
+  padding: 10px 12px; margin-bottom: 16px; font-size: 11.5px; color: var(--danger);
+  line-height: 1.6;
+}
+.line-errors ul { margin-left: 16px; }
+.delete-row { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* ── right: preview panel ── */
+#right {
+  grid-area: right;
+  background: var(--s1);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px 16px 30px;
+}
+#right h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; margin-bottom: 12px; }
+.meter { margin-bottom: 14px; }
+.meter-label { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px; }
+.meter-label .mv { font-weight: 600; color: var(--text); }
+.meter-track { height: 6px; background: var(--s3); border-radius: 3px; overflow: hidden; position: relative; }
+.meter-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+.valence-track { position: relative; }
+.valence-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.channels { display: flex; gap: 6px; margin-bottom: 16px; }
+.ch-col { flex: 1; text-align: center; }
+.ch-bar-track { height: 60px; width: 100%; background: var(--s3); border-radius: 4px; display: flex; align-items: flex-end; overflow: hidden; }
+.ch-bar-fill { width: 100%; border-radius: 4px 4px 0 0; transition: height .3s; }
+.ch-label { font-size: 10px; margin-top: 4px; color: var(--dim); }
+.ch-val { font-size: 10.5px; font-weight: 600; }
+.suggested-tag-box {
+  background: var(--s2); border: 1px solid var(--border); border-radius: 7px;
+  padding: 12px; margin-top: 6px; margin-bottom: 18px;
+}
+.suggested-tag-box .stb-tag { font-family: var(--display); font-weight: 700; font-size: 15px; color: var(--warm); }
+.suggested-tag-box .stb-none { color: var(--dim); font-style: italic; font-size: 12px; }
+.disclaimer {
+  font-size: 10.5px; color: var(--dim); line-height: 1.5; margin-top: 10px;
+  padding: 9px 10px; background: #150f08; border: 1px solid #2a2010; border-radius: 6px;
+}
+.disclaimer b { color: var(--warm); }
+.preview-error {
+  font-size: 11.5px; color: var(--danger); line-height: 1.6;
+  padding: 10px 12px; background: #2a1414; border: 1px solid #4a2020; border-radius: 7px;
+  margin-top: 10px;
+}
+
+/* ── modal ── */
+#modal-overlay {
+  position: fixed; inset: 0; background: rgba(4,6,10,.75);
+  display: none; align-items: center; justify-content: center; z-index: 50;
+}
+#modal-overlay.show { display: flex; }
+#modal {
+  background: var(--s1); border: 1px solid var(--border); border-radius: 10px;
+  width: 640px; max-width: 90vw; max-height: 84vh; display: flex; flex-direction: column;
+}
+#modal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+#modal-head h3 { font-family: var(--display); font-size: 15px; font-weight: 700; }
+#modal-body { padding: 16px 18px; overflow-y: auto; }
+#modal-body textarea { min-height: 220px; font-size: 12px; line-height: 1.6; font-family: var(--mono); }
+#modal-body p { font-size: 12px; color: var(--dim); line-height: 1.6; margin-bottom: 10px; }
+#modal-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#modal-foot .modal-foot-left { display: flex; gap: 8px; }
+#modal-foot .modal-foot-right { display: flex; gap: 8px; }
+.close-x { background: none; border: none; color: var(--dim); font-size: 18px; cursor: pointer; line-height: 1; }
+.close-x:hover { color: var(--danger); }
+.modal-err {
+  background: #2a1414; border: 1px solid #4a2020; border-radius: 6px;
+  padding: 10px 12px; font-size: 11.5px; color: var(--danger); line-height: 1.6; margin-top: 10px;
+}
+.modal-ok {
+  background: #0f2419; border: 1px solid #1e4030; border-radius: 6px;
+  padding: 10px 12px; font-size: 11.5px; color: var(--accent); line-height: 1.6; margin-top: 10px;
+}
+.field-inline { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.field-inline label { font-size: 11px; color: var(--dim); white-space: nowrap; }
+.file-drop {
+  border: 1px dashed var(--border); border-radius: 7px; padding: 14px; text-align: center;
+  font-size: 11.5px; color: var(--dim); margin-bottom: 10px; cursor: pointer;
+}
+.file-drop:hover { border-color: var(--cool); color: var(--cool); }
+
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; grid-template-areas: "hdr" "left" "main" "right"; overflow-y: auto; height: auto; min-height: 100vh; }
+  #left, #right { max-height: 260px; }
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="logo">MCCF <span>Dialogue Editor</span></div>
+  <div class="hdr-group">
+    <span class="hdr-label">API base</span>
+    <input class="hdr-input" id="api-base-input" placeholder="(same origin)" oninput="onApiBaseChange(this.value)">
+  </div>
+  <div class="hdr-group">
+    <span class="hdr-label">Scene</span>
+    <input class="hdr-input" id="scene-name-input" placeholder="scene name" style="width:100px" oninput="sceneName=this.value">
+  </div>
+  <span id="val-badge" class="val-badge ok">✓ valid</span>
+  <div class="spacer"></div>
+  <button class="pill-btn" onclick="openLoadSceneModal()">↓ Load scene</button>
+  <button class="pill-btn" onclick="openExportSceneModal()">↑ Export scene</button>
+  <button class="pill-btn" onclick="openExportKateModal()">↑ Export for Kate</button>
+  <button class="pill-btn" onclick="openImportKateModal()">↓ Import tagged</button>
+  <button class="pill-btn primary" onclick="addLine()">+ New line</button>
+</div>
+
+<div id="left">
+  <div id="left-head"><h2>Dialogue<span id="scene-label"></span></h2></div>
+  <div id="line-list"></div>
+</div>
+
+<div id="main"></div>
+
+<div id="right"></div>
+
+<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <div id="modal-head"><h3 id="modal-title"></h3><button class="close-x" onclick="closeModal()">✕</button></div>
+    <div id="modal-body"></div>
+    <div id="modal-foot"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// dialogue-xml.js — inlined verbatim from static/js/dialogue-xml.js
+// (Day 73 state: ttsText/tagSource/audioFile/audioSource, arc-complete
+// trigger, exportForKate/importFromKate). Inlined so this tool works as a
+// single self-contained file / artifact rather than depending on a
+// relative <script src>, which can't resolve in a sandboxed preview.
+//
+// IMPORTANT: this is a COPY. If static/js/dialogue-xml.js changes, this
+// block needs to be re-synced by hand, OR — once this file is actually
+// deployed inside the real static/ directory alongside the genuine
+// dialogue-xml.js — delete this whole inlined block and reference the
+// external file with a script tag instead, which removes the
+// duplication risk entirely. Left inlined for now because "does this tool
+// work when you just open the file" matters more at this stage than
+// deployment-path purity.
+// ═══════════════════════════════════════════════════════════════════════
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  } else {
+    root.MCCFDialogue = api;
+  }
+})(typeof self !== 'undefined' ? self : this, function () {
+
+  const LINE_TYPES = ['Question', 'Response', 'Statement'];
+  const MODES = ['static', 'improv'];
+  const TRIGGER_KINDS = ['scene-start', 'touch', 'zone', 'sensed', 'declared', 'arc-complete', 'legacy-waypoint'];
+
+  function parseTrigger(str) {
+    if (str === 'scene-start') return { type: 'scene-start' };
+    if (str === 'arc-complete') return { type: 'arc-complete' };
+    const m = /^(\w[\w-]*):(.+)$/.exec(str || '');
+    if (!m) return { type: '__invalid__', raw: str };
+    const [, kind, param] = m;
+    if (kind === 'touch') return { type: 'touch', sensor: param };
+    if (kind === 'zone') return { type: 'zone', zone: param };
+    if (kind === 'sensed') return { type: 'sensed', lineId: param };
+    if (kind === 'declared') {
+      const time = Number(param);
+      return { type: 'declared', time: Number.isFinite(time) ? time : NaN };
+    }
+    if (kind === 'arc-complete') return { type: 'arc-complete', zone: param };
+    if (kind === 'legacy-waypoint') return { type: 'legacy-waypoint', waypoint: param };
+    return { type: '__invalid__', raw: str };
+  }
+
+  function serializeTrigger(trigger) {
+    switch (trigger.type) {
+      case 'scene-start': return 'scene-start';
+      case 'touch': return `touch:${trigger.sensor}`;
+      case 'zone': return `zone:${trigger.zone}`;
+      case 'sensed': return `sensed:${trigger.lineId}`;
+      case 'declared': return `declared:${trigger.time}`;
+      case 'arc-complete': return trigger.zone ? `arc-complete:${trigger.zone}` : 'arc-complete';
+      case 'legacy-waypoint': return `legacy-waypoint:${trigger.waypoint}`;
+      default: throw new Error(`serializeTrigger: unknown trigger type "${trigger.type}"`);
+    }
+  }
+
+  const TAG_SOURCE_KINDS = ['algorithmic', 'authored', 'llm-interpreted'];
+
+  function parseTagSource(str) {
+    if (str === 'algorithmic') return { type: 'algorithmic' };
+    if (str === 'authored') return { type: 'authored' };
+    const m = /^llm-interpreted:(.+)$/.exec(str || '');
+    if (m) return { type: 'llm-interpreted', name: m[1] };
+    return { type: '__invalid__', raw: str };
+  }
+
+  function serializeTagSource(tagSource) {
+    switch (tagSource.type) {
+      case 'algorithmic': return 'algorithmic';
+      case 'authored': return 'authored';
+      case 'llm-interpreted': return `llm-interpreted:${tagSource.name}`;
+      default: throw new Error(`serializeTagSource: unknown tagSource type "${tagSource.type}"`);
+    }
+  }
+
+  const AUDIO_SOURCE_KINDS = ['elevenlabs', 'recorded', 'other-engine'];
+
+  function parseAudioSource(str) {
+    if (str === 'elevenlabs') return { type: 'elevenlabs' };
+    if (str === 'recorded') return { type: 'recorded' };
+    const m = /^other-engine:(.+)$/.exec(str || '');
+    if (m) return { type: 'other-engine', name: m[1] };
+    return { type: '__invalid__', raw: str };
+  }
+
+  function serializeAudioSource(audioSource) {
+    switch (audioSource.type) {
+      case 'elevenlabs': return 'elevenlabs';
+      case 'recorded': return 'recorded';
+      case 'other-engine': return `other-engine:${audioSource.name}`;
+      default: throw new Error(`serializeAudioSource: unknown audioSource type "${audioSource.type}"`);
+    }
+  }
+
+  function validateDialogueLines(lines) {
+    const errors = [];
+    if (!Array.isArray(lines)) return { valid: false, errors: ['dialogue lines must be an array'] };
+    const seenIds = new Set();
+    lines.forEach((l, i) => {
+      const where = `line[${i}]${l && l.id ? ' (' + l.id + ')' : ''}`;
+      if (!l || typeof l !== 'object') { errors.push(`${where}: not an object`); return; }
+      if (!l.id) errors.push(`${where}: missing id`);
+      else if (seenIds.has(l.id)) errors.push(`${where}: duplicate id "${l.id}" — line ids must be scene-wide unique`);
+      else seenIds.add(l.id);
+      if (!l.actor) errors.push(`${where}: missing actor`);
+      if (!LINE_TYPES.includes(l.type)) errors.push(`${where}: type must be one of ${LINE_TYPES.join(' | ')}`);
+      if (!MODES.includes(l.mode)) errors.push(`${where}: mode must be one of ${MODES.join(' | ')}`);
+      if (typeof l.blocking !== 'boolean') errors.push(`${where}: blocking must be a boolean`);
+      if (!l.trigger || !TRIGGER_KINDS.includes(l.trigger.type)) {
+        errors.push(`${where}: invalid trigger`);
+      } else if (l.trigger.type === 'declared' && !Number.isFinite(l.trigger.time)) {
+        errors.push(`${where}: declared trigger needs a numeric time`);
+      }
+      if (typeof l.text !== 'string' || !l.text.trim()) errors.push(`${where}: missing text`);
+
+      const hasTtsText = l.ttsText !== undefined && l.ttsText !== null;
+      const hasTagSource = l.tagSource !== undefined && l.tagSource !== null;
+      if (hasTtsText && !hasTagSource) {
+        errors.push(`${where}: ttsText present but tagSource missing — a tag with no recorded provenance can't be trusted or distrusted later`);
+      } else if (hasTagSource && !hasTtsText) {
+        errors.push(`${where}: tagSource present but ttsText missing — tagSource describes a tag that doesn't exist on this line`);
+      } else if (hasTagSource && (!l.tagSource || !TAG_SOURCE_KINDS.includes(l.tagSource.type))) {
+        errors.push(`${where}: tagSource must be one of ${TAG_SOURCE_KINDS.join(' | ')}`);
+      } else if (hasTtsText && typeof l.ttsText !== 'string') {
+        errors.push(`${where}: ttsText must be a string`);
+      }
+
+      const hasAudioFile = l.audioFile !== undefined && l.audioFile !== null;
+      const hasAudioSource = l.audioSource !== undefined && l.audioSource !== null;
+      if (hasAudioFile && !hasAudioSource) {
+        errors.push(`${where}: audioFile present but audioSource missing — an audio path with no recorded provenance can't be trusted or distrusted later`);
+      } else if (hasAudioSource && !hasAudioFile) {
+        errors.push(`${where}: audioSource present but audioFile missing — audioSource describes an audio file that doesn't exist on this line`);
+      } else if (hasAudioSource && (!l.audioSource || !AUDIO_SOURCE_KINDS.includes(l.audioSource.type))) {
+        errors.push(`${where}: audioSource must be one of ${AUDIO_SOURCE_KINDS.join(' | ')}`);
+      } else if (hasAudioFile && typeof l.audioFile !== 'string') {
+        errors.push(`${where}: audioFile must be a string`);
+      }
+    });
+    const ids = new Set(lines.filter((l) => l && l.id).map((l) => l.id));
+    lines.forEach((l, i) => {
+      if (l && l.trigger && l.trigger.type === 'sensed' && !ids.has(l.trigger.lineId)) {
+        errors.push(`line[${i}] (${l.id}): sensed trigger references unknown line id "${l.trigger.lineId}"`);
+      }
+    });
+    return { valid: errors.length === 0, errors };
+  }
+
+  function xmlEscape(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function serializeDialogueBlock(lines) {
+    const { valid, errors } = validateDialogueLines(lines);
+    if (!valid) throw new Error('serializeDialogueBlock: invalid lines:\n' + errors.join('\n'));
+    const rows = lines.map((l) => {
+      const trig = serializeTrigger(l.trigger);
+      let attrs = `id="${xmlEscape(l.id)}" actor="${xmlEscape(l.actor)}" type="${l.type}" ` +
+        `mode="${l.mode}" blocking="${l.blocking}" trigger="${xmlEscape(trig)}"`;
+      if (l.ttsText !== undefined && l.ttsText !== null) {
+        attrs += ` ttsText="${xmlEscape(l.ttsText)}" tagSource="${xmlEscape(serializeTagSource(l.tagSource))}"`;
+      }
+      if (l.audioFile !== undefined && l.audioFile !== null) {
+        attrs += ` audioFile="${xmlEscape(l.audioFile)}" audioSource="${xmlEscape(serializeAudioSource(l.audioSource))}"`;
+      }
+      return `  <Line ${attrs}>${xmlEscape(l.text.trim())}</Line>`;
+    });
+    return `<Dialogue>\n${rows.join('\n')}\n</Dialogue>`;
+  }
+
+  function parseDialogueBlock(sceneXml) {
+    const m = sceneXml.match(/<Dialogue>([\s\S]*?)<\/Dialogue>/);
+    if (!m) return [];
+    const body = m[1];
+    const lines = [];
+    const lineRe = /<Line\s+([^>]*)>([\s\S]*?)<\/Line>/g;
+    let lm;
+    while ((lm = lineRe.exec(body)) !== null) {
+      const attrsRaw = lm[1];
+      const text = lm[2].trim();
+      const attrs = {};
+      const attrRe = /(\w+)="([^"]*)"/g;
+      let am;
+      while ((am = attrRe.exec(attrsRaw)) !== null) attrs[am[1]] = am[2];
+      const line = {
+        id: attrs.id,
+        actor: attrs.actor,
+        type: attrs.type,
+        mode: attrs.mode,
+        blocking: attrs.blocking === 'true',
+        trigger: parseTrigger(attrs.trigger),
+        text: text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+      };
+      if (attrs.ttsText !== undefined) {
+        line.ttsText = attrs.ttsText.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        if (attrs.tagSource !== undefined) {
+          line.tagSource = parseTagSource(attrs.tagSource);
+        }
+      }
+      if (attrs.audioFile !== undefined) {
+        line.audioFile = attrs.audioFile.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        if (attrs.audioSource !== undefined) {
+          line.audioSource = parseAudioSource(attrs.audioSource);
+        }
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  function parseLegacyWaypointLines(sceneXml) {
+    const lines = [];
+    const wpRe = /<Waypoint\s+([^>]*)>([\s\S]*?)<\/Waypoint>/g;
+    let wm;
+    while ((wm = wpRe.exec(sceneXml)) !== null) {
+      const wpAttrs = {};
+      const attrRe = /(\w+)="([^"]*)"/g;
+      let am;
+      while ((am = attrRe.exec(wm[1])) !== null) wpAttrs[am[1]] = am[2];
+      const wpName = wpAttrs.name;
+      if (!wpName) continue;
+      const body = wm[2];
+      const lineRe = /<(Question|Response|Statement)([^>]*)>([\s\S]*?)<\/\1>/g;
+      let lm, idx = 0;
+      while ((lm = lineRe.exec(body)) !== null) {
+        const type = lm[1];
+        const attrs = {};
+        const a2 = /(\w+)="([^"]*)"/g;
+        let am2;
+        while ((am2 = a2.exec(lm[2])) !== null) attrs[am2[1]] = am2[2];
+        const text = lm[3].trim();
+        if (!text) continue;
+        lines.push({
+          id: `${wpName}_${idx++}`,
+          actor: attrs.speaker || '',
+          type,
+          mode: 'improv',
+          blocking: false,
+          trigger: { type: 'legacy-waypoint', waypoint: wpName },
+          text: text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+        });
+      }
+    }
+    return lines;
+  }
+
+  function mergeDialogueIntoRawXml(sceneXml, lines) {
+    const block = serializeDialogueBlock(lines);
+    if (/<Dialogue>[\s\S]*?<\/Dialogue>/.test(sceneXml)) {
+      return sceneXml.replace(/<Dialogue>[\s\S]*?<\/Dialogue>/, block);
+    }
+    if (!/<\/Scene>/.test(sceneXml)) {
+      throw new Error('mergeDialogueIntoRawXml: no </Scene> closing tag found — refusing to guess where to insert the Dialogue block');
+    }
+    return sceneXml.replace(/<\/Scene>/, `${block}\n</Scene>`);
+  }
+
+  function exportForKate(lines) {
+    return serializeDialogueBlock(lines);
+  }
+
+  function importFromKate(kateXml, originalLines, collaboratorName) {
+    collaboratorName = collaboratorName || 'Kate';
+    const wrapped = /<Dialogue[\s>]/.test(kateXml) ? kateXml : `<Dialogue>\n${kateXml}\n</Dialogue>`;
+    const returnedLines = parseDialogueBlock(wrapped);
+
+    const originalById = new Map(originalLines.map((l) => [l.id, l]));
+    const originalByText = new Map(originalLines.map((l) => [l.text.trim(), l]));
+
+    const updated = [];
+    const added = [];
+    const usedIds = new Set(originalLines.map((l) => l.id));
+    let newIdCounter = 0;
+
+    returnedLines.forEach((rl) => {
+      if (rl.ttsText !== undefined && rl.ttsText !== null &&
+          (rl.tagSource === undefined || rl.tagSource === null)) {
+        rl.tagSource = { type: 'llm-interpreted', name: collaboratorName };
+      }
+      if (rl.id && originalById.has(rl.id)) {
+        updated.push(rl);
+        return;
+      }
+      const fallback = originalByText.get((rl.text || '').trim());
+      if (fallback) {
+        updated.push(Object.assign({}, rl, { id: fallback.id }));
+        return;
+      }
+      let candidateId = rl.id && !usedIds.has(rl.id) ? rl.id : null;
+      if (!candidateId) {
+        do {
+          newIdCounter += 1;
+          candidateId = `kate_import_${newIdCounter}`;
+        } while (usedIds.has(candidateId));
+      }
+      usedIds.add(candidateId);
+      added.push(Object.assign({}, rl, { id: candidateId }));
+    });
+
+    const merged = originalLines
+      .map((orig) => updated.find((u) => u.id === orig.id) || orig)
+      .concat(added);
+
+    const { valid, errors } = validateDialogueLines(merged);
+
+    return {
+      lines: merged,
+      updatedIds: updated.map((l) => l.id),
+      addedIds: added.map((l) => l.id),
+      valid,
+      errors,
+    };
+  }
+
+  return {
+    LINE_TYPES, MODES, TRIGGER_KINDS, TAG_SOURCE_KINDS, AUDIO_SOURCE_KINDS,
+    parseTrigger, serializeTrigger,
+    parseTagSource, serializeTagSource,
+    parseAudioSource, serializeAudioSource,
+    validateDialogueLines, serializeDialogueBlock, parseDialogueBlock,
+    parseLegacyWaypointLines, mergeDialogueIntoRawXml,
+    exportForKate, importFromKate,
+  };
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Editor application — Day 73, priority queue item 6.
+// Real MCCFDialogue engine above (tested: 53/53 across the Day 73 test
+// suites). Real /voice/preview wiring. Real exportForKate/importFromKate.
+//
+// Scene load/save: mccf_api.py itself was never uploaded this session, so
+// its exact /scene/load/scene/raw and /scene/save/scene request/response
+// shapes are undocumented beyond the round-trip CONTRACT described in
+// docs/DIALOGUE_SCHEMA.md (fetch raw XML, merge only <Dialogue>, post raw
+// text back). "Load from server" / "Save to server" below are best-effort
+// against that contract, defensively handling a couple of plausible
+// response shapes, and every failure surfaces a clear inline error rather
+// than silently losing work. The GUARANTEED-reliable path that needs no
+// server at all is paste-in / file-upload to load, and copy/download to
+// export — that path is always available regardless of whether the server
+// buttons match your actual mccf_api.py routes.
+// ═══════════════════════════════════════════════════════════════════════
+
+const D = window.MCCFDialogue;
+
+// Mirrors mccf_voice_api.py's CORE_EMOTION_TAGS — duplicated here for the
+// same reason dialogue-xml.js's own word lists get duplicated across
+// modules in this codebase (no shared-constant mechanism across Python/JS
+// without a build step). Keep in sync by hand if that list changes.
+const CORE_TAGS = ['happy','sad','excited','angry','whisper','annoyed','appalled','thoughtful','surprised','cute','dismissive'];
+const NONVERBAL_TAGS = ['laughs','chuckles','sighs','clears throat','exhales sharply','inhales deeply','muttering','gasp','swallows','short pause','long pause'];
+const ACTORS = ['Cindy','Jack','MotherGoddess'];
+
+const TRIGGER_LABELS = {
+  'scene-start':     'Scene start',
+  'zone':            'Zone entered',
+  'touch':           'Touch sensor',
+  'sensed':          'Another line arrives',
+  'declared':        'Fixed clock time',
+  'arc-complete':    'Arc complete (Chorus)',
+  'legacy-waypoint': 'Legacy waypoint arrival (read-only)',
+};
+// Creatable from the dropdown — legacy-waypoint is migration-only, never
+// deliberately chosen (same rule as the schema doc's migration section).
+const CREATABLE_TRIGGER_TYPES = D.TRIGGER_KINDS.filter((t) => t !== 'legacy-waypoint');
+
+var lines = [
+  {
+    id: 'line_cindy_001', actor: 'Cindy', type: 'Question', mode: 'improv', blocking: false,
+    trigger: { type: 'scene-start' },
+    text: 'How does the water feel today?',
+  },
+  {
+    id: 'line_cindy_002', actor: 'Cindy', type: 'Response', mode: 'static', blocking: true,
+    trigger: { type: 'sensed', lineId: 'line_cindy_001' },
+    text: "Cool. Cooler than I expected.",
+    ttsText: '[thoughtful] Cool... cooler than I expected.', tagSource: { type: 'authored' },
+  },
+  {
+    id: 'line_jack_001', actor: 'Jack', type: 'Statement', mode: 'static', blocking: false,
+    trigger: { type: 'zone', zone: 'Pool' },
+    text: 'He always did like the water more than the rest of us.',
+    ttsText: '[thoughtful] He always did like the water more than the rest of us.',
+    tagSource: { type: 'llm-interpreted', name: 'Kate' },
+    audioFile: 'media/dialogue/garden_002/line_jack_001.wav', audioSource: { type: 'elevenlabs' },
+  },
+  {
+    id: 'line_jack_002', actor: 'Jack', type: 'Statement', mode: 'static', blocking: false,
+    trigger: { type: 'declared', time: 58 },
+    text: 'Did you feel that?',
+  },
+  {
+    id: 'line_mg_001', actor: 'MotherGoddess', type: 'Statement', mode: 'improv', blocking: false,
+    trigger: { type: 'arc-complete', zone: 'Pool' },
+    text: 'They will not remember this conversation the same way.',
+    _isChorus: true,
+  },
+];
+
+var selectedId = lines[0].id;
+var apiBaseUrl = '';
+var sceneName = '';
+var loadedRawXml = null; // raw scene XML text once loaded, else null
+
+function apiBase() { return apiBaseUrl.replace(/\/$/, ''); }
+function onApiBaseChange(v) { apiBaseUrl = v; }
+
+function uid(prefix) {
+  let id;
+  do { id = prefix + '_' + Math.random().toString(36).slice(2, 7); } while (lines.some((l) => l.id === id));
+  return id;
+}
+
+function triggerBadgeClass(t) {
+  if (t.type === 'declared') return 'declared';
+  if (t.type === 'sensed') return 'sensed';
+  if (t.type === 'legacy-waypoint') return 'legacy';
+  if (t.type === 'arc-complete') return 'arc-complete';
+  return '';
+}
+function triggerBadgeText(t) {
+  switch (t.type) {
+    case 'scene-start': return 'scene-start';
+    case 'zone': return 'zone: ' + (t.zone || '?');
+    case 'touch': return 'touch: ' + (t.sensor || '?');
+    case 'sensed': return 'sensed: ' + (t.lineId || '?');
+    case 'declared': return 'T=' + (t.time != null ? t.time : '?') + 's';
+    case 'arc-complete': return 'arc-complete' + (t.zone ? (': ' + t.zone) : '');
+    case 'legacy-waypoint': return 'legacy: ' + (t.waypoint || '?');
+    default: return t.type;
+  }
+}
+
+function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ── validation (computed fresh every render) ────────────────────────────
+var lastValidation = { valid: true, errors: [] };
+
+function lineErrorsFor(id) {
+  return lastValidation.errors.filter((e) => e.includes(`(${id})`));
+}
+
+function renderValBadge() {
+  const badge = document.getElementById('val-badge');
+  if (lastValidation.valid) {
+    badge.className = 'val-badge ok';
+    badge.textContent = `✓ ${lines.length} line${lines.length === 1 ? '' : 's'} valid`;
+    badge.onclick = null;
+    badge.title = '';
+  } else {
+    badge.className = 'val-badge err';
+    badge.textContent = `⚠ ${lastValidation.errors.length} error${lastValidation.errors.length === 1 ? '' : 's'}`;
+    badge.title = lastValidation.errors.join('\n');
+  }
+}
+
+// ── rendering: line list ───────────────────────────────────────────────
+function renderList() {
+  const el = document.getElementById('line-list');
+  el.innerHTML = lines.map((l) => {
+    const errs = lineErrorsFor(l.id);
+    return `
+    <div class="line-card ${l.id === selectedId ? 'active' : ''} ${errs.length ? 'invalid' : ''}" onclick="selectLine('${l.id}')">
+      <div class="lc-top">
+        <span class="lc-actor">${esc(l.actor)}</span>
+        <span class="lc-type">${l.type}</span>
+        <span style="flex:1"></span>
+        <span class="badge badge-trigger ${triggerBadgeClass(l.trigger)}">${esc(triggerBadgeText(l.trigger))}</span>
+      </div>
+      <div class="lc-text">${esc(l.text || '(empty)')}</div>
+      <div class="lc-flags">
+        ${errs.length ? '<span class="flag-dot invalid-mark" title="' + esc(errs.join('; ')) + '"></span>' : ''}
+        ${l.blocking ? '<span class="flag-dot blocking" title="blocking"></span>' : ''}
+        <span class="flag-dot ${l.mode}" title="${l.mode}"></span>
+        ${l.audioFile ? '<span class="flag-dot has-audio" title="has audio"></span>' : ''}
+        ${l._isChorus ? '<span style="font-size:9px;color:var(--purple);margin-left:2px">CHORUS</span>' : ''}
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+// ── rendering: editor ───────────────────────────────────────────────────
+function provClass(src) {
+  if (src.type === 'algorithmic') return 'prov-algorithmic';
+  if (src.type === 'authored') return 'prov-authored';
+  return 'prov-llm';
+}
+function provLabel(src) {
+  if (src.type === 'algorithmic') return 'algorithmic suggestion';
+  if (src.type === 'authored') return 'authored by you';
+  if (src.type === 'llm-interpreted') return 'interpreted by ' + src.name;
+  return 'unrecognized provenance';
+}
+
+function renderTriggerParam(l) {
+  const t = l.trigger;
+  if (t.type === 'zone') return `<div style="margin-top:8px"><input type="text" value="${esc(t.zone || '')}" placeholder="zone id" oninput="updateTriggerParam('zone', this.value)"></div>`;
+  if (t.type === 'touch') return `<div style="margin-top:8px"><input type="text" value="${esc(t.sensor || '')}" placeholder="sensor name" oninput="updateTriggerParam('sensor', this.value)"></div>`;
+  if (t.type === 'declared') return `<div style="margin-top:8px"><input type="number" value="${t.time != null ? t.time : ''}" placeholder="seconds" oninput="updateTriggerParam('time', parseFloat(this.value))"></div>`;
+  if (t.type === 'sensed') return `<div style="margin-top:8px">
+    <select onchange="updateTriggerParam('lineId', this.value)">
+      ${lines.filter((x) => x.id !== l.id).map((x) => `<option value="${x.id}" ${x.id === t.lineId ? 'selected' : ''}>${x.id} — ${esc((x.text || '').slice(0, 30))}</option>`).join('')}
+    </select></div>`;
+  if (t.type === 'arc-complete') return `<div style="margin-top:8px"><input type="text" value="${esc(t.zone || '')}" placeholder="zone id (optional — blank fires on ANY arc completing)" oninput="updateTriggerParam('zone', this.value)"></div>`;
+  return '';
+}
+
+function renderEditor() {
+  const main = document.getElementById('main');
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) { main.innerHTML = '<div class="empty">Select a line, or create a new one.</div>'; return; }
+
+  const errs = lineErrorsFor(l.id);
+  const audioSourceVal = l.audioSource ? l.audioSource.type : '';
+
+  main.innerHTML = `
+    ${errs.length ? `<div class="line-errors"><b>${errs.length} issue${errs.length === 1 ? '' : 's'} on this line:</b><ul>${errs.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : ''}
+
+    <div class="section-title">Line</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Actor</label>
+        <select onchange="updateField('actor', this.value)">
+          ${ACTORS.map((a) => `<option ${a === l.actor ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select onchange="updateField('type', this.value)">
+          ${D.LINE_TYPES.map((t) => `<option ${t === l.type ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Mode</label>
+        <div class="toggle-group">
+          ${D.MODES.map((m) => `<div class="toggle-btn ${l.mode === m ? 'on' : ''}" onclick="updateField('mode','${m}')">${m}</div>`).join('')}
+        </div>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="blocking-cb" ${l.blocking ? 'checked' : ''} onchange="updateField('blocking', this.checked)">
+          <label for="blocking-cb" style="text-transform:none;font-size:12.5px;color:var(--text);font-weight:400">Blocking — halts the scene until this line resolves</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Trigger</label>
+        <select onchange="updateTriggerType(this.value)" ${l.trigger.type === 'legacy-waypoint' ? 'disabled' : ''}>
+          ${(l.trigger.type === 'legacy-waypoint' ? D.TRIGGER_KINDS : CREATABLE_TRIGGER_TYPES).map((t) => `<option value="${t}" ${t === l.trigger.type ? 'selected' : ''}>${TRIGGER_LABELS[t]}</option>`).join('')}
+        </select>
+        ${renderTriggerParam(l)}
+        ${l.trigger.type === 'legacy-waypoint' ? '<div class="hint">Migrated from the old waypoint-nested schema — fires on arrival at <b>' + esc(l.trigger.waypoint) + '</b>, exactly as before. Pick a new trigger deliberately to move it off legacy behavior — it is never reinterpreted automatically.</div>' : ''}
+        ${l.trigger.type === 'arc-complete' ? '<div class="hint">Fires when a Chorus arc completes — bare (bl' + 'ank zone) fires on any arc scene-wide, a zone id scopes it to that zone\'s Chorus only. Goes through the same interrupt/wait/overlap collision handling as a declared step.</div>' : ''}
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Text</label>
+        <textarea rows="3" oninput="updateField('text', this.value)">${esc(l.text)}</textarea>
+        <div class="hint">Clean, untagged — what sentiment analysis reads. Never contains delivery tags.</div>
+      </div>
+    </div>
+
+    <div class="section-title">Delivery — ElevenLabs tags</div>
+    <div class="field-row">
+      <div class="field">
+        <label>ttsText</label>
+        <textarea rows="3" oninput="onTtsTextEdit(this.value)" placeholder="falls back to Text above if left empty">${esc(l.ttsText || '')}</textarea>
+        <div class="provenance-row">
+          ${l.tagSource ? `<span class="prov-badge ${provClass(l.tagSource)}">${esc(provLabel(l.tagSource))}</span>` : '<span class="hint">no tag source yet</span>'}
+        </div>
+        <div class="tag-toolbar">
+          ${CORE_TAGS.map((t) => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
+        </div>
+        <div class="tag-toolbar">
+          ${NONVERBAL_TAGS.map((t) => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Audio</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Source</label>
+        <select onchange="updateAudioSource(this.value)">
+          <option value="" ${!audioSourceVal ? 'selected' : ''}>— none yet —</option>
+          <option value="elevenlabs" ${audioSourceVal === 'elevenlabs' ? 'selected' : ''}>ElevenLabs (draft convenience)</option>
+          <option value="recorded" ${audioSourceVal === 'recorded' ? 'selected' : ''}>Recorded — real voice actor</option>
+          <option value="other-engine" ${audioSourceVal === 'other-engine' ? 'selected' : ''}>Other engine</option>
+        </select>
+        <div class="audio-row">
+          <span class="audio-path ${l.audioFile ? 'set' : ''}">${esc(l.audioFile || '(no audio file linked)')}</span>
+          <button class="pill-btn" onclick="mockGenerateAudio()">Generate draft (demo)</button>
+        </div>
+        <div class="hint">Joined to this line purely by its <b>id</b> — same key regardless of which engine, or a hired actor, produced the file. Draft TTS is an editing convenience, never a permanent dependency.</div>
+      </div>
+    </div>
+
+    <div class="delete-row">
+      <button class="pill-btn danger" onclick="deleteLine()">Delete this line</button>
+    </div>
+  `;
+}
+
+// ── rendering: preview panel ───────────────────────────────────────────
+function renderPreview() {
+  const right = document.getElementById('right');
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) { right.innerHTML = '<h2>Emotional preview</h2><div class="hint">Select a line first.</div>'; return; }
+
+  const p = l._preview || null;
+  const loading = !!l._previewLoading;
+  const err = l._previewError || null;
+
+  right.innerHTML = `
+    <h2>Emotional preview</h2>
+    <button class="pill-btn primary" style="width:100%;margin-bottom:16px" onclick="runPreview()" ${loading || !l.text.trim() ? 'disabled' : ''}>
+      ${loading ? '…calling /voice/preview' : '▶ Preview this line'}
+    </button>
+    ${!l.text.trim() ? '<div class="hint">Add line text first.</div>' : ''}
+    ${err ? `<div class="preview-error"><b>Preview failed:</b> ${esc(err)}<br><br>Check the API base in the header — if this tool isn't served by the real mccf_api.py, /voice/preview has nothing to reach.</div>` : ''}
+
+    ${p ? `
+      <div class="meter">
+        <div class="meter-label"><span>tag_valence</span><span class="mv">${p.tag_valence.toFixed(2)}</span></div>
+        <div class="meter-track valence-track"><div class="valence-mid"></div>
+          <div class="meter-fill" style="width:${Math.abs(p.tag_valence) * 50}%; margin-left:${p.tag_valence < 0 ? (50 + p.tag_valence * 50) : 50}%; background:${p.tag_valence < 0 ? 'var(--danger)' : 'var(--accent)'}"></div>
+        </div>
+      </div>
+      <div class="meter">
+        <div class="meter-label"><span>arousal_proxy</span><span class="mv">${p.arousal_proxy.toFixed(2)}</span></div>
+        <div class="meter-track"><div class="meter-fill" style="width:${p.arousal_proxy * 100}%;background:var(--E)"></div></div>
+      </div>
+      <div class="meter">
+        <div class="meter-label"><span>engagement_proxy</span><span class="mv">${p.engagement_proxy.toFixed(2)}</span></div>
+        <div class="meter-track"><div class="meter-fill" style="width:${p.engagement_proxy * 100}%;background:var(--cool)"></div></div>
+      </div>
+
+      <div class="channels">
+        ${['E', 'B', 'P', 'S'].map((ch) => `
+          <div class="ch-col">
+            <div class="ch-bar-track"><div class="ch-bar-fill" style="height:${(p.weights[ch] * 100).toFixed(0)}%;background:var(--${ch})"></div></div>
+            <div class="ch-label">${ch}</div>
+            <div class="ch-val" style="color:var(--${ch})">${p.weights[ch].toFixed(2)}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="suggested-tag-box">
+        <div style="font-size:10.5px;color:var(--dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Suggested tag</div>
+        ${p.suggested_tag ? `<span class="stb-tag">[${p.suggested_tag}]</span>` : '<span class="stb-none">no strong signal — natural delivery</span>'}
+        <div style="margin-top:10px"><button class="pill-btn" style="width:100%" onclick="acceptSuggestedTag()">Insert into ttsText</button></div>
+      </div>
+
+      <div class="disclaimer">
+        <b>Real endpoint, still a suggestion.</b> This is the live
+        <code>/voice/preview</code> response — the Day 73 calibration fix
+        (raw hit-count arousal/engagement, hedging no longer mis-read as
+        anger) is applied, but <code>tagSource="algorithmic"</code> means
+        exactly that: a suggestion, not a verified-correct delivery choice.
+        Review before treating it as final.
+      </div>
+    ` : (loading || err ? '' : '<div class="hint" style="padding:20px 0">Run a preview to see this line\'s computed arc.</div>')}
+  `;
+}
+
+function renderAll() {
+  lastValidation = D.validateDialogueLines(lines);
+  renderValBadge();
+  document.getElementById('scene-label').textContent = sceneName ? ' — ' + sceneName : '';
+  renderList();
+  renderEditor();
+  renderPreview();
+}
+
+// ── preview: real /voice/preview call ───────────────────────────────────
+async function runPreview() {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l || !l.text.trim()) return;
+  l._previewLoading = true;
+  l._previewError = null;
+  renderPreview();
+  try {
+    const resp = await fetch(`${apiBase()}/voice/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: l.text }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status}${body ? ' — ' + body.slice(0, 200) : ''}`);
+    }
+    const data = await resp.json();
+    l._preview = data;
+    l._previewError = null;
+  } catch (e) {
+    l._previewError = e.message || String(e);
+    l._preview = null;
+  } finally {
+    l._previewLoading = false;
+    renderPreview();
+  }
+}
+
+function acceptSuggestedTag() {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l || !l._preview) return;
+  l.ttsText = l._preview.suggested_tts_text;
+  l.tagSource = { type: 'algorithmic' };
+  renderAll();
+}
+
+// ── interactions ────────────────────────────────────────────────────────
+function selectLine(id) { selectedId = id; renderAll(); }
+
+function updateField(field, value) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  l[field] = value;
+  renderAll();
+}
+
+function onTtsTextEdit(value) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (value === '') {
+    // Fully cleared — drop both fields rather than leaving an empty
+    // string ttsText with a stale tagSource (validateDialogueLines
+    // requires them present or absent together, but an empty string is
+    // still "present" and would trip the "ttsText must be a string" —
+    // actually valid — check; clearing is meant to mean "no tag at all").
+    delete l.ttsText;
+    delete l.tagSource;
+  } else {
+    l.ttsText = value;
+    l.tagSource = { type: 'authored' }; // editing by hand promotes provenance, same rule as the real design
+  }
+  renderAll();
+}
+
+function insertTag(tag) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  // Tags land immediately before the segment they modify (ElevenLabs
+  // placement convention, same as build_tts_text in mccf_voice_api.py) —
+  // prefix, not append. Initialize from the clean text if there's no
+  // ttsText yet, so a tag chip click never produces a tag with no text.
+  const base = l.ttsText || l.text;
+  l.ttsText = `[${tag}] ${base}`;
+  l.tagSource = { type: 'authored' };
+  renderAll();
+}
+
+function updateAudioSource(typeStr) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (!typeStr) {
+    delete l.audioSource;
+    delete l.audioFile;
+  } else {
+    l.audioSource = typeStr === 'other-engine' ? { type: 'other-engine', name: '' } : { type: typeStr };
+    if (!l.audioFile) l.audioFile = ''; // needs a real path before this validates — Generate draft fills it
+  }
+  renderAll();
+}
+
+function updateTriggerType(type) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (type === 'scene-start') l.trigger = { type };
+  else if (type === 'zone') l.trigger = { type, zone: '' };
+  else if (type === 'touch') l.trigger = { type, sensor: '' };
+  else if (type === 'sensed') l.trigger = { type, lineId: (lines.find((x) => x.id !== l.id) || {}).id || '' };
+  else if (type === 'declared') l.trigger = { type, time: 0 };
+  else if (type === 'arc-complete') l.trigger = { type };
+  renderAll();
+}
+function updateTriggerParam(key, value) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  l.trigger[key] = value;
+  renderAll();
+}
+
+function mockGenerateAudio() {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (!l.audioSource) l.audioSource = { type: 'elevenlabs' };
+  l.audioFile = `media/dialogue/${sceneName || 'untitled'}/${l.id}.wav`;
+  renderAll();
+}
+
+function addLine() {
+  const id = uid('line_new');
+  lines.push({
+    id, actor: ACTORS[0], type: 'Statement', mode: 'improv', blocking: false,
+    trigger: { type: 'scene-start' }, text: '',
+  });
+  selectedId = id;
+  renderAll();
+}
+
+function deleteLine() {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (!confirm(`Delete "${l.id}"? This can't be undone within the editor (nothing is saved until you export).`)) return;
+  lines = lines.filter((x) => x.id !== l.id);
+  selectedId = lines.length ? lines[0].id : null;
+  renderAll();
+}
+
+// ── Load / Export scene XML ─────────────────────────────────────────────
+function openLoadSceneModal() {
+  document.getElementById('modal-title').textContent = 'Load scene';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Paste raw scene XML, or choose a file. Reads the <code>&lt;Dialogue&gt;</code> block if present; if the scene predates this schema, falls back to migrating waypoint-nested lines (marked <code>legacy-waypoint</code> — pick a real trigger deliberately when you're ready, it's never guessed for you).</p>
+    <div class="file-drop" onclick="document.getElementById('scene-file-input').click()">Click to choose a .xml file</div>
+    <input type="file" id="scene-file-input" accept=".xml" style="display:none" onchange="onSceneFileChosen(this.files[0])">
+    <textarea id="load-scene-text" placeholder="&lt;Scene&gt;...&lt;/Scene&gt;"></textarea>
+    <div id="load-scene-msg"></div>
+    <p style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">Or, best-effort, try loading directly from the server at the API base above (needs <code>/scene/load/scene/raw</code> to exist and accept <code>{scene_name}</code> — unverified against the real mccf_api.py, use the paste/file path above if this doesn't work):</div>
+    <button class="pill-btn" onclick="loadSceneFromServer()">↓ Load "${esc(sceneName || '(set a scene name above)')}" from server</button>
+  `;
+  document.getElementById('modal-foot').innerHTML = `
+    <div class="modal-foot-left"></div>
+    <div class="modal-foot-right"><button class="pill-btn primary" onclick="applyLoadedSceneText()">Load</button></div>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function onSceneFileChosen(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById('load-scene-text').value = reader.result; };
+  reader.readAsText(file);
+}
+
+function applyLoadedSceneText() {
+  const raw = document.getElementById('load-scene-text').value;
+  applyLoadedSceneXml(raw);
+}
+
+function applyLoadedSceneXml(raw) {
+  const msgEl = document.getElementById('load-scene-msg');
+  if (!raw || !raw.trim()) {
+    if (msgEl) msgEl.innerHTML = '<div class="modal-err">Nothing to load — paste XML or choose a file first.</div>';
+    return;
+  }
+  let parsed = D.parseDialogueBlock(raw);
+  let usedLegacy = false;
+  if (parsed.length === 0) {
+    const legacy = D.parseLegacyWaypointLines(raw);
+    if (legacy.length > 0) { parsed = legacy; usedLegacy = true; }
+  }
+  if (parsed.length === 0) {
+    if (msgEl) msgEl.innerHTML = '<div class="modal-err">No &lt;Dialogue&gt; block and no legacy waypoint-nested lines found — nothing to load.</div>';
+    return;
+  }
+  lines = parsed;
+  loadedRawXml = raw;
+  selectedId = lines[0].id;
+  closeModal();
+  renderAll();
+  toast(usedLegacy
+    ? `Loaded ${lines.length} legacy-migrated line(s) — pick real triggers when ready`
+    : `Loaded ${lines.length} line(s) from the Dialogue block`);
+}
+
+async function loadSceneFromServer() {
+  const msgEl = document.getElementById('load-scene-msg');
+  if (!sceneName.trim()) {
+    if (msgEl) msgEl.innerHTML = '<div class="modal-err">Set a scene name in the header first.</div>';
+    return;
+  }
+  try {
+    const resp = await fetch(`${apiBase()}/scene/load/scene/raw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scene_name: sceneName.trim() }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const contentType = resp.headers.get('content-type') || '';
+    let raw;
+    if (contentType.includes('application/json')) {
+      const data = await resp.json();
+      raw = data.xml || data.raw || data.content || data.scene_xml || '';
+      if (!raw) throw new Error('server returned JSON but no xml/raw/content/scene_xml field — response shape didn\'t match what this tool expected');
+    } else {
+      raw = await resp.text();
+    }
+    applyLoadedSceneXml(raw);
+  } catch (e) {
+    if (msgEl) msgEl.innerHTML = `<div class="modal-err">Server load failed: ${esc(e.message || String(e))}<br><br>Use paste/file load above instead — that path never depends on this endpoint matching.</div>`;
+  }
+}
+
+function openExportSceneModal() {
+  document.getElementById('modal-title').textContent = 'Export scene';
+  let xml, errBox = '';
+  try {
+    const base = loadedRawXml || '<Scene>\n</Scene>';
+    xml = D.mergeDialogueIntoRawXml(base, lines);
+  } catch (e) {
+    xml = '';
+    errBox = `<div class="modal-err"><b>Can't export — the dialogue isn't valid yet:</b><br>${esc(e.message).replace(/\n/g, '<br>')}</div>`;
+  }
+  document.getElementById('modal-body').innerHTML = `
+    <p>${loadedRawXml
+      ? 'The loaded scene XML with only the &lt;Dialogue&gt; block replaced — everything else passes through byte-identical, per the merge contract.'
+      : 'No scene was loaded this session, so this is a minimal &lt;Scene&gt; wrapper around just the &lt;Dialogue&gt; block — merge it into a real scene file by hand, or load a scene first for a proper round-trip.'}</p>
+    ${errBox}
+    ${xml ? `<textarea readonly>${esc(xml)}</textarea>` : ''}
+  `;
+  document.getElementById('modal-foot').innerHTML = xml ? `
+    <div class="modal-foot-left">
+      <button class="pill-btn" onclick="copyModalTextarea()">Copy</button>
+      <button class="pill-btn" onclick="downloadText('${esc(sceneName || 'scene')}.xml', document.querySelector('#modal-body textarea').value)">Download .xml</button>
+    </div>
+    <div class="modal-foot-right"><button class="pill-btn" onclick="saveSceneToServer()">↑ Save to server (best-effort)</button></div>
+  ` : `<div class="modal-foot-right"><button class="pill-btn primary" onclick="closeModal()">Close</button></div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function saveSceneToServer() {
+  const xml = document.querySelector('#modal-body textarea');
+  if (!xml) return;
+  if (!sceneName.trim()) { toast('Set a scene name in the header first', true); return; }
+  try {
+    const resp = await fetch(`${apiBase()}/scene/save/scene`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scene_name: sceneName.trim(), xml: xml.value }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    toast('Saved to server');
+  } catch (e) {
+    toast('Server save failed: ' + (e.message || String(e)) + ' — use Copy/Download instead', true);
+  }
+}
+
+// ── Kate export / import (real engine, XML format — Day 73 revision) ───
+function openExportKateModal() {
+  document.getElementById('modal-title').textContent = 'Export for Kate';
+  let xml, errBox = '';
+  try {
+    xml = D.exportForKate(lines);
+  } catch (e) {
+    xml = '';
+    errBox = `<div class="modal-err"><b>Can't export — the dialogue isn't valid yet:</b><br>${esc(e.message).replace(/\n/g, '<br>')}</div>`;
+  }
+  document.getElementById('modal-body').innerHTML = `
+    <p>Plain &lt;Dialogue&gt; XML — this schema's own format (Day 73 revision; superseded the original bracket-transcript plan since <code>id</code> already does that job). Paste this into a prompt with instructions to return the same shape, delivery tags inserted, ids preserved where the line is unchanged.</p>
+    ${errBox}
+    ${xml ? `<textarea readonly>${esc(xml)}</textarea>` : ''}
+  `;
+  document.getElementById('modal-foot').innerHTML = xml ? `
+    <div class="modal-foot-left">
+      <button class="pill-btn" onclick="copyModalTextarea()">Copy</button>
+      <button class="pill-btn" onclick="downloadText('kate_export.xml', document.querySelector('#modal-body textarea').value)">Download .xml</button>
+    </div>
+    <div class="modal-foot-right"><button class="pill-btn primary" onclick="closeModal()">Done</button></div>
+  ` : `<div class="modal-foot-right"><button class="pill-btn primary" onclick="closeModal()">Close</button></div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function openImportKateModal() {
+  document.getElementById('modal-title').textContent = 'Import tagged dialogue';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Paste the collaborator's returned XML. Matches by <code>id</code> first (an id match always wins as an edit); falls back to exact text match if an id gets dropped or regenerated, keeping the <b>original</b> id either way. Anything with a new tag and no explicit provenance gets stamped <code>llm-interpreted:&lt;name&gt;</code>.</p>
+    <div class="field-inline"><label>Collaborator name</label><input type="text" id="import-name" value="Kate" style="flex:1"></div>
+    <textarea id="import-text" placeholder="&lt;Dialogue&gt;...&lt;/Dialogue&gt;"></textarea>
+    <div id="import-msg"></div>
+  `;
+  document.getElementById('modal-foot').innerHTML = `<div class="modal-foot-right"><button class="pill-btn primary" onclick="doImport()">Import</button></div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function doImport() {
+  const name = document.getElementById('import-name').value.trim() || 'Kate';
+  const raw = document.getElementById('import-text').value;
+  const msgEl = document.getElementById('import-msg');
+  if (!raw.trim()) { msgEl.innerHTML = '<div class="modal-err">Paste the returned XML first.</div>'; return; }
+
+  const result = D.importFromKate(raw, lines, name);
+  if (!result.valid) {
+    msgEl.innerHTML = `<div class="modal-err"><b>Not applied — the reconciled result doesn't validate:</b><ul>${result.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>Fix the pasted reply (or edit lines manually afterward) and try again.</div>`;
+    return;
+  }
+  lines = result.lines;
+  closeModal();
+  renderAll();
+  const parts = [];
+  if (result.updatedIds.length) parts.push(`${result.updatedIds.length} updated`);
+  if (result.addedIds.length) parts.push(`${result.addedIds.length} added`);
+  toast(parts.length ? `${name}: ${parts.join(', ')}` : `${name}: nothing matched — check the pasted XML`, parts.length === 0);
+}
+
+// ── modal / clipboard / file helpers ────────────────────────────────────
+function closeModal() { document.getElementById('modal-overlay').classList.remove('show'); }
+
+function copyModalTextarea() {
+  const ta = document.querySelector('#modal-body textarea');
+  if (!ta) return;
+  ta.select();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(() => toast('Copied'));
+    } else {
+      document.execCommand('copy');
+      toast('Copied');
+    }
+  } catch (e) {
+    toast('Copy failed — select and copy manually', true);
+  }
+}
+
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function toast(msg, isErr) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:${isErr ? '#2a1414' : '#0f2419'};color:${isErr ? 'var(--danger)' : 'var(--accent)'};border:1px solid ${isErr ? 'var(--danger)' : 'var(--accent)'};padding:9px 16px;border-radius:7px;font-size:12.5px;z-index:100`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+renderAll();
+</script>
+</body>
+</html>

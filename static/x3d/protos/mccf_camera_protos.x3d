@@ -99,24 +99,29 @@
   Interpolators, no runtime wiring from the Loader at all beyond binding — this camera
   never moves once placed.
 
-  Orientation is yaw-then-pitch, composed via two nested Transforms rather than a single
-  hand-derived combined axis-angle rotation: the outer Transform holds world position and
-  rotates about the world Y axis (yaw), the inner Transform is its child and rotates about
-  its own local X axis (pitch). Composer supplies both as plain single-axis SFRotation
-  values (e.g. "0 1 0 <radians>" / "1 0 0 <radians>") — ordinary X3D parent/child rotation
-  composition does the rest. Deliberately avoids combining yaw+pitch into one custom
-  axis-angle computation in JS, which would need to be re-derived and re-verified rather
-  than relying on well-understood scene-graph nesting.
+  Orientation is yaw-then-pitch-then-roll, composed via three nested Transforms rather
+  than a single hand-derived combined axis-angle rotation: the outermost Transform holds
+  world position and rotates about the world Y axis (yaw), its child rotates about its
+  own local X axis (pitch), and its child in turn rotates about its own local Z axis
+  (roll — Day 77, added for canted/Dutch-style framing on placed cameras, not just a
+  live per-cue formula). Composer supplies all three as plain single-axis SFRotation
+  values (e.g. "0 1 0 <radians>" / "1 0 0 <radians>" / "0 0 1 <radians>") — ordinary
+  X3D parent/child rotation composition does the rest, same reasoning as the original
+  yaw/pitch design: deliberately avoids combining all three into one custom axis-angle
+  computation in JS, which would need to be re-derived and re-verified rather than
+  relying on well-understood scene-graph nesting.
 
   Binding/triggering a placed free camera during playback (an Events Editor cue, or a
-  "goto" button alongside VP_Overview/VP_Origin) is NOT wired yet — this proto only covers
-  placement + export. Follow-up, not done here.
+  "goto" button alongside VP_Overview/VP_Origin) is handled by the Loader's
+  _bindFreeCamera() (confirmed working, Day 77) — this proto covers placement + export;
+  binding lives in mccf_x3d_loader.html.
 -->
 <ProtoDeclare name="FreeCamera">
   <ProtoInterface>
     <field accessType="inputOutput" type="SFVec3f"    name="position"    value="0 1.7 0"/>
     <field accessType="inputOutput" type="SFRotation" name="yaw"         value="0 1 0 0"/>
     <field accessType="inputOutput" type="SFRotation" name="pitch"       value="1 0 0 0"/>
+    <field accessType="inputOutput" type="SFRotation" name="roll"        value="0 0 1 0"/>
     <field accessType="inputOutput" type="SFString"   name="description" value="Free Camera"/>
     <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
   </ProtoInterface>
@@ -130,12 +135,17 @@
         <IS>
           <connect nodeField="rotation" protoField="pitch"/>
         </IS>
-        <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0" jump="true" description="Free Camera">
+        <Transform DEF="RollXform">
           <IS>
-            <connect nodeField="description" protoField="description"/>
-            <connect nodeField="set_bind"    protoField="set_bind"/>
+            <connect nodeField="rotation" protoField="roll"/>
           </IS>
-        </Viewpoint>
+          <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0" jump="true" description="Free Camera">
+            <IS>
+              <connect nodeField="description" protoField="description"/>
+              <connect nodeField="set_bind"    protoField="set_bind"/>
+            </IS>
+          </Viewpoint>
+        </Transform>
       </Transform>
     </Transform>
   </ProtoBody>

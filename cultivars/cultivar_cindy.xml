@@ -25,6 +25,6 @@
   <Alias>Salida</Alias>
 
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
-  <HAnimFigure src="avatars/cindy_hanim.x3d" loa="4"/>
+  <HAnimFigure src="cindy_hanim.x3d" loa="4"/>
 
 </CultivarDefinition>

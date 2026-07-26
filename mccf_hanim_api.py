@@ -29,6 +29,7 @@ register_generate_api, register_playback_api, register_chorus_api):
 """
 
 import os
+import math as _math
 from flask import Blueprint, request, jsonify
 import base64  as _b64
 import shutil  as _shutil_hanim
@@ -1186,6 +1187,324 @@ def _write_expressions_xml(expressions_path: str, expressions: list) -> int:
     return written
 
 
+def _look_at_orientation(cam_pos, target_pos, v_angle_deg):
+    """
+    Python port of mccf_x3d_loader.html's _lookAtOrientation — including the Day 63
+    LOOK_AT_HEIGHT correction (aim at eye height, not the ground point) that the events
+    editor's own _prevLookAtOrientation never received. Ported from the Loader, the
+    corrected/authoritative source, not the stale copy — see Day 77 Camera Model
+    Revision doc for how that staleness was found (in mccf_scene_composer.html's
+    camera-seeding feature) and fixed there too.
+
+    Returns [ax, ay, az, angle] — X3D SFRotation axis-angle.
+    """
+    LOOK_AT_HEIGHT = 1.7
+    dx = target_pos[0] - cam_pos[0]
+    dy = (target_pos[1] + LOOK_AT_HEIGHT) - cam_pos[1]
+    dz = target_pos[2] - cam_pos[2]
+    yaw = _math.atan2(-dx, -dz)
+    horiz_dist = _math.sqrt(dx * dx + dz * dz)
+    pitch = _math.atan2(dy, horiz_dist) + (v_angle_deg * _math.pi / 180)
+    cos_y, sin_y = _math.cos(yaw / 2), _math.sin(yaw / 2)
+    cos_p, sin_p = _math.cos(pitch / 2), _math.sin(pitch / 2)
+    qw = cos_y * cos_p
+    qx = cos_y * sin_p
+    qy = sin_y * cos_p
+    qz = -sin_y * sin_p
+    angle = 2 * _math.acos(min(1, max(-1, qw)))
+    s = _math.sqrt(1 - qw * qw)
+    if s < 0.001:
+        ax, ay, az = 0, 1, 0
+    else:
+        ax, ay, az = qx / s, qy / s, qz / s
+    return [ax, ay, az, angle]
+
+
+def _compute_orbit_camera_keyframes(radius, height, start_angle_deg, v_angle_deg, steps=36):
+    """
+    Python port of mccf_x3d_loader.html's _executeAgentOrbit keyframe loop. Target is
+    always local origin [0,0,0] — the avatar's own Transform IS the world position,
+    same reasoning as the Loader's runtime version (this is now authored once at
+    Character-Creator time instead of computed at cue-fire time, but the geometry is
+    identical). Returns (keys, pos_key_values, ori_key_values) — flat lists, X3D
+    MFFloat/MFVec3f/MFRotation shapes, ready to join into attribute strings.
+    """
+    keys, pos_vals, ori_vals = [], [], []
+    subject_pos = [0, 0, 0]
+    for i in range(steps + 1):
+        frac = i / steps
+        theta = (start_angle_deg + frac * 360) * _math.pi / 180
+        cx = radius * _math.sin(theta)
+        cy = height
+        cz = radius * _math.cos(theta)
+        orient = _look_at_orientation([cx, cy, cz], subject_pos, v_angle_deg)
+        keys.append(frac)
+        pos_vals.append((cx, cy, cz))
+        ori_vals.append(tuple(orient))
+    return keys, pos_vals, ori_vals
+
+
+def _compute_track_camera_keyframes(off0, off1, height, depth, v_angle_deg, steps=36):
+    """
+    Python port of mccf_x3d_loader.html's _executeAgentTrack keyframe loop. Same local-
+    origin-target reasoning as orbit above.
+    """
+    keys, pos_vals, ori_vals = [], [], []
+    local_origin = [0, 0, 0]
+    for i in range(steps + 1):
+        frac = i / steps
+        cx = off0 + (off1 - off0) * frac
+        cy = height
+        cz = depth
+        orient = _look_at_orientation([cx, cy, cz], local_origin, v_angle_deg)
+        keys.append(frac)
+        pos_vals.append((cx, cy, cz))
+        ori_vals.append(tuple(orient))
+    return keys, pos_vals, ori_vals
+
+
+# DEF names used INSIDE the avatar file (bare, one per avatar — not per-scene-instance).
+# Matches the identity-EXPORT convention _write_clip_nodes already established:
+# "localDEF and AS are the same bare name. The agent-suffix... is applied by the Scene
+# Composer's IMPORT AS= attribute, not here." Composer's IMPORT AS= targets deliberately
+# match what the Loader already looks up today (VP_{subject}_Eye, CAM_OrbitProto_{subject},
+# CAM_TrackProto_{subject}) — see the Day 77 Camera Model Revision doc — so only the
+# Loader's *lookup mechanism* needs to change (getNamedNode -> getImportedNode), not any
+# caller-side string construction.
+_CAM_RIG_DEFS = {'agent_eye': 'CAM_Eye', 'agent_side': 'CAM_Side',
+                 'agent_orbit': 'CAM_Orbit', 'agent_track': 'CAM_Track'}
+
+# Relative path from static/avatars/ to static/x3d/protos/ — confirmed against
+# mccf_api.py's own comment on X3DAssets ("same relative-path convention as protos/,
+# see buildCameraProtoDecls") and Composer's avatar Inline path (../avatars/... from
+# static/x3d/), not guessed.
+_CAM_PROTO_REL_URL = '../x3d/protos/mccf_camera_protos.x3d'
+
+
+def _ensure_camera_proto_declares(scene_el):
+    """
+    Add ExternProtoDeclare for AgentOrbitCamera/AgentTrackCamera to the avatar file's
+    own Scene if not already present — proto instantiation requires a matching
+    ProtoDeclare/ExternProtoDeclare in the SAME execution context, not inherited from
+    whatever inlines this file. Interface mirrors mccf_camera_protos.x3d's real
+    ProtoDeclare exactly (position/rotation via initialTranslation/initialRotation,
+    not a single combined field — same reasoning as that file's own comment: ordinary
+    parent/child Transform nesting composes yaw/pitch/roll, not custom JS axis-angle
+    math). Idempotent — checks by name before inserting, inserted at the front of
+    Scene so it precedes any ProtoInstance that references it.
+    """
+    ns = _X3D_NS
+    existing_names = set()
+    for el in scene_el.findall(f'{{{ns}}}ExternProtoDeclare'):
+        if el.get('name'):
+            existing_names.add(el.get('name'))
+
+    def _make_declare(name, extra_fields):
+        if name in existing_names:
+            return None
+        el = _ET_hanim.Element(f'{{{ns}}}ExternProtoDeclare')
+        el.set('name', name)
+        el.set('url', f'"{_CAM_PROTO_REL_URL}#{name}"')
+        fields = [
+            ('inputOutput', 'SFVec3f', 'initialTranslation'),
+            ('inputOutput', 'SFRotation', 'initialRotation'),
+            ('inputOutput', 'MFFloat', 'key'),
+            ('inputOutput', 'MFVec3f', 'keyValue'),
+            ('inputOutput', 'MFRotation', 'oriKeyValue'),
+            ('inputOutput', 'SFTime', 'cycleInterval'),
+            ('inputOutput', 'SFBool', 'loop'),
+            ('inputOutput', 'SFBool', 'enabled'),
+            ('inputOutput', 'SFTime', 'startTime'),
+            ('inputOutput', 'SFString', 'description'),
+            ('inputOnly', 'SFBool', 'set_bind'),
+        ]
+        for access, ftype, fname in fields:
+            f_el = _ET_hanim.SubElement(el, f'{{{ns}}}field')
+            f_el.set('accessType', access)
+            f_el.set('type', ftype)
+            f_el.set('name', fname)
+        return el
+
+    for name in ('AgentOrbitCamera', 'AgentTrackCamera'):
+        el = _make_declare(name, None)
+        if el is not None:
+            scene_el.insert(0, el)
+
+
+def _remove_elements_by_def(root, def_names) -> None:
+    """Recursively remove elements whose DEF is in def_names, in-place. Mirrors
+    _remove_routes' recursion pattern — needed so re-exporting from Character Creator
+    replaces a previous rig instead of accumulating duplicate-DEF nodes (unlike
+    _write_clip_nodes, which is append-only; camera rig nodes are fixed-identity, one
+    per avatar, so idempotent replacement is the correct behavior here, not append)."""
+    to_remove = [c for c in root if c.get('DEF') in def_names]
+    for c in to_remove:
+        root.remove(c)
+    for child in root:
+        _remove_elements_by_def(child, def_names)
+
+
+def _remove_elements_by_localdef(root, tag, def_names) -> None:
+    """Same as above but for EXPORT elements, keyed by localDEF not DEF."""
+    to_remove = [c for c in root if c.tag == tag and c.get('localDEF') in def_names]
+    for c in to_remove:
+        root.remove(c)
+    for child in root:
+        _remove_elements_by_localdef(child, tag, def_names)
+
+
+def _write_camera_rig_nodes(scene_el, camera_rig: dict) -> list:
+    """
+    Write CAM_Eye/CAM_Side/CAM_Orbit/CAM_Track nodes (whichever camera_rig marks
+    enabled) into the avatar file's own Scene, each with a matching identity EXPORT
+    statement so Composer's IMPORT ... AS= mechanism can pull them into a scene at
+    the correct per-instance name. Removes any previously-written rig nodes first —
+    idempotent replacement, not accumulation (see _remove_elements_by_def).
+
+    Returns the list of rig types actually written (for the manifest and the
+    hanim_export response).
+    """
+    ns = _X3D_NS
+    all_defs = set(_CAM_RIG_DEFS.values())
+    _remove_elements_by_def(scene_el, all_defs)
+    _remove_elements_by_localdef(scene_el, f'{{{ns}}}EXPORT', all_defs)
+
+    written = []
+    needs_protos = False
+
+    def _add_export(def_name):
+        ex = _ET_hanim.SubElement(scene_el, f'{{{ns}}}EXPORT')
+        ex.set('localDEF', def_name)
+        ex.set('AS', def_name)
+
+    eye_cfg = camera_rig.get('agent_eye') or {}
+    if eye_cfg.get('enabled'):
+        vp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}Viewpoint')
+        vp.set('DEF', _CAM_RIG_DEFS['agent_eye'])
+        vp.set('position', '0 1.7 0.2')
+        vp.set('orientation', '0 1 0 3.14159')
+        vp.set('jump', 'true')
+        vp.set('description', 'Eye')
+        _add_export(_CAM_RIG_DEFS['agent_eye'])
+        written.append('agent_eye')
+
+    side_cfg = camera_rig.get('agent_side') or {}
+    if side_cfg.get('enabled'):
+        vp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}Viewpoint')
+        vp.set('DEF', _CAM_RIG_DEFS['agent_side'])
+        vp.set('position', '2.5 1.5 0')
+        vp.set('orientation', '0 1 0 1.5708')
+        vp.set('jump', 'true')
+        vp.set('description', 'Side')
+        _add_export(_CAM_RIG_DEFS['agent_side'])
+        written.append('agent_side')
+
+    orbit_cfg = camera_rig.get('agent_orbit') or {}
+    if orbit_cfg.get('enabled'):
+        radius = float(orbit_cfg.get('radius', 8.6))
+        height = float(orbit_cfg.get('height', 3.2))
+        start_angle = float(orbit_cfg.get('startAngle', 0))
+        v_angle = float(orbit_cfg.get('vAngle', -8))
+        cycle = float(orbit_cfg.get('cycleInterval', 4))
+        loop = bool(orbit_cfg.get('loop', True))
+        keys, pos_vals, ori_vals = _compute_orbit_camera_keyframes(radius, height, start_angle, v_angle)
+        el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}AgentOrbitCamera')
+        el.set('DEF', _CAM_RIG_DEFS['agent_orbit'])
+        el.set('description', 'Orbit')
+        el.set('cycleInterval', str(cycle))
+        el.set('loop', 'true' if loop else 'false')
+        el.set('initialTranslation', '%.6g %.6g %.6g' % pos_vals[0])
+        el.set('initialRotation', '%.6g %.6g %.6g %.6g' % ori_vals[0])
+        el.set('key', ' '.join('%.6g' % k for k in keys))
+        el.set('keyValue', ' '.join('%.6g %.6g %.6g' % p for p in pos_vals))
+        el.set('oriKeyValue', ' '.join('%.6g %.6g %.6g %.6g' % o for o in ori_vals))
+        _add_export(_CAM_RIG_DEFS['agent_orbit'])
+        written.append('agent_orbit')
+        needs_protos = True
+
+    track_cfg = camera_rig.get('agent_track') or {}
+    if track_cfg.get('enabled'):
+        off0 = float(track_cfg.get('trackOffset', -3))
+        off1 = float(track_cfg.get('trackOffsetEnd', 3))
+        height = float(track_cfg.get('height', 1.7))
+        depth = float(track_cfg.get('trackDepth', 4))
+        v_angle = float(track_cfg.get('vAngle', -8))
+        cycle = float(track_cfg.get('cycleInterval', 4))
+        keys, pos_vals, ori_vals = _compute_track_camera_keyframes(off0, off1, height, depth, v_angle)
+        el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}AgentTrackCamera')
+        el.set('DEF', _CAM_RIG_DEFS['agent_track'])
+        el.set('description', 'Track')
+        el.set('cycleInterval', str(cycle))
+        el.set('loop', 'false')  # agent_track always plays once — Camera Spec §3, not author-configurable
+        el.set('initialTranslation', '%.6g %.6g %.6g' % pos_vals[0])
+        el.set('initialRotation', '%.6g %.6g %.6g %.6g' % ori_vals[0])
+        el.set('key', ' '.join('%.6g' % k for k in keys))
+        el.set('keyValue', ' '.join('%.6g %.6g %.6g' % p for p in pos_vals))
+        el.set('oriKeyValue', ' '.join('%.6g %.6g %.6g %.6g' % o for o in ori_vals))
+        _add_export(_CAM_RIG_DEFS['agent_track'])
+        written.append('agent_track')
+        needs_protos = True
+
+    if needs_protos:
+        _ensure_camera_proto_declares(scene_el)
+
+    return written
+
+
+def _camera_rig_manifest_path(hanim_src: str) -> str:
+    """static/avatars/cindy_hanim.x3d -> static/avatars/cindy_hanim.manifest.xml —
+    same sidecar-file, same-basename-plus-suffix convention as
+    _expressions_xml_path (cindy_hanim.x3d -> cindy_expressions.xml), per the Avatar
+    Camera Rig Manifest doc §4 decision (XML sidecar, not embedded in the .x3d)."""
+    base = os.path.basename(hanim_src)
+    stem = base[:-4] if base.lower().endswith('.x3d') else base
+    return os.path.join(_avatar_dir(), f'{stem}.manifest.xml')
+
+
+def _write_camera_rig_manifest(hanim_src: str, camera_rig: dict, written_rig_types: list) -> None:
+    """
+    Write the sidecar XML manifest per Avatar Camera Rig Manifest doc §4:
+    '<MetadataSet name="cameraRig"> listing the Viewpoints actually parented in that
+    file'. Reuses field-map.js's own <MetadataSet>/<MetadataString> house style,
+    per that doc's explicit convention — hand-rolled here since this is the Python
+    side, not a shared module with the JS convention, but the output shape matches.
+
+    Carries the full authored parameter values as attributes, not just boolean
+    presence — needed so Character Creator can reconstruct its form state when an
+    author reopens an avatar that already has a rig, rather than only being able to
+    tell Composer "orbit exists" with no way to re-populate radius/height/etc. The
+    doc's own wording ("listing the Viewpoints actually parented") doesn't forbid
+    this; Composer's read side only needs the name attribute, everything else is
+    additional and backward-compatible with a reader that ignores extra attributes.
+
+    Note: behavior-clip listing (the manifest's other stated purpose, per §4 —
+    "plus whichever behavior clips are present") is NOT added here. Clips are
+    already written by _write_clip_nodes earlier in hanim_export() from a different
+    payload key (clips, not cameraRig) — merging that into this manifest write is a
+    reasonable follow-up but out of scope for the camera rig work this serves; not
+    doing it silently.
+    """
+    path = _camera_rig_manifest_path(hanim_src)
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<MetadataSet name="cameraRig">']
+    for rig_type in written_rig_types:
+        cfg = camera_rig.get(rig_type) or {}
+        attrs = [f'name="{rig_type}"', 'value="1"']
+        for key, val in cfg.items():
+            if key == 'enabled':
+                continue
+            if isinstance(val, bool):
+                attrs.append(f'{key}="{"true" if val else "false"}"')
+            else:
+                attrs.append(f'{key}="{val}"')
+        lines.append(f'  <MetadataString {" ".join(attrs)}/>')
+    lines.append('</MetadataSet>')
+    content = '\n'.join(lines) + '\n'
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        fh.write(content)
+    os.replace(tmp, path)
+
+
 def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
     """
     Append TimeSensor + OrientationInterpolator nodes for each clip, then
@@ -1418,6 +1737,18 @@ def hanim_export():
 
     clips_written, routes_written = _write_clip_nodes(scene_el, clips, existing_routes)
 
+    # ── Write camera rig nodes (Day 77) ────────────────────────────────────
+    # camera_rig: { agent_eye: {enabled}, agent_side: {enabled},
+    #               agent_orbit: {enabled, radius, height, startAngle, vAngle,
+    #                             cycleInterval, loop},
+    #               agent_track: {enabled, trackOffset, trackOffsetEnd, height,
+    #                             trackDepth, vAngle, cycleInterval} }
+    # Written into the avatar's OWN Scene (this file), not the calling scene —
+    # per the Avatar Camera Rig Manifest doc's decision that rigs are authored once
+    # per avatar file, not injected generically at Composer export time.
+    camera_rig = body.get('cameraRig') or {}
+    camera_rig_written = _write_camera_rig_nodes(scene_el, camera_rig)
+
     # ── Write AU displacer weights ────────────────────────────────────────
     displacers      = body.get('displacers') or []
     displacers_updated = _update_displacer_weights(scene_el, displacers)
@@ -1515,6 +1846,32 @@ def hanim_export():
                         'error': f'atomic rename failed (backups preserved): {exc}'}), 500
 
     _expr_basename = os.path.basename(expressions_filepath)
+
+    # Manifest write happens AFTER the atomic X3D rename succeeds — a manifest
+    # describing a rig that didn't actually get saved (because the atomic write
+    # failed and rolled back above) would be worse than no manifest at all, since
+    # Composer would then believe rig content exists that isn't really there.
+    # Not itself part of the atomic triple-write (manifest is discovery metadata,
+    # not scene-critical content — an out-of-date-by-a-few-seconds manifest on a
+    # write failure that's already been reported as an error is an acceptable gap,
+    # a phantom rig claim is not) but still best-effort try/except so a manifest
+    # write failure doesn't turn a successful export into a 500.
+    try:
+        _write_camera_rig_manifest(hanim_src, camera_rig, camera_rig_written)
+    except OSError as exc:
+        return jsonify({
+            'status': 'ok',
+            'hanim_path': f'/static/avatars/{os.path.basename(hanim_src)}',
+            'cultivar_path': f'cultivars/cultivar_{cultivar_name}.xml',
+            'expressions_path': f'/static/avatars/{_expr_basename}',
+            'clips_written': clips_written,
+            'routes_written': routes_written,
+            'skin_updated': skin_updated,
+            'expressions_written': expressions_written,
+            'camera_rig_written': camera_rig_written,
+            'camera_rig_manifest_warning': f'manifest write failed: {exc}',
+        })
+
     return jsonify({
         'status':               'ok',
         'hanim_path':           f'/static/avatars/{os.path.basename(hanim_src)}',
@@ -1523,6 +1880,7 @@ def hanim_export():
         'clips_written':        clips_written,
         'routes_written':       routes_written,
         'skin_updated':         skin_updated,
+        'camera_rig_written':   camera_rig_written,
         'displacers_updated':   displacers_updated,
         'expressions_written':  expressions_written,
     })

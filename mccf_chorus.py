@@ -29,13 +29,30 @@ Module ownership (never duplicate logic in mccf_api.py or mccf_playback.py):
 
 Constraints (Never Change):
   Chorus fires async — never blocks arc progression or TTS
-  Chorus has no voice — text display only
-  Chorus is not in voice map, arc dialogue, or BroadcastChannel
+  Chorus is not in the voice map or BroadcastChannel
   mccf_chorus.py owns all Chorus logic
   Couplers write to expressive_cv only — unrelated to Chorus
 
+Day 73 — REVISION to a previously-stated constraint, on record, not silent:
+  This module's header used to list "Chorus has no voice — text display
+  only" and "Chorus is not in ... arc dialogue" as never-change constraints.
+  The Day 72 seed doc §5.2 explicitly decided to revise this: a Chorus
+  firing may now ALSO produce a real Dialogue Line when the zone's
+  <Chorus> carries an optional `voice_actor` attribute (an Actor name in
+  the scene) — see ChorusConfig.voice_actor and ChorusManager's per-take
+  capture below. The base case (no voice_actor configured) is completely
+  unchanged: text-overlay-only, exactly as before. What changed is that
+  this is now an explicit opt-in extension, not a hard prohibition. Two
+  things that DIDN'T change, still true: Chorus still never calls TTS
+  itself (a captured Line is just text + metadata — the same
+  /voice/preview → TTS pipeline any other dialogue line goes through would
+  handle actual synthesis, if and when that's wired up), and a captured
+  Line is never auto-merged into the scene's canonical <Dialogue> block —
+  promotion is a deliberate author action, per-take capture only (see
+  ChorusManager.captured_lines()).
+
 Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
-MCCF V4, Day 13
+MCCF V4, Day 13 (voice_actor extension: Day 73)
 """
 
 import os
@@ -85,6 +102,7 @@ class ChorusConfig:
     persona:       str          = ""          # <Persona> text, overrides tone if set
     x3d_def:       str          = ""          # <MarqueeTarget x3d_def=...>
     viewpoint_def: str          = ""          # <MarqueeTarget viewpoint_def=...>
+    voice_actor:   str          = ""          # Day 73 — optional Actor name; see module header revision
 
     @property
     def is_mute(self) -> bool:
@@ -93,6 +111,10 @@ class ChorusConfig:
     @property
     def is_stub(self) -> bool:
         return self.llm == "stub"
+
+    @property
+    def has_voice(self) -> bool:
+        return bool(self.voice_actor)
 
 
 def parse_chorus_from_zone_element(zone_el: ET.Element) -> Optional[ChorusConfig]:
@@ -112,6 +134,7 @@ def parse_chorus_from_zone_element(zone_el: ET.Element) -> Optional[ChorusConfig
     tone       = chorus_el.get("tone", "oracular").strip()
     max_tokens = int(chorus_el.get("max_tokens", 80))
     display    = chorus_el.get("display", "overlay").strip()
+    voice_actor = chorus_el.get("voice_actor", "").strip()
 
     persona_el = chorus_el.find("Persona")
     persona    = (persona_el.text or "").strip() if persona_el is not None else ""
@@ -130,6 +153,7 @@ def parse_chorus_from_zone_element(zone_el: ET.Element) -> Optional[ChorusConfig
         persona=persona,
         x3d_def=x3d_def,
         viewpoint_def=viewpoint_def,
+        voice_actor=voice_actor,
     )
 
 
@@ -341,8 +365,15 @@ class ChorusManager:
 
     def __init__(self):
         self._config:   Optional[ChorusConfig] = None
-        self._last:     dict = {"text": "", "zone_id": "", "timestamp": 0, "pending": False}
+        self._last:     dict = {"text": "", "zone_id": "", "timestamp": 0, "pending": False, "voice_line": None}
         self._lock = threading.Lock()
+        # Day 73 — per-take capture (seed doc §5.2): every firing where the
+        # active config has a voice_actor produces a dialogue-schema-shaped
+        # Line, appended here. Never auto-merged into any scene's canonical
+        # <Dialogue> block — promotion is a deliberate author action,
+        # this list is just what's been captured and not yet acted on.
+        self._captured_lines: list = []
+        self._voice_line_counter: int = 0
 
     # ── Configuration ────────────────────────────────────────────────────
 
@@ -452,6 +483,42 @@ class ChorusManager:
         t = threading.Thread(target=self._run_chorus, args=(config, arc_xml_str, cv), daemon=True)
         t.start()
 
+    def _build_voice_line_locked(self, config: ChorusConfig, text: str) -> Optional[dict]:
+        """
+        Day 73 — construct the dialogue-schema-shaped Line for a Chorus
+        firing, when config.voice_actor is set. Must be called with
+        self._lock already held (mutates self._voice_line_counter and
+        appends to self._captured_lines) — not a public method.
+
+        Shape matches static/js/dialogue-xml.js's in-memory Line shape
+        exactly (see docs/DIALOGUE_SCHEMA.md): actor=voice_actor,
+        type='Statement', mode='improv' (per seed doc §5.2 — Chorus
+        commentary is generated fresh each firing, not authored), trigger
+        is the arc-complete event that caused this firing (build-schedule
+        item 3's new trigger kind — a Chorus firing IS an arc-complete
+        event, so this is the natural trigger to record, not a new one
+        invented for the purpose).
+
+        Per-take, not auto-canon: this Line is appended to
+        self._captured_lines and NOT written into any scene XML. Whether
+        it's ever promoted into the scene's real <Dialogue> block is a
+        deliberate author action elsewhere, not this method's job.
+        """
+        if not config.voice_actor:
+            return None
+        self._voice_line_counter += 1
+        line = {
+            "id": f"chorus_{config.zone_id}_{self._voice_line_counter:04d}",
+            "actor": config.voice_actor,
+            "type": "Statement",
+            "mode": "improv",
+            "blocking": False,
+            "trigger": {"type": "arc-complete", "zone": config.zone_id},
+            "text": text,
+        }
+        self._captured_lines.append(line)
+        return line
+
     def _run_chorus(self, config: ChorusConfig, arc_xml_str: str, cv: dict):
         try:
             transcript = build_transcript(arc_xml_str)
@@ -462,6 +529,7 @@ class ChorusManager:
             text = _dispatch_llm(config, transcript, cv)
             print(f"  Chorus response: {text[:80]!r}{'…' if len(text)>80 else ''}")
             with self._lock:
+                voice_line = self._build_voice_line_locked(config, text)
                 self._last = {
                     "text":       text,
                     "zone_id":    config.zone_id,
@@ -469,6 +537,7 @@ class ChorusManager:
                     "display":    config.display,
                     "timestamp":  time.time(),
                     "pending":    False,
+                    "voice_line": voice_line,
                 }
         except Exception as e:
             print(f"  Chorus error: {e}")
@@ -508,6 +577,7 @@ class ChorusManager:
             text = _dispatch_llm(config, transcript, cv)
             print(f"  Chorus response: {text[:80]!r}{'…' if len(text)>80 else ''}")
             with self._lock:
+                voice_line = self._build_voice_line_locked(config, text)
                 self._last = {
                     "text":       text,
                     "zone_id":    config.zone_id,
@@ -515,6 +585,7 @@ class ChorusManager:
                     "display":    config.display,
                     "timestamp":  time.time(),
                     "pending":    False,
+                    "voice_line": voice_line,
                 }
         except Exception as e:
             print(f"  Chorus error: {e}")
@@ -527,9 +598,25 @@ class ChorusManager:
         with self._lock:
             return dict(self._last)
 
+    def captured_lines(self) -> list:
+        """
+        Day 73 — all voice-actor Chorus lines captured this session,
+        per-take. Returns a shallow copy; callers get a snapshot, not a
+        live view. See _build_voice_line_locked for the shape and the
+        "never auto-merged into canon" contract.
+        """
+        with self._lock:
+            return list(self._captured_lines)
+
+    def clear_captured_lines(self):
+        """Discard captured-but-not-yet-promoted lines (e.g. starting a
+        fresh take). Does not touch self._last / the overlay display."""
+        with self._lock:
+            self._captured_lines = []
+
     def clear(self):
         with self._lock:
-            self._last = {"text": "", "zone_id": "", "timestamp": 0, "pending": False}
+            self._last = {"text": "", "zone_id": "", "timestamp": 0, "pending": False, "voice_line": None}
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +729,33 @@ def chorus_clear():
     return jsonify({"status": "cleared"})
 
 
+@chorus_bp.route("/chorus/captured_lines", methods=["GET"])
+def chorus_captured_lines():
+    """
+    GET /chorus/captured_lines
+    Day 73 — every voice-actor Chorus line captured this session (see
+    ChorusConfig.voice_actor, ChorusManager._build_voice_line_locked).
+    Per-take: none of these have been written into any scene's <Dialogue>
+    block. This endpoint is read-only reporting for whatever eventually
+    does the promotion (the not-yet-built Dialogue editor, most likely) —
+    it does not itself merge anything into scene XML.
+
+    Response: { "lines": [ {id, actor, type, mode, blocking, trigger, text}, ... ] }
+    Empty list is normal — either no zone in this scene has a voice_actor
+    configured, or none has fired yet this session.
+    """
+    return jsonify({"lines": _mgr().captured_lines()})
+
+
+@chorus_bp.route("/chorus/captured_lines/clear", methods=["POST"])
+def chorus_captured_lines_clear():
+    """POST /chorus/captured_lines/clear — discard captured-but-not-yet-
+    promoted voice lines (e.g. starting a fresh take/session). Does not
+    touch the overlay display state — use /chorus/clear for that."""
+    _mgr().clear_captured_lines()
+    return jsonify({"status": "cleared"})
+
+
 @chorus_bp.route("/chorus/config", methods=["GET"])
 def chorus_config():
     """GET /chorus/config — active Chorus config (for diagnostics)."""
@@ -658,6 +772,8 @@ def chorus_config():
         "has_persona":  bool(cfg.persona),
         "viewpoint":    cfg.viewpoint_def,
         "x3d_def":      cfg.x3d_def,
+        "has_voice_actor": cfg.has_voice,
+        "voice_actor":  cfg.voice_actor,
     })
 
 

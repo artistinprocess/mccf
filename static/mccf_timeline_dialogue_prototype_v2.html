@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCCF — Event Timeline &amp; Dialogue Editor (prototype v2)</title>
+<style>
+  :root{
+    --bg:#10131a; --bg-panel:#161b24; --bg-lane-a:#1a2028; --bg-lane-b:#171c24;
+    --line:#2a3142; --line-soft:#212734;
+    --text:#e6e3da; --text-dim:#8a92a6; --text-faint:#5b6376;
+    --amber:#c9915a; --amber-dim:#4a3a2a;
+    --teal:#5fb3a3; --teal-dim:#22403a;
+    --coral:#d9636a; --coral-dim:#4a2529;
+    --violet:#9b8cd9; --violet-dim:#332e4a;
+    --rose:#c97fa0; --rose-dim:#43293a;
+    --blue:#6f9bd1; --blue-dim:#25344a;
+    --steel:#5f8fae; --steel-dim:#233544;
+    --grey:#7c8494; --grey-dim:#2a303c;
+    --cyan:#5ac8d8; --cyan-dim:#1f3a40;
+    --mono: ui-monospace,'SF Mono','Cascadia Code','JetBrains Mono',Menlo,Consolas,monospace;
+    --sans: -apple-system,'Inter','Segoe UI',system-ui,sans-serif;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  header{display:flex;align-items:center;gap:18px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--bg-panel);flex-shrink:0;}
+  .brand{display:flex;align-items:baseline;gap:8px;}
+  .brand .mark{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--amber);border:1px solid var(--amber-dim);padding:2px 6px;border-radius:var(--radius);}
+  .brand h1{font-size:14px;font-weight:600;margin:0;}
+  .scene-name{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
+  .tabs{display:flex;gap:2px;margin-left:auto;background:var(--bg-lane-b);border:1px solid var(--line);border-radius:6px;padding:2px;}
+  .tab{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:7px 14px;border-radius:4px;color:var(--text-dim);cursor:pointer;border:none;background:transparent;}
+  .tab.active{background:var(--bg-panel);color:var(--amber);box-shadow:inset 0 0 0 1px var(--line);}
+  .proto-flag{font-family:var(--mono);font-size:10px;color:var(--text-faint);border:1px dashed var(--line);padding:3px 8px;border-radius:var(--radius);}
+
+  .legend-bar{display:flex;gap:16px;padding:7px 18px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0;flex-wrap:wrap;align-items:center;}
+  .legend-group{display:flex;gap:8px;align-items:center;}
+  .legend-sep{width:1px;height:14px;background:var(--line);}
+  .verb-badge{font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  .verb-badge .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .v-start{background:var(--blue-dim);color:var(--blue);} .v-start .dot{background:var(--blue);}
+  .v-stop{background:var(--grey-dim);color:var(--grey);} .v-stop .dot{background:var(--grey);}
+  .v-arrived{background:var(--teal-dim);color:var(--teal);} .v-arrived .dot{background:var(--teal);}
+  .v-blocked{background:var(--coral-dim);color:var(--coral);} .v-blocked .dot{background:var(--coral);animation:pulse 1.4s infinite;}
+  .v-set{background:var(--violet-dim);color:var(--violet);} .v-set .dot{background:var(--violet);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .mini-swatch{font-family:var(--mono);font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:5px;}
+  .mini-box{width:20px;height:12px;border-radius:2px;}
+  .mini-box.declared{border:1px solid var(--text-dim);}
+  .mini-box.sensed{border:1px dashed var(--text-dim);}
+  .mini-box.fixed{background:var(--bg-lane-a);}
+  .mini-box.estimate{background:repeating-linear-gradient(45deg,var(--bg-lane-a),var(--bg-lane-a) 3px,var(--line-soft) 3px,var(--line-soft) 6px);}
+
+  main{flex:1;min-height:0;position:relative;}
+  .view{display:none;height:100%;}
+  .view.active{display:flex;}
+
+  /* ===== TIMELINE ===== */
+  .timeline-shell{display:flex;width:100%;height:100%;}
+  .actor-rail{width:180px;flex-shrink:0;border-right:1px solid var(--line);background:var(--bg-panel);overflow-y:auto;padding:10px 0;}
+  .rail-title{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);padding:4px 14px 8px;}
+  .rail-item{padding:8px 14px;cursor:pointer;border-left:2px solid transparent;}
+  .rail-item:hover{background:var(--bg-lane-a);}
+  .rail-item .nm{font-size:12.5px;font-weight:600;}
+  .rail-item .ty{font-family:var(--mono);font-size:10px;color:var(--text-dim);}
+
+  .timeline-col{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .timeline-toolbar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg-panel);flex-shrink:0;flex-wrap:wrap;}
+  .toolbar-btn{font-family:var(--mono);font-size:11px;background:var(--bg-lane-a);color:var(--text);border:1px solid var(--line);padding:6px 11px;border-radius:5px;cursor:pointer;}
+  .toolbar-btn:hover{border-color:var(--amber);color:var(--amber);}
+  .toolbar-btn.primary{background:var(--amber-dim);color:var(--amber);border-color:var(--amber-dim);}
+  .toolbar-btn.primary:hover{background:var(--amber);color:var(--bg);}
+  .playhead-readout{font-family:var(--mono);font-size:12px;color:var(--amber);margin-left:auto;}
+
+  .cue-builder{display:none;padding:12px 14px;background:var(--bg-lane-a);border-bottom:1px solid var(--line);flex-shrink:0;}
+  .cue-builder.open{display:block;}
+  .cue-builder-top{display:flex;gap:12px;margin-bottom:10px;align-items:flex-end;flex-wrap:wrap;}
+  .cb-field{display:flex;flex-direction:column;gap:4px;}
+  .cb-field label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);}
+  .cb-field input,.cb-field select{background:var(--bg-lane-b);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:6px 8px;font-size:12.5px;font-family:var(--sans);}
+  .cb-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:8px;background:var(--bg-lane-b);border:1px solid var(--line-soft);border-radius:5px;flex-wrap:wrap;}
+  .cb-row select,.cb-row input{background:var(--bg-panel);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:5px 7px;font-size:11.5px;}
+  .cb-row .rm{margin-left:auto;background:none;border:1px solid var(--line);color:var(--text-faint);border-radius:4px;font-family:var(--mono);font-size:10px;padding:3px 7px;cursor:pointer;}
+  .cb-actions{display:flex;gap:8px;margin-top:8px;}
+
+  .timeline-scroll{flex:1;overflow:auto;position:relative;background:var(--bg);}
+  .timeline-inner{position:relative;padding:0 0 30px;}
+
+  .ruler{position:relative;height:26px;margin-left:200px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .ruler-tick{position:absolute;top:0;bottom:0;border-left:1px solid var(--line-soft);}
+  .ruler-tick.major{border-left:1px solid var(--line);}
+  .ruler-tick .lbl{position:absolute;top:6px;left:3px;font-family:var(--mono);font-size:9.5px;color:var(--text-faint);}
+
+  .zone-lane{height:30px;position:relative;margin:0 0 4px 200px;border-bottom:1px dashed var(--line);}
+  .zone-mark{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;}
+  .zone-mark .diamond{width:8px;height:8px;background:var(--amber);transform:rotate(45deg);margin-top:8px;}
+  .zone-mark .lbl{font-family:var(--mono);font-size:9px;color:var(--amber);white-space:nowrap;margin-top:2px;}
+
+  .playhead{position:absolute;top:0;bottom:0;width:0;border-left:1.5px solid var(--coral);z-index:5;pointer-events:none;}
+  .playhead .flag{position:absolute;top:-1px;left:2px;font-family:var(--mono);font-size:9.5px;color:var(--coral);background:var(--bg);padding:0 3px;white-space:nowrap;}
+
+  .cue-guide{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed var(--amber);opacity:.55;z-index:4;pointer-events:none;}
+  .cue-guide .flag{position:absolute;top:-1px;left:2px;font-family:var(--mono);font-size:9px;color:var(--amber);background:var(--bg);padding:0 3px;white-space:nowrap;opacity:1;}
+
+  .actor-group{border-bottom:1px solid var(--line-soft);}
+  .actor-group-label{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--text-dim);padding:8px 0 2px 14px;width:200px;}
+  .track-row{display:flex;align-items:stretch;min-height:40px;}
+  .track-label{width:200px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 14px;font-size:11.5px;color:var(--text-dim);border-right:1px solid var(--line-soft);}
+  .track-label .kind-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .track-lane{position:relative;flex:1;height:40px;background:var(--bg-lane-b);}
+  .track-row:nth-child(even) .track-lane{background:var(--bg-lane-a);}
+
+  .step{position:absolute;top:6px;height:28px;border-radius:5px;display:flex;align-items:center;padding:0 8px;gap:6px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;border:1px solid var(--line);}
+  .step:hover{box-shadow:0 0 0 1px var(--text-dim);}
+  .step.selected{box-shadow:0 0 0 1.5px var(--amber);}
+  .step .sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .step.trig-declared{border-style:solid;}
+  .step.trig-sensed{border-style:dashed;}
+  .step.dur-estimate{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.03),rgba(255,255,255,.03) 4px,transparent 4px,transparent 8px);}
+  .step.st-start{background-color:var(--blue-dim);color:var(--blue);}
+  .step.st-arrived{background-color:var(--teal-dim);color:var(--teal);}
+  .step.st-set{background-color:var(--violet-dim);color:var(--violet);}
+  .step.st-blocked{background-color:var(--coral-dim);color:var(--coral);animation:blockedGlow 1.6s infinite;}
+  @keyframes blockedGlow{0%,100%{box-shadow:0 0 0 1px var(--coral);}50%{box-shadow:0 0 6px 1px var(--coral);}}
+
+  /* audio waveform block */
+  .step.k-audio{padding:0 4px;align-items:stretch;}
+  .wave{display:flex;align-items:center;gap:1px;flex:1;height:100%;overflow:hidden;}
+  .wave span{flex:1;background:var(--teal);opacity:.75;border-radius:1px;min-width:1px;}
+  .step.k-audio .wlabel{position:absolute;top:1px;left:6px;font-size:9px;color:var(--text);opacity:.85;text-shadow:0 0 3px #000;}
+  .step.k-audio{background-color:var(--teal-dim);color:var(--teal);}
+
+  /* movie filmstrip block */
+  .step.k-movie{padding:0;background-color:var(--steel-dim);color:var(--steel);}
+  .filmstrip{display:flex;height:100%;width:100%;overflow:hidden;}
+  .filmstrip span{flex:1;border-right:1px solid rgba(0,0,0,.35);}
+  .filmstrip span:nth-child(odd){background:rgba(95,143,174,.35);}
+  .filmstrip span:nth-child(even){background:rgba(95,143,174,.2);}
+  .step.k-movie .flabel{position:absolute;top:1px;left:6px;font-size:9px;color:var(--text);text-shadow:0 0 3px #000;display:flex;align-items:center;gap:3px;}
+
+  /* camera cut block */
+  .step.k-camera{background-color:var(--cyan-dim);color:var(--cyan);}
+
+  svg.connectors{position:absolute;top:0;left:0;pointer-events:none;}
+  .conn-path{fill:none;stroke:var(--text-faint);stroke-width:1.2;stroke-dasharray:3 3;opacity:.55;}
+  .conn-path.zoneconn{stroke:var(--amber);opacity:.5;}
+
+  .inspector{width:290px;flex-shrink:0;border-left:1px solid var(--line);background:var(--bg-panel);display:flex;flex-direction:column;}
+  .inspector-scroll{padding:16px;overflow-y:auto;flex:1;}
+  .inspector h3{margin:0 0 12px;font-size:13px;}
+  .insp-empty{color:var(--text-faint);font-size:12px;line-height:1.5;}
+  .insp-row{margin-bottom:14px;}
+  .insp-row .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;}
+  .insp-row .v{font-size:12.5px;color:var(--text);line-height:1.4;}
+  .arb-badge{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:8px;display:inline-block;margin-top:4px;}
+  .arb-replace{background:var(--blue-dim);color:var(--blue);}
+  .arb-blend{background:var(--amber-dim);color:var(--amber);}
+  .arb-trackwins{background:var(--grey-dim);color:var(--grey);}
+  .insp-row select{width:100%;background:var(--bg-lane-b);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:6px 8px;font-size:12px;}
+  .warn{color:var(--coral);font-size:11.5px;line-height:1.4;}
+
+  /* preview stub */
+  .preview-stub{border-top:1px solid var(--line);padding:12px;flex-shrink:0;}
+  .preview-stub h4{margin:0 0 8px;font-size:11px;color:var(--text-dim);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;}
+  .preview-frame{background:var(--bg-lane-b);border:1px dashed var(--line);border-radius:5px;height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text-faint);}
+  .preview-frame .play{width:26px;height:26px;border-radius:50%;border:1px solid var(--text-faint);display:flex;align-items:center;justify-content:center;font-size:11px;}
+  .preview-frame .note{font-size:10px;text-align:center;padding:0 10px;line-height:1.4;}
+
+  /* ===== DIALOGUE VIEW ===== (mostly unchanged from v1, trigger model updated) */
+  .dialogue-shell{display:flex;width:100%;height:100%;}
+  .dialogue-main{flex:1;overflow-y:auto;padding:20px 24px;}
+  .dlg-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .dlg-header h2{font-size:15px;margin:0;}
+  .dlg-header .badge-actor{font-family:var(--mono);font-size:10px;color:var(--amber);border:1px solid var(--amber-dim);padding:2px 7px;border-radius:10px;}
+  .add-line-btn{margin-left:auto;font-family:var(--mono);font-size:11px;background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-dim);padding:6px 12px;border-radius:5px;cursor:pointer;}
+  .add-line-btn:hover{background:var(--amber);color:var(--bg);}
+  .dlg-card{border:1px solid var(--line);border-radius:7px;background:var(--bg-panel);margin-bottom:12px;overflow:hidden;}
+  .dlg-card-top{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line-soft);background:var(--bg-lane-a);}
+  .dlg-index{font-family:var(--mono);font-size:11px;color:var(--text-faint);width:20px;}
+  .dlg-order-btns{display:flex;flex-direction:column;gap:1px;}
+  .dlg-order-btns button{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:10px;line-height:1;padding:1px 4px;}
+  .dlg-order-btns button:hover{color:var(--amber);}
+  .dlg-remove{margin-left:auto;background:none;border:1px solid var(--line);color:var(--text-faint);border-radius:4px;font-family:var(--mono);font-size:10px;padding:3px 8px;cursor:pointer;}
+  .dlg-remove:hover{color:var(--coral);border-color:var(--coral-dim);}
+  .dlg-body{padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .field-block{display:flex;flex-direction:column;gap:5px;}
+  .field-block.span2{grid-column:1/-1;}
+  .field-block label{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);}
+  select, textarea, input[type=text], input[type=number]{background:var(--bg-lane-b);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:7px 9px;font-family:var(--sans);font-size:12.5px;width:100%;}
+  textarea{resize:vertical;min-height:52px;line-height:1.4;}
+  .mode-toggle{display:flex;gap:0;border:1px solid var(--line);border-radius:4px;overflow:hidden;width:fit-content;}
+  .mode-toggle button{background:var(--bg-lane-b);border:none;color:var(--text-dim);font-family:var(--mono);font-size:10.5px;padding:6px 11px;cursor:pointer;}
+  .mode-toggle button.active{background:var(--violet-dim);color:var(--violet);}
+  .improv-note{font-size:11.5px;color:var(--text-faint);font-style:italic;padding:8px 0;}
+  .block-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-dim);}
+  .block-row input{width:auto;}
+  .custom-time{display:flex;gap:6px;align-items:center;margin-top:4px;}
+  .custom-time input{width:80px;}
+  .rail-item .cnt{font-family:var(--mono);font-size:10px;color:var(--text-faint);}
+  .actor-rail .rail-item.dlg-only{display:flex;justify-content:space-between;align-items:center;}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><span class="mark">MCCF</span><h1>Actor Timeline / Dialogue Editor</h1></div>
+    <span class="scene-name" id="sceneName"></span>
+    <div class="tabs">
+      <button class="tab active" data-view="timeline">Timeline</button>
+      <button class="tab" data-view="dialogue">Dialogue</button>
+    </div>
+    <span class="proto-flag">prototype v2 — in-memory only</span>
+  </header>
+
+  <div class="legend-bar" id="legendBar"></div>
+
+  <main>
+    <section class="view active" id="view-timeline">
+      <div class="timeline-shell">
+        <aside class="actor-rail" id="actorRail"></aside>
+        <div class="timeline-col">
+          <div class="timeline-toolbar">
+            <button class="toolbar-btn primary" id="addCueBtn">+ Declared cue at playhead</button>
+            <button class="toolbar-btn" id="jumpZeroBtn">⏮ Playhead → 0</button>
+            <button class="toolbar-btn" id="exportXmlBtn">Export scene XML</button>
+            <button class="toolbar-btn" id="importXmlBtn">Import scene XML</button>
+            <span class="playhead-readout" id="playheadReadout">T = 0.0s</span>
+          </div>
+          <div class="cue-builder open" id="scrubCopyPanel" style="padding:10px 14px;">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <div>
+                <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:4px;">SECONDS — paste into a trigger, e.g. declared:&lt;this&gt;</label>
+                <input id="scrubSecondsBox" type="text" readonly
+                  style="font-family:var(--mono);font-size:22px;font-weight:600;color:var(--amber);background:var(--bg-lane-b);border:1px solid var(--line);border-radius:4px;padding:6px 12px;width:160px;">
+              </div>
+              <div>
+                <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:4px;">TIMECODE (reference only — not what triggers expect)</label>
+                <input id="scrubTimecodeBox" type="text" readonly
+                  style="font-family:var(--mono);font-size:22px;font-weight:600;color:var(--text);background:var(--bg-lane-b);border:1px solid var(--line);border-radius:4px;padding:6px 12px;width:160px;">
+              </div>
+              <button class="toolbar-btn primary" id="copySecondsBtn" style="align-self:flex-end;">Copy seconds</button>
+              <span id="copyStatus" style="font-family:var(--mono);font-size:11px;color:var(--teal);align-self:flex-end;padding-bottom:8px;"></span>
+            </div>
+          </div>
+          <div class="cue-builder" id="xmlPanel">
+            <div class="cb-field" style="width:100%">
+              <label id="xmlPanelLabel">Scene XML</label>
+              <textarea id="xmlPanelText" style="width:100%;height:220px;font-family:var(--mono);font-size:11px;background:var(--bg-lane-b);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:8px"></textarea>
+            </div>
+            <div class="cb-actions">
+              <button class="toolbar-btn primary" id="xmlPanelActionBtn">Load into scene</button>
+              <button class="toolbar-btn" id="xmlPanelCloseBtn">Close</button>
+            </div>
+            <div id="xmlPanelStatus" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:6px"></div>
+          </div>
+          <div class="cue-builder" id="cueBuilder">
+            <div class="cue-builder-top">
+              <div class="cb-field"><label>Cue name</label><input type="text" id="cueName" placeholder="Ground tremor"></div>
+              <div class="cb-field"><label>Time (s)</label><input type="number" id="cueTime" step="0.1"></div>
+            </div>
+            <div id="cueRows"></div>
+            <div class="cb-actions">
+              <button class="toolbar-btn" id="addCueRowBtn">+ add response</button>
+              <button class="toolbar-btn primary" id="createCueBtn">Create cue</button>
+              <button class="toolbar-btn" id="cancelCueBtn">Cancel</button>
+            </div>
+          </div>
+          <div class="timeline-scroll">
+            <div class="timeline-inner" id="timelineInner">
+              <div class="ruler" id="ruler"></div>
+              <div class="zone-lane" id="zoneLane"></div>
+              <div class="lanes-wrap" id="lanesWrap"></div>
+              <svg class="connectors" id="connSvg"></svg>
+              <div class="playhead" id="playhead"><div class="flag" id="playheadFlag">0.0s</div></div>
+            </div>
+          </div>
+        </div>
+        <aside class="inspector">
+          <div class="inspector-scroll">
+            <h3>Step inspector</h3>
+            <div class="insp-empty" id="inspEmpty">Select a step to see its verb, trigger, duration certainty, and — for <code>set</code> steps — the field-map entry and arbitration rule it uses.</div>
+            <div id="inspBody" style="display:none"></div>
+          </div>
+          <div class="preview-stub">
+            <h4>Scene preview — future</h4>
+            <div class="preview-frame">
+              <div class="play">▶</div>
+              <div class="note">Not wired yet. Planned: a screen-captured mp4 of a run, scrubbed in sync with this playhead, so new declared cues can be dropped at the moment something worth reacting to happens on screen — DAW-style hit-pointing.</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="view-dialogue">
+      <div class="dialogue-shell">
+        <aside class="actor-rail" id="dialogueActorRail"></aside>
+        <div class="dialogue-main">
+          <div class="dlg-header">
+            <h2 id="dlgActorName">—</h2>
+            <span class="badge-actor" id="dlgActorType"></span>
+            <button class="add-line-btn" id="addLineBtn">+ Add line</button>
+          </div>
+          <div id="dlgSteps"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/dialogue-xml.js"></script>
+<script src="js/field-map.js"></script>
+<script src="js/dispatcher.js"></script>
+<script src="js/timeline-xml.js"></script>
+<script src="js/worked-manifests.js"></script>
+<script>
+/* =====================================================================
+   MCCF Timeline / Dialogue editor — prototype v2
+   - Real seconds master clock (PPS = pixels per second)
+   - trigger is a structured object: {type: 'scene-start'|'touch'|'zone'|'sensed'|'declared', ...}
+   - durationKind: 'fixed' (computable/authored) vs 'estimate' (unknown until runtime)
+   - Declared multi-actor cues fan out one clock trigger to several Actors at once
+   All state is in-memory. Nothing persists across reloads.
+
+   Day 74: Export/Import wired to the real schema (MCCF_Step_Track_Timeline_
+   Schema_v0_1.md) via timeline-xml.js/dialogue-xml.js/field-map.js/
+   dispatcher.js — no longer "not wired to the API" (see header proto-flag,
+   now stale text left as historical record of the prototype's original
+   status, superseded by this). Verified against the real dispatcher before
+   being wired here — see MCCF_Step_Track_Timeline_Schema_v0_1.md and the
+   Day 74 session notes for the full trail.
+===================================================================== */
+
+const PPS = 14; // pixels per second on the timeline ruler
+
+const VERBS = {
+  start:{label:'start',cls:'v-start',desc:'begin a track / next step'},
+  stop:{label:'stop',cls:'v-stop',desc:'halt whatever is running'},
+  arrived:{label:'arrived',cls:'v-arrived',desc:'a step completed on its own'},
+  blocked:{label:'blocked',cls:'v-blocked',desc:'a step failed to complete'},
+  set:{label:'set',cls:'v-set',desc:'direct field write (bypasses tracks)'}
+};
+
+const FIELD_MAP = {
+  idleGestureBias:{channel:'arousal',arbitration:'track-wins',range:'calm(0.0) – wary(1.0)'},
+  walkPace:{channel:'arousal',arbitration:'blend',range:'0.9 – 1.6 m/s'},
+  visibility:{channel:'tension',arbitration:'replace',range:'2000 – 80'},
+  swingSpeed:{channel:'tension',arbitration:'blend',range:'0.6x – 1.3x nominal'}
+};
+
+const state = {
+  sceneName:'newDirectoryTestScene',
+  scrubTime:0,
+  zones:[
+    {id:'Zone1',name:'The Garden',at:8},
+    {id:'Pool',name:'The Pool',at:22},
+    {id:'Temp1',name:'The Temple (underworld approach)',at:46}
+  ],
+  actors:[
+    {id:'Cindy',type:'Avatar',tracks:[
+      {id:'path',label:'Path',kind:'path',steps:[
+        {id:'c-p1',label:'WP1 → WP2',verb:'start',trigger:{type:'scene-start'},t0:0,t1:8,durationKind:'fixed',status:'ok'},
+        {id:'c-p2',label:'WP2 → WP3',verb:'arrived',trigger:{type:'sensed',ref:'c-p1'},t0:8,t1:22,durationKind:'fixed',status:'ok'},
+        {id:'c-p3',label:'WP3 → Meditation',verb:'arrived',trigger:{type:'sensed',ref:'c-p2'},t0:22,t1:46,durationKind:'fixed',status:'ok'}
+      ]},
+      {id:'gesture',label:'Gesture',kind:'gesture',steps:[
+        {id:'c-g1',label:'Idle sway (bias)',verb:'set',field:'idleGestureBias',value:0.3,trigger:{type:'declared',at:0,cue:null},t0:0,t1:90,durationKind:'fixed',status:'ok'},
+        {id:'c-g2',label:'Wary glance',verb:'start',trigger:{type:'zone',zone:'Temp1'},t0:46,t1:50,durationKind:'estimate',status:'blocked'},
+        {id:'c-g3',label:'Startle',verb:'start',trigger:{type:'declared',at:58,cue:'ground-tremor'},t0:58,t1:60,durationKind:'fixed',status:'ok',onCollision:'interrupt'}
+      ]},
+      {id:'dialogue',label:'Dialogue',kind:'dialogue',steps:[
+        {id:'c-d1',label:'"This is the Garden."',verb:'start',trigger:{type:'sensed',ref:'c-p1'},t0:8,t1:13,durationKind:'fixed',status:'ok',
+          content:'This is the Garden. It hasn\u2019t changed since I was small.',mode:'static',voice:'Cindy — warm alto',rate:'1.0',blocks:true},
+        {id:'c-d2',label:'"The water is still here."',verb:'start',trigger:{type:'sensed',ref:'c-p2'},t0:22,t1:29,durationKind:'estimate',status:'ok',
+          content:'',mode:'improv',voice:'Cindy — warm alto',rate:'1.0',blocks:true},
+        {id:'c-d3',label:'"...something waits below."',verb:'start',trigger:{type:'zone',zone:'Temp1'},t0:46,t1:51,durationKind:'fixed',status:'ok',
+          content:'I don\u2019t like this. Something waits below.',mode:'static',voice:'Cindy — warm alto',rate:'0.92',blocks:false}
+      ]}
+    ]},
+    {id:'Jack',type:'Avatar',tracks:[
+      {id:'path',label:'Path',kind:'path',steps:[
+        {id:'j-p1',label:'Bench → Pool edge',verb:'start',trigger:{type:'sensed',ref:'c-p2'},t0:22,t1:32,durationKind:'fixed',status:'ok'}
+      ]},
+      {id:'dialogue',label:'Dialogue',kind:'dialogue',steps:[
+        {id:'j-d1',label:'"Wait for me."',verb:'start',trigger:{type:'sensed',ref:'c-p2'},t0:22,t1:26,durationKind:'fixed',status:'ok',
+          content:'Wait for me, will you?',mode:'static',voice:'Jack — low tenor',rate:'1.0',blocks:false}
+      ]}
+    ]},
+    {id:'SceneFog',type:'Prop (ambient)',tracks:[
+      {id:'affect',label:'Affect',kind:'affect',steps:[
+        {id:'f-1',label:'visibility ← tension',verb:'set',field:'visibility',value:900,trigger:{type:'declared',at:30,cue:null},t0:30,t1:70,durationKind:'fixed',status:'ok'},
+        {id:'f-2',label:'Flicker spike',verb:'set',field:'visibility',value:80,trigger:{type:'declared',at:58,cue:'ground-tremor'},t0:58,t1:61,durationKind:'fixed',status:'ok',onCollision:'overlap'}
+      ]}
+    ]},
+    {id:'TempleDoor',type:'Prop',tracks:[
+      {id:'swing',label:'Swing',kind:'prop',steps:[
+        {id:'d-1',label:'Slams shut',verb:'start',trigger:{type:'declared',at:58,cue:'ground-tremor'},t0:58,t1:59.5,durationKind:'fixed',status:'ok',onCollision:'interrupt'},
+        {id:'d-2',label:'Open + creak',verb:'start',trigger:{type:'touch'},t0:75,t1:77,durationKind:'fixed',status:'ok'}
+      ]}
+    ]},
+    {id:'Score',type:'Ambient / Music',tracks:[
+      {id:'ambient',label:'Ambient bed',kind:'audio',steps:[
+        {id:'a-1',label:'Sitar / flute bed',verb:'start',trigger:{type:'declared',at:0,cue:null},t0:0,t1:90,durationKind:'fixed',status:'ok'}
+      ]},
+      {id:'music',label:'Music',kind:'audio',steps:[
+        {id:'a-2',label:'Tension swell',verb:'start',trigger:{type:'declared',at:54,cue:null},t0:54,t1:74,durationKind:'fixed',status:'ok'}
+      ]},
+      {id:'sfx',label:'SFX',kind:'audio',steps:[
+        {id:'a-3',label:'Stone groan',verb:'start',trigger:{type:'declared',at:58,cue:'ground-tremor'},t0:58,t1:61,durationKind:'fixed',status:'ok',onCollision:'overlap'}
+      ]}
+    ]},
+    {id:'UnderworldFX',type:'Effect',tracks:[
+      {id:'movie',label:'Movie overlay',kind:'movie',steps:[
+        {id:'m-1',label:'Portal ripple overlay',verb:'start',trigger:{type:'declared',at:59,cue:'ground-tremor'},t0:59,t1:65,durationKind:'fixed',status:'ok'}
+      ]}
+    ]},
+    {id:'Camera',type:'Director',tracks:[
+      {id:'cuts',label:'Camera cuts',kind:'camera',steps:[
+        {id:'cam-1',label:'',verb:'start',trigger:{type:'scene-start'},t0:0,t1:8,durationKind:'fixed',status:'ok',
+          cameraType:'fixed',viewpointRef:'VP_Overview'},
+        {id:'cam-2',label:'',verb:'start',trigger:{type:'sensed',ref:'c-p1'},t0:8,t1:22,durationKind:'fixed',status:'ok',
+          cameraType:'track',targetActor:'Cindy'},
+        {id:'cam-3',label:'',verb:'start',trigger:{type:'zone',zone:'Pool'},t0:22,t1:46,durationKind:'fixed',status:'ok',
+          cameraType:'orbit',targetActor:'Cindy'},
+        {id:'cam-4',label:'',verb:'start',trigger:{type:'zone',zone:'Temp1'},t0:46,t1:58,durationKind:'fixed',status:'ok',
+          cameraType:'pov',targetActor:'Cindy'},
+        {id:'cam-5',label:'',verb:'start',trigger:{type:'declared',at:58,cue:'ground-tremor'},t0:58,t1:62,durationKind:'fixed',status:'ok',
+          cameraType:'orbit',targetActor:'Cindy',onCollision:'interrupt'},
+        {id:'cam-6',label:'',verb:'start',trigger:{type:'sensed',ref:'cam-5'},t0:62,t1:70,durationKind:'fixed',status:'ok',
+          cameraType:'dolly'}
+      ]}
+    ]}
+  ]
+};
+state.cueNames = {'ground-tremor':'Ground tremor'};
+
+// ---------------------------------------------------------------------
+// Day 74 — real schema export/import, verified against dispatcher.js in
+// Node before being placed here (see bridge-test.js in the Day 74 session
+// output). Actor id -> real actorType with a known manifest in
+// worked-manifests.js; actors not listed get no field-map block emitted
+// — legal, timeline-xml.js tolerates a missing manifest as an empty one.
+const REAL_MANIFEST_TYPES = { Cindy:'Avatar', Jack:'Avatar', SceneFog:'SceneFog', TempleDoor:'Door' };
+const MANIFEST_BY_TYPE = { Avatar: MCCFWorkedManifests.AVATAR, SceneFog: MCCFWorkedManifests.SCENE_FOG, Door: MCCFWorkedManifests.DOOR };
+
+function xmlAttrEscape(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function stateTriggerToXmlString(actorId, trigger){
+  switch(trigger.type){
+    case 'scene-start': return 'scene-start';
+    case 'touch': return `touch:${trigger.sensor || actorId+'Touch'}`;
+    case 'zone': return `zone:${trigger.zone}`;
+    case 'sensed': return `sensed:${trigger.ref}`;
+    case 'declared': return `declared:${trigger.at}`;
+    default: throw new Error(`stateTriggerToXmlString: unknown trigger type "${trigger.type}"`);
+  }
+}
+function xmlStringToStateTrigger(str){
+  const t = MCCFDialogue.parseTrigger(str);
+  switch(t.type){
+    case 'scene-start': return {type:'scene-start'};
+    case 'touch': return {type:'touch', sensor:t.sensor};
+    case 'zone': return {type:'zone', zone:t.zone};
+    case 'sensed': return {type:'sensed', ref:t.lineId};
+    case 'declared': return {type:'declared', at:t.time, cue:null};
+    default: throw new Error(`xmlStringToStateTrigger: unparseable trigger "${str}"`);
+  }
+}
+function dlgTriggerToWireTrigger(stateTrigger){
+  switch(stateTrigger.type){
+    case 'scene-start': return {type:'scene-start'};
+    case 'touch': return {type:'touch', sensor:'TouchSensor'};
+    case 'zone': return {type:'zone', zone:stateTrigger.zone};
+    case 'sensed': return {type:'sensed', lineId:stateTrigger.ref};
+    case 'declared': return {type:'declared', time:stateTrigger.at};
+    default: throw new Error(`unknown state trigger type "${stateTrigger.type}"`);
+  }
+}
+
+function stepToXml(actorId, step){
+  const trig = stateTriggerToXmlString(actorId, step.trigger);
+  let attrs = `id="${xmlAttrEscape(step.id)}" verb="${step.verb}" trigger="${xmlAttrEscape(trig)}"`;
+  attrs += ` durationKind="${step.durationKind}" duration="${(step.t1-step.t0).toFixed(2)}"`;
+  if(step.onCollision) attrs += ` onCollision="${step.onCollision}"`;
+  if(step.trigger.type==='declared' && step.trigger.cue) attrs += ` cue="${xmlAttrEscape(step.trigger.cue)}"`;
+  if(step.verb==='set') attrs += ` field="${xmlAttrEscape(step.field)}" value="${xmlAttrEscape(step.value!==undefined?step.value:'')}"`;
+  if(step.cameraType){
+    attrs += ` cameraType="${step.cameraType}"`;
+    if(step.targetActor) attrs += ` target="${xmlAttrEscape(step.targetActor)}"`;
+    if(step.viewpointRef) attrs += ` viewpoint="${xmlAttrEscape(step.viewpointRef)}"`;
+  }
+  return `    <Step ${attrs}/>`;
+}
+function xmlStepToState(attrs){
+  const trigger = xmlStringToStateTrigger(attrs.trigger);
+  if(attrs.cue && trigger.type==='declared') trigger.cue = attrs.cue;
+  const step = { id:attrs.id, label:attrs.id, verb:attrs.verb, trigger, durationKind:attrs.durationKind||'fixed', status:'ok' };
+  if(attrs.onCollision) step.onCollision = attrs.onCollision;
+  if(attrs.field){ step.field=attrs.field; const n=Number(attrs.value); step.value = Number.isNaN(n)?attrs.value:n; }
+  if(attrs.cameraType){
+    step.cameraType = attrs.cameraType;
+    if(attrs.target) step.targetActor = attrs.target;
+    if(attrs.viewpoint) step.viewpointRef = attrs.viewpoint;
+  }
+  const duration = Number(attrs.duration)||0;
+  step.t1 = duration; step.t0 = 0; // resolved below once zone/declared context is known
+  return step;
+}
+
+function dialogueTrackToXml(actorId, track, allStepIds){
+  const lines = track.steps.map(s => ({
+    id:s.id, actor:actorId, type:'Statement', mode:s.mode, blocking:!!s.blocks,
+    trigger: dlgTriggerToWireTrigger(s.trigger), text: s.content||'',
+  }));
+  return MCCFDialogue.serializeDialogueBlock(lines, {additionalValidIds: allStepIds||[]});
+}
+function dialogueLineToStateStep(line){
+  const trigger = xmlStringToStateTrigger(MCCFDialogue.serializeTrigger(line.trigger));
+  return {
+    id:line.id, label:`"${line.text.slice(0,30)}${line.text.length>30?'…':''}"`,
+    verb:'start', trigger, durationKind: line.mode==='improv'?'estimate':'fixed', status:'ok',
+    content:line.text, mode:line.mode, voice:'', rate:'1.0', blocks:line.blocking,
+    t0:0, t1: line.mode==='improv'?4:Math.max(2, line.text.length/15),
+  };
+}
+
+function exportSceneXml(){
+  const parts = [];
+  Object.entries(state.cueNames).forEach(([id])=>{
+    const found = allSteps().find(({s})=>s.trigger.type==='declared' && s.trigger.cue===id);
+    if(found) parts.push(`<Cue id="${xmlAttrEscape(id)}" at="${found.s.trigger.at}"/>`);
+  });
+  const usedTypes = new Set();
+  state.actors.forEach(a=>{ const t=REAL_MANIFEST_TYPES[a.id]; if(t) usedTypes.add(t); });
+  usedTypes.forEach(t => parts.push(MCCFFieldMap.serializeFieldMap(MANIFEST_BY_TYPE[t])));
+
+  const allStepIds = allSteps().map(({s})=>s.id);
+  state.actors.forEach(actor=>{
+    const type = REAL_MANIFEST_TYPES[actor.id] || actor.type;
+    const blocks = actor.tracks.map(track=>{
+      if(track.kind==='dialogue') return dialogueTrackToXml(actor.id, track, allStepIds);
+      const steps = track.steps.map(s=>stepToXml(actor.id, s)).join('\n');
+      return `  <Track id="${track.id}" kind="${track.kind}">\n${steps}\n  </Track>`;
+    }).join('\n');
+    parts.push(`<Actor name="${xmlAttrEscape(actor.id)}" type="${xmlAttrEscape(type)}" parent="">\n${blocks}\n</Actor>`);
+  });
+  return parts.join('\n\n');
+}
+
+function importSceneXml(xml){
+  // Parse via the real loader against a throwaway Dispatcher — this both
+  // validates the XML (addStep's own checks) and gives us the real
+  // per-actor field maps to carry back into state, all through code
+  // that's already been verified against the real dispatcher rather than
+  // a second hand-rolled parse.
+  const dispatcher = new MCCFDispatcher.Dispatcher();
+  const result = MCCFTimeline.loadTimelineIntoDispatcher(dispatcher, xml);
+
+  // ---- Pass 1: parse every <Actor>/<Track>/<Step> and every <Dialogue>
+  // <Line> into flat step descriptors, deliberately NOT resolving `sensed`-
+  // trigger timing yet. Day 75 bug found by an actual browser test: this
+  // used to be a single pass that resolved t0 for declared/scene-start/
+  // zone triggers inline but left `sensed` (and `touch`) at the t0=0
+  // placeholder xmlStepToState/dialogueLineToStateStep set — meaning every
+  // chained step (path segment N+1 waiting on segment N's `arrived`,
+  // dialogue lines chained off path arrivals, camera cuts chained off each
+  // other) silently collapsed to the same start time on reimport. The
+  // dispatcher-facing load above was never affected (it dispatches off
+  // trigger strings directly, not t0/t1), but this prototype's own timeline
+  // lanes visually stacked every chained step on top of each other. A
+  // sensed step's real start time is "whenever the step it references
+  // arrives" — which may itself be a sensed step (c-p3 depends on c-p2
+  // depends on c-p1), and the reference can cross actors/tracks (a
+  // dialogue line referencing a path step's id) — so this can't be
+  // resolved track-by-track as steps are parsed; it needs every step in
+  // the scene known first, then resolved as a dependency graph.
+  const actorsRaw = [];
+  const flatSteps = {}; // step id -> descriptor, scene-wide (sensed refs cross actor/track boundaries)
+
+  const actorRe = /<Actor\s+([^>]*?)>([\s\S]*?)<\/Actor>/g;
+  let am;
+  while((am = actorRe.exec(xml)) !== null){
+    const attrRe = /(\w+)="([^"]*)"/g; const actorAttrs={}; let m2;
+    while((m2=attrRe.exec(am[1]))!==null) actorAttrs[m2[1]]=m2[2];
+    const actorBody = am[2];
+    const tracks = [];
+
+    const trackRe = /<Track\s+([^>]*?)>([\s\S]*?)<\/Track>/g;
+    let tm;
+    while((tm = trackRe.exec(actorBody)) !== null){
+      const trAttrs={}; const tAttrRe=/(\w+)="([^"]*)"/g; let m3;
+      while((m3=tAttrRe.exec(tm[1]))!==null) trAttrs[m3[1]]=m3[2];
+      const steps=[];
+      const stepRe = /<Step\s+([^>]*?)\/?>/g; let sm;
+      while((sm=stepRe.exec(tm[2]))!==null){
+        const sAttrs={}; const sAttrRe=/(\w+)="([^"]*)"/g; let m4;
+        while((m4=sAttrRe.exec(sm[1]))!==null) sAttrs[m4[1]]=m4[2];
+        const step = xmlStepToState(sAttrs); // t0=0 placeholder, t1=raw duration placeholder
+        steps.push(step);
+        flatSteps[step.id] = step;
+      }
+      tracks.push({ id:trAttrs.id, label:trAttrs.id, kind:trAttrs.kind, steps });
+    }
+
+    const dlgLines = MCCFDialogue.parseDialogueBlock(actorBody);
+    if(dlgLines.length){
+      const dialogueSteps = dlgLines.map(dialogueLineToStateStep); // same t0=0/raw-duration placeholder shape
+      dialogueSteps.forEach(s => { flatSteps[s.id] = s; });
+      tracks.push({ id:'dialogue', label:'Dialogue', kind:'dialogue', steps: dialogueSteps });
+    }
+
+    actorsRaw.push({ id:actorAttrs.name, type:actorAttrs.type, tracks });
+  }
+
+  // ---- Pass 2: resolve every step's real t0, in dependency order.
+  // declared/scene-start/zone/touch resolve immediately — none of them
+  // depend on another step's timing. `sensed` resolves once the step it
+  // references has itself been resolved (its t0 already reflects its own
+  // duration by the time we read it here, via resolveArrival below), so
+  // this iterates to a fixed point rather than assuming single-level
+  // chains — c-p3 (sensed:c-p2) only resolves after c-p2 (sensed:c-p1)
+  // has already resolved from c-p1 (scene-start), same pass or a later one.
+  const allFlat = Object.values(flatSteps);
+  allFlat.forEach(s => { s._duration = s.t1; }); // xmlStepToState/dialogueLineToStateStep stashed raw duration in t1
+  function resolveArrival(s, t0){
+    s.t0 = t0;
+    s.t1 = t0 + s._duration; // this step's own arrival time, for anything sensed off of it
+    s._resolved = true;
+  }
+  allFlat.forEach(s => {
+    if(s.trigger.type==='declared') resolveArrival(s, s.trigger.at);
+    else if(s.trigger.type==='scene-start') resolveArrival(s, 0);
+    else if(s.trigger.type==='zone'){ const z=state.zones.find(z=>z.id===s.trigger.zone); resolveArrival(s, z?z.at:0); }
+    else if(s.trigger.type==='touch') resolveArrival(s, 0); // no deterministic scene time for a live touch event; unchanged from prior behavior, never claimed to place correctly on a static replay timeline
+  });
+  let progress = true, guard = 0;
+  while(progress && guard < allFlat.length + 2){
+    progress = false; guard++;
+    allFlat.forEach(s => {
+      if(s._resolved || s.trigger.type !== 'sensed') return;
+      const ref = flatSteps[s.trigger.ref];
+      if(ref && ref._resolved){ resolveArrival(s, ref.t1); progress = true; }
+    });
+  }
+  // Anything still unresolved after the graph settles is a genuinely
+  // broken/dangling reference (points at an id that doesn't exist in this
+  // scene) — falls back to t0=0 same as before, but now that only happens
+  // for an actual bad reference, not for every sensed step unconditionally.
+  allFlat.forEach(s => { if(!s._resolved) resolveArrival(s, 0); });
+  allFlat.forEach(s => { delete s._duration; delete s._resolved; });
+
+  state.actors.length = 0;
+  actorsRaw.forEach(a=>state.actors.push(a));
+
+  const newCueNames = {};
+  result.cues.forEach(c => { newCueNames[c.id] = state.cueNames[c.id] || c.id; });
+  state.cueNames = newCueNames;
+
+  return { actorCount: actorsRaw.length, stepCount: result.stepCount, cues: result.cues };
+}
+
+document.getElementById('exportXmlBtn').addEventListener('click', ()=>{
+  const xml = exportSceneXml();
+  document.getElementById('xmlPanelLabel').textContent = 'Exported scene XML — copy or verify elsewhere';
+  document.getElementById('xmlPanelText').value = xml;
+  document.getElementById('xmlPanelActionBtn').style.display = 'none';
+  document.getElementById('xmlPanelStatus').textContent = xml.length + ' chars, ' + state.actors.length + ' actors';
+  document.getElementById('xmlPanel').classList.add('open');
+});
+document.getElementById('importXmlBtn').addEventListener('click', ()=>{
+  document.getElementById('xmlPanelLabel').textContent = 'Paste scene XML to load';
+  document.getElementById('xmlPanelText').value = '';
+  document.getElementById('xmlPanelActionBtn').style.display = '';
+  document.getElementById('xmlPanelStatus').textContent = '';
+  document.getElementById('xmlPanel').classList.add('open');
+});
+document.getElementById('xmlPanelCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('xmlPanel').classList.remove('open');
+});
+document.getElementById('xmlPanelActionBtn').addEventListener('click', ()=>{
+  const statusEl = document.getElementById('xmlPanelStatus');
+  try{
+    const result = importSceneXml(document.getElementById('xmlPanelText').value);
+    statusEl.style.color = 'var(--teal)';
+    statusEl.textContent = `Loaded: ${result.actorCount} actors, ${result.stepCount} steps, ${result.cues.length} cues.`;
+    renderTimeline(); renderDialogueRail(); renderDialogueSteps();
+  }catch(err){
+    statusEl.style.color = 'var(--coral)';
+    statusEl.textContent = 'Load failed: ' + err.message;
+  }
+});
+
+// ---------------------------------------------------------------------
+function allSteps(){
+  const out=[];
+  state.actors.forEach(a=>a.tracks.forEach(t=>t.steps.forEach(s=>out.push({a,t,s}))));
+  return out;
+}
+function findStep(id){ return allSteps().find(x=>x.s.id===id) || null; }
+function kindColor(kind){
+  return {path:'var(--blue)',gesture:'var(--violet)',dialogue:'var(--amber)',affect:'var(--rose)',
+          prop:'var(--grey)',audio:'var(--teal)',movie:'var(--steel)',camera:'var(--cyan)'}[kind] || 'var(--grey)';
+}
+const CAMERA_TYPES = {
+  fixed:{label:'Fixed', needsTarget:false, needsViewpoint:true},
+  orbit:{label:'Orbit', needsTarget:true, needsViewpoint:false},
+  track:{label:'Track', needsTarget:true, needsViewpoint:false},
+  dolly:{label:'Dolly', needsTarget:false, needsViewpoint:false},
+  pov:{label:'POV', needsTarget:true, needsViewpoint:false}
+};
+function cameraStepLabel(s){
+  const ct = CAMERA_TYPES[s.cameraType] || CAMERA_TYPES.fixed;
+  if(ct.needsViewpoint) return ct.label.toUpperCase()+' \u00b7 '+(s.viewpointRef||'Overview');
+  if(ct.needsTarget) return ct.label.toUpperCase()+' \u00b7 '+(s.targetActor||'?');
+  return ct.label.toUpperCase();
+}
+function seededPeaks(id,n){
+  let h=0; for(let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
+  const out=[];
+  for(let i=0;i<n;i++){ h=(h*1103515245+12345)>>>0; out.push(20+ (h%80)); }
+  return out;
+}
+function displayTrigger(step){
+  const tr=step.trigger;
+  if(tr.type==='scene-start') return 'Scene start';
+  if(tr.type==='touch') return 'Touch';
+  if(tr.type==='zone'){ const z=state.zones.find(z=>z.id===tr.zone); return 'Zone entry: '+(z?z.name:tr.zone); }
+  if(tr.type==='sensed'){ const f=findStep(tr.ref); return 'Sensed: '+tr.ref+'.arrived'+(f?(' ('+f.a.id+' / '+f.t.label+': '+f.s.label+')'):''); }
+  if(tr.type==='declared'){
+    const cueLbl = tr.cue ? ('  · cue: '+ (state.cueNames[tr.cue]||tr.cue)) : '';
+    return 'Declared T='+tr.at.toFixed(1)+'s'+cueLbl;
+  }
+  return 'unknown';
+}
+
+// ---------------------------------------------------------------------
+// header / legend
+document.getElementById('sceneName').textContent = state.sceneName;
+(function renderLegend(){
+  const el = document.getElementById('legendBar');
+  let h = '<div class="legend-group">' + Object.values(VERBS).map(v=>
+    `<span class="verb-badge ${v.cls}"><span class="dot"></span>${v.label}</span>`).join('') + '</div>';
+  h += '<div class="legend-sep"></div>';
+  h += `<div class="legend-group">
+    <span class="mini-swatch"><span class="mini-box declared fixed"></span>declared trigger</span>
+    <span class="mini-swatch"><span class="mini-box sensed fixed"></span>sensed trigger</span>
+  </div>`;
+  h += '<div class="legend-sep"></div>';
+  h += `<div class="legend-group">
+    <span class="mini-swatch"><span class="mini-box declared fixed"></span>fixed duration</span>
+    <span class="mini-swatch"><span class="mini-box declared estimate"></span>runtime estimate</span>
+  </div>`;
+  el.innerHTML = h;
+})();
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='timeline') requestAnimationFrame(drawOverlay);
+  });
+});
+
+// ---------------------------------------------------------------------
+// TIMELINE
+function totalDuration(){
+  let max=60;
+  allSteps().forEach(({s})=>{ if(s.t1>max) max=s.t1; });
+  return max+15;
+}
+
+function renderActorRail(){
+  document.getElementById('actorRail').innerHTML = '<div class="rail-title">Actors</div>' + state.actors.map(a=>`
+    <div class="rail-item" data-actor="${a.id}"><div class="nm">${a.id}</div><div class="ty">${a.type}</div></div>
+  `).join('');
+  document.querySelectorAll('#actorRail .rail-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const row=document.querySelector(`.actor-group[data-actor="${item.dataset.actor}"]`);
+      if(row) row.scrollIntoView({block:'nearest'});
+    });
+  });
+}
+
+function renderRuler(){
+  const dur = totalDuration();
+  const w = dur*PPS;
+  const ruler = document.getElementById('ruler');
+  ruler.style.width = w+'px';
+  let h='';
+  for(let s=0;s<=dur;s+=5){
+    const major = s%10===0;
+    h += `<div class="ruler-tick${major?' major':''}" style="left:${s*PPS}px">${major?`<span class="lbl">${s}s</span>`:''}</div>`;
+  }
+  ruler.innerHTML = h;
+  document.getElementById('zoneLane').style.width = w+'px';
+  document.getElementById('timelineInner').style.width = (w+200)+'px';
+}
+
+function renderZoneLane(){
+  document.getElementById('zoneLane').innerHTML = state.zones.map(z=>`
+    <div class="zone-mark" style="left:${z.at*PPS}px"><div class="diamond"></div><div class="lbl">${z.name}</div></div>
+  `).join('');
+}
+
+function renderStepBlock(s){
+  const left=(s.t0*PPS).toFixed(1);
+  const width=Math.max(((s.t1-s.t0)*PPS),36).toFixed(1);
+  const trigClass = 'trig-'+s.trigger.type.replace('scene-start','declared').replace('zone','sensed').replace('touch','sensed');
+  const durClass = 'dur-'+(s.durationKind||'fixed');
+  const kind = findStep(s.id).t.kind;
+
+  if(kind==='audio'){
+    const peaks = seededPeaks(s.id, Math.max(6, Math.floor(width/6)));
+    return `<div class="step k-audio ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${s.label}">
+      <span class="wlabel">${s.label}</span>
+      <div class="wave">${peaks.map(p=>`<span style="height:${p}%"></span>`).join('')}</div>
+    </div>`;
+  }
+  if(kind==='movie'){
+    const n = Math.max(4, Math.floor(width/22));
+    return `<div class="step k-movie ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${s.label}">
+      <div class="filmstrip">${Array(n).fill(0).map(()=>'<span></span>').join('')}</div>
+      <span class="flabel">▶ ${s.label}</span>
+    </div>`;
+  }
+  if(kind==='camera'){
+    const lbl = cameraStepLabel(s);
+    return `<div class="step k-camera ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${lbl}">
+      <span class="sdot"></span>${lbl}
+    </div>`;
+  }
+  const v = VERBS[s.status==='blocked' ? 'blocked' : s.verb];
+  const vcls = s.status==='blocked' ? 'st-blocked' : ('st-'+s.verb);
+  return `<div class="step ${vcls} ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${s.label}">
+    <span class="sdot"></span>${s.label}
+  </div>`;
+}
+
+function renderLanes(){
+  const wrap = document.getElementById('lanesWrap');
+  wrap.innerHTML = state.actors.map(actor=>`
+    <div class="actor-group" data-actor="${actor.id}">
+      <div class="actor-group-label">${actor.id} <span style="color:var(--text-faint)">· ${actor.type}</span></div>
+      ${actor.tracks.map(track=>`
+        <div class="track-row">
+          <div class="track-label"><span class="kind-dot" style="background:${kindColor(track.kind)}"></span>${track.label}</div>
+          <div class="track-lane">${track.steps.map(renderStepBlock).join('')}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.step').forEach(el=>el.addEventListener('click', ()=>selectStep(el.dataset.id)));
+}
+
+let selectedStepId=null;
+function selectStep(id){
+  selectedStepId=id;
+  document.querySelectorAll('.step').forEach(el=>el.classList.toggle('selected', el.dataset.id===id));
+  const found=findStep(id);
+  const empty=document.getElementById('inspEmpty'), body=document.getElementById('inspBody');
+  if(!found){ empty.style.display='block'; body.style.display='none'; return; }
+  empty.style.display='none'; body.style.display='block';
+  const {a:actor,t:track,s:step}=found;
+  const v=VERBS[step.status==='blocked'?'blocked':step.verb];
+
+  let fieldRow='';
+  if(step.verb==='set' && step.field && FIELD_MAP[step.field]){
+    const fm=FIELD_MAP[step.field];
+    const arbCls={replace:'arb-replace',blend:'arb-blend','track-wins':'arb-trackwins'}[fm.arbitration];
+    const contenders = allSteps().filter(x=>x.s.field===step.field && x.s.id!==step.id);
+    fieldRow = `<div class="insp-row"><div class="k">Field map entry</div><div class="v">
+      <span style="font-family:var(--mono)">${step.field}</span><br>
+      channel: ${fm.channel} &middot; range: ${fm.range}
+      <div class="arb-badge ${arbCls}">arbitration: ${fm.arbitration}</div>
+      ${contenders.length ? `<div class="warn" style="margin-top:6px">Also written by: ${contenders.map(c=>c.s.id).join(', ')} — sub-coordinator resolves per the arbitration rule above.</div>` : ''}
+    </div></div>
+    <div class="insp-row"><div class="k">Value written</div><div class="v">
+      <input type="text" id="setValueInput" style="width:100%;font-family:var(--mono);background:var(--bg-lane-a);border:1px solid var(--line);color:var(--text);padding:5px 7px;border-radius:4px" value="${step.value!==undefined?step.value:''}" placeholder="e.g. 0.8, or a field-native value">
+    </div></div>`;
+  }
+
+  let cameraRow='';
+  if(track.kind==='camera'){
+    const ct = CAMERA_TYPES[step.cameraType] || CAMERA_TYPES.fixed;
+    cameraRow = `<div class="insp-row"><div class="k">Camera type</div>
+      <select id="camTypeSel">
+        ${Object.entries(CAMERA_TYPES).map(([k,v])=>`<option value="${k}" ${step.cameraType===k?'selected':''}>${v.label}</option>`).join('')}
+      </select></div>
+      ${ct.needsTarget ? `<div class="insp-row"><div class="k">Target actor</div>
+        <select id="camTargetSel">
+          ${state.actors.filter(a=>a.type==='Avatar').map(a=>`<option ${step.targetActor===a.id?'selected':''}>${a.id}</option>`).join('')}
+        </select></div>` : ''}
+      ${ct.needsViewpoint ? `<div class="insp-row"><div class="k">Viewpoint</div>
+        <select id="camVpSel">
+          ${['VP_Overview','VP_Origin'].concat(state.zones.map(z=>'VP_'+z.id)).map(v=>`<option ${step.viewpointRef===v?'selected':''}>${v}</option>`).join('')}
+        </select></div>` : ''}
+      <div class="insp-row"><div class="v" style="color:var(--text-faint);font-size:11.5px">Only one camera cut is bound at a time \u2014 same single-owner arbitration as a gesture track. The next cut on this track always displaces the previous one; nothing needs a <span class="verb-badge v-stop" style="padding:1px 5px"><span class="dot"></span>stop</span> authored explicitly.</div></div>`;
+  }
+
+  let collisionRow='';
+  if(step.trigger.type==='declared'){
+    collisionRow = `<div class="insp-row"><div class="k">On collision (declared cue vs. running track)</div>
+      <select id="onCollisionSel">
+        ${['interrupt','wait','overlap'].map(o=>`<option value="${o}" ${((step.onCollision||'interrupt')===o)?'selected':''}>${o}</option>`).join('')}
+      </select></div>`;
+  }
+
+  body.innerHTML = `
+    <div class="insp-row"><div class="k">Actor / Track</div><div class="v">${actor.id} → ${track.label}</div></div>
+    <div class="insp-row"><div class="k">Step</div><div class="v">${step.label}</div></div>
+    <div class="insp-row"><div class="k">Verb</div><div class="v"><span class="verb-badge ${v.cls}"><span class="dot"></span>${v.label}</span></div></div>
+    <div class="insp-row"><div class="k">Trigger</div><div class="v">
+      <select id="trigTypeSel" style="font-family:var(--mono);background:var(--bg-lane-a);border:1px solid var(--line);color:var(--text);padding:4px 6px;border-radius:4px;margin-bottom:8px;">
+        <option value="scene-start">Scene start</option>
+        <option value="touch">Touch</option>
+        <option value="zone">Zone entry</option>
+        <option value="sensed">Sensed (step arrival)</option>
+        <option value="declared">Declared (time)</option>
+      </select>
+      <div id="trigValueArea">${triggerValueEditorHtml(step, actor)}</div>
+    </div></div>
+    <div class="insp-row"><div class="k">Duration</div><div class="v">${(step.t1-step.t0).toFixed(1)}s — ${step.durationKind==='fixed'?'fixed (computed / authored)':'runtime estimate (may drift)'}</div></div>
+    ${collisionRow}
+    ${cameraRow}
+    ${fieldRow}
+    ${step.status==='blocked' ? '<div class="insp-row"><div class="k">Status</div><div class="v" style="color:var(--coral)">blocked — surfaced instead of failing silently</div></div>' : ''}
+  `;
+  const sel=document.getElementById('onCollisionSel');
+  if(sel) sel.addEventListener('change', e=>{ step.onCollision=e.target.value; });
+  const camTypeSel=document.getElementById('camTypeSel');
+  if(camTypeSel) camTypeSel.addEventListener('change', e=>{ step.cameraType=e.target.value; renderLanes(); selectStep(step.id); requestAnimationFrame(drawOverlay); });
+  const camTargetSel=document.getElementById('camTargetSel');
+  if(camTargetSel) camTargetSel.addEventListener('change', e=>{ step.targetActor=e.target.value; renderLanes(); requestAnimationFrame(drawOverlay); });
+  const camVpSel=document.getElementById('camVpSel');
+  if(camVpSel) camVpSel.addEventListener('change', e=>{ step.viewpointRef=e.target.value; renderLanes(); requestAnimationFrame(drawOverlay); });
+  const setValueInput=document.getElementById('setValueInput');
+  if(setValueInput) setValueInput.addEventListener('change', e=>{
+    const n = Number(e.target.value);
+    step.value = (e.target.value.trim() !== '' && !Number.isNaN(n)) ? n : e.target.value;
+  });
+
+  const trigTypeSel=document.getElementById('trigTypeSel');
+  if(trigTypeSel){
+    trigTypeSel.value = step.trigger.type;
+    trigTypeSel.addEventListener('change', e=>{
+      step.trigger = defaultTriggerForType(e.target.value, step, actor);
+      retimeStepFromTrigger(step);
+      renderLanes(); selectStep(step.id); requestAnimationFrame(drawOverlay);
+    });
+  }
+  wireTriggerValueInputs(step, actor);
+}
+
+// ---- Day 75: editable trigger controls ----------------------------------
+// Builds the type-appropriate value field(s) for the current trigger.type.
+// Kept as a pure string-builder (no side effects) so selectStep()'s single
+// body.innerHTML assignment stays the one place the DOM actually changes —
+// same pattern the existing cameraRow/fieldRow builders already use.
+function triggerValueEditorHtml(step, actor){
+  const trig = step.trigger;
+  const inputStyle = 'font-family:var(--mono);background:var(--bg-lane-a);border:1px solid var(--line);color:var(--text);padding:5px 7px;border-radius:4px';
+  if(trig.type==='scene-start'){
+    return `<div style="color:var(--text-faint);font-size:11.5px">Fires once, at scene load. No value to set.</div>`;
+  }
+  if(trig.type==='touch'){
+    return `<label style="display:block;font-size:10px;color:var(--text-dim);margin-bottom:3px">Sensor id (optional — defaults to ${actor.id}Touch)</label>
+      <input type="text" id="trigSensorInput" placeholder="${actor.id}Touch" value="${trig.sensor||''}" style="${inputStyle};width:100%">
+      <div style="color:var(--text-faint);font-size:11px;margin-top:4px">No deterministic scene time — this fires on live user interaction, not on the master clock. Placed at T=0 on this timeline for display only.</div>`;
+  }
+  if(trig.type==='zone'){
+    if(!state.zones.length) return `<div style="color:var(--coral);font-size:11.5px">No zones defined in this scene.</div>`;
+    return `<select id="trigZoneSel" style="${inputStyle}">
+      ${state.zones.map(z=>`<option value="${z.id}" ${trig.zone===z.id?'selected':''}>${z.name} (T=${z.at}s)</option>`).join('')}
+    </select>`;
+  }
+  if(trig.type==='sensed'){
+    const others = allSteps().filter(x=>x.s.id!==step.id);
+    if(!others.length) return `<div style="color:var(--coral);font-size:11.5px">No other steps in this scene to reference.</div>`;
+    return `<select id="trigRefSel" style="${inputStyle};width:100%">
+      ${others.map(x=>`<option value="${x.s.id}" ${trig.ref===x.s.id?'selected':''}>${x.s.id} — ${x.a.id} / ${x.t.label}: ${x.s.label}</option>`).join('')}
+    </select>
+    <div style="color:var(--text-faint);font-size:11px;margin-top:4px">Fires when the selected step reports <span class="verb-badge v-arrived" style="padding:1px 5px"><span class="dot"></span>arrived</span>.</div>`;
+  }
+  if(trig.type==='declared'){
+    return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="trigAtInput" value="${formatSecondsForTrigger(trig.at!==undefined?trig.at:0)}" placeholder="16.929 or 0:16.929" style="${inputStyle};width:130px">
+      <div style="color:var(--text-faint);font-size:10.5px;margin-top:3px">Accepts plain seconds or H:MM:SS / MM:SS timecode — either copy box pastes in correctly.</div>
+      <button class="toolbar-btn" id="usePlayheadBtn" type="button">Use playhead (${formatSecondsForTrigger(state.scrubTime)}s)</button>
+    </div>
+    <label style="display:block;font-size:10px;color:var(--text-dim);margin:8px 0 3px">Cue (optional — groups this with other steps firing at the same declared moment)</label>
+    <input type="text" id="trigCueInput" placeholder="e.g. ground-tremor" value="${trig.cue||''}" style="${inputStyle};width:100%">`;
+  }
+  return '';
+}
+
+// Sensible default trigger object when switching types in the dropdown —
+// mirrors the shapes xmlStringToStateTrigger already produces on import, so
+// a freshly-switched trigger round-trips through export/import identically
+// to one that was authored via XML from the start.
+function defaultTriggerForType(type, step, actor){
+  switch(type){
+    case 'scene-start': return {type:'scene-start'};
+    case 'touch': return {type:'touch', sensor:actor.id+'Touch'};
+    case 'zone': return {type:'zone', zone: state.zones.length ? state.zones[0].id : ''};
+    case 'sensed': {
+      const other = allSteps().find(x=>x.s.id!==step.id);
+      return {type:'sensed', ref: other ? other.s.id : ''};
+    }
+    case 'declared': return {type:'declared', at: state.scrubTime, cue: null};
+    default: return {type:'scene-start'};
+  }
+}
+
+// Recomputes this step's t0 (and t1, preserving its current duration) from
+// its trigger — same resolution rules as importSceneXml's pass 2 (§ Day 75
+// sensed-trigger fix), applied to a single live-edited step rather than the
+// whole scene at once. Known limitation, called out rather than hidden:
+// this doesn't cascade — if step A is edited and step B is sensed off A,
+// B's own t0 doesn't automatically re-resolve here. B will pick up the new
+// time next time IT is edited or the scene is re-imported. Fine for a
+// single authoring edit; a full-scene cascade is the same graph-resolution
+// machinery already built for import, just not wired to live edits yet.
+function retimeStepFromTrigger(step){
+  const duration = step.t1 - step.t0;
+  let t0 = 0;
+  if(step.trigger.type==='declared') t0 = step.trigger.at || 0;
+  else if(step.trigger.type==='scene-start') t0 = 0;
+  else if(step.trigger.type==='zone'){ const z=state.zones.find(z=>z.id===step.trigger.zone); t0 = z?z.at:0; }
+  else if(step.trigger.type==='touch') t0 = 0;
+  else if(step.trigger.type==='sensed'){ const ref=findStep(step.trigger.ref); t0 = ref?ref.s.t1:0; }
+  step.t0 = t0;
+  step.t1 = t0 + duration;
+}
+
+// Accepts what either copy box in the scrub panel actually produces: plain
+// decimal seconds ("16.929", "58" — what formatSecondsForTrigger emits and
+// what a trigger attribute actually wants), or H:MM:SS.mmm / MM:SS.mmm
+// timecode ("0:16.929", "1:01:01.500" — what formatTimecode emits, meant
+// for reading, but people will paste it here too, and it shouldn't punish
+// them for grabbing the wrong box). Returns null — never 0 — on genuinely
+// unparseable input, so the caller can tell "user typed garbage" apart
+// from "user meant zero seconds."
+function parseTimeInput(str){
+  if(str===undefined || str===null) return null;
+  const s=String(str).trim();
+  if(s==='') return null;
+  if(/^\d+(\.\d+)?$/.test(s)){
+    const n=parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  const m=s.match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/);
+  if(m){
+    const h=m[1]?parseInt(m[1],10):0;
+    const min=parseInt(m[2],10);
+    const sec=parseFloat(m[3]);
+    return h*3600 + min*60 + sec;
+  }
+  return null;
+}
+
+function wireTriggerValueInputs(step, actor){
+  const retimeAndRefresh = ()=>{ retimeStepFromTrigger(step); renderLanes(); selectStep(step.id); requestAnimationFrame(drawOverlay); };
+
+  const sensorInput = document.getElementById('trigSensorInput');
+  if(sensorInput) sensorInput.addEventListener('change', e=>{ step.trigger.sensor = e.target.value.trim() || undefined; });
+
+  const zoneSel = document.getElementById('trigZoneSel');
+  if(zoneSel) zoneSel.addEventListener('change', e=>{ step.trigger.zone = e.target.value; retimeAndRefresh(); });
+
+  const refSel = document.getElementById('trigRefSel');
+  if(refSel) refSel.addEventListener('change', e=>{ step.trigger.ref = e.target.value; retimeAndRefresh(); });
+
+  const atInput = document.getElementById('trigAtInput');
+  if(atInput) atInput.addEventListener('change', e=>{
+    const parsed = parseTimeInput(e.target.value);
+    if(parsed===null){
+      // Never silently corrupt to 0 on unparseable input (that's exactly
+      // the bug this replaced — pasting "0:16.929" into a type=number
+      // field got blanked by the browser, then parseFloat('')||0 turned
+      // it into 0 with no indication anything had gone wrong). Revert the
+      // displayed value to the last-good number and flag it visibly.
+      e.target.value = formatSecondsForTrigger(step.trigger.at!==undefined?step.trigger.at:0);
+      e.target.style.borderColor = 'var(--coral)';
+      e.target.title = 'Could not parse — expected plain seconds (16.929) or timecode (0:16.929). Value unchanged.';
+      setTimeout(()=>{ e.target.style.borderColor=''; e.target.title=''; }, 2500);
+      return;
+    }
+    e.target.style.borderColor='';
+    e.target.title='';
+    step.trigger.at = parsed;
+    retimeAndRefresh();
+  });
+
+  const usePlayheadBtn = document.getElementById('usePlayheadBtn');
+  if(usePlayheadBtn) usePlayheadBtn.addEventListener('click', ()=>{ step.trigger.at = state.scrubTime; retimeAndRefresh(); });
+
+  const cueInput = document.getElementById('trigCueInput');
+  if(cueInput) cueInput.addEventListener('change', e=>{
+    const v = e.target.value.trim();
+    step.trigger.cue = v || null;
+    if(v && !state.cueNames[v]) state.cueNames[v] = v;
+  });
+}
+
+function cueGroups(){
+  const map={};
+  allSteps().forEach(({s})=>{
+    if(s.trigger.type==='declared' && s.trigger.cue){
+      if(!map[s.trigger.cue]) map[s.trigger.cue]={at:s.trigger.at,name:state.cueNames[s.trigger.cue]||s.trigger.cue,ids:[]};
+      map[s.trigger.cue].ids.push(s.id);
+    }
+  });
+  return map;
+}
+
+function drawOverlay(){
+  const svg=document.getElementById('connSvg');
+  const inner=document.getElementById('timelineInner');
+  svg.setAttribute('width', inner.scrollWidth);
+  svg.setAttribute('height', inner.scrollHeight);
+  const rect=inner.getBoundingClientRect();
+  let paths='';
+
+  allSteps().forEach(({s})=>{
+    if(s.trigger.type==='sensed'){
+      const srcEl=document.querySelector(`.step[data-id="${s.trigger.ref}"]`);
+      const dstEl=document.querySelector(`.step[data-id="${s.id}"]`);
+      if(srcEl && dstEl){
+        const sr=srcEl.getBoundingClientRect(), dr=dstEl.getBoundingClientRect();
+        const x1=sr.right-rect.left, y1=sr.top+sr.height/2-rect.top;
+        const x2=dr.left-rect.left, y2=dr.top+dr.height/2-rect.top;
+        const mx=(x1+x2)/2;
+        paths+=`<path class="conn-path" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+      }
+    } else if(s.trigger.type==='zone'){
+      const z=state.zones.find(z=>z.id===s.trigger.zone);
+      const dstEl=document.querySelector(`.step[data-id="${s.id}"]`);
+      if(z && dstEl){
+        const dr=dstEl.getBoundingClientRect();
+        const x1=z.at*PPS+200, y1=40;
+        const x2=dr.left-rect.left, y2=dr.top+dr.height/2-rect.top;
+        paths+=`<path class="conn-path zoneconn" d="M${x1},${y1} C${x1},${(y1+y2)/2} ${x2},${(y1+y2)/2} ${x2},${y2}"/>`;
+      }
+    }
+  });
+  svg.innerHTML = paths;
+
+  // cue guidelines
+  document.querySelectorAll('.cue-guide').forEach(el=>el.remove());
+  Object.entries(cueGroups()).forEach(([cueId,g])=>{
+    const guide=document.createElement('div');
+    guide.className='cue-guide';
+    guide.style.left=(g.at*PPS+200)+'px';
+    guide.innerHTML=`<div class="flag">${g.name}</div>`;
+    inner.appendChild(guide);
+  });
+
+  // playhead
+  const ph=document.getElementById('playhead');
+  ph.style.left=(state.scrubTime*PPS+200)+'px';
+  document.getElementById('playheadFlag').textContent=state.scrubTime.toFixed(1)+'s';
+  document.getElementById('playheadReadout').textContent='T = '+state.scrubTime.toFixed(1)+'s';
+
+  // Day 75 — copyable scrub-time panel. secondsBox holds the exact plain
+  // number a trigger attribute expects (e.g. declared:8.3 wants "8.3", not
+  // "0:08.300") — deliberately NOT rounded to 1 decimal like the small
+  // playheadFlag/playheadReadout displays above, since a DAW/MIDI-style
+  // "line this up precisely" workflow is the whole point of this panel and
+  // losing sub-100ms precision to display rounding would defeat it.
+  const secondsBox = document.getElementById('scrubSecondsBox');
+  const timecodeBox = document.getElementById('scrubTimecodeBox');
+  if(secondsBox) secondsBox.value = formatSecondsForTrigger(state.scrubTime);
+  if(timecodeBox) timecodeBox.value = formatTimecode(state.scrubTime);
+}
+
+// Trigger-ready seconds string: full precision, no trailing garbage from
+// float math (e.g. avoids "8.299999999999999"), and no unnecessary
+// ".0" on whole-second values so it reads clean either way (matches how
+// the schema doc's own worked example writes declared:58, not declared:58.0).
+function formatSecondsForTrigger(t){
+  const rounded = Math.round(t*1000)/1000; // millisecond precision ceiling, avoids float noise like 8.299999999999999
+  return String(rounded); // String(58) -> "58", String(8.3) -> "8.3" — matches schema doc's own declared:58 style
+}
+
+// Human-readable MM:SS.mmm (or H:MM:SS.mmm past an hour) for reading off a
+// position at a glance — NOT what gets pasted into a trigger attribute,
+// the schema only understands plain seconds. Kept separate and clearly
+// labeled in the UI so the two values are never confused for each other.
+function formatTimecode(t){
+  const totalMs = Math.round(t*1000);
+  const ms = totalMs % 1000;
+  const totalSec = Math.floor(totalMs/1000);
+  const s = totalSec % 60;
+  const totalMin = Math.floor(totalSec/60);
+  const m = totalMin % 60;
+  const h = Math.floor(totalMin/60);
+  const pad2 = (n)=>String(n).padStart(2,'0');
+  const pad3 = (n)=>String(n).padStart(3,'0');
+  return h>0 ? `${h}:${pad2(m)}:${pad2(s)}.${pad3(ms)}` : `${m}:${pad2(s)}.${pad3(ms)}`;
+}
+
+function renderTimeline(){
+  renderActorRail(); renderRuler(); renderZoneLane(); renderLanes();
+  requestAnimationFrame(drawOverlay);
+}
+renderTimeline();
+window.addEventListener('resize', drawOverlay);
+
+// playhead scrubbing
+document.getElementById('ruler').addEventListener('click', e=>{
+  const rect=e.currentTarget.getBoundingClientRect();
+  state.scrubTime = Math.max(0, (e.clientX-rect.left)/PPS);
+  drawOverlay();
+});
+document.getElementById('jumpZeroBtn').addEventListener('click', ()=>{ state.scrubTime=0; drawOverlay(); });
+
+// Day 75 — copyable scrub-time panel wiring. Click-to-select-all on either
+// box (so a manual Ctrl+C always works with zero JS dependency), plus an
+// explicit Copy button that tries the modern Clipboard API first and falls
+// back to the older execCommand('copy') path. This matters specifically
+// because this page is loaded from file:// — browsers commonly refuse
+// navigator.clipboard.writeText on file:// as an insecure context, and
+// execCommand, while deprecated, still works there. Never silently do
+// nothing: on failure, the box is still selected and status text tells the
+// user to press Ctrl+C themselves rather than leaving them guessing why
+// nothing happened.
+['scrubSecondsBox','scrubTimecodeBox'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('click', ()=>{ el.focus(); el.select(); });
+});
+document.getElementById('copySecondsBtn').addEventListener('click', async ()=>{
+  const box = document.getElementById('scrubSecondsBox');
+  const statusEl = document.getElementById('copyStatus');
+  box.focus(); box.select();
+  let copied = false;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    try{ await navigator.clipboard.writeText(box.value); copied = true; }
+    catch(e){ /* fall through to execCommand */ }
+  }
+  if(!copied){
+    try{ copied = document.execCommand('copy'); }catch(e){ copied = false; }
+  }
+  statusEl.textContent = copied ? `Copied "${box.value}"` : 'Copy blocked by browser — value is selected, press Ctrl+C';
+  statusEl.style.color = copied ? 'var(--teal)' : 'var(--coral)';
+  setTimeout(()=>{ statusEl.textContent=''; }, 4000);
+});
+
+// ---------------------------------------------------------------------
+// Declared cue builder
+const cueBuilder = document.getElementById('cueBuilder');
+let cueRowSeq=0;
+function trackOptionsForActor(actorId){
+  const actor = state.actors.find(a=>a.id===actorId);
+  return actor.tracks.map(t=>`<option value="${t.id}">${t.label} (${t.kind})</option>`).join('') + `<option value="__new__">+ New track…</option>`;
+}
+function addCueRow(){
+  const id='row'+(cueRowSeq++);
+  const row=document.createElement('div');
+  row.className='cb-row'; row.dataset.rowid=id;
+  row.innerHTML = `
+    <select class="cr-actor">${state.actors.map(a=>`<option value="${a.id}">${a.id}</option>`).join('')}</select>
+    <select class="cr-track">${trackOptionsForActor(state.actors[0].id)}</select>
+    <input type="text" class="cr-newtrack" placeholder="new track name" style="display:none;width:110px">
+    <select class="cr-newkind" style="display:none">
+      ${['path','gesture','dialogue','affect','prop','audio','movie'].map(k=>`<option value="${k}">${k}</option>`).join('')}
+    </select>
+    <select class="cr-verb">
+      <option value="start">start</option><option value="stop">stop</option><option value="set">set</option>
+    </select>
+    <input type="text" class="cr-label" placeholder="label" style="width:130px">
+    <input type="number" class="cr-dur" placeholder="dur (s)" step="0.5" style="width:70px" value="2">
+    <select class="cr-durkind"><option value="fixed">fixed</option><option value="estimate">estimate</option></select>
+    <select class="cr-collision"><option value="interrupt">interrupt</option><option value="wait">wait</option><option value="overlap">overlap</option></select>
+    <select class="cr-camtype" style="display:none">
+      ${Object.entries(CAMERA_TYPES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}
+    </select>
+    <select class="cr-camtarget" style="display:none">
+      ${state.actors.filter(a=>a.type==='Avatar').map(a=>`<option>${a.id}</option>`).join('')}
+    </select>
+    <button class="rm">remove</button>
+  `;
+  function syncCamFields(){
+    const trackVal = row.querySelector('.cr-track').value;
+    const newKindVal = row.querySelector('.cr-newkind').value;
+    const actor = state.actors.find(a=>a.id===row.querySelector('.cr-actor').value);
+    const existingKind = trackVal!=='__new__' && actor ? (actor.tracks.find(t=>t.id===trackVal)||{}).kind : null;
+    const isCamera = trackVal==='__new__' ? newKindVal==='camera' : existingKind==='camera';
+    row.querySelector('.cr-camtype').style.display = isCamera?'inline-block':'none';
+    row.querySelector('.cr-camtarget').style.display = isCamera?'inline-block':'none';
+  }
+  row.querySelector('.cr-actor').addEventListener('change', e=>{
+    row.querySelector('.cr-track').innerHTML = trackOptionsForActor(e.target.value);
+    row.querySelector('.cr-track').dispatchEvent(new Event('change'));
+  });
+  row.querySelector('.cr-track').addEventListener('change', e=>{
+    const isNew = e.target.value==='__new__';
+    row.querySelector('.cr-newtrack').style.display = isNew?'inline-block':'none';
+    row.querySelector('.cr-newkind').style.display = isNew?'inline-block':'none';
+    syncCamFields();
+  });
+  row.querySelector('.cr-newkind').addEventListener('change', syncCamFields);
+  syncCamFields();
+  row.querySelector('.rm').addEventListener('click', ()=>row.remove());
+  document.getElementById('cueRows').appendChild(row);
+}
+document.getElementById('addCueBtn').addEventListener('click', ()=>{
+  cueBuilder.classList.add('open');
+  document.getElementById('cueTime').value = state.scrubTime.toFixed(1);
+  document.getElementById('cueName').value='';
+  document.getElementById('cueRows').innerHTML='';
+  addCueRow();
+});
+document.getElementById('cancelCueBtn').addEventListener('click', ()=>cueBuilder.classList.remove('open'));
+document.getElementById('addCueRowBtn').addEventListener('click', addCueRow);
+
+document.getElementById('createCueBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('cueName').value.trim() || 'Untitled cue';
+  const time = parseFloat(document.getElementById('cueTime').value) || 0;
+  const cueId = name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + Date.now().toString(36).slice(-4);
+  state.cueNames[cueId] = name;
+
+  document.querySelectorAll('#cueRows .cb-row').forEach(row=>{
+    const actorId = row.querySelector('.cr-actor').value;
+    const actor = state.actors.find(a=>a.id===actorId);
+    let trackSel = row.querySelector('.cr-track').value;
+    let track;
+    if(trackSel==='__new__'){
+      const newName = row.querySelector('.cr-newtrack').value.trim() || 'New track';
+      const newKind = row.querySelector('.cr-newkind').value;
+      track = {id:newName.toLowerCase().replace(/\s+/g,'-')+Date.now().toString(36).slice(-3), label:newName, kind:newKind, steps:[]};
+      actor.tracks.push(track);
+    } else {
+      track = actor.tracks.find(t=>t.id===trackSel);
+    }
+    const verb = row.querySelector('.cr-verb').value;
+    const label = row.querySelector('.cr-label').value.trim() || (name+' response');
+    const dur = Math.max(0.2, parseFloat(row.querySelector('.cr-dur').value) || 1);
+    const durKind = row.querySelector('.cr-durkind').value;
+    const collision = row.querySelector('.cr-collision').value;
+    const newStep = {
+      id: actorId.toLowerCase()+'-'+track.id+'-'+Date.now().toString(36).slice(-4),
+      label, verb, trigger:{type:'declared', at:time, cue:cueId},
+      t0:time, t1:time+dur, durationKind:durKind, status:'ok', onCollision:collision
+    };
+    if(track.kind==='camera'){
+      newStep.cameraType = row.querySelector('.cr-camtype').value;
+      newStep.targetActor = row.querySelector('.cr-camtarget').value;
+      newStep.label = '';
+    }
+    track.steps.push(newStep);
+  });
+
+  cueBuilder.classList.remove('open');
+  renderTimeline();
+});
+
+// ---------------------------------------------------------------------
+// DIALOGUE VIEW
+let dlgActorId = state.actors.find(a=>a.tracks.some(t=>t.kind==='dialogue')).id;
+
+function triggerOptionList(){
+  const opts=[{label:'Scene start', obj:{type:'scene-start'}}, {label:'Touch', obj:{type:'touch'}}];
+  state.zones.forEach(z=>opts.push({label:'Zone entry: '+z.name, obj:{type:'zone',zone:z.id}}));
+  allSteps().forEach(({a,t,s})=>opts.push({label:s.id+'.arrived  ('+a.id+' / '+t.label+': '+s.label+')', obj:{type:'sensed',ref:s.id}}));
+  Object.entries(cueGroups()).forEach(([id,g])=>opts.push({label:'Declared cue: '+g.name+' (T='+g.at+'s)', obj:{type:'declared',at:g.at,cue:id}}));
+  opts.push({label:'Custom declared time…', obj:{type:'declared',at:0,cue:null,__custom:true}});
+  return opts;
+}
+function triggerMatches(a,b){
+  if(a.type!==b.type) return false;
+  if(a.type==='zone') return a.zone===b.zone;
+  if(a.type==='sensed') return a.ref===b.ref;
+  if(a.type==='declared') return a.cue===b.cue && !b.__custom;
+  return true;
+}
+
+function renderDialogueRail(){
+  const el=document.getElementById('dialogueActorRail');
+  const withDlg = state.actors.filter(a=>a.tracks.some(t=>t.kind==='dialogue'));
+  el.innerHTML = '<div class="rail-title">Actors with dialogue</div>' + withDlg.map(a=>{
+    const track=a.tracks.find(t=>t.kind==='dialogue');
+    return `<div class="rail-item dlg-only ${a.id===dlgActorId?'sel':''}" data-actor="${a.id}">
+      <span><div class="nm">${a.id}</div><div class="ty">${a.type}</div></span><span class="cnt">${track.steps.length}</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.rail-item').forEach(item=>item.addEventListener('click', ()=>{
+    dlgActorId=item.dataset.actor; renderDialogueRail(); renderDialogueSteps();
+  }));
+}
+
+function renderDialogueSteps(){
+  const actor=state.actors.find(a=>a.id===dlgActorId);
+  const track=actor.tracks.find(t=>t.kind==='dialogue');
+  document.getElementById('dlgActorName').textContent=actor.id+' — Dialogue';
+  document.getElementById('dlgActorType').textContent=actor.type;
+  const opts = triggerOptionList();
+
+  document.getElementById('dlgSteps').innerHTML = track.steps.map((s,i)=>{
+    const matchIdx = opts.findIndex(o=>triggerMatches(o.obj,s.trigger));
+    const isCustom = matchIdx===-1;
+    return `
+    <div class="dlg-card" data-id="${s.id}">
+      <div class="dlg-card-top">
+        <span class="dlg-index">${String(i+1).padStart(2,'0')}</span>
+        <div class="dlg-order-btns">
+          <button data-act="up" ${i===0?'disabled':''}>▲</button>
+          <button data-act="down" ${i===track.steps.length-1?'disabled':''}>▼</button>
+        </div>
+        <span class="verb-badge v-start"><span class="dot"></span>start</span>
+        <span style="font-size:12px;color:var(--text-dim)">${s.label}</span>
+        <button class="dlg-remove" data-act="remove">remove</button>
+      </div>
+      <div class="dlg-body">
+        <div class="field-block">
+          <label>Trigger source</label>
+          <select data-field="trigger">
+            ${opts.map((o,idx)=>`<option value="${idx}" ${(!isCustom && idx===matchIdx)?'selected':(isCustom && o.obj.__custom?'selected':'')}>${o.label}</option>`).join('')}
+          </select>
+          ${(isCustom || (opts[matchIdx]&&opts[matchIdx].obj.__custom)) ? `<div class="custom-time"><span style="font-size:11px;color:var(--text-faint)">T=</span><input type="number" step="0.1" data-field="customtime" value="${s.trigger.type==='declared'?s.trigger.at:0}"><span style="font-size:11px;color:var(--text-faint)">s</span></div>` : ''}
+        </div>
+        <div class="field-block">
+          <label>Voice</label>
+          <select data-field="voice">
+            ${['Cindy — warm alto','Jack — low tenor','Narrator — neutral'].map(v=>`<option ${v===s.voice?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-block span2">
+          <label>Content</label>
+          <div class="mode-toggle">
+            <button data-mode="static" class="${s.mode==='static'?'active':''}">Static text</button>
+            <button data-mode="improv" class="${s.mode==='improv'?'active':''}">Improv (ollama)</button>
+          </div>
+          ${s.mode==='static'
+            ? `<textarea data-field="content" placeholder="Line text...">${s.content||''}</textarea>`
+            : `<div class="improv-note">Generated live via ollama at runtime, using current affective context. Duration is a runtime estimate — "arrived" fires when TTS finishes, not at an authored time.</div>`}
+        </div>
+        <div class="field-block">
+          <label>Rate</label>
+          <select data-field="rate">${['0.85','0.92','1.0','1.1','1.2'].map(r=>`<option ${r===s.rate?'selected':''}>${r}</option>`).join('')}</select>
+        </div>
+        <div class="field-block" style="justify-content:center">
+          <label>Blocking</label>
+          <div class="block-row"><input type="checkbox" data-field="blocks" ${s.blocks?'checked':''}><span>Blocks next step until this line's <span style="color:var(--teal)">arrived</span></span></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('.dlg-card').forEach(card=>{
+    const id=card.dataset.id;
+    const step=track.steps.find(x=>x.id===id);
+    card.querySelectorAll('[data-act]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx=track.steps.findIndex(x=>x.id===id);
+        if(btn.dataset.act==='up' && idx>0){[track.steps[idx-1],track.steps[idx]]=[track.steps[idx],track.steps[idx-1]];renderDialogueSteps();}
+        if(btn.dataset.act==='down' && idx<track.steps.length-1){[track.steps[idx+1],track.steps[idx]]=[track.steps[idx],track.steps[idx+1]];renderDialogueSteps();}
+        if(btn.dataset.act==='remove'){track.steps.splice(idx,1);renderDialogueSteps();}
+      });
+    });
+    card.querySelectorAll('.mode-toggle button').forEach(mb=>{
+      mb.addEventListener('click', ()=>{ step.mode=mb.dataset.mode; if(step.mode==='improv') step.content=''; renderDialogueSteps(); });
+    });
+    const trigSel=card.querySelector('[data-field="trigger"]');
+    if(trigSel) trigSel.addEventListener('change', e=>{
+      const chosen = opts[parseInt(e.target.value)];
+      step.trigger = JSON.parse(JSON.stringify(chosen.obj));
+      renderDialogueSteps();
+    });
+    const customTime=card.querySelector('[data-field="customtime"]');
+    if(customTime) customTime.addEventListener('change', e=>{ step.trigger={type:'declared',at:parseFloat(e.target.value)||0,cue:null}; });
+    const voiceSel=card.querySelector('[data-field="voice"]');
+    if(voiceSel) voiceSel.addEventListener('change', e=>{ step.voice=e.target.value; });
+    const rateSel=card.querySelector('[data-field="rate"]');
+    if(rateSel) rateSel.addEventListener('change', e=>{ step.rate=e.target.value; });
+    const contentTa=card.querySelector('[data-field="content"]');
+    if(contentTa) contentTa.addEventListener('input', e=>{ step.content=e.target.value; });
+    const blockCb=card.querySelector('[data-field="blocks"]');
+    if(blockCb) blockCb.addEventListener('change', e=>{ step.blocks=e.target.checked; });
+  });
+}
+
+document.getElementById('addLineBtn').addEventListener('click', ()=>{
+  const actor=state.actors.find(a=>a.id===dlgActorId);
+  const track=actor.tracks.find(t=>t.kind==='dialogue');
+  track.steps.push({
+    id:dlgActorId.toLowerCase()+'-d'+Date.now(), label:'New line', verb:'start',
+    trigger:{type:'scene-start'}, t0:0, t1:3, durationKind:'estimate', status:'ok',
+    content:'', mode:'static', voice:'Narrator — neutral', rate:'1.0', blocks:false
+  });
+  renderDialogueRail(); renderDialogueSteps();
+});
+
+renderDialogueRail();
+renderDialogueSteps();
+</script>
+</body>
+</html>

@@ -34,7 +34,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
   display: flex; align-items: center; padding: 0 16px; gap: 16px; }
 .logo { font-family: var(--display); font-weight: 800; font-size: 19px; color: var(--warm); }
 .logo span { color: var(--dim); font-weight: 400; }
-.vbadge { font-size: 13px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
+.vbadge { font-size: 16px; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
 .mode-tabs { display: flex; gap: 2px; }
 .mtab { font-family: var(--mono); font-size: 14px; padding: 3px 10px;
   border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--dim); cursor: pointer; }
@@ -44,7 +44,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
    panel is far narrower than the header, so four buttons in one unwrapped flex row
    ran past the panel edge and under the map canvas. */
 .place-subnav { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-.place-subnav .mtab { font-size: 12px; padding: 3px 8px; flex: 0 0 auto; }
+.place-subnav .mtab { font-size: 15px; padding: 3px 8px; flex: 0 0 auto; }
 .api-row { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dim); }
 .api-row input { background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
   color: var(--text); font-family: var(--mono); font-size: 14px; padding: 3px 8px; width: 160px; outline: none; }
@@ -55,7 +55,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 #left-panel { grid-area: left; }
 #map-panel { grid-area: map; position: relative; overflow: hidden; padding: 0; }
 #right-panel { grid-area: right; border-right: none; }
-.sh { font-family: var(--display); font-size: 13px; font-weight: 600; letter-spacing: 0.14em;
+.sh { font-family: var(--display); font-size: 16px; font-weight: 600; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--dim); margin: 14px 0 8px;
   display: flex; align-items: center; gap: 6px; }
 .sh:first-child { margin-top: 0; }
@@ -67,7 +67,7 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 .obj-item.sel { border-color: var(--warm); }
 .obj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .obj-name { flex: 1; font-family: var(--display); font-size: 15px; font-weight: 600; }
-.obj-tag { font-size: 13px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
+.obj-tag { font-size: 16px; color: var(--dim); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; }
 .agent-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; }
 .agent-item:hover { border-color: var(--cool); }
@@ -75,14 +75,14 @@ header { grid-area: hdr; background: var(--s1); border-bottom: 1px solid var(--b
 .agent-item.placing { border-color: var(--warm); background: #1a1508; }
 .aswatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 .aname { flex: 1; font-family: var(--display); font-size: 15px; font-weight: 600; }
-.arole { font-size: 13px; color: var(--dim); }
+.arole { font-size: 16px; color: var(--dim); }
 .wp-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; cursor: pointer; font-size: 15px; }
 .wp-item:hover { border-color: var(--dim); }
 .wp-item.sel { border-color: var(--cool); }
 .wp-num { width: 18px; height: 18px; border-radius: 50%; background: var(--s3);
-  display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--cool); flex-shrink: 0; }
-label { display: block; font-size: 14px; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
+  display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--cool); flex-shrink: 0; }
+label { display: block; font-size: 14px; font-weight: 600; color: var(--dim); margin-bottom: 3px; margin-top: 8px; }
 label:first-child { margin-top: 0; }
 input[type=text], input[type=number], select, textarea {
   width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 4px;
@@ -122,46 +122,46 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 .expopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px; }
 .explbl { flex: 1; font-size: 15px; }
-.expdsc { font-size: 13px; color: var(--dim); margin-top: 1px; }
+.expdsc { font-size: 16px; color: var(--dim); margin-top: 1px; }
 .path-seq { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
 .pwp { background: var(--s3); border: 1px solid var(--border); border-radius: 3px;
   padding: 2px 7px; font-size: 14px; color: var(--cool); cursor: pointer; }
 /* ── Network links ── */
 .net-link { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
-  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 3px; font-size: 16px;
   transition: border-color 0.3s, background 0.3s; }
 .net-link.flash { border-color: var(--purple); background: #1c1030; }
 .net-from { color: var(--cool); font-weight: 600; }
 .net-arrow { color: var(--dim); }
 .net-to   { color: var(--accent); font-weight: 600; }
 .net-str  { color: var(--warm); margin-left: auto; }
-.net-couplers { color: var(--purple); font-size: 12px; letter-spacing: 0.05em; }
+.net-couplers { color: var(--purple); font-size: 15px; letter-spacing: 0.05em; }
 .net-del  { background: none; border: 1px solid var(--border); border-radius: 3px;
-  color: var(--danger); cursor: pointer; padding: 1px 6px; font-size: 12px; }
+  color: var(--danger); cursor: pointer; padding: 1px 6px; font-size: 15px; }
 .net-del:hover { border-color: var(--danger); }
 .cpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
 .cpl-row  { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
   border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
 .cpl-row:hover { border-color: var(--dim); }
 .cpl-row input[type=checkbox] { accent-color: var(--accent); width:14px; height:14px; cursor:pointer; }
-.cpl-label { font-size: 13px; color: var(--text); flex: 1; }
-.cpl-key   { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 24px; }
+.cpl-label { font-size: 16px; color: var(--text); flex: 1; }
+.cpl-key   { font-size: 15px; color: var(--accent); font-weight: 600; min-width: 24px; }
 .cpl-params { background: var(--s3); border: 1px solid var(--border); border-radius: 4px;
   padding: 6px 8px; margin: 2px 0 6px; display: none; }
 .cpl-params.open { display: block; }
 .cpl-param-row { display: grid; grid-template-columns: 80px 1fr 36px; align-items: center;
-  gap: 6px; margin-bottom: 4px; font-size: 12px; color: var(--dim); }
+  gap: 6px; margin-bottom: 4px; font-size: 15px; color: var(--dim); }
 .cpl-param-row input[type=range] { width: 100%; accent-color: var(--warm); }
 .cpl-param-row input[type=text]  { background: var(--s2); border: 1px solid var(--border);
-  border-radius: 3px; color: var(--text); font-family: var(--mono); font-size: 12px;
+  border-radius: 3px; color: var(--text); font-family: var(--mono); font-size: 15px;
   padding: 2px 5px; width: 100%; outline: none; }
-.cpl-param-val { color: var(--warm); text-align: right; font-size: 12px; }
+.cpl-param-val { color: var(--warm); text-align: right; font-size: 15px; }
 /* waypointOrder badge on path list items */
 .order-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; border-radius: 50%;
   background: var(--s3); border: 1px solid var(--warm);
-  font-size: 12px; color: var(--warm); font-weight: 700; flex-shrink: 0;
+  font-size: 15px; color: var(--warm); font-weight: 700; flex-shrink: 0;
 }
 #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(12px);
   background: var(--s2); border: 1px solid var(--warm); border-radius: 4px;
@@ -196,7 +196,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="sh">Scene Setup</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <label>Scene Name</label>
-      <input id="sc-name" type="text" value="garden_001" onchange="sceneChanged()">
+      <input id="sc-name" type="text" value="" placeholder="unnamed_scene" onchange="sceneChanged()">
       <div class="setup-grid" style="margin-top:8px">
         <div><label>Width (m)</label><input id="sc-width" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
         <div><label>Depth (m)</label><input id="sc-depth" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
@@ -206,29 +206,29 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div class="sh" style="margin-top:12px">Scene Sound (Track 1 + Track 3)</div>
       <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:4px">
         <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
-          <button class="btn cool" onclick="refreshMediaList()" style="padding:2px 8px;font-size:11px" title="Reload media/ directory">↺ media/</button>
+          <button class="btn cool" onclick="refreshMediaList()" style="padding:2px 8px;font-size:14px" title="Reload media/ directory">↺ media/</button>
         </div>
-        <label style="margin-top:0">Music <span style="color:var(--dim);font-size:11px">(Track 1 — global)</span></label>
-        <select id="sc-music-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+        <label style="margin-top:0">Music <span style="color:var(--dim);font-size:14px">(Track 1 — global)</span></label>
+        <select id="sc-music-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
           <option value="">— select file —</option>
         </select>
         <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
           <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
             <input type="checkbox" id="sc-music-loop" style="width:auto;margin:0" checked>
-            <span style="font-size:12px;color:var(--dim)">loop</span>
+            <span style="font-size:15px;color:var(--dim)">loop</span>
           </label>
           <label style="margin:0;flex:1">Gain <span id="sc-music-gain-val" style="color:var(--warm)">0.70</span></label>
         </div>
         <input type="range" id="sc-music-gain" min="0" max="1" step="0.01" value="0.70"
           oninput="document.getElementById('sc-music-gain-val').textContent=parseFloat(this.value).toFixed(2)">
-        <label style="margin-top:8px">Bed <span style="color:var(--dim);font-size:11px">(Track 3 — atmosphere)</span></label>
-        <select id="sc-bed-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+        <label style="margin-top:8px">Bed <span style="color:var(--dim);font-size:14px">(Track 3 — atmosphere)</span></label>
+        <select id="sc-bed-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
           <option value="">— select file —</option>
         </select>
         <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
           <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
             <input type="checkbox" id="sc-bed-loop" style="width:auto;margin:0" checked>
-            <span style="font-size:12px;color:var(--dim)">loop</span>
+            <span style="font-size:15px;color:var(--dim)">loop</span>
           </label>
           <label style="margin:0;flex:1">Gain <span id="sc-bed-gain-val" style="color:var(--warm)">0.50</span></label>
         </div>
@@ -242,13 +242,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="sh">Load Existing Scene</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
-        <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace">
+        <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace">
           <option value="">— saved scenes —</option>
         </select>
-        <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:12px" title="Refresh list">↺</button>
+        <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:15px" title="Refresh list">↺</button>
       </div>
       <button class="btn pri full" onclick="loadSceneFromDropdown()">Load Scene</button>
-      <div id="scene-load-log" style="font-size:11px;color:var(--dim);min-height:14px;margin-top:4px"></div>
+      <div id="scene-load-log" style="font-size:14px;color:var(--dim);min-height:14px;margin-top:4px"></div>
     </div>
     <div class="sh">Scene Summary</div>
     <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:18px">Apply grid to begin.</div></div>
@@ -269,6 +269,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="btn full" style="margin-top:6px" onclick="startPlace('zone')">+ Place Zone</button>
     <div id="zone-form" style="display:none;margin-top:10px">
       <div class="sh">New Zone</div>
+      <div style="background:var(--s3);border:1px solid var(--purple);border-radius:4px;padding:8px;margin-bottom:10px">
+        <label style="margin-top:0">Zone Template <span style="color:var(--dim);font-size:14px">(zones/ — reusable, like cultivars)</span></label>
+        <select id="z-template-select" onchange="loadZoneTemplate()" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
+          <option value="">— none (custom zone) —</option>
+        </select>
+        <button class="btn" style="font-size:15px;width:100%;margin-top:6px;border-color:var(--purple);color:var(--purple)" onclick="saveZoneAsTemplate()">&#128190; Save current settings as Template</button>
+      </div>
       <label>ID</label><input id="z-id" type="text" placeholder="the_pool">
       <label>Name</label><input id="z-name" type="text" placeholder="The Pool">
       <label>Type</label>
@@ -333,15 +340,15 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
             <option value="overlay">overlay (HTML div)</option>
             <option value="x3d">x3d (SAI Text node — v2)</option>
           </select>
-          <label>Persona <span style="color:var(--dim);font-size:12px">(optional — overrides tone)</span></label>
+          <label>Persona <span style="color:var(--dim);font-size:15px">(optional — overrides tone)</span></label>
           <textarea id="z-chorus-persona" rows="3" placeholder="You are the garden itself. Speak in cold observations. Never more than two sentences."></textarea>
         </div>
       </div>
       <div class="sh" style="margin-top:12px">Zone Commands</div>
       <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
-        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Rules that trigger Ollama when cultivars enter, dwell, or exit this zone.</div>
+        <div style="font-size:15px;color:var(--dim);margin-bottom:6px">Rules that trigger Ollama when cultivars enter, dwell, or exit this zone.</div>
         <div id="z-commands-list" style="margin-bottom:6px"></div>
-        <button class="btn" style="font-size:12px;width:100%" onclick="addZoneCommand()">+ Add Command Rule</button>
+        <button class="btn" style="font-size:15px;width:100%" onclick="addZoneCommand()">+ Add Command Rule</button>
       </div>
       <div class="sh" style="margin-top:12px">Zone Sound (Track 2 — Ambient)</div>
       <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
@@ -350,14 +357,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
           <span style="font-size:14px;color:var(--text)">Enable ambient sound for this zone</span>
         </label>
         <div id="z-sound-form" style="display:none;margin-top:8px">
-          <label style="margin-top:0">Ambient <span style="color:var(--dim);font-size:11px">(Track 2 — loop on zone enter)</span></label>
-          <select id="z-sound-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+          <label style="margin-top:0">Ambient <span style="color:var(--dim);font-size:14px">(Track 2 — loop on zone enter)</span></label>
+          <select id="z-sound-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
             <option value="">— select file —</option>
           </select>
           <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
             <label style="margin:0;display:flex;align-items:center;gap:4px;cursor:pointer">
               <input type="checkbox" id="z-sound-loop" style="width:auto;margin:0" checked>
-              <span style="font-size:12px;color:var(--dim)">loop</span>
+              <span style="font-size:15px;color:var(--dim)">loop</span>
             </label>
             <label style="margin:0;flex:1">Gain <span id="z-sound-gain-val" style="color:var(--warm)">0.80</span></label>
           </div>
@@ -366,7 +373,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
           <label style="margin-top:8px">Low-pass Filter</label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
             <input type="checkbox" id="z-sound-filter" style="width:auto;margin:0" onchange="toggleZoneSoundFilter()">
-            <span style="font-size:13px;color:var(--text)">Apply BiquadFilter (lowpass)</span>
+            <span style="font-size:16px;color:var(--text)">Apply BiquadFilter (lowpass)</span>
           </label>
           <div id="z-sound-filter-form" style="display:none;margin-top:6px">
             <label>Frequency (Hz) <span id="z-sound-freq-val" style="color:var(--cool)">900</span></label>
@@ -376,21 +383,47 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
             <input type="range" id="z-sound-q" min="0.1" max="10" step="0.1" value="1.0"
               oninput="document.getElementById('z-sound-q-val').textContent=parseFloat(this.value).toFixed(1)">
           </div>
-          <label style="margin-top:8px">Dwell <span style="color:var(--dim);font-size:11px">(Track 4 — one-shot on dwell, optional)</span></label>
-          <select id="z-sound-dwell-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+          <label style="margin-top:8px">Dwell <span style="color:var(--dim);font-size:14px">(Track 4 — one-shot on dwell, optional)</span></label>
+          <select id="z-sound-dwell-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
             <option value="">— none —</option>
           </select>
           <label>Dwell Gain <span id="z-sound-dwell-gain-val" style="color:var(--warm)">0.85</span></label>
           <input type="range" id="z-sound-dwell-gain" min="0" max="1" step="0.01" value="0.85"
             oninput="document.getElementById('z-sound-dwell-gain-val').textContent=parseFloat(this.value).toFixed(2)">
-          <label style="margin-top:8px">Convolver IR <span style="color:var(--dim);font-size:11px">(reverb impulse response, optional)</span></label>
-          <select id="z-sound-convolver-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:12px;font-family:monospace;width:100%">
+          <label style="margin-top:8px">Convolver IR <span style="color:var(--dim);font-size:14px">(reverb impulse response, optional)</span></label>
+          <select id="z-sound-convolver-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
             <option value="">— none —</option>
           </select>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
             <input type="checkbox" id="z-sound-convolver-normalize" style="width:auto;margin:0" checked>
-            <span style="font-size:12px;color:var(--dim)">Normalize IR (recommended)</span>
+            <span style="font-size:15px;color:var(--dim)">Normalize IR (recommended)</span>
           </div>
+        </div>
+      </div>
+      <div class="sh" style="margin-top:12px">Zone Asset (X3D Inline)</div>
+      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:0">
+          <input type="checkbox" id="z-asset-enabled" style="width:auto;margin:0" onchange="toggleZoneAssetForm()">
+          <span style="font-size:14px;color:var(--text)">Inline an X3D asset into this zone</span>
+        </label>
+        <div id="z-asset-form" style="display:none;margin-top:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <label style="margin-top:0">Asset <span style="color:var(--dim);font-size:14px">(static/x3d/X3DAssets/)</span></label>
+            <button type="button" class="btn cool" onclick="refreshX3DAssetsList(null,true)" style="padding:2px 8px;font-size:14px" title="Reload X3DAssets/ directory">↺ assets/</button>
+          </div>
+          <select id="z-asset-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace;width:100%">
+            <option value="">— select asset —</option>
+          </select>
+          <label style="margin-top:8px">Offset from zone center (m)</label>
+          <div style="display:flex;gap:6px">
+            <input id="z-asset-offset-x" type="number" value="0" step="0.1" style="width:33%" title="X offset">
+            <input id="z-asset-offset-y" type="number" value="0" step="0.1" style="width:33%" title="Y offset (height)">
+            <input id="z-asset-offset-z" type="number" value="0" step="0.1" style="width:33%" title="Z offset">
+          </div>
+          <label style="margin-top:8px">Rotation (Y-axis, degrees)</label>
+          <input id="z-asset-rotation" type="number" value="0" step="1" min="-180" max="180">
+          <label style="margin-top:8px">Scale</label>
+          <input id="z-asset-scale" type="number" value="1" step="0.1" min="0.01">
         </div>
       </div>
       <div class="btn-row">
@@ -404,7 +437,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="agent-roster"><div style="color:var(--dim);font-size:18px">Connect to API to load agents.</div></div>
     <div style="margin-top:8px"><button class="btn full" onclick="loadAgents()">Refresh from API</button></div>
     <div class="sh" style="margin-top:14px">Agent Voice (for arc playback)</div>
-    <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Assigned when agent is placed. Stored in scene XML.</div>
+    <div style="font-size:16px;color:var(--dim);margin-bottom:4px">Assigned when agent is placed. Stored in scene XML.</div>
     <select id="agent-voice-select" style="width:100%;margin-bottom:6px">
       <option value="">(default voice)</option>
     </select>
@@ -426,7 +459,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <div><label>Pace (m/s) — travel speed here</label><input id="wp-pace" type="number" value="1.4" min="0.1" max="10" step="0.1"></div>
       </div>
       <div class="sh" style="margin-top:10px">Dialogue Lines</div>
-      <div style="display:flex;gap:4px;margin-bottom:3px;font-size:11px;color:var(--dim)">
+      <div style="display:flex;gap:4px;margin-bottom:3px;font-size:14px;color:var(--dim)">
         <div style="width:84px;min-width:84px">Type</div>
         <div style="width:110px;min-width:110px">Speaker (agent name)</div>
         <div style="flex:1">Question / Response text</div>
@@ -434,9 +467,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
       <div id="wp-qa-container"></div>
       <div style="display:flex;gap:6px;margin-top:5px">
-        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Question')">+ Question</button>
-        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Response')">+ Response</button>
-        <button class="btn" style="flex:1;font-size:13px" onclick="addWPQALine('Statement')">+ Statement</button>
+        <button class="btn" style="flex:1;font-size:16px" onclick="addWPQALine('Question')">+ Question</button>
+        <button class="btn" style="flex:1;font-size:16px" onclick="addWPQALine('Response')">+ Response</button>
+        <button class="btn" style="flex:1;font-size:16px" onclick="addWPQALine('Statement')">+ Statement</button>
       </div>
       <div class="btn-row" style="margin-top:8px">
         <button class="btn pri" onclick="confirmWP()">Place on Map</button>
@@ -454,13 +487,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <!-- ── waypointOrder REQUIRED field ── -->
       <label style="margin-top:10px">
         Waypoint Order
-        <span style="color:var(--danger);font-size:11px;margin-left:4px">* required — no default</span>
+        <span style="color:var(--danger);font-size:14px;margin-left:4px">* required — no default</span>
       </label>
       <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
         <input id="p-order" type="number" value="" min="1" step="1" placeholder="1"
           style="width:72px;flex-shrink:0;border-color:var(--danger)"
           oninput="this.style.borderColor=this.value?'var(--warm)':'var(--danger)'">
-        <div style="font-size:11px;color:var(--dim);line-height:1.5;padding-top:5px">
+        <div style="font-size:14px;color:var(--dim);line-height:1.5;padding-top:5px">
           Same number fires simultaneously.<br>
           Higher number waits for lower group to complete.<br>
           <span style="color:var(--danger)">Missing = scene will not run.</span>
@@ -477,16 +510,16 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   </div>
   <div id="mode-characters" style="display:none">
     <div class="sh">Character Creator</div>
-    <div style="font-size:13px;color:var(--dim);line-height:1.7">
+    <div style="font-size:16px;color:var(--dim);line-height:1.7">
       Build and edit H-Anim figures, assign cultivar definitions, and configure expression slots.
-      Changes here update <code style="color:var(--accent);font-size:12px">hanim_src</code> on each agent.
+      Changes here update <code style="color:var(--accent);font-size:15px">hanim_src</code> on each agent.
     </div>
   </div>
   <div id="mode-events" style="display:none">
     <div class="sh">Events Editor</div>
-    <div style="font-size:13px;color:var(--dim);line-height:1.7">
+    <div style="font-size:16px;color:var(--dim);line-height:1.7">
       Compose camera cues, lighting changes, fog, background, FX, and behavior triggers
-      anchored to waypoint arrivals. Exports <code style="color:var(--accent);font-size:12px">&lt;EventCues&gt;</code> into scene XML.
+      anchored to waypoint arrivals. Exports <code style="color:var(--accent);font-size:15px">&lt;EventCues&gt;</code> into scene XML.
     </div>
   </div>
   <div id="mode-run" style="display:none">
@@ -514,22 +547,22 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="run-multi-status"></div>
     <div class="sh" style="margin-top:10px">Arc Export</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:8px">
-      <div style="font-size:12px;color:var(--dim)">
+      <div style="font-size:15px;color:var(--dim)">
         Take: <span id="take-current" style="color:var(--accent)">none yet — starts on first save</span>
       </div>
       <div class="btn-row" style="margin-top:6px">
         <input id="take-label" type="text" placeholder="optional take label" style="flex:1">
         <button class="btn" onclick="_startNewTake(document.getElementById('take-label').value)">New Take</button>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:4px">
+      <div style="font-size:14px;color:var(--dim);margin-top:4px">
         Every arc saved without starting a new take lands in the same take folder — this is how multiple agents' arcs from one session end up grouped together, and how the playback dropdown stays scoped to one scene/take instead of showing arcs from every scene ever recorded.
       </div>
     </div>
-    <div id="run-log" style="font-size:13px;color:var(--dim)">Run a scene to generate arc.</div>
+    <div id="run-log" style="font-size:16px;color:var(--dim)">Run a scene to generate arc.</div>
   </div>
   <div id="mode-network" style="display:none">
     <div class="sh">Coupling Network</div>
-    <div style="font-size:12px;color:var(--dim);margin-bottom:8px;">
+    <div style="font-size:15px;color:var(--dim);margin-bottom:8px;">
       Links define which agents are coupled and how strongly their expressive states influence each other.
       Strength 0–1. Bidirectional = two links.
     </div>
@@ -537,7 +570,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <input type="checkbox" id="net-show-links" onchange="toggleShowLinks()">
       Show links on grid
     </label>
-    <div id="net-link-list"><div style="color:var(--dim);font-size:13px;">No links defined.</div></div>
+    <div id="net-link-list"><div style="color:var(--dim);font-size:16px;">No links defined.</div></div>
     <div style="margin-top:12px">
       <div class="sh">New Link</div>
       <label>From Agent</label>
@@ -629,6 +662,18 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="btn full" style="margin-top:6px" onclick="startPlace('camera')">+ Place Free Camera</button>
     <div id="camera-form" style="display:none;margin-top:10px">
       <div class="sh">New Free Camera</div>
+      <div class="insp-field">
+        <label>Seed from shot type (optional)</label>
+        <select id="cam-seed-type" onchange="seedCameraFromPreset()">
+          <option value="">— none, place manually —</option>
+        </select>
+      </div>
+      <div class="insp-field">
+        <label>Subject (for seeding only, not stored)</label>
+        <select id="cam-seed-subject" onchange="seedCameraFromPreset()">
+          <option value="">— none placed —</option>
+        </select>
+      </div>
       <label>Name</label><input id="cam-name" type="text" placeholder="CAM_Wide1">
       <label>Height (m)</label><input id="cam-height" type="number" value="1.7" step="0.1" min="0">
       <div class="insp-field">
@@ -645,6 +690,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
           <span id="cam-vangle-val" style="width:34px;text-align:right;font-family:monospace">-10</span>
         </div>
       </div>
+      <div class="insp-field">
+        <label>Roll (°)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="cam-roll" type="range" min="-45" max="45" step="1" value="0" style="flex:1" oninput="document.getElementById('cam-roll-val').textContent=this.value">
+          <span id="cam-roll-val" style="width:34px;text-align:right;font-family:monospace">0</span>
+        </div>
+      </div>
       <div class="btn-row" style="margin-top:8px">
         <button class="btn pri" onclick="confirmCamera()">Place on Map</button>
         <button class="btn" onclick="cancelPlace()">Cancel</button>
@@ -654,20 +706,20 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
     <div class="expopt">
-      <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE</div></div>
-      <button class="btn accent" onclick="exportX3D()">Export</button>
+      <div class="explbl"><div>Scene file</div><div class="expdsc">Valid X3D 4.0 - opens in X_ITE &middot; saves to static/x3d/</div></div>
+      <button class="btn accent" onclick="exportX3D()">Export X3D</button>
     </div>
     <div class="sh" style="margin-top:14px">Exports</div>
     <div class="expopt">
       <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
-      <button class="btn cool" onclick="exportZoneXML()">Export</button>
+      <button class="btn cool" onclick="exportZoneXML()">Export Zone XML</button>
     </div>
     <div class="expopt">
       <div class="explbl"><div>Scene XML</div><div class="expdsc">scenes/[name].xml — carries waypointOrder</div></div>
-      <button class="btn cool" onclick="exportSceneXML()">Export</button>
+      <button class="btn cool" onclick="exportSceneXML()">Export Scene XML</button>
     </div>
     <div class="expopt" style="border-color:var(--accent)">
-      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Uploads to static/x3d/ (same path as Export) — reload launcher</div></div>
+      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Uploads to static/x3d/ — same path as "Export X3D" above, NOT the same as "Export Scene XML" (which saves to scenes/[name]/) — reload launcher</div></div>
       <button class="btn" id="send-btn" onclick="sendToLauncher()" style="border-color:var(--accent);color:var(--accent)">&#9654; Send</button>
     </div>
     <div class="expopt" style="border-color:var(--purple);margin-top:6px">
@@ -704,7 +756,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div style="font-size:36px;opacity:0.15">◎</div>
       <div id="tool-offline-name" style="font-family:var(--display);font-size:15px;font-weight:600;
         color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;"></div>
-      <div style="font-size:13px;color:var(--dim);text-align:center;line-height:1.9;opacity:0.7">
+      <div style="font-size:16px;color:var(--dim);text-align:center;line-height:1.9;opacity:0.7">
         File not yet in static/ — will load here when present
       </div>
     </div>
@@ -719,15 +771,19 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect" id="zd-chorus-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Greek Chorus</div>
-      <div id="zd-chorus" style="font-size:13px;color:var(--purple)"></div>
+      <div id="zd-chorus" style="font-size:16px;color:var(--purple)"></div>
     </div>
     <div class="dsect" id="zd-commands-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Zone Commands</div>
-      <div id="zd-commands" style="font-size:13px;color:var(--cool)"></div>
+      <div id="zd-commands" style="font-size:16px;color:var(--cool)"></div>
     </div>
     <div class="dsect" id="zd-sound-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Zone Sound</div>
-      <div id="zd-sound" style="font-size:13px;color:var(--accent)"></div>
+      <div id="zd-sound" style="font-size:16px;color:var(--accent)"></div>
+    </div>
+    <div class="dsect" id="zd-asset-sect" style="display:none">
+      <div class="sh" style="margin:0 0 4px">Zone Asset</div>
+      <div id="zd-asset" style="font-size:16px;color:var(--purple)"></div>
     </div>
     <div class="btn-row">
       <button class="btn cool" onclick="editZone(selectedId)">Edit</button>
@@ -746,23 +802,23 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar</div>
-      <div id="ad-hanim" style="font-size:12px;color:var(--dim);word-break:break-all;margin-bottom:4px">(placeholder — assign in Character Creator)</div>
+      <div id="ad-hanim" style="font-size:15px;color:var(--dim);word-break:break-all;margin-bottom:4px">(placeholder — assign in Character Creator)</div>
       <select id="ad-hanim-select" style="display:none;margin-bottom:4px">
         <option value="">(none — cylinder placeholder)</option>
       </select>
       <div class="btn-row" style="margin:0">
-        <button class="btn cool" style="font-size:11px" onclick="toggleHanimEdit()">Swap Avatar</button>
-        <button class="btn pri" style="font-size:11px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Apply</button>
+        <button class="btn cool" style="font-size:14px" onclick="toggleHanimEdit()">Swap Avatar</button>
+        <button class="btn pri" style="font-size:14px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Apply</button>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:4px">To assign a new H-Anim figure, use Character Creator.</div>
+      <div style="font-size:14px;color:var(--dim);margin-top:4px">To assign a new H-Anim figure, use Character Creator.</div>
     </div>
     <div class="dsect" id="ad-couplers-sect" style="display:none">
       <div class="sh" style="margin:0 0 6px">Couplers Affecting This Agent</div>
-      <div id="ad-couplers" style="font-size:12px"></div>
+      <div id="ad-couplers" style="font-size:15px"></div>
     </div>
     <div class="dsect" id="ad-couplers-sect" style="display:none">
       <div class="sh" style="margin:0 0 6px">Couplers Affecting This Agent</div>
-      <div id="ad-couplers" style="font-size:12px"></div>
+      <div id="ad-couplers" style="font-size:15px"></div>
     </div>
     <div class="btn-row"><button class="btn danger" onclick="deleteSelected('agent')">Remove</button></div>
   </div>
@@ -771,7 +827,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <div id="wpd-name" style="font-family:var(--display);font-size:22px;font-weight:700;color:var(--cool);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="wpd-pos" style="font-size:18px;color:var(--accent)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Zone Pressure</div><div id="wpd-zones" style="font-size:18px;color:var(--dim)"></div></div>
-    <div class="dsect" id="wpd-q-sect" style="display:none"><div class="sh" style="margin:0 0 4px">Dialogue</div><div id="wpd-question" style="font-size:13px;color:var(--warm);font-style:italic"></div></div>
+    <div class="dsect" id="wpd-q-sect" style="display:none"><div class="sh" style="margin:0 0 4px">Dialogue</div><div id="wpd-question" style="font-size:16px;color:var(--warm);font-style:italic"></div></div>
     <div class="btn-row">
       <button class="btn cool" onclick="editWaypoint(selectedId)">Edit</button>
       <button class="btn danger" onclick="deleteSelected('waypoint')">Delete</button>
@@ -840,11 +896,204 @@ var tool = 'select';
 var placing = null;
 var pendingPos = null;
 var placingAgent = null;
-var sceneConfig = { name: 'garden_001', width: 40, depth: 40, description: '' };
+var sceneConfig = { name: '', width: 40, depth: 40, description: '' };
 var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, networks = [];
+var _sceneLoadInFlight = false;  // Day 77: see loadSceneFromDropdown/_restoreChorusFromXml/_sendSceneDataToEventsEditor
+var _lastRestoredTracks = null;  // Day 77: see _restoreChorusFromXml/setMode — cues need the same re-send-on-tab-open treatment as scene data, not just a single unconditional send at restore time
 var _showLinks = false;  // off by default — crowded scenes get noisy fast; opt-in via Network tab
+// Day 77: Avatar Camera Rig Manifest support. Composer's buildAX3D() used to
+// unconditionally emit VP_Eye/VP_Side/CAM_OrbitProto/CAM_TrackProto for every placed
+// agent — exactly the "Composer-side generic fallback rig" the Avatar Camera Rig
+// Manifest doc (Day 76 §4) explicitly rejected ("pollutes the X_ITE viewpoint menu
+// with near-duplicate generic cameras across every avatar in a scene"), but that
+// decision was never implemented until now. Cache is keyed by avatar filename stem
+// (e.g. 'cindy_hanim'), value is an array of enabled rig-type strings
+// (['agent_eye','agent_orbit']) as written by mccf_hanim_api.py's
+// _write_camera_rig_manifest, or null if no manifest exists yet (avatar has no
+// Character-Creator-authored rig) — that's the expected, common case, not an error.
+//
+// Fetched best-effort, not awaited by export — buildAX3D() reads synchronously from
+// whatever's already cached. This means an avatar swapped in right before an
+// immediate export might not have its rig yet (benign race, self-heals on next
+// export/refresh) rather than making exportX3D()/buildX3DString() async throughout —
+// a deliberate simplification, not an oversight.
+var _camRigManifestCache = {};
+function camRigManifestStem(hanimSrc){
+  var base = (hanimSrc||'').split('/').pop();
+  return base.replace(/\.x3d$/i,'');
+}
+function camRigFetchManifest(hanimSrc){
+  var stem = camRigManifestStem(hanimSrc);
+  if(!stem || _camRigManifestCache.hasOwnProperty(stem)) return;  // already cached (or already tried)
+  fetch('/static/avatars/'+stem+'.manifest.xml').then(function(r){
+    if(!r.ok){ _camRigManifestCache[stem]=null; return; }
+    return r.text();
+  }).then(function(text){
+    if(!text){ return; }
+    var doc = new DOMParser().parseFromString(text,'application/xml');
+    var entries = Array.prototype.slice.call(doc.getElementsByTagName('MetadataString'));
+    _camRigManifestCache[stem] = entries.map(function(el){return el.getAttribute('name');}).filter(Boolean);
+  }).catch(function(){ _camRigManifestCache[stem]=null; });
+}
+
 var placedCameras = {}; // Day 64: free/world-space cameras placed on the grid, class 3 of the three-class camera model
+
+// Day 77: ported from mccf_events_editor_prototype_2.html's SHOT_TYPES/SHOT_PRESETS —
+// static + relational groups ONLY. Under the Day 77 camera model revision, these shot
+// types are no longer a live per-cue formula; they're a placement-time SEED for the
+// Free Camera form (distance/height/hAngle/vAngle/roll relative to a chosen subject),
+// which the author then drags/dials into its final position. The 'move' group (Dolly/
+// Pan/Orbit/Crane/Track) is deliberately NOT included here — those need the animated-
+// placed-camera authoring surface (Camera Model Revision doc §5 item 6, not designed
+// yet), not a one-shot position seed. 'attached'/'baked' groups don't apply to Free
+// Camera placement at all (attached = Character Creator's job now; baked/free_camera
+// IS this placement UI). Keep in sync with the events editor's SHOT_PRESETS if either
+// changes — same reasoning as that file's own note about staying in sync with the
+// Loader's math.
+var CAM_SEED_TYPES = [
+  { value:'wide',            label:'Wide'              },
+  { value:'medium',          label:'Medium'            },
+  { value:'closeup',         label:'Close-Up'          },
+  { value:'extreme_closeup', label:'Extreme Close-Up'  },
+  { value:'overhead',        label:'Overhead'          },
+  { value:'worms_eye',       label:"Worm's Eye"        },
+  { value:'dutch',           label:'Dutch Angle'       },
+  { value:'over_shoulder',   label:'Over Shoulder'     },
+  { value:'profile',         label:'Profile'           },
+  { value:'two_shot',        label:'Two Shot'          }
+];
+// [distance, height, hAngle, vAngle, roll] — identical values to the events editor's
+// SHOT_PRESETS for these ten entries.
+var CAM_SEED_PRESETS = {
+  wide:            [12,  3.0,   0, -15,   0],
+  medium:          [ 5,  1.7,   0,  -8,   0],
+  closeup:         [ 1.5,1.7,   0,  -5,   0],
+  extreme_closeup: [ 0.65,1.7,  0,   0,   0],
+  overhead:        [ 6,  7,    40, -6,   0],
+  worms_eye:       [ 1.5,0.1,   0, -15,   0],
+  dutch:           [ 3,  1.7,   0,  -8,  25],
+  over_shoulder:   [ 1.2,1.6, -20,  -5,   0],
+  profile:         [ 3,  1.7,  90,  -8,   0],
+  two_shot:        [ 4,  1.7,   0,  -8,   0]
+};
+
+// Resolve a placed agent's position for seeding. Composer already has the
+// authoritative source (placedAgents[name].position, [x,0,z]) — unlike the events
+// editor's _prevResolveSubjectPos, which has to fall back to WPS/stage-canvas guesses
+// because it doesn't have direct access to this.
+function camSeedResolveSubjectPos(name){
+  var a = placedAgents[name];
+  return a && a.position ? a.position : [0,0,0];
+}
+
+// Same offset-from-subject formula as the events editor's _prevComputeCamPos, and the
+// same yaw/pitch-from-lookAt derivation as the Loader's _lookAtOrientation (NOT the
+// events editor's own _prevLookAtOrientation — Day 77: found while porting this same
+// math to the Character Creator rig work that the events editor's preview function
+// never received the Loader's Day 63 LOOK_AT_HEIGHT fix and has been aiming at the
+// subject's ground point instead of eye height ever since. Ported from the Loader,
+// the corrected source, not the stale copy) — but returning plain yaw/pitch degrees
+// instead of a combined quaternion, since the Place Free Camera form's cam-hangle/
+// cam-vangle/cam-roll are decomposed sliders on three nested Transforms (§1 of the
+// Camera Model Revision doc), not one axis-angle field. roll passes through from the
+// preset untouched — it doesn't depend on lookAt.
+var CAM_SEED_LOOK_AT_HEIGHT = 1.7;  // matches the Loader's LOOK_AT_HEIGHT constant
+function camSeedCompute(shotType, subjectName){
+  var preset = CAM_SEED_PRESETS[shotType];
+  if(!preset) return null;
+  var distance=preset[0], height=preset[1], hAngleDeg=preset[2], vAngleDeg=preset[3], rollDeg=preset[4];
+  var subjectPos = camSeedResolveSubjectPos(subjectName);
+  var hRad = hAngleDeg * Math.PI/180;
+  var camPos = [
+    subjectPos[0] + distance*Math.sin(hRad),
+    subjectPos[1] + height,
+    subjectPos[2] + distance*Math.cos(hRad)
+  ];
+  var dx = subjectPos[0]-camPos[0];
+  var dy = (subjectPos[1]+CAM_SEED_LOOK_AT_HEIGHT)-camPos[1];
+  var dz = subjectPos[2]-camPos[2];
+  var yawDeg = Math.atan2(-dx,-dz) * 180/Math.PI;
+  var horizDist = Math.sqrt(dx*dx+dz*dz);
+  var pitchDeg = Math.atan2(dy,horizDist) * 180/Math.PI + vAngleDeg;
+  pitchDeg = Math.max(-90, Math.min(90, pitchDeg));  // clamp to the cam-vangle slider's range
+  return { position:[camPos[0],camPos[2]], height:height, hAngle:Math.round(yawDeg), vAngle:Math.round(pitchDeg), roll:rollDeg };
+}
+
+// Auto-numbered instance naming, per the Camera Model Revision doc §1: a shot-type
+// label gets an instance number so multiple placements of the same type (two Closeups
+// on different subjects, say) stay distinguishable in routes/scripts/the grid.
+// registerId() still enforces the actual collision refusal at confirm time (Day 72) —
+// this just generates a starting suggestion, it doesn't bypass that check.
+function camSeedNextName(label){
+  var base = label.replace(/[^A-Za-z0-9]+/g,'');
+  var n = 1;
+  while(placedCameras[base+'_'+n]) n++;
+  return base+'_'+n;
+}
+
+var _camAutoNamedAs = null;  // tracks the last auto-generated name, so we only
+                              // overwrite cam-name if the author hasn't typed their own
+function seedCameraFromPreset(){
+  var shotType = document.getElementById('cam-seed-type').value;
+  var subject  = document.getElementById('cam-seed-subject').value;
+  if(!shotType) return;
+  var nameEl = document.getElementById('cam-name');
+  if(!nameEl.value.trim() || nameEl.value === _camAutoNamedAs){
+    var label = CAM_SEED_TYPES.filter(function(t){return t.value===shotType;})[0].label;
+    _camAutoNamedAs = camSeedNextName(label);
+    nameEl.value = _camAutoNamedAs;
+  }
+  if(!subject) return;  // no subject placed yet — name seeded, framing left as-is
+  var seed = camSeedCompute(shotType, subject);
+  if(!seed) return;
+  pendingPos = [seed.position[0], 0, seed.position[1]];
+  document.getElementById('cam-height').value = seed.height;
+  document.getElementById('cam-hangle').value = seed.hAngle;
+  document.getElementById('cam-hangle-val').textContent = seed.hAngle;
+  document.getElementById('cam-vangle').value = seed.vAngle;
+  document.getElementById('cam-vangle-val').textContent = seed.vAngle;
+  document.getElementById('cam-roll').value = seed.roll;
+  document.getElementById('cam-roll-val').textContent = seed.roll;
+  toast('Seeded from '+shotType+' — click map to reposition, or Place Camera to accept.');
+}
 var selectedId = null, selectedType = null, pathSeq = [];
+
+// ── Day 72: shared identity guard ───────────────────────────────────────
+// Root cause (Day 70/71): every entity map above (zones, paths, waypoints,
+// placedCameras, placedAgents) is keyed directly by an author-typed string
+// with no uniqueness check at most creation sites. Re-entering an existing
+// name silently overwrote the previous entry — no warning, no toast, data
+// just gone (confirmZone/confirmWP had NO guard at all; createPath had only
+// a rename-aware delete, no collision check on fresh creates; confirmCamera
+// had a bespoke one-off check, now folded into this shared function).
+//
+// registerId() is the single point of enforcement every creation/edit path
+// below calls before writing into its scope map. It does not silently
+// disambiguate (e.g. auto-renaming to "name_2") — a collision is refused
+// outright with a toast, same as a compiler rejecting a duplicate
+// declaration, so the author always knows a name choice was rejected rather
+// than having it quietly rewritten.
+//
+//   scopeMap      the object being keyed into (zones, waypoints, paths, ...)
+//   id            the id/name about to be used as a key
+//   currentEditId if this call is "save changes to the thing I'm already
+//                 editing," pass the id it was loaded under — resaving under
+//                 the same id is not a collision. Pass null for a brand-new
+//                 object. If id !== currentEditId this is being treated as
+//                 a rename, and the caller is responsible for deleting the
+//                 old key AFTER this returns true (never before — deleting
+//                 first would let a rename collide with itself).
+//   label         human-readable scope name for the toast message
+function registerId(scopeMap, id, currentEditId, label){
+  if(!id){return false;} // empty/missing id is a separate, pre-existing validation concern
+  var isSameObjectResave = currentEditId!=null && currentEditId===id;
+  if(scopeMap[id] && !isSameObjectResave){
+    toast((label||'Name')+' "'+id+'" already exists — choose a different name, or edit the existing one instead.', true);
+    return false;
+  }
+  return true;
+}
+var _editingZoneId=null;  // set by editZone(); distinguishes "save changes" from "place new" — zones had no such tracking before Day 72, which is exactly why confirmZone() had no way to allow a same-id resave without also allowing any other id collision.
 var canvas, ctx, arcCanvas, arcCtx, W, H, SCALE = 18, OX = 0, OZ = 0;
 var ZONE_COLORS = {
   library:'#60a8f0',intimate:'#f06060',forum:'#4af0a8',
@@ -918,7 +1167,7 @@ function renderWPQALines() {
 
     var sel = document.createElement('select');
     sel.dataset.i = i; sel.dataset.f = 'type';
-    sel.style.cssText = 'flex:0 0 auto;width:94px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-family:var(--mono);font-size:12px';
+    sel.style.cssText = 'flex:0 0 auto;width:94px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 4px;font-family:var(--mono);font-size:15px';
     sel.onchange = (function(idx){ return function(){ if(_wpQALines[idx]) _wpQALines[idx].type = this.value; }; })(i);
     ['Question','Response','Statement'].forEach(function(t) {
       var opt = document.createElement('option');
@@ -929,7 +1178,7 @@ function renderWPQALines() {
 
     var inp = document.createElement('select');
     inp.dataset.i = i; inp.dataset.f = 'speaker';
-    inp.style.cssText = 'flex:1;min-width:0;padding:3px 5px;font-size:12px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono)';
+    inp.style.cssText = 'flex:1;min-width:0;padding:3px 5px;font-size:15px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono)';
     // Populate from placedAgents — blank option first
     var blankOpt = document.createElement('option');
     blankOpt.value = ''; blankOpt.textContent = '-- speaker --';
@@ -944,7 +1193,7 @@ function renderWPQALines() {
 
     var btn = document.createElement('button');
     btn.textContent = '✕';
-    btn.style.cssText = 'flex:0 0 auto;padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--dim);cursor:pointer;font-size:13px';
+    btn.style.cssText = 'flex:0 0 auto;padding:2px 6px;background:none;border:1px solid var(--border);border-radius:3px;color:var(--dim);cursor:pointer;font-size:16px';
     btn.onclick = (function(idx){ return function(){ removeWPQALine(idx); }; })(i);
 
     row1.appendChild(sel); row1.appendChild(inp); row1.appendChild(btn);
@@ -953,7 +1202,7 @@ function renderWPQALines() {
     var ta = document.createElement('textarea');
     ta.dataset.i = i; ta.dataset.f = 'text';
     ta.placeholder = 'Enter dialogue text here...';
-    ta.style.cssText = 'display:block;width:100%;min-height:54px;font-size:12px;padding:4px 6px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);resize:vertical;box-sizing:border-box;';
+    ta.style.cssText = 'display:block;width:100%;min-height:54px;font-size:15px;padding:4px 6px;background:var(--s3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);resize:vertical;box-sizing:border-box;';
     ta.value = line.text;
     ta.oninput = (function(idx){ return function(){ if(_wpQALines[idx]) _wpQALines[idx].text = this.value; }; })(i);
 
@@ -1000,7 +1249,7 @@ function clamp(wx,wz){return{wx:Math.max(0,Math.min(sceneConfig.width,wx)),wz:Ma
 function setApi(url){API=url.trim();ping();}
 function ping(){
   fetch(API+'/ping',{signal:AbortSignal.timeout(2500)})
-    .then(function(r){if(r.ok){setStatus('on');loadAll();refreshMediaList();}else setStatus('off');})
+    .then(function(r){if(r.ok){setStatus('on');loadAll();refreshMediaList();refreshX3DAssetsList();refreshZoneTemplatesList();}else setStatus('off');})
     .catch(function(){setStatus('off');});
 }
 function setStatus(s){
@@ -1047,7 +1296,7 @@ function loadAll(){
         // An empty cultivar hanim_src must NOT clobber a value already loaded from
         // scene XML — that is the source of the avatar persistence bug (Day 61).
         if(placedAgents[c.agentname]){
-          if(c.hanim_src) placedAgents[c.agentname].hanim_src=c.hanim_src;
+          if(c.hanim_src) { placedAgents[c.agentname].hanim_src=c.hanim_src; camRigFetchManifest(c.hanim_src); }
           placedAgents[c.agentname].hanim_loa=c.hanim_loa||4;
           placedAgents[c.agentname].behavior_clips=c.behavior_clips||[];
         }
@@ -1099,9 +1348,9 @@ function pollField(){
       html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:2px">';
       ['E','B','P','S'].forEach(function(ch){
         var v=w[ch]||0;
-        html+='<div><div style="font-size:13px;color:var(--dim)">'+ch+'</div>';
+        html+='<div><div style="font-size:16px;color:var(--dim)">'+ch+'</div>';
         html+='<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>';
-        html+='<div style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</div></div>';
+        html+='<div style="font-size:16px;color:var(--'+ch+')">'+v.toFixed(2)+'</div></div>';
       });
       html+='</div></div>';
     });
@@ -1277,9 +1526,15 @@ function _buildSceneData() {
   var triggers = ['manual'];
   wpsOrdered.forEach(function(wp) { triggers.push(wp.name + ' arrive'); });
   triggers.push('field E>0.6', 'field E<0.3');
-  // X3D scene URL — use last known path from sendToLauncher, else guess x3d/ subdir
-  var sceneName = (typeof sceneConfig !== 'undefined' && sceneConfig.name) ? sceneConfig.name : 'mccf_scene';
-  var x3dUrl = _lastX3dUrl || '/static/x3d/' + sceneName + '.x3d';
+  // X3D scene URL — Day 77: only ever send a URL we have real confidence in.
+  // This used to guess '/static/x3d/' + sceneConfig.name + '.x3d' whenever
+  // _lastX3dUrl (set only by a confirmed export) wasn't available yet —
+  // sceneConfig.name defaulted to the stale placeholder 'garden_001' (a
+  // leftover from an earlier version of the tool, not a real scene), so on
+  // a fresh page load this guess constructed a URL to a file that has never
+  // existed, sent it to the Events Editor, which dutifully tried to fetch it
+  // and 404'd. No guessing now: empty until a real export confirms a path.
+  var x3dUrl = _lastX3dUrl || '';
 
   return {
     agents:   Object.keys(placedAgents),
@@ -1305,10 +1560,27 @@ function _sendSceneDataToEventsEditor() {
   // placedCameras), which is populated identically whether the scene was loaded or
   // hand-authored, so there's no actual readiness condition left to gate on here —
   // every call to setMode('events') already re-sends fresh data on its own.
+  //
+  // Day 77 addition: that reasoning holds once a load has settled, but not mid-load
+  // — waypoints/zones/paths/networks only finish populating when
+  // _restoreChorusFromXml's separate, later fetch resolves. Opening the Events tab
+  // in that gap used to snapshot a partial waypoint set (confirmed: 3 of 4 in a real
+  // test, correct only after a full page reload gave the load time to finish).
+  // _restoreChorusFromXml already re-sends on its own completion (see its own tail),
+  // so skipping here mid-load doesn't lose the update — it arrives correctly a
+  // moment later instead of arriving early and wrong.
+  if (_sceneLoadInFlight) { console.log('[events bridge] skipping send — scene load in flight'); return; }
   var frame = _eventsFrame();
   if (!frame || !frame.contentWindow) return;
   try { frame.contentWindow.postMessage({ type: 'mccf_scene_data', data: _buildSceneData() }, '*'); }
   catch(e) { console.warn('[events bridge] send failed:', e); }
+  // Day 77: cues used to only ever be sent once, unconditionally, from inside
+  // _restoreChorusFromXml — if the Events tab wasn't open yet (iframe not
+  // created) at that moment, the message was lost with nothing to re-send it
+  // later. Scene data already gets re-sent on every tab-open via this same
+  // function; folding cues in here too means every existing caller benefits
+  // without needing five separate call sites kept in sync by hand.
+  if (_lastRestoredTracks && _lastRestoredTracks.length) _sendCuesToEventsEditor(_lastRestoredTracks);
 }
 
 function _sendCuesToEventsEditor(tracksJson) {
@@ -1450,7 +1722,7 @@ function renderCameraList(){
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'camera\',\''+c.name+'\')">'+
       '<div class="obj-dot" style="background:#e0c860"></div>'+
       '<span class="obj-name">'+c.name+'</span>'+
-      '<span style="font-size:13px;color:var(--dim)">'+c.position[0].toFixed(1)+', '+c.position[1].toFixed(1)+', '+c.position[2].toFixed(1)+'</span></div>';
+      '<span style="font-size:16px;color:var(--dim)">'+c.position[0].toFixed(1)+', '+c.position[1].toFixed(1)+', '+c.position[2].toFixed(1)+'</span></div>';
   }).join('');
 }
 function renderZoneList(){
@@ -1471,7 +1743,7 @@ function renderWPList(){
     var sel=selectedType==='waypoint'&&selectedId===wp.name;
     return '<div class="wp-item '+(sel?'sel':'')+'" onclick="selectObj(\'waypoint\',\''+wp.name+'\')">'+
       '<div class="wp-num">'+(i+1)+'</div><span style="flex:1">'+wp.name+'</span>'+
-      '<span style="color:var(--dim);font-size:13px">'+(wp.label||'')+'</span></div>';
+      '<span style="color:var(--dim);font-size:16px">'+(wp.label||'')+'</span></div>';
   }).join('');
 }
 function renderPathList(){
@@ -1487,7 +1759,7 @@ function renderPathList(){
     return '<div class="obj-item '+(sel?'sel':'')+'" style="gap:6px;cursor:pointer" onclick="selectObj(\'path\',\''+p.name+'\')">'+badge+
       '<span class="obj-name">'+p.name+'</span>'+
       '<span class="obj-tag">'+(p.agent||'?')+'</span>'+
-      '<span style="font-size:12px;color:var(--dim)">'+(p.waypoints||[]).length+'wp</span></div>';
+      '<span style="font-size:15px;color:var(--dim)">'+(p.waypoints||[]).length+'wp</span></div>';
   }).join('');
 }
 function renderAgentRoster(){
@@ -1509,7 +1781,7 @@ function renderPlaced(){
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'agent\',\''+a.name+'\')">'+
       '<div class="obj-dot" style="background:'+a.color+'"></div>'+
       '<span class="obj-name">'+a.name+'</span>'+
-      '<span style="font-size:13px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
+      '<span style="font-size:16px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
   }).join('');
 }
 function updateStats(){
@@ -1740,7 +2012,7 @@ function chBars(w){
     var v=(w&&w[ch])||0.25;
     h+='<div class="chbr"><span style="font-size:14px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
       '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
-      '<span style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';
+      '<span style="font-size:16px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';
   });return h;
 }
 function showZD(id){
@@ -1795,6 +2067,20 @@ function showZD(id){
     soundSect.style.display = 'none';
     soundEl.textContent = '';
   }
+  // Asset detail
+  var assetSect = document.getElementById('zd-asset-sect');
+  var assetEl   = document.getElementById('zd-asset');
+  if (z.asset && z.asset.url) {
+    assetSect.style.display = 'block';
+    assetEl.innerHTML =
+      '<div>model: <span style="color:var(--purple)">' + xe(z.asset.url) + '</span></div>' +
+      '<div>offset: <span style="color:var(--text)">' + (z.asset.offsetX||0) + ', ' + (z.asset.offsetY||0) + ', ' + (z.asset.offsetZ||0) + '</span></div>' +
+      '<div>rotation: <span style="color:var(--text)">' + (z.asset.rotationY||0) + '&deg;</span></div>' +
+      '<div>scale: <span style="color:var(--text)">' + (z.asset.scale!==undefined?z.asset.scale:1) + '</span></div>';
+  } else {
+    assetSect.style.display = 'none';
+    assetEl.textContent = '';
+  }
   // Pre-load commands into form buffer so editing an existing zone preserves them
   _loadZoneCommandsIntoForm(z.commands || []);
 }
@@ -1829,11 +2115,11 @@ function showAD(name){
           var details = Object.entries(p).map(function(kv){ return kv[0]+':'+kv[1]; }).join(' ');
           return '<div style="display:flex;gap:6px;align-items:baseline;padding:2px 0;border-bottom:1px solid var(--border)">'
             + '<span style="color:var(--accent);font-weight:700;min-width:24px">'+key+'</span>'
-            + '<span style="color:var(--dim);font-size:11px;flex:1">'+details+'</span>'
+            + '<span style="color:var(--dim);font-size:14px;flex:1">'+details+'</span>'
             + '</div>';
         }).join('');
         return '<div style="margin-bottom:6px">'
-          + '<div style="color:var(--cool);font-size:12px;margin-bottom:2px">← from <b>'+lk.from+'</b>'
+          + '<div style="color:var(--cool);font-size:15px;margin-bottom:2px">← from <b>'+lk.from+'</b>'
           + ' <span style="color:var(--warm)">str '+parseFloat(lk.strength).toFixed(2)+'</span></div>'
           + rows + '</div>';
       }).join('');
@@ -1910,6 +2196,7 @@ function saveHanimSrc(){
   if(!val){toast('No MCCF avatar selected — create one in Character Creator first',true);return;}
   if(placedAgents[name])placedAgents[name].hanim_src=val;
   if(agents[name])agents[name].hanim_src=val;
+  camRigFetchManifest(val);
   var hEl=document.getElementById('ad-hanim');
   if(hEl)hEl.textContent=val;
   sel.style.display='none';
@@ -1938,9 +2225,9 @@ function showWD(name){
   if(lines.length){
     qSect.style.display='block';
     qEl.innerHTML=lines.map(function(l){
-      return '<div style="margin-bottom:3px"><span style="color:var(--'+(l.type==='Question'?'warm':'cool')+');font-size:11px">'+(l.type)+
+      return '<div style="margin-bottom:3px"><span style="color:var(--'+(l.type==='Question'?'warm':'cool')+');font-size:14px">'+(l.type)+
         (l.speaker?' <b>'+xe(l.speaker)+'</b>':'')+': </span>'+
-        '<span style="font-size:12px">'+xe(l.text)+'</span></div>';
+        '<span style="font-size:15px">'+xe(l.text)+'</span></div>';
     }).join('');
   } else { qSect.style.display='none'; }
 }
@@ -1950,16 +2237,20 @@ function showCD(name){
   document.getElementById('cd-name').textContent=name;
   var pos=c.position||[0,0,0];
   document.getElementById('cd-pos').textContent='X='+pos[0].toFixed(1)+' Y='+pos[1].toFixed(1)+' Z='+pos[2].toFixed(1);
-  document.getElementById('cd-angle').textContent='yaw='+(c.hAngle||0)+'°  pitch='+(c.vAngle||0)+'°';
+  document.getElementById('cd-angle').textContent='yaw='+(c.hAngle||0)+'°  pitch='+(c.vAngle||0)+'°  roll='+(c.roll||0)+'°';
 }
 function editCamera(name){
   var c=placedCameras[name];if(!c)return;
+  document.getElementById('cam-seed-type').value='';
+  document.getElementById('cam-seed-subject').value='';
   document.getElementById('cam-name').value=c.name;
   document.getElementById('cam-height').value=(c.position&&c.position[1]!==undefined)?c.position[1]:1.7;
   document.getElementById('cam-hangle').value=c.hAngle||0;
   document.getElementById('cam-hangle-val').textContent=c.hAngle||0;
   document.getElementById('cam-vangle').value=c.vAngle||0;
   document.getElementById('cam-vangle-val').textContent=c.vAngle||0;
+  document.getElementById('cam-roll').value=c.roll||0;
+  document.getElementById('cam-roll-val').textContent=c.roll||0;
   // Reuse existing position so confirmCamera can save without requiring a map re-click,
   // same pattern editWaypoint/editZone already use.
   pendingPos=(c.position||[0,0,0]).slice();
@@ -2009,15 +2300,76 @@ function showQuery(wx,wz){
   var ph='';if(tw>0){['E','B','P','S'].forEach(function(ch){var v=combined[ch]/tw;ph+=
     '<div class="chbr"><span style="font-size:14px;font-weight:600;color:var(--'+ch+')">'+ch+'</span>'+
     '<div class="chbar"><div class="chfill" style="width:'+Math.round(v*100)+'%;background:var(--'+ch+')"></div></div>'+
-    '<span style="font-size:13px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';});}
+    '<span style="font-size:16px;color:var(--'+ch+')">'+v.toFixed(2)+'</span></div>';});}
   else ph='<span style="color:var(--dim)">No zone influence.</span>';
   document.getElementById('q-pressure').innerHTML=ph;
 }
 function startPlace(t){
-  if(t==='zone'){document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
+  if(t==='zone'){clearZoneForm();document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
   else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';}
-  else if(t==='camera'){document.getElementById('camera-form').style.display='block';placing='camera';}
+  else if(t==='camera'){
+    document.getElementById('camera-form').style.display='block';placing='camera';
+    renderCamSeedForm();
+  }
   showHint('Click map to place');
+}
+// Populate the shot-type/subject seed dropdowns and reset auto-naming state for a
+// fresh placement. Subject list is rebuilt from placedAgents each time the form opens
+// (not cached) since agents can be placed/removed between camera placements.
+function renderCamSeedForm(){
+  var typeSel = document.getElementById('cam-seed-type');
+  typeSel.innerHTML = '<option value="">— none, place manually —</option>' +
+    CAM_SEED_TYPES.map(function(t){return '<option value="'+t.value+'">'+t.label+'</option>';}).join('');
+  var subjSel = document.getElementById('cam-seed-subject');
+  var agentNames = Object.keys(placedAgents);
+  subjSel.innerHTML = agentNames.length
+    ? agentNames.map(function(n){return '<option value="'+xe(n)+'">'+xe(n)+'</option>';}).join('')
+    : '<option value="">— none placed —</option>';
+  document.getElementById('cam-name').value='';
+  _camAutoNamedAs = null;
+}
+// Reset the zone form to a blank "New Zone" state. Called by startPlace('zone')
+// ("+ Place Zone") so a fresh placement never inherits stale field values —
+// specifically z-id, which previously carried over from whatever zone was
+// last placed or edited this session. Without this, placing a new zone
+// (with or without a template) silently overwrote the last zone instead of
+// creating a new one, since confirmZone() keys zones[] by the ID field's
+// current value. editZone() intentionally does NOT call this — it needs the
+// ID field to stay populated with the zone being edited.
+function clearZoneForm(){
+  _editingZoneId=null;  // Day 72: a fresh "New Zone" is never a resave of the last-edited zone
+  document.getElementById('zone-form').querySelector('.sh').textContent='New Zone';
+  document.getElementById('z-template-select').value='';
+  document.getElementById('z-id').value='';
+  document.getElementById('z-name').value='';
+  document.getElementById('z-type').value='neutral';
+  document.getElementById('z-radius').value=4;
+  document.getElementById('z-desc').value='';
+  document.getElementById('z-noise').value=0.10;
+  document.getElementById('z-ambient').value='dorian';
+  ['E','B','P','S'].forEach(function(ch){
+    document.getElementById('zw-'+ch).value=0.25;
+    document.getElementById('zwv-'+ch).textContent='0.25';
+  });
+  document.getElementById('z-chorus-enabled').checked=false;
+  document.getElementById('z-chorus-form').style.display='none';
+  document.getElementById('z-chorus-persona').value='';
+  document.getElementById('z-sound-enabled').checked=false;
+  document.getElementById('z-sound-form').style.display='none';
+  document.getElementById('z-sound-url').value='';
+  document.getElementById('z-sound-dwell-url').value='';
+  document.getElementById('z-sound-convolver-url').value='';
+  document.getElementById('z-sound-convolver-normalize').checked=true;
+  document.getElementById('z-sound-filter').checked=false;
+  document.getElementById('z-sound-filter-form').style.display='none';
+  document.getElementById('z-asset-enabled').checked=false;
+  document.getElementById('z-asset-form').style.display='none';
+  document.getElementById('z-asset-url').value='';
+  document.getElementById('z-asset-offset-x').value=0;
+  document.getElementById('z-asset-offset-y').value=0;
+  document.getElementById('z-asset-offset-z').value=0;
+  document.getElementById('z-asset-rotation').value=0;
+  document.getElementById('z-asset-scale').value=1;
 }
 function cancelPlace(){
   placing=null;placingAgent=null;pendingPos=null;
@@ -2042,6 +2394,228 @@ function toggleZoneSoundFilter() {
   var enabled = document.getElementById('z-sound-filter').checked;
   document.getElementById('z-sound-filter-form').style.display = enabled ? 'block' : 'none';
 }
+function toggleZoneAssetForm() {
+  var enabled = document.getElementById('z-asset-enabled').checked;
+  document.getElementById('z-asset-form').style.display = enabled ? 'block' : 'none';
+}
+
+// ─────────────────────────────────────────────
+// X3D asset directory listing — populates the zone "Inline Asset" picker.
+// Separate from _mediaFiles/refreshMediaList below: this scans
+// static/x3d/X3DAssets/ for .x3d models, not static/x3d/media/ for audio.
+// ─────────────────────────────────────────────
+var _x3dAssetFiles = [];  // cached from last fetch
+
+function refreshX3DAssetsList(callback, manual) {
+  fetch(API + '/x3d/assets/list')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _x3dAssetFiles = data.files || [];
+      _populateAssetSelect(document.getElementById('z-asset-url'));
+      if (manual) toast('X3D assets: ' + _x3dAssetFiles.length + ' found');
+      if (callback) callback();
+    })
+    .catch(function(e) {
+      // Endpoint may not exist yet — leave select with whatever it has
+      console.warn('refreshX3DAssetsList: /x3d/assets/list not available (' + e.message + ')');
+      if (manual) toast('Could not reload X3DAssets/ (' + e.message + ')', true);
+    });
+}
+function _populateAssetSelect(sel, currentVal) {
+  if (!sel) return;
+  var prev = currentVal !== undefined ? currentVal : sel.value;
+  sel.innerHTML = '<option value="">— select asset —</option>';
+  _x3dAssetFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'X3DAssets/' + f;
+    opt.textContent = f;
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+
+// ─────────────────────────────────────────────
+// Zone Template library (Directory Redesign §5.2) — zones/<name>.xml,
+// generic-named, reusable across scenes, same role as cultivars/. Loading a
+// template pre-fills the zone form's reusable fields (type/descriptor/
+// weights/ambient/chorus/sound/asset). Position, radius, id and name stay
+// per-placement and are never touched by a template load.
+// ─────────────────────────────────────────────
+var _zoneTemplates = {};   // { name: { zone_type, descriptor, weights, ambient_theme, chorus, sound, asset } }
+
+function refreshZoneTemplatesList() {
+  fetch(API + '/zone/template/list')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _zoneTemplates = data.templates || {};
+      var sel = document.getElementById('z-template-select');
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = '<option value="">— none (custom zone) —</option>';
+      Object.keys(_zoneTemplates).sort().forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+      if (prev) sel.value = prev;
+    })
+    .catch(function(e) {
+      console.warn('refreshZoneTemplatesList: /zone/template/list not available (' + e.message + ')');
+    });
+}
+
+function loadZoneTemplate() {
+  var name = document.getElementById('z-template-select').value;
+  if (!name) return;  // "none" selected — leave form as-is, don't clear anything
+  var t = _zoneTemplates[name];
+  if (!t) { toast('Template not found: ' + name, true); return; }
+
+  document.getElementById('z-type').value = t.zone_type || 'neutral';
+  document.getElementById('z-desc').value = t.descriptor || '';
+  document.getElementById('z-ambient').value = (t.ambient_theme && t.ambient_theme.scale) || 'dorian';
+  var w = t.weights || {E:0.25,B:0.25,P:0.25,S:0.25};
+  ['E','B','P','S'].forEach(function(ch){
+    document.getElementById('zw-'+ch).value = w[ch] || 0.25;
+    document.getElementById('zwv-'+ch).textContent = (w[ch] || 0.25).toFixed(2);
+  });
+
+  // Chorus
+  var chorus = t.chorus || null;
+  document.getElementById('z-chorus-enabled').checked = !!chorus;
+  document.getElementById('z-chorus-form').style.display = chorus ? 'block' : 'none';
+  if (chorus) {
+    document.getElementById('z-chorus-llm').value = chorus.llm || 'stub';
+    document.getElementById('z-chorus-tone').value = chorus.tone || 'ominous';
+    document.getElementById('z-chorus-tokens').value = chorus.max_tokens || 80;
+    document.getElementById('z-chorus-display').value = chorus.display || 'overlay';
+    document.getElementById('z-chorus-persona').value = chorus.persona || '';
+  }
+
+  // Sound
+  var snd = t.sound || null;
+  document.getElementById('z-sound-enabled').checked = !!snd;
+  document.getElementById('z-sound-form').style.display = snd ? 'block' : 'none';
+  if (snd) {
+    _populateMediaSelect(document.getElementById('z-sound-url'), snd.url || '');
+    document.getElementById('z-sound-loop').checked = snd.loop !== false;
+    document.getElementById('z-sound-gain').value = snd.gain !== undefined ? snd.gain : 0.80;
+    document.getElementById('z-sound-gain-val').textContent = (snd.gain !== undefined ? snd.gain : 0.80).toFixed(2);
+    document.getElementById('z-sound-filter').checked = !!snd.filter;
+    document.getElementById('z-sound-filter-form').style.display = snd.filter ? 'block' : 'none';
+    document.getElementById('z-sound-freq').value = snd.filterFreq || 900;
+    document.getElementById('z-sound-freq-val').textContent = snd.filterFreq || 900;
+    document.getElementById('z-sound-q').value = snd.filterQ !== undefined ? snd.filterQ : 1.0;
+    document.getElementById('z-sound-q-val').textContent = (snd.filterQ !== undefined ? snd.filterQ : 1.0).toFixed(1);
+    _populateSoundEffectsSelect(document.getElementById('z-sound-dwell-url'), snd.dwellUrl || '');
+    document.getElementById('z-sound-dwell-gain').value = snd.dwellGain !== undefined ? snd.dwellGain : 0.85;
+    document.getElementById('z-sound-dwell-gain-val').textContent = (snd.dwellGain !== undefined ? snd.dwellGain : 0.85).toFixed(2);
+    _populateConvolverSelect(document.getElementById('z-sound-convolver-url'), snd.convolverUrl || '');
+    document.getElementById('z-sound-convolver-normalize').checked = snd.convolverNormalize !== false;
+  }
+
+  // Asset
+  var asset = t.asset || null;
+  document.getElementById('z-asset-enabled').checked = !!asset;
+  document.getElementById('z-asset-form').style.display = asset ? 'block' : 'none';
+  if (asset) {
+    _populateAssetSelect(document.getElementById('z-asset-url'), asset.url || '');
+    document.getElementById('z-asset-offset-x').value = asset.offsetX || 0;
+    document.getElementById('z-asset-offset-y').value = asset.offsetY || 0;
+    document.getElementById('z-asset-offset-z').value = asset.offsetZ || 0;
+    document.getElementById('z-asset-rotation').value = asset.rotationY || 0;
+    document.getElementById('z-asset-scale').value = asset.scale !== undefined ? asset.scale : 1;
+  }
+
+  toast('Loaded template: ' + name + ' — position/radius/ID still yours to set');
+}
+
+function saveZoneAsTemplate() {
+  var suggested = document.getElementById('z-template-select').value
+    || document.getElementById('z-id').value.trim()
+    || document.getElementById('z-type').value;
+  var name = prompt('Template name (generic — no scene prefix, e.g. "Giparu"):', suggested);
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+
+  var type = document.getElementById('z-type').value;
+  var desc = document.getElementById('z-desc').value.trim();
+  var ambient = document.getElementById('z-ambient').value;
+  var w = {}; ['E','B','P','S'].forEach(function(ch){ w[ch] = parseFloat(document.getElementById('zw-'+ch).value); });
+
+  var chorus = null;
+  if (document.getElementById('z-chorus-enabled').checked) {
+    chorus = {
+      llm: document.getElementById('z-chorus-llm').value,
+      tone: document.getElementById('z-chorus-tone').value,
+      max_tokens: parseInt(document.getElementById('z-chorus-tokens').value) || 80,
+      display: document.getElementById('z-chorus-display').value,
+      persona: document.getElementById('z-chorus-persona').value.trim()
+    };
+  }
+
+  var sound = null;
+  if (document.getElementById('z-sound-enabled').checked) {
+    sound = {
+      url: document.getElementById('z-sound-url').value.trim(),
+      gain: parseFloat(document.getElementById('z-sound-gain').value),
+      loop: document.getElementById('z-sound-loop').checked,
+      filter: document.getElementById('z-sound-filter').checked,
+      filterFreq: parseInt(document.getElementById('z-sound-freq').value),
+      filterQ: parseFloat(document.getElementById('z-sound-q').value),
+      dwellUrl: document.getElementById('z-sound-dwell-url').value.trim(),
+      dwellGain: parseFloat(document.getElementById('z-sound-dwell-gain').value),
+      convolverUrl: document.getElementById('z-sound-convolver-url').value.trim(),
+      convolverNormalize: document.getElementById('z-sound-convolver-normalize').checked
+    };
+  }
+
+  var asset = null;
+  if (document.getElementById('z-asset-enabled').checked) {
+    asset = {
+      url: document.getElementById('z-asset-url').value.trim(),
+      offsetX: parseFloat(document.getElementById('z-asset-offset-x').value) || 0,
+      offsetY: parseFloat(document.getElementById('z-asset-offset-y').value) || 0,
+      offsetZ: parseFloat(document.getElementById('z-asset-offset-z').value) || 0,
+      rotationY: parseFloat(document.getElementById('z-asset-rotation').value) || 0,
+      scale: parseFloat(document.getElementById('z-asset-scale').value) || 1
+    };
+  }
+
+  var x = xmlDecl() + '<ZoneTemplate name="'+xe(name)+'" zone_type="'+xe(type)+'">\n';
+  x += '  <Descriptor>'+xe(desc)+'</Descriptor>\n';
+  x += '  <Weights E="'+w.E+'" B="'+w.B+'" P="'+w.P+'" S="'+w.S+'"/>\n';
+  x += '  <AmbientTheme scale="'+xe(ambient)+'" tempo="medium"/>\n';
+  if (chorus) {
+    x += '  <Chorus llm="'+xe(chorus.llm)+'" tone="'+xe(chorus.tone)+'" max_tokens="'+chorus.max_tokens+'" display="'+xe(chorus.display)+'">\n';
+    if (chorus.persona) x += '    <Persona>'+xe(chorus.persona)+'</Persona>\n';
+    x += '  </Chorus>\n';
+  }
+  if (sound && sound.url) {
+    x += '  <SoundDesign>\n';
+    x += '    <Track id="ambient" url="'+xe(sound.url)+'" loop="'+(sound.loop!==false?'true':'false')+'" gain="'+(sound.gain||0.8).toFixed(2)+'"'
+       + (sound.filter ? ' filter="lowpass" filterFreq="'+(sound.filterFreq||900)+'" filterQ="'+(sound.filterQ||1.0).toFixed(1)+'"' : '') + '/>\n';
+    if (sound.dwellUrl) x += '    <Track id="dwell" url="'+xe(sound.dwellUrl)+'" loop="false" gain="'+(sound.dwellGain||0.85).toFixed(2)+'"/>\n';
+    x += '  </SoundDesign>\n';
+  }
+  if (asset && asset.url) {
+    x += '  <Asset url="'+xe(asset.url)+'" offsetX="'+asset.offsetX+'" offsetY="'+asset.offsetY+'" offsetZ="'+asset.offsetZ
+       + '" rotationY="'+asset.rotationY+'" scale="'+asset.scale+'"/>\n';
+  }
+  x += '</ZoneTemplate>\n';
+
+  apiPost('/zone/template', {name: name, content: x})
+    .then(function(res) {
+      toast('Saved template: ' + (res.name || name));
+      refreshZoneTemplatesList();
+      var sel = document.getElementById('z-template-select');
+      if (sel) sel.value = res.name || name;
+    })
+    .catch(function(e) {
+      toast('Template save failed: ' + e.message, true);
+    });
+}
 
 // ─────────────────────────────────────────────
 // Media directory listing — populates all sound pickers
@@ -2051,10 +2625,11 @@ var _mediaFiles = [];  // cached from last fetch
 function refreshMediaList() {
   refreshConvolverList();
   refreshSoundEffectsList();
-  // Music/bed/zone-loop tracks live in static/x3d/media/music/ (same split as
-  // soundeffects/ below) — must pass subdir=music or this scans the flat
-  // media/ folder and finds nothing, leaving these three selects empty while
-  // Dwell (subdir=soundeffects) populates fine.
+  // Music/bed/zone-loop tracks live in static/x3d/X3DAssets/media/music/
+  // (same split as soundeffects/ below, reorganized under X3DAssets/ — Day 77)
+  // — must pass subdir=music or this scans the flat media/ folder and finds
+  // nothing, leaving these three selects empty while Dwell (subdir=soundeffects)
+  // populates fine.
   fetch(API + '/media/list?subdir=music')
     .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function(data) {
@@ -2078,7 +2653,7 @@ function _populateMediaSelect(sel, currentVal, allowEmpty) {
     : '<option value="">— select file —</option>';
   _mediaFiles.forEach(function(f) {
     var opt = document.createElement('option');
-    opt.value = 'media/' + f;
+    opt.value = 'X3DAssets/media/' + f;  // Day 77: reorganized under X3DAssets/
     var label = f.replace(/^music\//, '');
     var isMidi = /\.(mid|midi)$/i.test(f);
     opt.textContent = label + (isMidi ? '  [MIDI→Reaper]' : '');
@@ -2119,7 +2694,7 @@ function _populateConvolverSelect(sel, currentVal) {
   sel.innerHTML = '<option value="">— none —</option>';
   _convolverFiles.forEach(function(f) {
     var opt = document.createElement('option');
-    opt.value = 'media/' + f;
+    opt.value = 'X3DAssets/media/' + f;  // Day 77: reorganized under X3DAssets/
     opt.textContent = f.replace('convolver/', '');
     sel.appendChild(opt);
   });
@@ -2145,7 +2720,7 @@ function _populateSoundEffectsSelect(sel, currentVal) {
   sel.innerHTML = '<option value="">— none —</option>';
   _soundEffectsFiles.forEach(function(f) {
     var opt = document.createElement('option');
-    opt.value = 'media/' + f;
+    opt.value = 'X3DAssets/media/' + f;  // Day 77: reorganized under X3DAssets/
     opt.textContent = f.replace('soundeffects/', '');
     sel.appendChild(opt);
   });
@@ -2172,7 +2747,7 @@ function renderZoneCommandsForm() {
   var el = document.getElementById('z-commands-list');
   if (!el) return;
   if (!_zoneCommandRules.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:2px 0">No commands — zone will be silent.</div>';
+    el.innerHTML = '<div style="font-size:15px;color:var(--dim);padding:2px 0">No commands — zone will be silent.</div>';
     return;
   }
   var agentNames = ['*'].concat(Object.keys(placedAgents));
@@ -2187,10 +2762,10 @@ function renderZoneCommandsForm() {
       return '<option value="'+c+'"'+(r.command===c?' selected':'')+'>'+c+'</option>';
     }).join('');
     return '<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">'
-      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].event=this.value">'+evtOpts+'</select>'
-      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].cultivar=this.value">'+culOpts+'</select>'
-      + '<select style="flex:1;font-size:11px" onchange="_zoneCommandRules['+i+'].command=this.value">'+cmdOpts+'</select>'
-      + '<button class="btn danger" style="font-size:11px;padding:2px 6px" onclick="removeZoneCommand('+i+')">✕</button>'
+      + '<select style="flex:1;font-size:14px" onchange="_zoneCommandRules['+i+'].event=this.value">'+evtOpts+'</select>'
+      + '<select style="flex:1;font-size:14px" onchange="_zoneCommandRules['+i+'].cultivar=this.value">'+culOpts+'</select>'
+      + '<select style="flex:1;font-size:14px" onchange="_zoneCommandRules['+i+'].command=this.value">'+cmdOpts+'</select>'
+      + '<button class="btn danger" style="font-size:14px;padding:2px 6px" onclick="removeZoneCommand('+i+')">✕</button>'
       + '</div>';
   }).join('');
 }
@@ -2243,32 +2818,48 @@ function confirmZone(){
       convolverUrl: convolverUrl, convolverNormalize: convolverNormalize
     };
   }
+  // Asset config (X3D Inline)
+  var assetEnabled = document.getElementById('z-asset-enabled').checked;
+  var asset = null;
+  if (assetEnabled) {
+    var assetUrl = document.getElementById('z-asset-url').value.trim();
+    asset = {
+      url: assetUrl,
+      offsetX: parseFloat(document.getElementById('z-asset-offset-x').value) || 0,
+      offsetY: parseFloat(document.getElementById('z-asset-offset-y').value) || 0,
+      offsetZ: parseFloat(document.getElementById('z-asset-offset-z').value) || 0,
+      rotationY: parseFloat(document.getElementById('z-asset-rotation').value) || 0,
+      scale: parseFloat(document.getElementById('z-asset-scale').value) || 1
+    };
+  }
+  // Template reference — which zones/<name>.xml this instance was built from,
+  // if any. Purely informational/for re-editing; placing a zone always
+  // captures the form's current values regardless of template origin.
+  var templateName = document.getElementById('z-template-select').value || null;
+  // Day 72: identity guard — was previously entirely unguarded (see registerId
+  // comment above). Blocks id collisions with a DIFFERENT existing zone while
+  // still allowing a same-id resave from editZone().
+  if(!registerId(zones, id, _editingZoneId, 'Zone')) return;
+  var wasEditingZone=!!_editingZoneId;
+  if(wasEditingZone && _editingZoneId!==id) delete zones[_editingZoneId];  // rename
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
     descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus,
-    commands:_zoneCommandRules.slice(),sound:sound};
+    commands:_zoneCommandRules.slice(),sound:sound,asset:asset,template:templateName};
+  _editingZoneId=null;
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
     channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
   placing=null;pendingPos=null;document.getElementById('zone-form').style.display='none';
-  // Reset chorus and commands forms for next zone
-  document.getElementById('z-chorus-enabled').checked = false;
-  document.getElementById('z-chorus-form').style.display = 'none';
-  document.getElementById('z-chorus-persona').value = '';
+  // Single source of truth for the "blank form" state — same function
+  // startPlace('zone') uses, so this can't drift out of sync with it.
+  clearZoneForm();
   _zoneCommandRules = [];
   renderZoneCommandsForm();
-  // Reset sound form
-  document.getElementById('z-sound-enabled').checked = false;
-  document.getElementById('z-sound-form').style.display = 'none';
-  document.getElementById('z-sound-url').value = '';
-  document.getElementById('z-sound-dwell-url').value = '';
-  document.getElementById('z-sound-convolver-url').value = '';
-  document.getElementById('z-sound-convolver-normalize').checked = true;
-  document.getElementById('z-sound-filter').checked = false;
-  document.getElementById('z-sound-filter-form').style.display = 'none';
   hideHint();renderAll();toast('Zone: '+(name||id));
 }
 function editZone(id){
   var z=zones[id];if(!z){toast('Zone not found',true);return;}
   // Populate all form fields from existing zone data
+  document.getElementById('z-template-select').value = z.template || '';
   document.getElementById('z-id').value=z.id||'';
   document.getElementById('z-name').value=z.name||'';
   document.getElementById('z-type').value=z.zone_type||'neutral';
@@ -2319,6 +2910,18 @@ function editZone(id){
     var zcn = document.getElementById('z-sound-convolver-normalize');
     if(zcn) zcn.checked = snd.convolverNormalize !== false;
   }
+  // Asset (X3D Inline)
+  var asset = z.asset || null;
+  document.getElementById('z-asset-enabled').checked = !!asset;
+  document.getElementById('z-asset-form').style.display = asset ? 'block' : 'none';
+  if (asset) {
+    _populateAssetSelect(document.getElementById('z-asset-url'), asset.url || '');
+    document.getElementById('z-asset-offset-x').value = asset.offsetX || 0;
+    document.getElementById('z-asset-offset-y').value = asset.offsetY || 0;
+    document.getElementById('z-asset-offset-z').value = asset.offsetZ || 0;
+    document.getElementById('z-asset-rotation').value = asset.rotationY || 0;
+    document.getElementById('z-asset-scale').value = asset.scale !== undefined ? asset.scale : 1;
+  }
   // Set pendingPos so confirmZone doesn't reject — use existing zone location
   pendingPos=(z.location||[0,0]).slice();
   // Switch to zones mode and show form
@@ -2326,6 +2929,7 @@ function editZone(id){
   document.getElementById('zone-form').style.display='block';
   document.getElementById('zone-form').querySelector('.sh').textContent='Edit Zone';
   placing='zone';
+  _editingZoneId=id;  // Day 72: lets confirmZone() allow this specific id back through
   toast('Editing zone: '+(z.name||id));
 }
 function loadZonePreset(){
@@ -2335,6 +2939,13 @@ function loadZonePreset(){
 }
 function updW(ch){var v=parseFloat(document.getElementById('zw-'+ch).value);document.getElementById('zwv-'+ch).textContent=v.toFixed(2);}
 function startPlaceAgent(name){
+  // Day 72: intentionally NOT routed through registerId() — agent names come
+  // from a fixed roster (a <select>, not free text), so a "collision" here
+  // always means the same agent is already on the map, never a typo'd
+  // duplicate. Selecting the existing placement is more useful than a
+  // rejection toast, so this keeps its own UX. Still satisfies the same
+  // underlying rule (nothing overwrites an existing key without the author
+  // being routed to it first).
   if(placedAgents[name]){selectObj('agent',name);toast(name+' already placed.');return;}
   placing='agent';placingAgent=name;showHint('Click map to place '+name);
   if(mode!=='agents')setMode('agents');renderAgentRoster();
@@ -2357,6 +2968,11 @@ function confirmWP(){
   var firstQ='';
   _wpQALines.forEach(function(l){if(!firstQ&&l.type==='Question'&&l.text)firstQ=l.text;});
   var qaLines=_wpQALines.filter(function(l){return l.text.trim();}).map(function(l){return{type:l.type,speaker:l.speaker,text:l.text};});
+  // Day 72: identity guard. There is currently no editWP()/resave flow for
+  // waypoints (unlike zones/paths/cameras) — every confirmWP() call is a
+  // fresh create, so currentEditId is always null here: any existing name
+  // is always a true collision, never a legitimate same-object resave.
+  if(!registerId(waypoints, name, null, 'Waypoint')) return;
   waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,pace:pace,position:pendingPos.slice(),question:firstQ,qaLines:qaLines};
   apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ}).catch(function(){});
   placing=null;pendingPos=null;
@@ -2373,12 +2989,16 @@ function confirmCamera(){
   var height=parseFloat(document.getElementById('cam-height').value)||1.7;
   var hAngle=parseFloat(document.getElementById('cam-hangle').value)||0;
   var vAngle=parseFloat(document.getElementById('cam-vangle').value)||0;
+  var roll=parseFloat(document.getElementById('cam-roll').value)||0;
   if(!name){toast('Name required',true);return;}
-  // Block name collisions with a DIFFERENT existing camera — but allow saving back
-  // under the same name when editing (that's not a collision, it's the same object).
-  if(placedCameras[name]&&name!==_editingCameraName){toast('Name already used',true);return;}
+  // Day 72: this bespoke check was the one entity type that already had a
+  // guard (see Day 71 §4.5) — folded into the shared registerId() function
+  // so there's one enforcement point instead of one-off logic living only
+  // here. Behavior is unchanged: block collisions with a DIFFERENT existing
+  // camera, allow saving back under the same name when editing.
+  if(!registerId(placedCameras, name, _editingCameraName, 'Camera')) return;
   if(_editingCameraName&&_editingCameraName!==name)delete placedCameras[_editingCameraName];  // rename
-  placedCameras[name]={name:name,position:[pendingPos[0],height,pendingPos[2]],hAngle:hAngle,vAngle:vAngle};
+  placedCameras[name]={name:name,position:[pendingPos[0],height,pendingPos[2]],hAngle:hAngle,vAngle:vAngle,roll:roll};
   var wasEditing=!!_editingCameraName;
   placing=null;pendingPos=null;_editingCameraName=null;
   var btn=document.querySelector('#camera-form .btn.pri');
@@ -2449,6 +3069,12 @@ function createPath(){
     return;
   }
   var wasEditing=!!_editingPathName;
+  // Day 72: identity guard — this previously had rename-delete logic but NO
+  // collision check on a fresh create, which is the exact confirmed cause of
+  // the Day 70/71 DEF-collision bug (two paths on the same agent, one
+  // silently clobbering the other's block). registerId() must run BEFORE the
+  // old-key delete below, so a rename can't be used to collide with itself.
+  if(!registerId(paths, name, wasEditing?_editingPathName:null, 'Path')) return;
   if(wasEditing && _editingPathName!==name) delete paths[_editingPathName];  // rename
   paths[name]={name:name,agent:agent,waypoints:pathSeq.slice(),waypointOrder:orderInt};
   apiPost('/path',{name:name,agent_name:agent,waypoints:pathSeq.slice()})
@@ -2698,6 +3324,7 @@ function buildCameraProtoDecls(){
   s+='  <field accessType="inputOutput" type="SFVec3f"    name="position"/>\n';
   s+='  <field accessType="inputOutput" type="SFRotation" name="yaw"/>\n';
   s+='  <field accessType="inputOutput" type="SFRotation" name="pitch"/>\n';
+  s+='  <field accessType="inputOutput" type="SFRotation" name="roll"/>\n';
   s+='  <field accessType="inputOutput" type="SFString"   name="description"/>\n';
   s+='  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>\n';
   s+='</ExternProtoDeclare>\n\n';
@@ -2738,6 +3365,17 @@ function buildZX3D(z,iS){
   s+='<Text string=\'"'+nm+'"\' ><FontStyle size="0.28" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
   s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
+  if(z.asset && z.asset.url){
+    // Zone Asset (X3D Inline) — a pre-built X3D model (e.g. fountain, statue) from
+    // static/x3d/X3DAssets/, inlined at an offset/rotation/scale relative to the
+    // zone center. Independent of the iS (sound stubs) toggle below — this is
+    // geometry, always emitted when a zone has an asset assigned.
+    var az=z.asset;
+    s+='<Transform DEF="ZoneAsset_'+sid+'" translation="'+(az.offsetX||0)+' '+(az.offsetY||0)+' '+(az.offsetZ||0)+
+       '" rotation="0 1 0 '+((az.rotationY||0)*Math.PI/180).toFixed(4)+'" scale="'+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+'">\n';
+    s+='  <Inline url=\'"'+xe(az.url)+'"\'/>\n';
+    s+='</Transform>\n';
+  }
   if(iS){
     var snd=z.sound;
     if(snd && snd.url){
@@ -2950,36 +3588,67 @@ function buildAX3D(a){
     _bhTimerSet.forEach(function(base){
       s+='  <IMPORT inlineDEF="HAnim_'+sn+'" exportedDEF="'+base+'" AS="'+base+'_'+sn+'"/>\n';
     });
+    // Camera rig — Day 77. Used to be unconditional generic injection here
+    // (VP_Eye/VP_Side/CAM_OrbitProto/CAM_TrackProto for every avatar, regardless of
+    // whether Character Creator ever authored anything) — exactly the "Composer-side
+    // generic fallback rig" the Avatar Camera Rig Manifest doc (Day 76 §4) rejected as
+    // polluting the X_ITE viewpoint menu with near-duplicate cameras per avatar. That
+    // decision went unimplemented until now. Rig nodes live inside the avatar's own
+    // Inline scope (written by mccf_hanim_api.py's _write_camera_rig_nodes), so they
+    // need the same IMPORT ... AS= treatment as the behavior timers above — same
+    // reasoning, same getNamedNode-doesn't-resolve-into-Inline constraint. AS= targets
+    // deliberately match what the Loader already looks up (VP_{name}_Eye,
+    // CAM_OrbitProto_{name}, CAM_TrackProto_{name}) so only the Loader's lookup
+    // mechanism needs to change, not any caller-side string construction.
+    var stem = camRigManifestStem(a.hanim_src);
+    var rigTypes = _camRigManifestCache[stem] || [];  // [] if uncached or no manifest — no IMPORTs, same as any other missing-manifest case
+    var _camRigDefs = {agent_eye:'CAM_Eye', agent_side:'CAM_Side', agent_orbit:'CAM_Orbit', agent_track:'CAM_Track'};
+    var _camRigAs   = {agent_eye:'VP_'+sn+'_Eye', agent_side:'VP_'+sn+'_Side',
+                       agent_orbit:'CAM_OrbitProto_'+sn, agent_track:'CAM_TrackProto_'+sn};
+    // Node tag needed for the USE reference below — plain Viewpoint for eye/side,
+    // the actual proto name for orbit/track.
+    var _camRigTag  = {agent_eye:'Viewpoint', agent_side:'Viewpoint', agent_orbit:'AgentOrbitCamera', agent_track:'AgentTrackCamera'};
+    var _camRigLabel= {agent_eye:'Eye', agent_side:'Side', agent_orbit:'Orbit', agent_track:'Track'};
+    rigTypes.forEach(function(rt){
+      if(!_camRigDefs[rt]) return;
+      s+='  <IMPORT inlineDEF="HAnim_'+sn+'" exportedDEF="'+_camRigDefs[rt]+'" AS="'+_camRigAs[rt]+'"/>\n';
+      // Day 77: X_ITE's Viewpoints menu displays each node's own `description` field,
+      // baked once inside the avatar file at Character-Creator-authoring time as a
+      // generic label ("Orbit", not "Cindy Orbit") — the avatar file has no way to
+      // know what agent name it'll eventually be placed under, and could be placed
+      // under several different names in the same scene. IMPORT only renames the
+      // scene-graph binding (AS=), not the field value X_ITE actually shows, so
+      // without this every avatar's orbit camera shows up in the dropdown as the
+      // identical unqualified "Orbit" — confirmed by the author testing this live.
+      // Fix: a tiny per-instance Script overrides description after import. The
+      // Script's `cam` field is a USE reference to the just-imported node, resolved
+      // by ordinary XML USE semantics at parse time (IMPORT'd names are USE-able in
+      // the importing scope) — deliberately not a runtime getNamedNode/
+      // getImportedNode SAI lookup, so there's no ambiguity about which one resolves
+      // an Inline-scoped node to get wrong.
+      s+='  <Script DEF="CamDescInit_'+sn+'_'+rt+'" directOutput="true">\n';
+      s+='    <field name="cam" type="SFNode" accessType="initializeOnly"><'+_camRigTag[rt]+' USE="'+_camRigAs[rt]+'"/></field>\n';
+      s+='    <field name="qname" type="SFString" accessType="initializeOnly" value="'+qn+' '+_camRigLabel[rt]+'"/>\n';
+      s+='    <![CDATA[ecmascript:\n';
+      s+='    function initialize(){ if(cam) cam.description = qname; }\n';
+      s+='    ]]>\n';
+      s+='  </' + 'Script>\n';
+    });
   } else {
     // Cylinder placeholder — used when no H-Anim figure assigned via Character Creator
     s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
     s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
     s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
+    // No camera rig at all for placeholder agents — there is no avatar file for
+    // Character Creator to have authored one in. Matches the Avatar Camera Rig
+    // Manifest doc's stated behavior for any missing-manifest case: "naturally
+    // offers nothing to trigger on," not a special-cased guard.
   }
 
   // Name label — always present regardless of figure type
   s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
   s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
-  // Avatar viewpoints — parented inside Transform so they ride with the figure
-  s+='<Viewpoint DEF="VP_'+sn+'_Eye" description="'+qn+' Eye" position="0 1.7 0.2" orientation="0 1 0 3.14159" jump="true"/>\n';
-  s+='<Viewpoint DEF="VP_'+sn+'_Side" description="'+qn+' Side" position="2.5 1.5 0" orientation="0 1 0 1.5708" jump="true"/>\n';
-  // Agent-orbit camera — Day 64: converted from hand-templated vessel XML to a real
-  // proto (AgentOrbitCamera, declared once per scene by buildCameraProtoDecls, defined
-  // in mccf_camera_protos.x3d). One DEF'd ProtoInstance replaces the old four-node,
-  // four-ROUTE block — the Loader now reads/writes this single node's exposed fields
-  // instead of reaching into five separately-DEF'd internal nodes. Still rides with the
-  // avatar via ordinary scene-graph parenting; nothing about the orbit math changed.
-  s+='<AgentOrbitCamera DEF="CAM_OrbitProto_'+sn+'" description="'+qn+' Orbit"/>\n';
-  // Agent-track camera (Day 63) — same parenting principle as agent-orbit: baked inside
-  // the avatar's own Transform, so the avatar's world motion is inherited for free via
-  // ordinary scene-graph semantics. Built agent-attached from the start (not converted
-  // after the fact from a free-camera version) per the Day 63 decision — see spec's
-  // "parenting beats tracking" principle and the orbit→agent_orbit precedent it's named for.
-  // Agent-track camera — Day 64: converted from hand-templated vessel XML to a real
-  // proto (AgentTrackCamera), same pattern as AgentOrbitCamera above. One DEF'd
-  // ProtoInstance replaces the old four-node, four-ROUTE block.
-  s+='<AgentTrackCamera DEF="CAM_TrackProto_'+sn+'" description="'+qn+' Track"/>\n';
   s+='</Transform>\n\n';return s;
 }
 function buildInterpNodes(path){
@@ -2994,6 +3663,27 @@ function buildInterpNodes(path){
   var sa=safeId(path.agent);
   var numSegs=wps.length-1;
   var order=parseInt(path.waypointOrder)||1;
+  // Day 77: DEF-collision fix. Every DEF this function emits (Interp_/Timer_/Dwell_/
+  // Arrival_/Kill_) used to be named purely from the agent (Interp_Cindy_1), with no
+  // reference to which PATH it belonged to. An agent with only one path never showed
+  // this. An agent with two or more separate paths in the same scene got the exact
+  // same DEF names emitted twice — confirmed directly in a real exported scene
+  // (Cindy: path_to_beyondGiparu, order=1, AND path_to_hindi_temple, order=3, both
+  // emitting Interp_Cindy_1/Timer_Cindy_1/Arrival_Cindy/Kill_Cindy). Duplicate DEFs
+  // make getNamedNode lookups and same-named ROUTE pairing ambiguous — root cause of
+  // two separate reported symptoms: an agent's later path's Arrival_ script
+  // resolving the WRONG Timer_ node ("doesn't see the first WP"), and a ROUTE
+  // pairing collapsing onto the wrong interpolator (agent snaps/jumps instead of
+  // smoothly transitioning).
+  // Fix: only paths with order !== 1 get a qualifying suffix. order===1 keeps
+  // today's exact unqualified naming — deliberately, not for minimalism's sake:
+  // mccf_x3d_loader.html's pbActivateX3DTimers() constructs 'Timer_'+safeName+'_1'
+  // and 'Arrival_'+safeName bare, with no order suffix, to arm an agent's FIRST
+  // path. Qualifying order===1 too would silently break that lookup. Order values
+  // besides 1 get '_'+order folded in, which is sufficient to guarantee uniqueness
+  // since waypointOrder is already tracked as distinguishing multiple paths for the
+  // same agent (see the Arrival_ script's own waypointOrder field, added V4).
+  var suf=(order===1)?'':('_'+order);
   var out='<!-- Animation nodes: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' waypointOrder='+order+' -->\n';
 
   for(var i=0;i<numSegs;i++){
@@ -3007,10 +3697,10 @@ function buildInterpNodes(path){
     var dwellTime=(parseFloat(wps[i+1].dwell)||2).toFixed(1);
     out+='\n<!-- Segment '+seg+': '+wps[i].name+' -> '+wps[i+1].name
         +' dist='+dist.toFixed(1)+'m pace='+pace+'m/s travel='+travelTime+'s dwell='+dwellTime+'s -->\n';
-    out+='<PositionInterpolator DEF="Interp_'+sa+'_'+seg+'" key="0 1"'
+    out+='<PositionInterpolator DEF="Interp_'+sa+suf+'_'+seg+'" key="0 1"'
         +' keyValue="'+p1[0]+' '+p1[1]+' '+p1[2]+' '+p2[0]+' '+p2[1]+' '+p2[2]+'"/>\n';
-    out+='<TimeSensor DEF="Timer_'+sa+'_'+seg+'" cycleInterval="'+travelTime+'" loop="false" enabled="false"/>\n';
-    out+='<TimeSensor DEF="Dwell_'+sa+'_'+seg+'" cycleInterval="'+dwellTime+'" loop="false" enabled="false"/>\n';
+    out+='<TimeSensor DEF="Timer_'+sa+suf+'_'+seg+'" cycleInterval="'+travelTime+'" loop="false" enabled="false"/>\n';
+    out+='<TimeSensor DEF="Dwell_'+sa+suf+'_'+seg+'" cycleInterval="'+dwellTime+'" loop="false" enabled="false"/>\n';
   }
 
   // Arrival_ Script — self-contained movement chain
@@ -3020,10 +3710,10 @@ function buildInterpNodes(path){
   var dwellDefs=[];
   var timerDefsArr=[];
   for(var d=1;d<=numSegs;d++){
-    dwellDefs.push("'Dwell_"+sa+'_'+d+"'");
-    timerDefsArr.push("'Timer_"+sa+'_'+d+"'");
+    dwellDefs.push("'Dwell_"+sa+suf+'_'+d+"'");
+    timerDefsArr.push("'Timer_"+sa+suf+'_'+d+"'");
   }
-  out+='\n<Script DEF="Arrival_'+sa+'" directOutput="true" mustEvaluate="true">\n';
+  out+='\n<Script DEF="Arrival_'+sa+suf+'" directOutput="true" mustEvaluate="true">\n';
   out+='  <field name="waypointOrder"   type="SFInt32" accessType="initializeOnly" value="'+order+'"/>\n';
   out+='  <field name="startFromLoader" type="SFTime"  accessType="inputOnly"/>\n';
   out+='  <field name="arrived"         type="SFBool"  accessType="inputOnly"/>\n';
@@ -3037,27 +3727,27 @@ function buildInterpNodes(path){
   out+='  var _timerIds=['+timerDefsArr.join(',')+'];\n';
   out+='  var _dwellIds=['+dwellDefs.join(',')+'];\n';
   out+='  var _maxSeg='+numSegs+';\n';
-  out+='  function initialize(){ Browser.println("Arrival_'+sa+': ready maxSeg="+_maxSeg+" order='+order+'"); }\n';
+  out+='  function initialize(){ Browser.println("Arrival_'+sa+suf+': ready maxSeg="+_maxSeg+" order='+order+'"); }\n';
   out+='  function resetSeg(val,time){ if(!val)return; _seg=0; _wasActive=false; }\n';
   out+='  function startFromLoader(val,time){\n';
   out+='    if(val<=0)return;\n';
   out+='    try{ var t=Browser.currentScene.getNamedNode(_timerIds[0]);\n';
-  out+='      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_1 fired at "+(time+0.1));}\n';
-  out+='    }catch(e){Browser.println("Arrival_'+sa+' startFromLoader err: "+e);}\n';
+  out+='      if(t){t.startTime=time+0.1;t.enabled=true;Browser.println("Arrival_'+sa+suf+': Timer_1 fired at "+(time+0.1));}\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+suf+' startFromLoader err: "+e);}\n';
   out+='  }\n';
   out+='  function arrived(val,time){\n';
   out+='    if(val){ _wasActive=true; return; }\n';
   out+='    if(!_wasActive) return;\n';
   out+='    _wasActive=false; _seg++; segmentArrived=_seg;\n';
-  out+='    Browser.println("Arrival_'+sa+': arrived seg "+_seg);\n';
+  out+='    Browser.println("Arrival_'+sa+suf+': arrived seg "+_seg);\n';
   out+='  }\n';
   out+='  function advanceSeg(completedSeg,time){\n';
   out+='    var nextIdx=completedSeg;\n';
-  out+='    if(nextIdx>=_maxSeg){ Browser.println("Arrival_'+sa+': arc complete"); return; }\n';
+  out+='    if(nextIdx>=_maxSeg){ Browser.println("Arrival_'+sa+suf+': arc complete"); return; }\n';
   out+='    var tNow=(time&&time>0)?time:Browser.currentTime;\n';
   out+='    try{ var t=Browser.currentScene.getNamedNode(_timerIds[nextIdx]);\n';
-  out+='      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_'+sa+': Timer_"+(nextIdx+1)+" at "+tNow);}\n';
-  out+='    }catch(e){Browser.println("Arrival_'+sa+' advanceSeg err: "+e);}\n';
+  out+='      if(t){t.startTime=tNow;t.enabled=true;Browser.println("Arrival_'+sa+suf+': Timer_"+(nextIdx+1)+" at "+tNow);}\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+suf+' advanceSeg err: "+e);}\n';
   out+='  }\n';
   out+='  function releaseDwell(val,time){\n';
   out+='    if(!val||_seg<1)return;\n';
@@ -3067,8 +3757,8 @@ function buildInterpNodes(path){
   out+='      var dw=Browser.currentScene.getNamedNode(dwId);\n';
   out+='      dw.enabled=true;\n';
   out+='      dw.startTime=Browser.currentTime;\n';
-  out+='      Browser.println("Arrival_'+sa+': released dwell "+dwId);\n';
-  out+='    }catch(e){Browser.println("Arrival_'+sa+' releaseDwell error: "+e);}\n';
+  out+='      Browser.println("Arrival_'+sa+suf+': released dwell "+dwId);\n';
+  out+='    }catch(e){Browser.println("Arrival_'+sa+suf+' releaseDwell error: "+e);}\n';
   out+='  }\n';
   out+='  ]]>\n';
   out+='</'+'Script>\n\n';
@@ -3076,11 +3766,11 @@ function buildInterpNodes(path){
   // Kill_ Script
   var timerIds=[];
   for(var j=1;j<wps.length;j++){
-    timerIds.push("'Timer_"+sa+'_'+j+"'");
-    timerIds.push("'Dwell_"+sa+'_'+j+"'");
+    timerIds.push("'Timer_"+sa+suf+'_'+j+"'");
+    timerIds.push("'Dwell_"+sa+suf+'_'+j+"'");
   }
   var wp1pos=wps[0].position||[0,0,0];
-  out+='<Script DEF="Kill_'+sa+'" directOutput="true" mustEvaluate="true">\n';
+  out+='<Script DEF="Kill_'+sa+suf+'" directOutput="true" mustEvaluate="true">\n';
   out+='  <field name="killAll" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <field name="resetPos" type="SFBool" accessType="inputOnly"/>\n';
   out+='  <![CDATA[ecmascript:\n';
@@ -3098,9 +3788,9 @@ function buildInterpNodes(path){
   out+='    try{\n';
   out+='      var av=Browser.currentScene.getNamedNode("Avatar_'+sa+'");\n';
   out+='      av.translation=new SFVec3f(startX,startY,startZ);\n';
-  out+='    }catch(e){Browser.println("Kill_'+sa+' resetPos error: "+e);}\n';
+  out+='    }catch(e){Browser.println("Kill_'+sa+suf+' resetPos error: "+e);}\n';
   out+='    try{\n';
-  out+='      Browser.currentScene.getNamedNode("Arrival_'+sa+'").resetSeg=true;\n';
+  out+='      Browser.currentScene.getNamedNode("Arrival_'+sa+suf+'").resetSeg=true;\n';
   out+='    }catch(e){}\n';
   out+='  }\n';
   out+='  ]]>\n';
@@ -3115,15 +3805,17 @@ function buildInterpRoutes(path){
   if(wps.length<2)return '';
   var sa=safeId(path.agent);
   var numSegs=wps.length-1;
+  var order=parseInt(path.waypointOrder)||1;
+  var suf=(order===1)?'':('_'+order);  // must match buildInterpNodes' suffix exactly
   var out='<!-- ROUTEs: '+xe(path.agent)+' -->\n';
   for(var i=0;i<numSegs;i++){
     var seg=i+1;
-    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="fraction_changed"'
-        +' toNode="Interp_'+sa+'_'+seg+'" toField="set_fraction"/>\n';
-    out+='<ROUTE fromNode="Interp_'+sa+'_'+seg+'" fromField="value_changed"'
+    out+='<ROUTE fromNode="Timer_'+sa+suf+'_'+seg+'" fromField="fraction_changed"'
+        +' toNode="Interp_'+sa+suf+'_'+seg+'" toField="set_fraction"/>\n';
+    out+='<ROUTE fromNode="Interp_'+sa+suf+'_'+seg+'" fromField="value_changed"'
         +' toNode="Avatar_'+sa+'" toField="translation"/>\n';
-    out+='<ROUTE fromNode="Timer_'+sa+'_'+seg+'" fromField="isActive"'
-        +' toNode="Arrival_'+sa+'" toField="arrived"/>\n';
+    out+='<ROUTE fromNode="Timer_'+sa+suf+'_'+seg+'" fromField="isActive"'
+        +' toNode="Arrival_'+sa+suf+'" toField="arrived"/>\n';
     // Dwell→Timer chaining handled by MCCFMaster.startNextTimer after TTS completes
   }
   out+='\n';
@@ -3169,10 +3861,10 @@ function buildMS(){
 function buildFreeCamerasX3D(){
   var s='';
   Object.values(placedCameras).forEach(function(c){
-    var yawRad=(c.hAngle||0)*Math.PI/180, pitchRad=(c.vAngle||0)*Math.PI/180;
+    var yawRad=(c.hAngle||0)*Math.PI/180, pitchRad=(c.vAngle||0)*Math.PI/180, rollRad=(c.roll||0)*Math.PI/180;
     s+='<FreeCamera DEF="CAM_Free_'+safeId(c.name)+'" description="'+xe(c.name)+'" '+
        'position="'+c.position[0]+' '+c.position[1]+' '+c.position[2]+'" '+
-       'yaw="0 1 0 '+yawRad+'" pitch="1 0 0 '+pitchRad+'"/>\n';
+       'yaw="0 1 0 '+yawRad+'" pitch="1 0 0 '+pitchRad+'" roll="0 0 1 '+rollRad+'"/>\n';
   });
   return s;
 }
@@ -3455,7 +4147,7 @@ function renderNetLinks() {
   var el = document.getElementById('net-link-list');
   if (!el) return;
   if (!networks.length) {
-    el.innerHTML = '<div style="color:var(--dim);font-size:13px;">No links defined.</div>';
+    el.innerHTML = '<div style="color:var(--dim);font-size:16px;">No links defined.</div>';
     return;
   }
   el.innerHTML = networks.map(function(lk, i) {
@@ -3575,7 +4267,7 @@ function _doExportSceneXML(_eventTracks){
       var zpos=z.location||z.position||[0,0,0];
       var zw=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25};
       var zat=z.ambient_theme||{scale:'major',tempo:'medium'};
-      x+='  <Zone id="'+xe(z.id)+'" name="'+xe(z.name||z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
+      x+='  <Zone id="'+xe(z.id)+'" name="'+xe(z.name||z.id)+'" zone_type="'+xe(z.zone_type)+'"'+(z.template?' template="'+xe(z.template)+'"':'')+'>\n';
       x+='    <Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
       x+='    <Weights E="'+zw.E+'" B="'+zw.B+'" P="'+zw.P+'" S="'+zw.S+'"/>\n';
       x+='    <Position x="'+zpos[0]+'" y="0" z="'+zpos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
@@ -3594,6 +4286,10 @@ function _doExportSceneXML(_eventTracks){
         if(z.sound.dwellUrl)
           x+='      <Track id="dwell" url="'+xe(z.sound.dwellUrl)+'" loop="false" gain="'+(z.sound.dwellGain||0.85).toFixed(2)+'"/>\n';
         x+='    </SoundDesign>\n';
+      }
+      if(z.asset && z.asset.url){
+        x+='    <Asset url="'+xe(z.asset.url)+'" offsetX="'+(z.asset.offsetX||0)+'" offsetY="'+(z.asset.offsetY||0)+
+           '" offsetZ="'+(z.asset.offsetZ||0)+'" rotationY="'+(z.asset.rotationY||0)+'" scale="'+(z.asset.scale!==undefined?z.asset.scale:1)+'"/>\n';
       }
       x+='  </Zone>\n';
     });
@@ -3647,7 +4343,7 @@ function _doExportSceneXML(_eventTracks){
     Object.values(placedCameras).forEach(function(c){
       var cpos=c.position||[0,1.7,0];
       x+='  <Camera name="'+xe(c.name)+'" x="'+cpos[0]+'" y="'+(cpos[1]!==undefined?cpos[1]:1.7)+'" z="'+cpos[2]+
-        '" hAngle="'+(c.hAngle||0)+'" vAngle="'+(c.vAngle||0)+'"/>\n';
+        '" hAngle="'+(c.hAngle||0)+'" vAngle="'+(c.vAngle||0)+'" roll="'+(c.roll||0)+'"/>\n';
     });
     x+='</Cameras>\n';
   }
@@ -3762,11 +4458,21 @@ function loadSceneFromDropdown() {
   var sel=document.getElementById('scene-load-select');
   var logEl=document.getElementById('scene-load-log');
   if(!sel||!sel.value){if(logEl)logEl.textContent='Select a scene first.';return;}
+  // Day 77: waypoints/zones/paths/networks only finish populating once
+  // _restoreChorusFromXml's SEPARATE, later fetch resolves — _applyLoadedScene
+  // (called first, from the server JSON) does not carry them. If the Events
+  // tab is opened in the gap between those two stages, _sendSceneDataToEventsEditor
+  // snapshots whatever's been parsed so far (confirmed: 3 of 4 waypoints in a
+  // real test) instead of the complete set. This flag makes that window visible
+  // to _sendSceneDataToEventsEditor so it can skip a send mid-load rather than
+  // ship a partial snapshot — cleared on every exit path below (success,
+  // rawXml missing, and both fetch failures) so it can never get stuck true.
+  _sceneLoadInFlight = true;
   fetch(API+'/scene/load/scene',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({filename:sel.value})})
     .then(function(r){return r.json();})
     .then(function(data){
-      if(data.error){if(logEl)logEl.textContent='Error: '+data.error;return;}
+      if(data.error){_sceneLoadInFlight=false; if(logEl)logEl.textContent='Error: '+data.error;return;}
       _applyLoadedScene(data);
       // Also fetch raw scene XML to restore Chorus data (not returned by server endpoint)
       fetch(API+'/scene/load/scene/raw?filename='+encodeURIComponent(sel.value))
@@ -3779,13 +4485,14 @@ function loadSceneFromDropdown() {
             .catch(function(){return null;});
         })
         .then(function(rawXml){
-          if(rawXml) _restoreChorusFromXml(rawXml);
+          if(rawXml) _restoreChorusFromXml(rawXml);  // clears _sceneLoadInFlight itself, success or catch
+          else _sceneLoadInFlight = false;            // no raw XML available — nothing more will arrive
         })
-        .catch(function(){});
+        .catch(function(){ _sceneLoadInFlight = false; });
       if(logEl)logEl.textContent='Loaded: '+sel.value;
       toast('Scene loaded: '+sel.value);
     })
-    .catch(function(e){if(logEl)logEl.textContent='Load failed: '+e.message;});
+    .catch(function(e){ _sceneLoadInFlight=false; if(logEl)logEl.textContent='Load failed: '+e.message;});
 }
 
 function _restoreChorusFromXml(xml) {
@@ -3822,6 +4529,7 @@ function _restoreChorusFromXml(xml) {
       var zid      = zEl.getAttribute('id');
       var zname    = zEl.getAttribute('name');
       var ztype    = zEl.getAttribute('zone_type') || 'neutral';
+      var ztemplate = zEl.getAttribute('template') || null;
       if (!zid) return;
 
       var posEl    = zEl.querySelector('Position');
@@ -3891,6 +4599,20 @@ function _restoreChorusFromXml(xml) {
         }
       }
 
+      // Asset (X3D Inline)
+      var asset = null;
+      var assetEl = zEl.querySelector('Asset');
+      if (assetEl) {
+        asset = {
+          url:       assetEl.getAttribute('url') || '',
+          offsetX:   parseFloat(assetEl.getAttribute('offsetX')   || '0'),
+          offsetY:   parseFloat(assetEl.getAttribute('offsetY')   || '0'),
+          offsetZ:   parseFloat(assetEl.getAttribute('offsetZ')   || '0'),
+          rotationY: parseFloat(assetEl.getAttribute('rotationY') || '0'),
+          scale:     parseFloat(assetEl.getAttribute('scale')     || '1')
+        };
+      }
+
       // Build or merge zone object
       if (!zones[zid]) zones[zid] = {};
       Object.assign(zones[zid], {
@@ -3904,7 +4626,9 @@ function _restoreChorusFromXml(xml) {
         ambient_theme: ambient_theme,
         chorus: chorus || zones[zid].chorus || null,
         commands: commands.length ? commands : (zones[zid].commands || []),
-        sound: sound || zones[zid].sound || null
+        sound: sound || zones[zid].sound || null,
+        asset: asset || zones[zid].asset || null,
+        template: ztemplate || zones[zid].template || null
       });
     });
 
@@ -4003,7 +4727,8 @@ function _restoreChorusFromXml(xml) {
           parseFloat(cEl.getAttribute('z') || '0')
         ],
         hAngle: parseFloat(cEl.getAttribute('hAngle') || '0'),
-        vAngle: parseFloat(cEl.getAttribute('vAngle') || '0')
+        vAngle: parseFloat(cEl.getAttribute('vAngle') || '0'),
+        roll: parseFloat(cEl.getAttribute('roll') || '0')
       };
     });
 
@@ -4069,10 +4794,11 @@ function _restoreChorusFromXml(xml) {
           hanim_src:   xmlHanim || ag.hanim_src || '',
           hanim_loa:   ag.hanim_loa   || 4
         };
+        if(placedAgents[name].hanim_src) camRigFetchManifest(placedAgents[name].hanim_src);
       } else {
         // Agent already in placedAgents (server path) — patch hanim_src and voice
         // from XML, which is the only authoritative source for these fields (path b).
-        if (xmlHanim) placedAgents[name].hanim_src = xmlHanim;
+        if (xmlHanim) { placedAgents[name].hanim_src = xmlHanim; camRigFetchManifest(xmlHanim); }
         if (voice)    placedAgents[name].voice      = voice;
         // Also patch position from XML — server may return a stale start position
         if (px3 || pz3) placedAgents[name].position = [px3, 0, pz3];
@@ -4137,6 +4863,7 @@ function _restoreChorusFromXml(xml) {
         trackMap[key].cues.push(cue);
       });
       var restoredTracks = trackOrder.map(function(k){ return trackMap[k]; });
+      _lastRestoredTracks = restoredTracks;  // Day 77: cached for re-send whenever Events tab opens
       if (restoredTracks.length) _sendCuesToEventsEditor(restoredTracks);
     }
 
@@ -4144,13 +4871,14 @@ function _restoreChorusFromXml(xml) {
     renderAll();
     updateSummary();
     window._sceneXmlLoaded = true;  // Day 47: block loadAll from overwriting XML-restored state
+    _sceneLoadInFlight = false;     // Day 77: waypoints/zones/paths/networks are now complete
     // Now that sceneConfig.name is correct, send live scene data to Events Editor if open.
     _sendSceneDataToEventsEditor();
     console.log('[restore] zones:', Object.keys(zones).length,
                 'waypoints:', Object.keys(waypoints).length,
                 'paths:', Object.keys(paths).length,
                 'networks:', networks.length);
-  } catch(e) { console.warn('_restoreChorusFromXml:', e); }
+  } catch(e) { _sceneLoadInFlight = false; console.warn('_restoreChorusFromXml:', e); }
 }
 
 // Day 47: normalize waypoints from any source (server API, scene load JSON, XML restore)
@@ -4234,11 +4962,11 @@ function _renderRunStatusShell(pnames){
     var sid=_safePname(pn);
     return '<div id="run-status-'+sid+'" style="background:var(--s2);border:1px solid var(--border);'
       +'border-radius:5px;padding:8px;margin-bottom:8px">'
-      +'<div style="color:var(--cool);font-family:var(--display);font-size:14px;font-weight:700">'+pn+' <span style="color:var(--dim);font-weight:400;font-size:12px">('+(paths[pn]?paths[pn].agent:'')+')</span></div>'
-      +'<div id="run-status-'+sid+'-wp" style="color:var(--accent);font-size:13px;margin-top:2px">queued…</div>'
-      +'<div id="run-status-'+sid+'-q" style="color:var(--warm);font-size:13px;font-style:italic;margin-top:4px"></div>'
-      +'<div id="run-status-'+sid+'-r" style="color:var(--text);font-size:13px;line-height:1.5;max-height:80px;overflow-y:auto;margin-top:2px"></div>'
-      +'<div id="run-status-'+sid+'-ch" style="display:flex;gap:8px;margin-top:4px;font-size:12px">'
+      +'<div style="color:var(--cool);font-family:var(--display);font-size:14px;font-weight:700">'+pn+' <span style="color:var(--dim);font-weight:400;font-size:15px">('+(paths[pn]?paths[pn].agent:'')+')</span></div>'
+      +'<div id="run-status-'+sid+'-wp" style="color:var(--accent);font-size:16px;margin-top:2px">queued…</div>'
+      +'<div id="run-status-'+sid+'-q" style="color:var(--warm);font-size:16px;font-style:italic;margin-top:4px"></div>'
+      +'<div id="run-status-'+sid+'-r" style="color:var(--text);font-size:16px;line-height:1.5;max-height:80px;overflow-y:auto;margin-top:2px"></div>'
+      +'<div id="run-status-'+sid+'-ch" style="display:flex;gap:8px;margin-top:4px;font-size:15px">'
       +'<span style="color:var(--E)">E —</span><span style="color:var(--B)">B —</span>'
       +'<span style="color:var(--P)">P —</span><span style="color:var(--S)">S —</span></div>'
       +'</div>';

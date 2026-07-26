@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ZoneTemplate name="TempleZone" zone_type="authority">
+  <Descriptor>Hindu Temple</Descriptor>
+  <Weights E="0.1" B="0.35" P="0.3" S="0.1"/>
+  <AmbientTheme scale="phrygian" tempo="medium"/>
+  <SoundDesign>
+    <Track id="ambient" url="media/music/OrchestraChorus1.mp3" loop="true" gain="0.80"/>
+  </SoundDesign>
+</ZoneTemplate>
