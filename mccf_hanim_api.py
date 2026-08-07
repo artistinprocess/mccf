@@ -1770,11 +1770,35 @@ def hanim_export():
     }
 
     if clips:
-        cultivar_def.behavior_clips = []
+        # Day 83: real bug fix, confirmed by direct user test (playback panel
+        # showed several real, working clips; cultivar still only had Default
+        # after Export). This used to wholesale-replace cultivar_def.
+        # behavior_clips with ONLY whatever was in THIS export's clips[] —
+        # which is _heClips, the hand-authored pose-editing scratchpad on the
+        # client (see mccf_character_creator.html's heExport()). _heClips
+        # self-seeds with a single "Default" entry whenever the author hasn't
+        # hand-built a custom animation, so every Export — even one that only
+        # changes skin/receptivity/expressions — silently discarded every
+        # OTHER real clip the avatar actually has (the standard base timers,
+        # any Mixamo-ingested clips), regardless of what GET /hanim/joints
+        # reports as genuinely present in the X3D file.
+        #
+        # Fixed to merge by name instead of replacing: existing entries not
+        # present in this export's clips[] are preserved untouched; entries
+        # that ARE present get added or updated. Deliberately does NOT touch
+        # _write_clip_nodes above — that still only ever writes X3D
+        # TimeSensor/Interpolator nodes for what's actually in clips[], so
+        # pre-existing real TimeSensors are never duplicated by this change
+        # (confirmed _write_clip_nodes has no existing-DEF check at all —
+        # feeding it already-real clips would create duplicate TimeSensor
+        # DEFs, invalid X3D. Only the cultivar's own clip-selection table is
+        # affected here.)
+        existing_by_name = {c.get('name'): c for c in cultivar_def.behavior_clips}
         for clip in clips:
+            name = clip.get('name', 'Default')
             c = {
-                'name':     clip.get('name', 'Default'),
-                'timerDEF': clip.get('timerDEF', f'{clip.get("name","Default")}Timer'),
+                'name':     name,
+                'timerDEF': clip.get('timerDEF', f'{name}Timer'),
                 'loop':     bool(clip.get('loop', True)),
                 'priority': int(clip.get('priority', 0)),
             }
@@ -1788,7 +1812,8 @@ def hanim_export():
                             c[key] = round(float(val), 4)
                         except (TypeError, ValueError):
                             pass
-            cultivar_def.behavior_clips.append(c)
+            existing_by_name[name] = c
+        cultivar_def.behavior_clips = list(existing_by_name.values())
         p0 = [c for c in cultivar_def.behavior_clips if c.get('priority', 0) == 0]
         cultivar_def.behavior_default = (
             p0[0]['name'] if p0 else cultivar_def.behavior_clips[0]['name']

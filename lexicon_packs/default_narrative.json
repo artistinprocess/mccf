@@ -1,0 +1,16 @@
+{
+  "pack_id": "default_narrative",
+  "label": "Narrative / Dramatic Dialogue (default)",
+  "description": "General-purpose supplemental vocabulary for authored scene dialogue that the core constitutional-arc-tuned lexicon doesn't cover. English only, no cultural/regional framing \u2014 see mccf_voice_api.py's Day 80 comment for scope reasoning.",
+  "pos": [
+    "alive", "beautiful", "bloom", "blooming", "bright", "brilliant",
+    "delighted", "enchanted", "excited", "glow", "glowing", "magic",
+    "magical", "radiant", "serene", "sunlight", "thrilled", "wonder",
+    "wondrous"
+  ],
+  "neg": [
+    "afraid", "darkness", "dread", "dreadful", "empty", "fearful",
+    "haunted", "lurking", "menacing", "ominous", "shadow", "shadows",
+    "silence", "silent", "terrified", "unease", "uneasy", "watching"
+  ]
+}

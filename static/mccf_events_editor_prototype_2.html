@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MCCF Events Editor</title>
 <script src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
+<!-- Day 78, V5 Tasklist Phase 2: path-recorder.js's RDP decimation + the
+     independent recorded-path data structure. Same /static/js/ absolute-path
+     convention established in mccf_scene_composer.html (Phase 1 task 1). -->
+<script src="/static/js/path-recorder.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
+  font-size: 17px;
   background: #0a0c10;
   color: #c8d0e0;
   height: 100vh;
@@ -33,8 +37,8 @@ html, body {
   --warm:    #f0c060;
   --cool:    #60a8f0;
   --purple:  #a880f0;
+  --pink:    #f078c8; /* Day 82: lights — same hex as Route Graph's SFColor port color, kept consistent across tools */
   --radius:  4px;
-  --tl-height: 280px;    /* timeline panel height */
   --stage-w:   200px;    /* left stage panel width */
   --insp-w:    240px;    /* right inspector width */
 }
@@ -53,7 +57,7 @@ header {
 }
 .logo {
   font-family: 'Syne', sans-serif;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--accent4);
 }
@@ -63,7 +67,7 @@ header {
 .viewport-row {
   display: grid;
   grid-template-columns: var(--stage-w) 1fr var(--insp-w);
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   border-bottom: 2px solid var(--border);
@@ -87,7 +91,7 @@ header {
   flex: 1;
   text-align: center;
   padding: 5px 0;
-  font-size: 13px;
+  font-size: 16px;
   color: var(--dim);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -113,7 +117,7 @@ header {
 .stage-add-btn {
   flex: 1;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
+  font-size: 16px;
   padding: 4px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -123,6 +127,49 @@ header {
   text-align: center;
 }
 .stage-add-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+
+/* Object list (Day 79 — replaces the old dummy stage canvas) */
+.stage-object-list {
+  padding: 8px;
+  overflow-y: auto;
+  height: 100%;
+}
+.stage-object-section-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 4px;
+}
+.stage-object-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  color: var(--text);
+}
+.stage-object-row:hover { background: var(--surface2); }
+.stage-object-row.selected { background: var(--surface2); color: var(--accent3); }
+.stage-object-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent3);
+  flex-shrink: 0;
+}
+.obj-field { margin-bottom: 10px; }
+.obj-field label {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+.obj-field label span { color: var(--accent3); }
+.obj-field input[type="range"] { width: 100%; }
 
 /* X3D Viewport (top-center) */
 .x3d-viewport {
@@ -146,14 +193,14 @@ header {
   backdrop-filter: blur(4px);
 }
 .x3d-label {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 .x3d-cam-select {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
+  font-size: 16px;
   background: rgba(24,28,36,0.8);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -164,7 +211,7 @@ header {
 .x3d-cam-select:focus { border-color: var(--accent3); }
 .x3d-status {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.06em;
 }
@@ -194,11 +241,11 @@ x3d-canvas {
   pointer-events: none;
 }
 .x3d-placeholder-icon {
-  font-size: 40px;
+  font-size: 48px;
   opacity: 0.18;
 }
 .x3d-placeholder-text {
-  font-size: 14px;
+  font-size: 17px;
   color: var(--dim);
   letter-spacing: 0.08em;
   text-align: center;
@@ -208,7 +255,7 @@ x3d-canvas {
 /* Blender-style corner overlays */
 .x3d-corner {
   position: absolute;
-  font-size: 12px;
+  font-size: 14px;
   color: rgba(200,208,224,0.3);
   letter-spacing: 0.06em;
   pointer-events: none;
@@ -229,7 +276,7 @@ x3d-canvas {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 3px 14px;
-  font-size: 14px;
+  font-size: 17px;
   color: var(--accent);
   letter-spacing: 0.06em;
   z-index: 6;
@@ -249,7 +296,7 @@ x3d-canvas {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -268,7 +315,7 @@ x3d-canvas {
 
 .insp-cue-title {
   font-family: 'Syne', sans-serif;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text);
   margin-bottom: 12px;
@@ -279,7 +326,7 @@ x3d-canvas {
 .insp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .insp-field { margin-bottom: 9px; }
 .insp-label {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -292,7 +339,7 @@ x3d-canvas {
   border-radius: var(--radius);
   color: var(--text);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
+  font-size: 17px;
   padding: 5px 8px;
   outline: none;
 }
@@ -309,7 +356,7 @@ x3d-canvas {
 .insp-btn {
   width: 100%;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
+  font-size: 16px;
   padding: 6px 0;
   border-radius: var(--radius);
   cursor: pointer;
@@ -322,12 +369,12 @@ x3d-canvas {
 .insp-btn-exp:hover  { opacity: 0.85; }
 .insp-slider-row { display: grid; grid-template-columns: 1fr 36px; align-items: center; gap: 5px; }
 .insp-slider-row input[type=range] { width: 100%; accent-color: var(--accent3); }
-.insp-slider-val { font-size: 13px; color: var(--accent3); text-align: right; }
-.insp-section { font-size: 12px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase;
+.insp-slider-val { font-size: 16px; color: var(--accent3); text-align: right; }
+.insp-section { font-size: 14px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase;
   border-top: 1px solid var(--border); margin: 10px 0 8px; padding-top: 7px; }
 .insp-radio-row { display: flex; gap: 8px; align-items: center; }
 .insp-radio-row label { display: flex; align-items: center; gap: 4px; cursor: pointer;
-  font-size: 13px; color: var(--text); }
+  font-size: 16px; color: var(--text); }
 .insp-radio-row input[type=radio] { accent-color: var(--accent3); cursor: pointer; }
 .empty-insp {
   flex: 1;
@@ -336,266 +383,169 @@ x3d-canvas {
   justify-content: center;
   text-align: center;
   color: var(--dim);
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1.9;
 }
 
-/* ── TIMELINE DOCK (bottom) ── */
-.tl-dock {
-  height: var(--tl-height);
-  flex-shrink: 0;
+/* ── TIMELINE PANEL (production tracks: camera/light/gesture/path) ──
+   Day 81. Scheduled events only — camera cuts, gesture cues, path/timer
+   assignments, light cues. Deliberately does NOT include dialogue (owned
+   by mccf_timeline_dialogue_prototype_v2.html) or anything sensed
+   (waypoint arrival, zone entry — those don't have an authored duration,
+   so a timeline can't represent them honestly; see the Day 81 event-
+   architecture note). A recorded path DOES belong here — once captured
+   it has a fixed, authored duration (the timer's cycle interval), same
+   as any other scheduled cue. */
+.timeline-panel {
+  flex: 0 0 340px;
   display: flex;
   flex-direction: column;
+  background: var(--surface);
   overflow: hidden;
-  background: var(--bg);
-  border-top: 2px solid var(--border);
 }
-
-/* Timeline toolbar inside dock */
-.tl-toolbar {
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
-  height: 36px;
+.timeline-head {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 6px;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.tb-btn {
+.timeline-title {
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.timeline-time-readout {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  color: var(--accent4);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  cursor: pointer;
+  user-select: all;
+}
+.timeline-time-readout:hover { border-color: var(--accent4); }
+.timeline-head-btn {
+  margin-left: auto;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 14px;
   padding: 3px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent3);
   border-radius: var(--radius);
   background: transparent;
-  color: var(--text);
+  color: var(--accent3);
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
+  letter-spacing: 0.05em;
 }
-.tb-btn:hover { border-color: var(--muted); }
-.tb-btn.accent { border-color: var(--accent); color: var(--accent); }
-.tb-btn.accent:hover { background: rgba(74,240,168,0.1); }
-.tb-btn.purple { border-color: var(--purple); color: var(--purple); }
-.tb-btn.purple:hover { background: rgba(168,128,240,0.1); }
-.tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 3px; }
-.tb-time {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
-  color: var(--accent);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 3px 8px;
-  min-width: 60px;
-  text-align: center;
-}
-.tb-zoom {
-  margin-left: auto;
-  font-size: 13px;
-  color: var(--dim);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.zoom-btn {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius);
-  width: 20px; height: 20px;
-  cursor: pointer;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.zoom-btn:hover { border-color: var(--muted); }
-
-/* Timeline track area */
-.tl-content {
-  display: flex;
+.timeline-head-btn:hover { background: var(--accent3); color: var(--bg); }
+.timeline-body {
   flex: 1;
-  overflow: hidden;
-  min-height: 0;
-}
-
-/* Track label gutter (fixed left side of timeline) */
-.tl-labels {
-  width: 90px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  overflow: hidden;
+  position: relative;
 }
-.tl-label-head {
-  height: 26px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+/* Track label column (left) is fixed; ruler + lanes scroll horizontally
+   together via .timeline-scroll so a track's cues always line up under
+   the same ruler position, matching "camera cuts, gesture, dialogue" all
+   reading off one shared clock. */
+.timeline-row { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.timeline-track-label {
+  width: 110px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   padding: 0 8px;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.timeline-track-add {
+  font-size: 15px;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius);
+  line-height: 1;
+}
+.timeline-track-add:hover { color: var(--accent3); background: var(--surface2); }
+.timeline-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+.timeline-ruler {
+  height: 26px;
+  position: relative;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.timeline-ruler-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px solid var(--border);
   font-size: 12px;
   color: var(--dim);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  flex-shrink: 0;
+  padding-left: 3px;
+  padding-top: 2px;
+  white-space: nowrap;
 }
-.tl-label-rows {
+#tl-tracks {
   flex: 1;
-  overflow-y: hidden; /* synced via JS scroll event */
-  min-height: 0;
-}
-.tl-track-label {
-  height: 34px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 6px 0 8px;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-  user-select: none;
-  background: var(--surface);
-  overflow: hidden;
-}
-.tl-track-label:hover { background: rgba(255,255,255,0.03); }
-.track-icon { font-size: 14px; flex-shrink: 0; }
-.track-label-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.track-clear-btn {
-  font-size: 15px; line-height: 1; color: var(--muted); flex-shrink: 0;
-  padding: 1px 3px; border-radius: 3px; cursor: pointer; opacity: 0;
-  transition: opacity 0.15s;
-}
-.tl-track-label:hover .track-clear-btn { opacity: 1; }
-.track-clear-btn:hover { color: var(--accent2) !important; background: rgba(240,96,96,0.15); }
-
-/* Scrollable tracks + ruler area */
-.tl-scroll-area {
-  flex: 1;
-  overflow-x: auto;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
+  overflow-x: hidden; /* horizontal scroll happens per-row via .timeline-scroll below, not at this container level — one scrollbar per axis, not two competing ones */
 }
-.tl-scroll-area::-webkit-scrollbar { height: 5px; width: 5px; }
-.tl-scroll-area::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
-.tl-scroll-area::-webkit-scrollbar-corner { background: var(--surface); }
-
-.tl-ruler-row {
-  height: 26px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+.timeline-lane {
+  height: 46px;
   position: relative;
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
-.tl-ruler { position: relative; height: 100%; min-width: 100%; }
-.wp-marker-head {
-  position: absolute;
-  top: 0;
-  font-size: 14px;
-  color: var(--purple);
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  padding-top: 4px;
-  transform: translateX(-50%);
-}
-.wp-tick-head {
+.timeline-lane:nth-child(odd) { background: rgba(255,255,255,0.015); }
+.timeline-playhead {
   position: absolute;
   top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(168,128,240,0.3);
-}
-
-.tl-tracks-scroll {
-  flex: 1;
-  position: relative;
-  min-width: 100%;
-}
-.tl-track-row {
-  display: flex;
-  height: 38px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-.tl-track-row:hover { background: rgba(255,255,255,0.01); }
-.tl-track-lane {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-/* WP vertical lines */
-.wp-line {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(168,128,240,0.2);
+  width: 0;
+  border-left: 2px solid var(--accent4);
+  z-index: 6;
   pointer-events: none;
-  z-index: 1;
 }
-
-/* Cue blocks */
-.cue {
+.timeline-playhead::before {
+  content: '';
   position: absolute;
-  top: 3px;
-  height: 32px;
-  border-radius: 3px;
-  display: flex;
-  align-items: center;
-  padding: 0 7px;
+  top: 0; left: -5px;
+  border: 5px solid transparent;
+  border-top-color: var(--accent4);
+}
+/* Cue blocks — a filled bar spanning [t0, t0+duration], so overlap and
+   length are visible at a glance instead of guessed. Color = track type,
+   distinct from coupler/type-badge colors used elsewhere so the two
+   systems (relational vs. production timing) don't visually blur together. */
+.cue-block {
+  position: absolute;
+  top: 6px;
+  height: 34px;
+  border-radius: var(--radius);
+  padding: 3px 6px;
   font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
+  line-height: 1.25;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
+  cursor: pointer;
   border: 1px solid transparent;
-  z-index: 2;
-  user-select: none;
-  transition: filter 0.1s;
 }
-.cue:hover { filter: brightness(1.15); }
-.cue.selected { border-color: rgba(255,255,255,0.5); filter: brightness(1.2); }
-.cue-cam      { background: rgba(24,95,165,0.55);   color: #85b7eb; }
-.cue-light    { background: rgba(186,117,23,0.55);   color: #fac775; }
-.cue-fog      { background: rgba(31,158,117,0.45);   color: #5dcaa5; }
-.cue-bg       { background: rgba(83,74,183,0.45);    color: #afa9ec; }
-.cue-fx       { background: rgba(216,90,48,0.55);    color: #f0997b; }
-.cue-behavior { background: rgba(74,240,168,0.2);    color: #4af0a8; }
-
-/* Playhead */
-.playhead {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 2px;
-  background: var(--accent2);
-  z-index: 10;
-  pointer-events: none;
-}
-/* Playhead on ruler */
-.ph-ruler {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 2px;
-  background: var(--accent2);
-  z-index: 10;
-  pointer-events: none;
-}
-
-/* Drag resize handle for timeline dock */
-.tl-resize-handle {
-  height: 4px;
-  background: var(--border);
-  cursor: ns-resize;
-  flex-shrink: 0;
-  transition: background 0.1s;
-}
-.tl-resize-handle:hover { background: var(--accent3); }
+.cue-block.selected { border-color: #fff; }
+.cue-camera  { background: rgba(96,168,240,0.28); color: var(--accent3); }
+.cue-light   { background: rgba(240,192,96,0.28); color: var(--accent4); }
+.cue-gesture { background: rgba(168,128,240,0.28); color: var(--purple); }
+.cue-path    { background: rgba(74,240,168,0.28); color: var(--accent); }
+.cue-audio   { background: rgba(240,120,200,0.28); color: var(--pink); }
+.cue-block .cue-target { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -607,18 +557,25 @@ x3d-canvas {
 <!-- ── TOP: Stage | X3D Viewport | Inspector ── -->
 <div class="viewport-row">
 
-  <!-- Stage (top-left) -->
+  <!-- Stage (top-left) — Day 79: was a dummy top-down canvas (hardcoded fake
+       agent/zone positions, never wired to real data — see this file's own
+       "Dummy agent positions (replaced by Task 3...)" comment) driving cue
+       selection. Cues are retired; this is now a real object list, sourced
+       from live CAMERAS/AGENTS data (already flowing in via mccf_scene_data —
+       just never rendered into real UI before now). Selecting an object here
+       drives the viewport preview + Object properties panel on the right. -->
   <div class="stage-panel">
     <div class="stage-tabs">
       <div class="stage-tab active" onclick="setStageTab('stage',this)">Stage</div>
       <div class="stage-tab" onclick="setStageTab('assets',this)">Assets</div>
     </div>
     <div class="stage-canvas-wrap">
-      <canvas id="stage-canvas"></canvas>
+      <div id="stage-object-list" class="stage-object-list"></div>
     </div>
     <div class="stage-footer">
-      <button class="stage-add-btn" onclick="addCamera()">+ Cam</button>
-      <button class="stage-add-btn" onclick="addLight()">+ Light</button>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--dim);letter-spacing:0.04em;">
+        Add cameras/lights in Composer's Place tab — this list previews what's already placed.
+      </span>
     </div>
   </div>
 
@@ -636,10 +593,53 @@ x3d-canvas {
       </select>
       <span class="x3d-status" id="vp-status">— no scene loaded —</span>
       <button id="vp-refresh-btn" onclick="refreshViewport()" title="Re-export X3D and reload viewport" style="
-        margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+        margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;
         padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius);
         background:transparent;color:var(--dim);cursor:pointer;letter-spacing:0.06em;
         text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">↺ refresh</button>
+      <!-- Day 78, V5 Tasklist Phase 2 tasks 2-4: fly-mode path recorder. Lives
+           in this preview's existing (crash-fixed) viewport, per the author's
+           own Day 78 call: "Let's take advantage of our existing code." -->
+      <button id="path-rec-btn" onclick="togglePathRecording()" title="Navigate the viewport (fly/walk) while recording to capture a curved path" style="
+        margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;
+        padding:2px 8px;border:1px solid var(--accent2);border-radius:var(--radius);
+        background:transparent;color:var(--accent2);cursor:pointer;letter-spacing:0.06em;
+        text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">&#9679; Record Path</button>
+      <span class="x3d-status" id="path-rec-status" style="display:none"></span>
+      <button id="saved-paths-btn" onclick="_toggleRecordedPathsPanel()" title="Paths already recorded and saved to Composer" style="
+        margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;
+        padding:2px 8px;border:1px solid var(--purple);border-radius:var(--radius);
+        background:transparent;color:var(--purple);cursor:pointer;letter-spacing:0.06em;
+        text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">Saved Paths (<span id="saved-paths-count">0</span>)</button>
+    </div>
+
+    <!-- Read-only view of what's already saved to Composer — same info as
+         Composer's own Scene Stats > Recorded Paths list, surfaced here too
+         since the author asked to see it without tabbing back to Scene. -->
+    <div id="saved-paths-panel" style="display:none;position:absolute;top:38px;right:8px;z-index:20;
+      background:var(--surface2);border:1px solid var(--purple);border-radius:var(--radius);
+      padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--text);
+      max-width:320px;max-height:280px;overflow-y:auto;"></div>
+
+    <!-- Path recorder save/discard panel — appears once recording stops with
+         at least 2 samples captured. Deliberately NOT auto-saved: the author
+         names the path and can see/adjust the RDP tolerance's effect (sample
+         count before/after) before committing it. -->
+    <div id="path-rec-panel" style="display:none;position:absolute;top:38px;left:8px;z-index:20;
+      background:var(--panel-bg,#181c24);border:1px solid var(--accent2);border-radius:var(--radius);
+      padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--text,#ccd);
+      gap:8px;align-items:center;flex-wrap:wrap;max-width:420px;">
+      <span id="path-rec-stats" style="color:var(--dim)"></span>
+      <input id="path-rec-id" type="text" placeholder="path id (e.g. crane_shot_1)" style="
+        font-family:inherit;font-size:14px;padding:2px 6px;background:transparent;
+        border:1px solid var(--border);border-radius:4px;color:inherit;width:160px;">
+      <label style="color:var(--dim)">tol <input id="path-rec-tolerance" type="number" value="0.15" step="0.05" min="0.01" style="
+        width:56px;font-family:inherit;font-size:14px;padding:2px 4px;background:transparent;
+        border:1px solid var(--border);border-radius:4px;color:inherit;" onchange="_pathRecRebuild()"></label>
+      <button onclick="savePathRecording()" style="font-family:inherit;font-size:14px;padding:2px 8px;
+        border:1px solid var(--accent3,#4af0a8);border-radius:4px;background:transparent;color:var(--accent3,#4af0a8);cursor:pointer;">Save</button>
+      <button onclick="discardPathRecording()" style="font-family:inherit;font-size:14px;padding:2px 8px;
+        border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--dim);cursor:pointer;">Discard</button>
     </div>
 
     <!-- Blender-style corner labels -->
@@ -668,403 +668,63 @@ x3d-canvas {
     <div class="vp-playhead-badge" id="vp-t-badge">T 0.0s</div>
   </div>
 
-  <!-- Inspector (top-right) -->
+  <!-- Inspector (top-right) — Day 79: was "cue properties" (shot-preset framing
+       math relative to a subject agent — closeup/orbit/dolly/etc). That
+       cinematography belongs to Timeline/Dialogue's camera-cut tracks now, not
+       here. This panel keeps only placement tuning for a real placed object:
+       jump the live viewport to where it actually sits, adjust, save back to
+       Composer's placedCameras — no subject-relative shot math, no cue/track
+       concepts at all. -->
   <div class="insp-panel">
-    <div class="insp-head">cue properties</div>
+    <div class="insp-head">object properties</div>
     <div class="insp-body" id="insp-body">
-      <div class="empty-insp">Click a cue to edit its properties.</div>
+      <div class="empty-insp">Select a camera from the Stage list to preview and tune its placement, or a cue from the Timeline below to edit it.</div>
     </div>
   </div>
 
 </div>
 
-<!-- Drag handle for resizing timeline dock -->
-<div class="tl-resize-handle" id="tl-resize-handle"></div>
-
-<!-- ── BOTTOM: Timeline Dock ── -->
-<div class="tl-dock" id="tl-dock">
-
-  <!-- Timeline toolbar -->
-  <div class="tl-toolbar">
-    <button class="tb-btn" id="play-btn" onclick="togglePlay()">▶</button>
-    <button class="tb-btn" onclick="rewind()">⏮</button>
-    <div class="tb-time" id="t-display">T 0.0s</div>
-    <div class="tb-sep"></div>
-    <button class="tb-btn accent" onclick="snapToWP()">Snap to WP</button>
-    <button class="tb-btn purple" onclick="addCue()">+ Add cue</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" onclick="addTrack()">+ Track</button>
-    <div class="tb-zoom">
-      zoom: <span id="zoom-val">1</span>×
-      <button class="zoom-btn" onclick="zoomOut()">−</button>
-      <button class="zoom-btn" onclick="zoomIn()">+</button>
-    </div>
+<!-- ── TIMELINE PANEL — Day 81: scheduled production cues only. See this
+     file's CSS comment above for exactly what does and doesn't belong
+     here (no dialogue, no sensed/waypoint content). -->
+<div class="timeline-panel">
+  <div class="timeline-head">
+    <span class="timeline-title">Timeline</span>
+    <span class="timeline-time-readout" id="tl-time-readout" onclick="_tlCopyPlayhead()" title="Click to copy this time — paste into a cue's start-time field">t = 0.00s</span>
+    <button class="timeline-head-btn" onclick="exportProductionCues()">Save to Composer</button>
   </div>
-
-  <!-- Track label gutter + scrollable tracks -->
-  <div class="tl-content">
-
-    <!-- Fixed label column -->
-    <div class="tl-labels">
-      <div class="tl-label-head">track</div>
-      <div class="tl-label-rows" id="tl-label-rows"></div>
-    </div>
-
-    <!-- Scrollable ruler + lane area -->
-    <div class="tl-scroll-area" id="tl-scroll-area">
-      <div class="tl-ruler-row">
-        <div class="tl-ruler" id="tl-ruler">
-          <div class="ph-ruler" id="ph-ruler" style="left:0px"></div>
-        </div>
+  <div class="timeline-body">
+    <div class="timeline-row" style="border-bottom:none;">
+      <div class="timeline-track-label" style="border-right:1px solid var(--border);color:var(--dim);font-size:13px;">clock</div>
+      <div class="timeline-scroll" id="tl-ruler-scroll">
+        <div class="timeline-ruler" id="tl-ruler" onclick="_tlRulerClick(event)"></div>
       </div>
-      <div class="tl-tracks-scroll" id="tl-tracks"></div>
     </div>
-
+    <div id="tl-tracks"></div>
   </div>
 </div>
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
-var _zoom     = 1;
-var PX_PER_S  = 20;
-var _playing  = false;
-var _playT    = 0;
-var _playRaf  = null;
-var _playStart= 0;
-var _selCue   = null;
-
 var WPS = [
   { name: 'WP1', t: 0  },
   { name: 'WP2', t: 8  },
   { name: 'WP3', t: 16 },
 ];
-// Day 64 fix: SCENE_END used to be trusted as-is from Composer's postMessage
-// (d.sceneEnd = wpsOrdered.length*8+8, an evenly-spaced placeholder guess) or the
-// hardcoded 24 default below. Neither accounts for real authored cue/waypoint times —
-// mccf_load_cues (which restores a saved scene's actual cues) never touched SCENE_END
-// at all. Result: any cue whose t+dur ran past that guess got positioned beyond the
-// timeline lane's own rendered width and was clipped by .tl-track-lane's
-// overflow:hidden — unreachable by scroll or zoom, since the pixel position it needed
-// simply didn't exist inside a too-narrow container.
-// Fix: _sceneEndFloor holds only the hint/default; SCENE_END itself is recomputed from
-// scratch in _computeSceneEnd() every render, as the max of that floor and every actual
-// cue end / waypoint time currently loaded. Recomputed fresh each call (not padded
-// on top of its own previous value) so it self-heals regardless of load order and
-// never grows unboundedly across repeated renders.
-var _sceneEndFloor = 24;
-var SCENE_END = 24;
-function _computeSceneEnd() {
-  var maxT = _sceneEndFloor;
-  WPS.forEach(function(wp) { if (wp.t > maxT) maxT = wp.t; });
-  _tracks.forEach(function(track) {
-    (track.cues || []).forEach(function(c) {
-      var end = (c.t || 0) + (c.dur || 4);
-      if (end > maxT) maxT = end;
-    });
-  });
-  return maxT + 8; // fixed right-hand padding so the last cue/marker isn't flush against the edge
-}
-
-var TRACK_TYPES = {
-  camera:   { label: 'Camera',     icon: '📷', color: 'cue-cam'      },
-  light:    { label: 'Lights',     icon: '💡', color: 'cue-light'    },
-  fog:      { label: 'Fog',        icon: '🌫', color: 'cue-fog'      },
-  bg:       { label: 'Background', icon: '🖼', color: 'cue-bg'       },
-  fx:       { label: 'FX',         icon: '✨', color: 'cue-fx'       },
-  behavior: { label: 'Behavior',   icon: '🎭', color: 'cue-behavior' },
-};
-
-var _tracksAreStub = false; // initial tracks are already the correct 6-row empty structure
-var _tracks = [
-  { type: 'camera',   label: 'Camera',     cues: [] },
-  { type: 'light',    label: 'Lights',     cues: [] },
-  { type: 'fog',      label: 'Fog',        cues: [] },
-  { type: 'bg',       label: 'Background', cues: [] },
-  { type: 'fx',       label: 'FX',         cues: [] },
-  { type: 'behavior', label: 'Behavior',   cues: [] },
-];
-
 var AGENTS   = ['Cindy','The Witness','The Steward'];
+var AGENT_CLIPS = {}; // {agentName: [clipName,...]} — populated from Composer, which already loads this from /cultivars/xml. Falls back to ['Default'] per-agent below when an agent isn't in this map yet (e.g. before scene data has arrived).
 var CAMERAS  = []; // Day 64: placed free cameras, populated from Composer via mccf_scene_data
-var CLIPS    = ['DefaultTimer','WalkTimer','PitchTimer','YawTimer','RollTimer','RunTimer','JumpTimer','KickTimer'];
-// Fallback only — overwritten by Composer's postMessage (mccf_scene_data.views) on load.
-// Composer generates this dynamically per-agent (Eye/Side/Orbit); this hardcoded list is
-// just a reasonable starting point for standalone Events Editor testing without Composer.
+var LIGHTS   = []; // Day 82: {name, type:'point'|'spot'|'directional', translation, rotation}[]
+var AUDIO_SOURCES = []; // Day 82: {name, url, loop, gain, translation}[]
+// Day 78: summary of paths already recorded+saved (this session or a
+// previous one, restored via Composer's own scene load) — {id, keyCount,
+// rawSampleCount, tolerance, createdAt}, not the actual key geometry.
+// Composer stays the source of truth; this is read-only visibility.
+var RECORDED_PATHS = [];
 var VIEWS    = ['VP_Overview','VP_Origin',
                  'VP_Cindy_Eye','VP_Cindy_Side','VP_Cindy_Orbit',
                  'VP_Witness_Eye','VP_Witness_Side','VP_Witness_Orbit',
                  'VP_Steward_Eye','VP_Steward_Side','VP_Steward_Orbit'];
-var LIGHTS_L = ['KeyLight','FillLight','AmbientLight','RimLight','S0Light'];
-var TRIGGERS = ['manual','WAYPT1 arrive','WAYPT2 arrive','WAYPT3 arrive','WP1 arrive','WP2 arrive','WP3 arrive','field E>0.6','field E<0.3'];
-
-// Camera shot system — spec v1.0
-var SHOT_TYPES = [
-  { value:'wide',            label:'Wide',              group:'static'    },
-  { value:'medium',          label:'Medium',            group:'static'    },
-  { value:'closeup',         label:'Close-Up',          group:'static'    },
-  { value:'extreme_closeup', label:'Extreme Close-Up',  group:'static'    },
-  { value:'overhead',        label:'Overhead',          group:'static'    },
-  { value:'worms_eye',       label:"Worm's Eye",        group:'static'    },
-  { value:'dutch',           label:'Dutch Angle',       group:'static'    },
-  { value:'over_shoulder',   label:'Over Shoulder',     group:'relational'},
-  { value:'profile',         label:'Profile',           group:'relational'},
-  { value:'two_shot',        label:'Two Shot',          group:'relational'},
-  { value:'agent_eye',       label:'Agent Eye (POV)',   group:'attached'  },
-  { value:'agent_side',      label:'Agent Side',        group:'attached'  },
-  { value:'agent_orbit',     label:'Agent Orbit',       group:'attached'  },
-  { value:'agent_track',     label:'Agent Track',       group:'attached'  },
-  { value:'named_vp',        label:'Bind Named VP',     group:'baked'     },
-  { value:'free_camera',     label:'Free Camera',       group:'baked'     },
-  { value:'dolly_in',        label:'Dolly In',          group:'move'      },
-  { value:'dolly_out',       label:'Dolly Out',         group:'move'      },
-  { value:'pan',             label:'Pan',               group:'move'      },
-  { value:'tilt',            label:'Tilt',              group:'move'      },
-  { value:'orbit',           label:'Orbit',             group:'move'      },
-  { value:'crane_up',        label:'Crane Up',          group:'move'      },
-  { value:'track',           label:'Track',             group:'move'      },
-];
-// Default framing per shot type: [distance, height, hAngle, vAngle, roll]
-var SHOT_PRESETS = {
-  // Day 63: three corrections from live testing (CameraTestAll_scene.xml, post
-  // _lookAtOrientation fix — every preset re-checked against the corrected math,
-  // not just the ones that read as visibly wrong):
-  //   extreme_closeup — was 0.4, too tight; now 0.65
-  //   over_shoulder    — was 0.8, too tight; now 1.2
-  //   overhead         — redesigned entirely. Was distance=0/vAngle=-90, a pure
-  //     nadir shot: loses facing direction by definition at 90°, and redundant
-  //     with each avatar's baked JinLOA-style "Top" viewpoint once that's wired
-  //     to a unique per-avatar name (Class 1 protos, see spec). Overhead's real
-  //     job is the one a baked static viewpoint can't do — track a moving
-  //     subject from a high angle during a live scene. Now offset up-and-to-the-
-  //     side (hAngle=40) and tilted (vAngle=-6, most of the "looking down" comes
-  //     from the corrected geometry automatically) rather than dead overhead —
-  //     confirmed -47.5° total look-down angle, a real high angle, not nadir.
-  wide:            [12,  3.0,   0, -15,   0],
-  medium:          [ 5,  1.7,   0,  -8,   0],
-  closeup:         [ 1.5,1.7,   0,  -5,   0],
-  extreme_closeup: [ 0.65,1.7,  0,   0,   0],
-  overhead:        [ 6,  7,    40, -6,   0],
-  // Day 63: worms_eye vAngle corrected from 35 to -15 after the _lookAtOrientation
-  // fix — old value produced ~31 deg total pitch only because it was compounding
-  // with the ground-target bug; under corrected math, 35 alone gives ~82 deg
-  // (too steep, confirmed by testing). -15 reproduces the original ~31 deg the
-  // author had already confirmed looked right, now for the right reason.
-  worms_eye:       [ 1.5,0.1,   0, -15,   0],
-  dutch:           [ 3,  1.7,   0,  -8,  25],
-  over_shoulder:   [ 1.2,1.6, -20,  -5,   0],
-  profile:         [ 3,  1.7,  90,  -8,   0],
-  two_shot:        [ 4,  1.7,   0,  -8,   0],
-  agent_eye:       [ 0,  0,     0,   0,   0],
-  agent_side:      [ 0,  0,     0,   0,   0],
-  agent_orbit:     [ 8.6,3.2,   0,  -8,   0],
-  agent_track:     [ 0,  1.7,   0,  -8,   0],   // unused in practice — agent_track has its own
-                                                  // dedicated fields (trackOffset/trackOffsetEnd/
-                                                  // trackDepth), see applyShotPreset. height/vAngle
-                                                  // (indices 1,3) are the only ones actually read.
-  dolly_in:        [ 8,  1.7,   0,  -8,   0],
-  dolly_out:       [ 3,  1.7,   0,  -8,   0],
-  pan:             [ 5,  1.7, -45,  -8,   0],
-  tilt:            [ 5,  1.7,   0, -30,   0],
-  orbit:           [ 5,  1.7,   0,  -8,   0],
-  crane_up:        [ 6,  1.5,   0, -15,   0],
-  track:           [ 4,  1.7, -90,  -8,   0],   // free/world-space track NOT implemented in the
-                                                  // Loader (Day 63 decision: build agent_track,
-                                                  // parented, instead — see _executeAgentTrack).
-                                                  // Preset/dropdown entry kept for when/if the
-                                                  // free version is revisited.
-};
-var SHOT_ATTACHED = { agent_eye: true, agent_side: true, agent_orbit: true, agent_track: true };
-// Day 78: agent_orbit/agent_track folded into SHOT_ATTACHED. Previously excluded —
-// see the old comment this replaces — because they needed their own dedicated framing
-// fields (radius/height/start-angle for orbit; lateral offset/depth/height for track)
-// and, for orbit specifically, a loop checkbox. That's no longer true: Character
-// Creator now owns all of that (rig authoring, baked once per avatar file, per the
-// Day 77 Camera Model Revision's Character-Creator/Events split — CC owns the rig and
-// its initial position, Events keeps trigger/subject/timing only). Any values an
-// author sets in this inspector for these two shot types no longer have anywhere to
-// write to at runtime, so the fields are removed rather than left as dead controls.
-// agent_orbit/agent_track stay in SHOT_MOVES below — that set is still used for
-// preview/FOV-cone styling paths these two shot types no longer reach now that
-// they're attached, so leaving them in is harmless, not incorrect.
-var SHOT_MOVES    = { dolly_in:true, dolly_out:true, pan:true, tilt:true, orbit:true, crane_up:true, track:true, agent_orbit:true, agent_track:true };
-var SHOT_AGENT_ORBIT = { agent_orbit: true };
-var SHOT_AGENT_TRACK = { agent_track: true };
-
-// Day 63 fix: per-shot default End values. Two bugs fixed by this function existing:
-//   1. applyShotPreset previously never wrote distanceEnd/heightEnd/hAngleEnd/vAngleEnd
-//      at all — only the inspector's *display* computed a fallback, which was never
-//      persisted to the cue unless the author manually dragged that exact slider. A
-//      freshly chosen "Dolly In" cue therefore animated from A to A — no-op, confirmed
-//      by a live test (identical keyframe[0]/keyframe[last] in the console log).
-//   2. The old fallback formula was one-size-fits-all (distanceEnd=dist*0.4 always,
-//      hAngleEnd=hAngle+90 always, etc.) regardless of shot — which is backwards for
-//      dolly_out (would move CLOSER, not away) and drifts axes a shot isn't supposed
-//      to touch (tilt would also sweep 90° horizontally; pan would also drift height).
-// Used both by applyShotPreset (to persist real defaults at creation time) and by
-// renderInspector (as the fallback for legacy cues authored before this fix existed).
-function _defaultMoveEnds(shotValue, dist, ht, hAng, vAng) {
-  switch (shotValue) {
-    case 'dolly_in':  return { distanceEnd: +(dist * 0.4).toFixed(1), heightEnd: ht, hAngleEnd: hAng, vAngleEnd: vAng };
-    case 'dolly_out': return { distanceEnd: +(dist * 2.5).toFixed(1), heightEnd: ht, hAngleEnd: hAng, vAngleEnd: vAng };
-    case 'pan':       return { distanceEnd: dist, heightEnd: ht, hAngleEnd: hAng + 90, vAngleEnd: vAng };
-    case 'tilt':      return { distanceEnd: dist, heightEnd: ht, hAngleEnd: hAng, vAngleEnd: vAng - 30 };
-    case 'crane_up':  return { distanceEnd: dist, heightEnd: +(ht + 4).toFixed(1), hAngleEnd: hAng, vAngleEnd: vAng };
-    default:          return { distanceEnd: +(dist * 0.4).toFixed(1), heightEnd: +(ht + 4).toFixed(1), hAngleEnd: hAng + 90, vAngleEnd: vAng - 15 };
-  }
-}
-
-// ── Zoom ──────────────────────────────────────────────────────────────────────
-function toPx(t) { return t * PX_PER_S * _zoom; }
-function zoomIn()  { if (_zoom < 4)   { _zoom = Math.round((_zoom + 0.5) * 2) / 2; renderTimeline(); } }
-function zoomOut() { if (_zoom > 0.5) { _zoom = Math.round((_zoom - 0.5) * 2) / 2; renderTimeline(); } }
-
-// ── Stage canvas ──────────────────────────────────────────────────────────────
-function drawStage() {
-  var canvas = document.getElementById('stage-canvas');
-  var w = canvas.offsetWidth, h = canvas.offsetHeight;
-  canvas.width = w; canvas.height = h;
-  var ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#080b12';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#1a1e2a'; ctx.lineWidth = 0.5;
-  var gs = 20;
-  for (var x=0; x<w; x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
-  for (var y=0; y<h; y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
-  ctx.strokeStyle = '#252a36'; ctx.lineWidth = 1;
-  ctx.strokeRect(14, 14, w-28, h-28);
-  ctx.font = '11px IBM Plex Mono'; ctx.fillStyle = '#4a5568';
-  ctx.fillText('top-down view', 20, 28);
-
-  // Dummy agent positions (replaced by Task 3 real scene data)
-  var stageAgents = [
-    { x:w*.38, y:h*.42, c:'#4af0a8', l:'C', name: AGENTS[0]||'Cindy' },
-    { x:w*.50, y:h*.30, c:'#f06060', l:'W', name: AGENTS[1]||'The Witness' },
-    { x:w*.65, y:h*.58, c:'#f0c060', l:'S', name: AGENTS[2]||'The Steward' }
-  ];
-
-  // Zones
-  var zones = [
-    { x: w*0.38, y: h*0.42, r: 30, fill:'#0f6e5640', line:'#1d9e75' },
-    { x: w*0.65, y: h*0.58, r: 22, fill:'#53349040', line:'#7f77dd', dash:true },
-  ];
-  zones.forEach(function(z){
-    ctx.beginPath(); ctx.arc(z.x,z.y,z.r,0,Math.PI*2);
-    ctx.fillStyle=z.fill; ctx.fill();
-    ctx.strokeStyle=z.line; ctx.lineWidth=1;
-    if(z.dash) ctx.setLineDash([3,3]); else ctx.setLineDash([]);
-    ctx.stroke(); ctx.setLineDash([]);
-  });
-
-  // Agents
-  stageAgents.forEach(function(a){
-    ctx.beginPath(); ctx.arc(a.x,a.y,8,0,Math.PI*2); ctx.fillStyle=a.c+'33'; ctx.fill();
-    ctx.strokeStyle=a.c; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.fillStyle=a.c; ctx.font='9px Syne,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(a.l,a.x,a.y); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-  });
-
-  // Selected camera cue — draw FOV cone from computed position toward subject
-  if (_selCue) {
-    var track = _tracks[_selCue.ti];
-    var cue   = track && track.cues[_selCue.ci];
-    if (track && track.type === 'camera' && cue) {
-      var isNamedVPCue = (cue.viewpoint !== undefined && cue.viewpoint !== null);
-      var isFreeCameraCue = (cue.shot === 'free_camera');
-      var isMove = !isNamedVPCue && !!SHOT_MOVES[cue.shot];
-      var isAttached = !isNamedVPCue && !!SHOT_ATTACHED[cue.shot];
-      var subjectName = cue.subject || (AGENTS[0]||'');
-      // Find subject canvas position
-      var subj = stageAgents.reduce(function(best, a) {
-        return (a.name === subjectName) ? a : best;
-      }, stageAgents[0] || { x: w*0.5, y: h*0.5 });
-      var sx = subj.x, sy = subj.y;
-
-      if (isNamedVPCue || isFreeCameraCue) {
-        // Named VP or free camera (both baked) — camera position is unknown at author
-        // time here (it's either in the X3D file directly, or in Composer's
-        // placedCameras, neither of which this preview has access to). Draw a badge
-        // near the subject rather than a fabricated FOV cone from stale/default fields.
-        ctx.beginPath(); ctx.arc(sx, sy, 15, 0, Math.PI*2);
-        ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#a880f0';
-        ctx.font = 'bold 10px IBM Plex Mono'; ctx.textAlign = 'center';
-        ctx.fillText(isFreeCameraCue ? 'CAM' : 'VP', sx, sy + 4);
-        ctx.font = '10px IBM Plex Mono';
-        var vpShort = isFreeCameraCue
-          ? (cue.camera || 'unset')
-          : (cue.viewpoint || 'unnamed').replace(/^VP_/,'');
-        ctx.fillText(vpShort, sx, sy + 22);
-        ctx.textAlign = 'left';
-      } else if (!isAttached) {
-        // Compute camera canvas position from hAngle + distance
-        // Scene scale: w * 0.7 ≈ scene width, so 1m ≈ w*0.7/sceneWidth
-        // Use a fixed pixel scale: 1m = w/30
-        var pxPerM = w / 30;
-        var hRad = (cue.hAngle || 0) * Math.PI / 180;
-        var dist = (cue.distance || 3) * pxPerM;
-        var cx = sx + dist * Math.sin(hRad);
-        var cy = sy + dist * Math.cos(hRad);
-
-        // FOV cone — half-angle ~20°
-        var fovHalf = 20 * Math.PI / 180;
-        var coneColor = (cue.transition === 'fly' || isMove) ? '#f0c060' : '#378add';
-        var dx = sx - cx, dy = sy - cy;
-        var baseAngle = Math.atan2(dy, dx);
-        var coneLen = dist * 0.85;
-
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + coneLen * Math.cos(baseAngle - fovHalf), cy + coneLen * Math.sin(baseAngle - fovHalf));
-        ctx.lineTo(cx + coneLen * Math.cos(baseAngle + fovHalf), cy + coneLen * Math.sin(baseAngle + fovHalf));
-        ctx.closePath();
-        ctx.fillStyle = coneColor + '22';
-        ctx.fill();
-        ctx.strokeStyle = coneColor;
-        ctx.lineWidth = 1;
-        ctx.setLineDash(isMove ? [3,3] : []);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Camera icon at apex
-        ctx.fillStyle = coneColor + '55';
-        ctx.strokeStyle = coneColor;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.rect(cx - 5, cy - 5, 10, 10);
-        ctx.fill(); ctx.stroke();
-        ctx.fillStyle = coneColor;
-        ctx.font = '11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('CAM', cx, cy + 15);
-        ctx.textAlign = 'left';
-        // Shot label near subject
-        ctx.fillStyle = coneColor;
-        ctx.font = '11px IBM Plex Mono';
-        ctx.fillText((cue.shot||'').replace(/_/g,' '), sx + 10, sy - 10);
-      } else {
-        // Agent-attached runtime shot — draw a ring around the subject
-        ctx.beginPath(); ctx.arc(sx, sy, 13, 0, Math.PI*2);
-        ctx.strokeStyle = '#a880f0'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([2,3]); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#a880f0';
-        ctx.font = '11px IBM Plex Mono'; ctx.textAlign = 'center';
-        var _attLabel = {agent_eye:'EYE', agent_side:'SIDE', agent_orbit:'ORBIT', agent_track:'TRACK'}[cue.shot] || cue.shot.toUpperCase();
-        ctx.fillText(_attLabel, sx, sy + 23);
-        ctx.textAlign = 'left';
-      }
-    }
-  }
-
-  // Lights
-  [{ x:w*.12,y:h*.58 },{ x:w*.82,y:h*.62 }].forEach(function(l){
-    ctx.beginPath(); ctx.arc(l.x,l.y,6,0,Math.PI*2); ctx.fillStyle='#ba751733'; ctx.fill();
-    ctx.strokeStyle='#ef9f27'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.fillStyle='#fac775'; ctx.font='9px monospace'; ctx.textAlign='center';
-    ctx.fillText('L',l.x,l.y+3); ctx.textAlign='left';
-  });
-}
-
-// ── Viewport canvas (ambient atmosphere placeholder) ──────────────────────────
 function drawVPCanvas() {
   var canvas = document.getElementById('vp-canvas');
   var w = canvas.offsetWidth, h = canvas.offsetHeight;
@@ -1097,417 +757,286 @@ function drawVPCanvas() {
   ctx.fill();
 }
 
-// ── Timeline render ───────────────────────────────────────────────────────────
-function renderTimeline() {
-  SCENE_END = _computeSceneEnd();
-  document.getElementById('zoom-val').textContent = _zoom;
-  var totalPx = toPx(SCENE_END) + 80;
-
-  // Sync label rows
-  var labelContainer = document.getElementById('tl-label-rows');
-  labelContainer.innerHTML = '';
-  _tracks.forEach(function(track, ti) {
-    var tdef = TRACK_TYPES[track.type] || TRACK_TYPES.camera;
-    var el = document.createElement('div');
-    el.className = 'tl-track-label';
-    el.innerHTML = '<span class="track-icon">'+tdef.icon+'</span>'
-      + '<span class="track-label-text">'+track.label+'</span>'
-      + '<span class="track-clear-btn" title="Clear all cues on this track" onclick="event.stopPropagation();clearTrack('+ti+')">×</span>';
-    labelContainer.appendChild(el);
-  });
-
-  // Ruler
-  var ruler = document.getElementById('tl-ruler');
-  ruler.style.width = totalPx + 'px';
-  // Clear old markers but keep ph-ruler
-  Array.from(ruler.children).forEach(function(c){ if (!c.id || c.id !== 'ph-ruler') ruler.removeChild(c); });
-  WPS.forEach(function(wp) {
-    var px = toPx(wp.t);
-    var tick = document.createElement('div');
-    tick.className = 'wp-tick-head'; tick.style.left = px + 'px';
-    ruler.appendChild(tick);
-    var label = document.createElement('div');
-    label.className = 'wp-marker-head'; label.style.left = px + 'px';
-    label.textContent = wp.name;
-    ruler.appendChild(label);
-  });
-
-  // Tracks
-  var container = document.getElementById('tl-tracks');
-  container.style.width = totalPx + 'px';
-  container.innerHTML = '';
-
-  _tracks.forEach(function(track, ti) {
-    var row = document.createElement('div');
-    row.className = 'tl-track-row';
-    var tdef = TRACK_TYPES[track.type] || TRACK_TYPES.camera;
-
-    var lane = document.createElement('div');
-    lane.className = 'tl-track-lane';
-    lane.style.width = totalPx + 'px';
-
-    WPS.forEach(function(wp) {
-      var line = document.createElement('div');
-      line.className = 'wp-line'; line.style.left = toPx(wp.t) + 'px';
-      lane.appendChild(line);
-    });
-
-    track.cues.forEach(function(cue, ci) {
-      var el = document.createElement('div');
-      var isSel = _selCue && _selCue.ti === ti && _selCue.ci === ci;
-      el.className = 'cue ' + tdef.color + (isSel ? ' selected' : '');
-      el.style.left  = toPx(cue.t) + 'px';
-      el.style.width = Math.max(toPx(cue.dur) - 3, 20) + 'px';
-      el.textContent = cue.label;
-      el.onclick = function(e) { e.stopPropagation(); selectCue(ti, ci); };
-      lane.appendChild(el);
-    });
-
-    var ph = document.createElement('div');
-    ph.className = 'playhead'; ph.id = 'ph-' + ti;
-    ph.style.left = toPx(_playT) + 'px';
-    lane.appendChild(ph);
-
-    row.appendChild(lane);
-    container.appendChild(row);
-  });
-
-  updatePlayhead();
-}
-
-// ── Cue selection ─────────────────────────────────────────────────────────────
-function selectCue(ti, ci) {
-  _selCue = { ti: ti, ci: ci };
-  renderTimeline();
-  renderInspector();
-  drawStage();
-  // Fire preview immediately when a camera cue is selected
-  var track = _tracks[ti];
-  if (track && track.type === 'camera') _previewCameraShot();
-}
-
-function renderInspector() {
-  var body = document.getElementById('insp-body');
-  if (!_selCue) { body.innerHTML = '<div class="empty-insp">Click a cue to edit its properties.</div>'; return; }
-  var track = _tracks[_selCue.ti];
-  var cue   = track.cues[_selCue.ci];
-  var dotColors = { camera:'#378add', light:'#ef9f27', fog:'#1d9e75', bg:'#7f77dd', fx:'#d85a30', behavior:'#4af0a8' };
-  var typeSpecific = '';
-
-  if (track.type === 'camera') {
-    // Detect which routing path this cue is on.
-    // Named VP (baked): cue.viewpoint is set (and cue.shot is absent).
-    // Runtime:          cue.shot is set (and cue.viewpoint is absent).
-    // These are mutually exclusive — see MCCF_Events_Editor_Architecture.md §4.
-    var isNamedVP  = (cue.viewpoint !== undefined && cue.viewpoint !== null);
-    var shot       = isNamedVP ? 'named_vp' : (cue.shot || 'closeup');
-    var subject    = cue.subject    || (AGENTS[0] || '');
-    var trans      = cue.transition || 'cut';
-    var isAttached = !isNamedVP && !!SHOT_ATTACHED[shot];
-    var isMove     = !isNamedVP && !!SHOT_MOVES[shot];
-    var isAgentOrbit = !!SHOT_AGENT_ORBIT[shot];
-    var isAgentTrack = !!SHOT_AGENT_TRACK[shot];
-    var isFullSweepMove = isMove && !isAgentOrbit && !isAgentTrack; // agent_orbit/agent_track use their own dedicated framing blocks
-    var isTwoShot  = !isNamedVP && shot === 'two_shot';
-    var isDutch    = !isNamedVP && shot === 'dutch';
-    var isCraneUp  = !isNamedVP && shot === 'crane_up';
-    var isFreeCamera = (shot === 'free_camera'); // Day 64 — static, placed via Composer; no framing sliders at all
-    var preset     = SHOT_PRESETS[shot] || [3, 1.7, 0, -8, 0];
-    var dist   = cue.distance    !== undefined ? cue.distance    : preset[0];
-    var ht     = cue.height      !== undefined ? cue.height      : preset[1];
-    var hAng   = cue.hAngle      !== undefined ? cue.hAngle      : preset[2];
-    var vAng   = cue.vAngle      !== undefined ? cue.vAngle      : preset[3];
-    var roll   = cue.roll        !== undefined ? cue.roll        : preset[4];
-    var flyDur = cue.flyDuration !== undefined ? cue.flyDuration : 1.5;
-    var delay  = cue.delay       !== undefined ? cue.delay       : 0;
-    // agent_track's own fields — a signed lateral offset doesn't fit the generic
-    // distance slider (range 0.1–20, positive only), so it gets dedicated fields
-    // rather than overloading distance/hAngle. See _executeAgentTrack for the math.
-    var trackOffset    = cue.trackOffset    !== undefined ? cue.trackOffset    : -3;
-    var trackOffsetEnd = cue.trackOffsetEnd !== undefined ? cue.trackOffsetEnd : 3;
-    var trackDepth     = cue.trackDepth     !== undefined ? cue.trackDepth     : 4;
-    var _mdef = _defaultMoveEnds(shot, dist, ht, hAng, vAng);
-    var distEnd = cue.distanceEnd !== undefined ? cue.distanceEnd : _mdef.distanceEnd;
-    var hAngEnd = cue.hAngleEnd   !== undefined ? cue.hAngleEnd   : _mdef.hAngleEnd;
-    var vAngEnd = cue.vAngleEnd   !== undefined ? cue.vAngleEnd   : _mdef.vAngleEnd;
-    var htEnd   = cue.heightEnd   !== undefined ? cue.heightEnd   : _mdef.heightEnd;
-    var arcDepth = cue.arcDepth  !== undefined ? cue.arcDepth    : 3;
-
-    // Shot type grouped select.
-    // 'named_vp' sentinel appears in its own "Named Viewpoint" group.
-    // When isNamedVP, it is pre-selected; selecting any other value calls
-    // applyShotPreset() which clears cue.viewpoint and sets cue.shot.
-    var shotOpts = ''; var lastGroup = '';
-    var groupLabels = {
-      static:    'Static',
-      relational:'Relational',
-      attached:  'Agent POV',
-      baked:     'Named Viewpoint',
-      move:      'Camera Moves'
-    };
-    SHOT_TYPES.forEach(function(s) {
-      if (s.group !== lastGroup) {
-        if (lastGroup) shotOpts += '</optgroup>';
-        shotOpts += '<optgroup label="── '+( groupLabels[s.group]||s.group)+' ──">';
-        lastGroup = s.group;
-      }
-      shotOpts += '<option value="'+s.value+'"'+(shot===s.value?' selected':'')+'>'+s.label+'</option>';
-    });
-    if (lastGroup) shotOpts += '</optgroup>';
-
-    var subjectOpts  = AGENTS.map(function(a){ return '<option value="'+a+'"'+(subject===a?' selected':'')+'>'+a+'</option>'; }).join('');
-    var subject2     = cue.subject2 || (AGENTS[1] || '');
-    var subject2Opts = AGENTS.map(function(a){ return '<option value="'+a+'"'+(subject2===a?' selected':'')+'>'+a+'</option>'; }).join('');
-
-    function sliderRow(prop, min, max, step, val, unit) {
-      return '<div class="insp-slider-row">'
-        + '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" '
-        + 'oninput="setCueProp(\''+prop+'\',parseFloat(this.value));this.nextElementSibling.textContent=parseFloat(this.value).toFixed('+(step<1?1:0)+')+\''+unit+'\';">'
-        + '<span class="insp-slider-val">'+parseFloat(val).toFixed(step<1?1:0)+unit+'</span></div>';
-    }
-
-    // Named VP inspector block (baked path)
-    // Shows a text input for the VP name. No framing sliders — position is
-    // entirely the author's responsibility in the X3D file.
-    // The VP name must match a DEF in the exported X3D scene exactly.
-    var namedVPBlock = isNamedVP
-      ? '<div class="insp-section">viewpoint</div>'
-        + '<div class="insp-field"><div class="insp-label">VP name (must match DEF in X3D)</div>'
-        + '<input class="insp-input" type="text" placeholder="e.g. VP_Cindy_Overview" value="'+(cue.viewpoint||'')+'" '
-        + 'oninput="setNamedVP(this.value)"></div>'
-        + '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
-        + 'Baked path — Loader binds this Viewpoint by name.<br>'
-        + 'Do not use VP_Free here. See Architecture doc §4.'
-        + '</div>'
-      : '';
-
-    // Free camera inspector block (baked path, Day 64). Position/orientation are fixed at
-    // placement time in Composer's grid UI — this cue only picks WHICH placed camera to
-    // bind, nothing else. No framing sliders: there's nothing here for them to adjust.
-    var cameraOpts = CAMERAS.map(function(c){ return '<option value="'+c+'"'+(cue.camera===c?' selected':'')+'>'+c+'</option>'; }).join('');
-    var freeCameraBlock = isFreeCamera
-      ? '<div class="insp-section">free camera</div>'
-        + (CAMERAS.length
-            ? '<div class="insp-field"><div class="insp-label">camera</div>'
-              + '<select class="insp-select" onchange="setFreeCameraName(this.value)"><option value="">-- choose --</option>'+cameraOpts+'</select></div>'
-            : '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
-              + 'No free cameras placed yet — use the Cameras tab in Composer, then re-sync.</div>')
-        + '<div style="color:var(--dim);font-size:12px;padding:4px 0 6px;line-height:1.7">'
-        + 'Position and angle are fixed at placement time — nothing to adjust here.'
-        + '</div>'
-      : '';
-
-    typeSpecific =
-      '<div class="insp-field"><div class="insp-label">shot type</div>'
-      + '<select class="insp-select" onchange="applyShotPreset(this.value)">'+shotOpts+'</select></div>'
-
-      // Named VP path: show VP name field only; hide all runtime framing fields
-      + namedVPBlock
-
-      // Free camera path: show camera picker only; hide all runtime framing fields
-      + freeCameraBlock
-
-      // Subject field — shown for all paths (the VP is still "about" an agent)
-      + '<div class="insp-field"><div class="insp-label">subject</div>'
-      + '<select class="insp-select" onchange="setCueProp(\'subject\',this.value)">'+subjectOpts+'</select></div>'
-
-      // Runtime paths only below this point
-      + (!isNamedVP && isTwoShot
-          ? '<div class="insp-field"><div class="insp-label">subject 2</div>'
-            + '<select class="insp-select" onchange="setCueProp(\'subject2\',this.value)">'+subject2Opts+'</select></div>'
-          : '')
-      + (!isNamedVP && !isFreeCamera && !isAttached && !isAgentOrbit && !isAgentTrack
-          ? '<div class="insp-field"><div class="insp-label">transition</div>'
-            + '<div class="insp-radio-row">'
-            + '<label><input type="radio" name="trans_r" value="cut" '+(trans==='cut'?'checked':'')+' onchange="setCueProp(\'transition\',\'cut\');renderInspector()"> cut</label>'
-            + (!isMove ? '<label><input type="radio" name="trans_r" value="fly" '+(trans==='fly'?'checked':'')+' onchange="setCueProp(\'transition\',\'fly\');renderInspector()"> fly</label>' : '')
-            + '</div></div>'
-            + (trans==='fly'||isMove
-                ? '<div class="insp-field"><div class="insp-label">fly duration (s)</div>'+sliderRow('flyDuration',0.3,8,0.1,flyDur,'s')+'</div>'
-                : '')
-          : '')
-      + (!isNamedVP && !isFreeCamera && !isAttached
-          ? '<div class="insp-section">framing</div>'
-            + '<div class="insp-field"><div class="insp-label">distance'+(isMove?' — start':'')+'(m)</div>'+sliderRow('distance',0.1,20,0.1,dist,'m')+'</div>'
-            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">distance — end (m)</div>'+sliderRow('distanceEnd',0.1,20,0.1,distEnd,'m')+'</div>' : '')
-            + '<div class="insp-field"><div class="insp-label">height'+(isMove?' — start':'')+'(m)</div>'+sliderRow('height',-1,15,0.1,ht,'m')+'</div>'
-            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">height — end (m)</div>'+sliderRow('heightEnd',-1,15,0.1,htEnd,'m')+'</div>' : '')
-            + '<div class="insp-field"><div class="insp-label">h. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('hAngle',-180,180,1,hAng,'°')+'</div>'
-            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">h. angle — end (°)</div>'+sliderRow('hAngleEnd',-180,180,1,hAngEnd,'°')+'</div>' : '')
-            + '<div class="insp-field"><div class="insp-label">v. angle'+(isMove?' — start':'')+'(°)</div>'+sliderRow('vAngle',-90,90,1,vAng,'°')+'</div>'
-            + (isFullSweepMove ? '<div class="insp-field"><div class="insp-label">v. angle — end (°)</div>'+sliderRow('vAngleEnd',-90,90,1,vAngEnd,'°')+'</div>' : '')
-            + (isDutch ? '<div class="insp-field"><div class="insp-label">roll (°)</div>'+sliderRow('roll',-45,45,1,roll,'°')+'</div>' : '')
-            + (isCraneUp ? '<div class="insp-field"><div class="insp-label">arc depth (m)</div>'+sliderRow('arcDepth',0,15,0.1,arcDepth,'m')+'</div>' : '')
-          : (!isNamedVP && isAttached
-              // Day 78: was hardcoded for eye/side only ('Binds VP_...Eye/Side') —
-              // agent_orbit/agent_track fold in here now too, but they bind a
-              // different node family (CAM_OrbitProto_{subject}/CAM_TrackProto_
-              // {subject}, per _executeAgentOrbit/_executeAgentTrack in the Loader),
-              // not a VP_{subject}_Eye/Side viewpoint. Framing/loop for these two are
-              // authored once in Character Creator now, not per-cue here.
-              ? '<div style="color:var(--dim);font-size:13px;padding:6px 0;line-height:1.6">'
-                + (shot==='agent_orbit' || shot==='agent_track'
-                    ? 'Rig authored in Character Creator — radius/height/start-angle'
-                      +(shot==='agent_orbit'?'/loop':'')+' baked into the avatar file.<br>'
-                      + 'Binds CAM_'+(shot==='agent_orbit'?'Orbit':'Track')+'Proto_'+subject.replace(/\s+/g,'_')+'</div>'
-                    : 'Position from agent Transform.<br>'
-                      + 'Binds VP_'+subject.replace(/\s+/g,'_')+'_'+(shot==='agent_eye'?'Eye':'Side')+'</div>')
-              : ''))
-      + '<div class="insp-section">timing</div>'
-      // Day 63 fix: loop only applies to the free-form 'orbit' shot type per spec §3 —
-      // other move shots ignore cue.loop and always play once, holding last frame.
-      // Day 78: agent_orbit no longer gets this checkbox at all — its loop is now
-      // authored once in Character Creator, baked into the rig, not a per-cue
-      // override. 'orbit' (the older, still-live free/world-space formula shot,
-      // distinct from agent_orbit) keeps its own loop checkbox unchanged — this
-      // fold only touches the two agent-attached shot types.
-      + (shot === 'orbit' ? '<div class="insp-field"><div class="insp-label">loop</div><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" '+(cue.loop?'checked':'')+' onchange="setCueProp(\'loop\',this.checked)"> repeat continuously</label></div>' : '')
-      + '<div class="insp-field"><div class="insp-label">delay after trigger (s)</div>'+sliderRow('delay',0,10,0.5,delay,'s')+'</div>';
-  } else if (track.type === 'light') {
-    var ltOpts = LIGHTS_L.map(function(l){ return '<option value="'+l+'"'+(cue.node===l?' selected':'')+'>'+l+'</option>'; }).join('');
-    typeSpecific = '<div class="insp-field"><div class="insp-label">light</div><select class="insp-select" onchange="setCueProp(\'node\',this.value)">'+ltOpts+'</select></div>'
-      + '<div class="insp-row2"><div class="insp-field"><div class="insp-label">intensity</div><input class="insp-input" type="number" min="0" max="2" step="0.1" value="'+(cue.intensity||0.8)+'" onchange="setCueProp(\'intensity\',parseFloat(this.value))"></div></div>';
-  } else if (track.type === 'behavior') {
-    var agOpts = AGENTS.map(function(a){ return '<option value="'+a+'"'+(cue.agent===a?' selected':'')+'>'+a+'</option>'; }).join('');
-    var clipOpts = CLIPS.map(function(c){ return '<option value="'+c+'"'+(cue.clip===c?' selected':'')+'>'+c.replace('Timer','')+'</option>'; }).join('');
-    typeSpecific = '<div class="insp-field"><div class="insp-label">agent</div><select class="insp-select" onchange="setCueProp(\'agent\',this.value)">'+agOpts+'</select></div>'
-      + '<div class="insp-field"><div class="insp-label">clip</div><select class="insp-select" onchange="setCueProp(\'clip\',this.value)">'+clipOpts+'</select></div>';
-  } else {
-    typeSpecific = '<div class="insp-field"><div class="insp-label">value / descriptor</div><input class="insp-input" value="'+(cue.label||'')+'" onchange="setCueProp(\'label\',this.value)"></div>';
-  }
-
-  var trigOpts = TRIGGERS.map(function(tr){ return '<option value="'+tr+'"'+(cue.trigger===tr?' selected':'')+'>'+tr+'</option>'; }).join('');
-
-  body.innerHTML =
-    '<div class="insp-cue-title"><div class="insp-dot" style="background:'+dotColors[track.type]+'"></div><span>'+cue.label+'</span></div>'
-    + '<div class="insp-field"><div class="insp-label">trigger</div><select class="insp-select" onchange="setCueProp(\'trigger\',this.value)">'+trigOpts+'</select></div>'
-    + typeSpecific
-    + '<div class="insp-row2">'
-    + '<div class="insp-field"><div class="insp-label">start (s)</div><input class="insp-input" type="number" min="0" step="0.5" value="'+cue.t+'" onchange="setCueProp(\'t\',parseFloat(this.value))"></div>'
-    + '<div class="insp-field"><div class="insp-label">duration (s)</div><input class="insp-input" type="number" min="0.5" step="0.5" value="'+cue.dur+'" onchange="setCueProp(\'dur\',parseFloat(this.value))"></div>'
-    + '</div>'
-    + '<div class="insp-footer">'
-    + '<button class="insp-btn insp-btn-del" onclick="deleteCue()">Delete cue</button>'
-    + '<button class="insp-btn insp-btn-exp" onclick="exportCues()">Export cues ↗</button>'
-    + '</div>';
-}
-
-function setCueProp(k, v) {
-  if (!_selCue) return;
-  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
-  cue[k] = v;
-  renderTimeline();
-  if (k === 'label') renderInspector();
-  // Live camera preview — fire on any framing prop change for camera cues
-  var _PREVIEW_PROPS = { distance:1, height:1, hAngle:1, vAngle:1, roll:1, subject:1 };
-  var track = _tracks[_selCue.ti];
-  if (track && track.type === 'camera' && _PREVIEW_PROPS[k]) {
-    _previewCameraShot();
-  }
-}
-
-// setFreeCameraName — updates cue.camera for the free_camera baked path.
-// Mirrors setNamedVP: also updates cue.label so the timeline block reflects the pick
-// immediately, since generic setCueProp only touches the label when k==='label'.
-function setFreeCameraName(camName) {
-  if (!_selCue) return;
-  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
-  cue.camera = camName;
-  cue.label = 'free camera ' + (camName || 'unset');
-  renderTimeline();
-}
-// setNamedVP — updates cue.viewpoint for the baked named VP path.
-// Also updates cue.label so the timeline block shows the VP name.
-// Called from the VP name text input in the inspector.
-function setNamedVP(vpName) {
-  if (!_selCue) return;
-  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
-  cue.viewpoint = vpName;
-  cue.label = 'vp ' + (vpName || 'unnamed');
-  renderTimeline();
-  // Do not re-render inspector — the text input is live, re-rendering would
-  // reset the cursor position mid-type.
-}
-
-// ── Camera preview system ─────────────────────────────────────────────────────
-// Identical math to mccf_x3d_loader.html _computeCamPosition + _lookAtOrientation.
-// Keep in sync with Loader if that math ever changes.
-
-function _prevComputeCamPos(subjectPos, distance, height, hAngleDeg) {
-  var hRad = (hAngleDeg || 0) * Math.PI / 180;
-  return [
-    subjectPos[0] + distance * Math.sin(hRad),
-    subjectPos[1] + height,
-    subjectPos[2] + distance * Math.cos(hRad)
-  ];
-}
-
-function _prevLookAtOrientation(camPos, targetPos, vAngleDeg) {
-  var dx = targetPos[0] - camPos[0];
-  var dy = targetPos[1] - camPos[1];
-  var dz = targetPos[2] - camPos[2];
-  // X3D cameras face -Z. Negate vector so -Z axis points at target.
-  var yaw = Math.atan2(-dx, -dz);
-  var horizDist = Math.sqrt(dx * dx + dz * dz);
-  var pitch = Math.atan2(dy, horizDist) + ((vAngleDeg || 0) * Math.PI / 180);
-  var cosY = Math.cos(yaw / 2),   sinY = Math.sin(yaw / 2);
-  var cosP = Math.cos(pitch / 2), sinP = Math.sin(pitch / 2);
-  var qw = cosY * cosP;
-  var qx = cosY * sinP;
-  var qy = sinY * cosP;
-  var qz = -sinY * sinP;
-  var angle = 2 * Math.acos(Math.min(1, Math.max(-1, qw)));
-  var s = Math.sqrt(1 - qw * qw);
-  var ax, ay, az;
-  if (s < 0.001) { ax = 0; ay = 1; az = 0; }
-  else { ax = qx / s; ay = qy / s; az = qz / s; }
-  return [ax, ay, az, angle];
-}
-
-// Resolve a subject agent's position for preview.
-// Uses WPS data (t-keyed) or falls back to scene centroid.
-// WPS from the Composer carry x/z if the author set waypoint positions.
-// This is best-effort for preview — the Loader's PATH 1 runtime position
-// is more accurate during actual playback.
-function _prevResolveSubjectPos(subjectName) {
-  if (!subjectName) return [0, 0, 0];
-  // Look for a WP whose name or associated agent matches
-  // The Composer sends WPS as { name, t, x, z } when available.
-  for (var i = 0; i < WPS.length; i++) {
-    var wp = WPS[i];
-    if (wp.agent === subjectName && wp.x !== undefined && wp.z !== undefined) {
-      return [wp.x, 0, wp.z];
-    }
-  }
-  // Fallback: use agent index position on stage canvas (rough scene centroid offsets)
-  // These match the stage canvas dummy positions scaled to ~scene units (scene ~30m wide)
-  var agentFallbacks = {};
-  AGENTS.forEach(function(a, i) {
-    // Stage canvas: agents at roughly w*0.38, w*0.50, w*0.65 in a ~30m scene
-    var xFracs = [0.38, 0.50, 0.65];
-    var zFracs = [0.42, 0.30, 0.58];
-    agentFallbacks[a] = [xFracs[i] * 30, 0, zFracs[i] * 30];
-  });
-  return agentFallbacks[subjectName] || [15, 0, 15];
-}
-
-// _previewCameraShot — drives VP_Free in the Events Editor's own X_ITE viewport
-// using the currently selected cue's framing parameters.
-// Safe to call on every slider change — debounced via _previewRaf.
+// ── Object list + placement tuning (Day 79) ──────────────────────────────────
+// Replaces the old cue system's selectCue/renderInspector/_previewCameraShot.
+// Cue authoring (triggers, tracks, shot presets) moved to Timeline/Dialogue —
+// this file keeps only what Timeline can't do: a live X_ITE viewport to jump
+// to a placed object's real position/orientation and tune it visually, since
+// this is the only tool in the whole app with a live 3D preview at all
+// (confirmed by reading mccf_scene_composer.html's Place>Cameras panel — flat
+// 2D canvas, no X3D — and the Timeline/Dialogue prototype — no X3D at all).
+var _selObj = null; // working copy of the selected stage object: {kind:'camera', name, position:[x,y,z], hAngle, vAngle, roll} or {kind:'agent', name}
+var _selCue = null; // working copy of the selected Timeline cue — see renderCueEditor below
 var _previewRaf = null;
-function _previewCameraShot() {
+
+function drawStage() {
+  var wrap = document.getElementById('stage-object-list');
+  if (!wrap) return;
+  var html = '<div class="stage-object-section-label">Cameras</div>';
+  if (!CAMERAS.length) {
+    html += '<div class="empty-insp" style="padding:8px 4px">No cameras placed yet — add one in Composer\'s Place tab.</div>';
+  } else {
+    html += CAMERAS.map(function(c) {
+      var sel = (_selObj && _selObj.kind === 'camera' && _selObj.name === c.name);
+      return '<div class="stage-object-row' + (sel ? ' selected' : '') + '" onclick="selectObject(\'camera\',' +
+        JSON.stringify(c.name).replace(/"/g, '&quot;') + ')">' +
+        '<span class="stage-object-dot"></span>' + c.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+    }).join('');
+  }
+  // Day 82: real section now — mccf_light_protos.x3d gives lights the same
+  // "placed object with real position/rotation" shape cameras already have,
+  // so this follows the Cameras block above exactly, not a new pattern.
+  // One honest rough edge, flagged rather than hidden: a light's rotation is
+  // ONE combined SFRotation (axis + angle) on its single wrapping Transform
+  // — unlike cameras, which compose yaw/pitch/roll as three separate,
+  // author-friendly angles via three nested Transforms (see FreeCamera in
+  // mccf_camera_protos.x3d). The proto file didn't build that same
+  // convenience layer for lights, so the Inspector below exposes the raw
+  // axis-angle fields as they actually are, not a friendlier tilt slider
+  // that doesn't exist yet. Worth revisiting once it's decided whether
+  // lights get their own yaw/pitch/roll wrapper like FreeCamera's.
+  html += '<div class="stage-object-section-label" style="margin-top:10px">Lights</div>';
+  if (!LIGHTS.length) {
+    html += '<div class="empty-insp" style="padding:8px 4px">No lights placed yet — add one in Composer\'s Place tab.</div>';
+  } else {
+    html += LIGHTS.map(function(l) {
+      var sel = (_selObj && _selObj.kind === 'light' && _selObj.name === l.name);
+      var dotColor = { point:'var(--pink)', spot:'var(--pink)', directional:'var(--pink)' }[l.type] || 'var(--pink)';
+      return '<div class="stage-object-row' + (sel ? ' selected' : '') + '" onclick="selectObject(\'light\',' +
+        JSON.stringify(l.name).replace(/"/g, '&quot;') + ')">' +
+        '<span class="stage-object-dot" style="background:'+dotColor+'"></span>' + l.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') +
+        ' <span style="color:var(--dim);font-size:12px">'+l.type+'</span></div>';
+    }).join('');
+  }
+  // Day 81: Agents were already flowing into this file's own AGENTS array
+  // (the mccf_scene_data handler below has set it since before this merge)
+  // but never rendered here — this tool had no reason to show them until
+  // the Timeline panel gave agents something to be selected FOR (a cue's
+  // Target). Read-only context only — placement stays the Actors tab's job,
+  // same "one place owns each fact" reasoning as everywhere else this
+  // redesign has followed.
+  html += '<div class="stage-object-section-label" style="margin-top:10px">Agents</div>';
+  html += AGENTS.length ? AGENTS.map(function(name) {
+    var sel = (_selObj && _selObj.kind === 'agent' && _selObj.name === name);
+    return '<div class="stage-object-row' + (sel ? ' selected' : '') + '" onclick="selectObject(\'agent\',' +
+      JSON.stringify(name).replace(/"/g, '&quot;') + ')">' +
+      '<span class="stage-object-dot" style="background:var(--purple)"></span>' + name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  }).join('') : '<div class="empty-insp" style="padding:8px 4px">None placed — see Actors tab.</div>';
+  // Day 82: discrete audio sources — same treatment as Lights (editable
+  // translation here; url/loop/gain are authored in Place, not here).
+  html += '<div class="stage-object-section-label" style="margin-top:10px">Audio</div>';
+  html += AUDIO_SOURCES.length ? AUDIO_SOURCES.map(function(a) {
+    var sel = (_selObj && _selObj.kind === 'audio' && _selObj.name === a.name);
+    return '<div class="stage-object-row' + (sel ? ' selected' : '') + '" onclick="selectObject(\'audio\',' +
+      JSON.stringify(a.name).replace(/"/g, '&quot;') + ')">' +
+      '<span class="stage-object-dot" style="background:var(--pink)"></span>' + a.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  }).join('') : '<div class="empty-insp" style="padding:8px 4px">No audio sources placed yet — add one in Composer\'s Place tab.</div>';
+  wrap.innerHTML = html;
+}
+
+function selectObject(kind, name) {
+  _selCue = null; // Timeline cue selection and stage-object selection share the one Inspector panel
+  if (kind === 'agent') {
+    _selObj = { kind: 'agent', name: name };
+    drawStage();
+    renderObjectPanel();
+    return;
+  }
+  if (kind === 'light') {
+    var l = LIGHTS.find(function(x) { return x.name === name; });
+    if (!l) { _selObj = null; renderObjectPanel(); drawStage(); return; }
+    _selObj = {
+      kind: 'light',
+      name: l.name,
+      lightType: l.type,
+      translation: (l.translation || [0,3,0]).slice(),
+      rotation:    (l.rotation    || [1,0,0,0]).slice(),
+    };
+    drawStage();
+    renderObjectPanel();
+    return; // no live-preview jump for lights — nothing analogous to "move a camera here" to do
+  }
+  if (kind === 'audio') {
+    var au = AUDIO_SOURCES.find(function(x) { return x.name === name; });
+    if (!au) { _selObj = null; renderObjectPanel(); drawStage(); return; }
+    _selObj = {
+      kind: 'audio',
+      name: au.name,
+      url: au.url || '',
+      loop: !!au.loop,
+      gain: au.gain !== undefined ? au.gain : 0.8,
+      translation: (au.translation || [0,1.5,0]).slice(),
+    };
+    drawStage();
+    renderObjectPanel();
+    return; // no live-preview jump — same reasoning as lights
+  }
+  var c = CAMERAS.find(function(x) { return x.name === name; });
+  if (!c) { _selObj = null; renderObjectPanel(); drawStage(); return; }
+  _selObj = {
+    kind: 'camera',
+    name: c.name,
+    position: (c.position || [0, 1.7, 0]).slice(),
+    hAngle: c.hAngle || 0,
+    vAngle: c.vAngle || 0,
+    roll:   c.roll   || 0,
+  };
+  drawStage();
+  renderObjectPanel();
+  _previewPlacedCamera();
+}
+
+function renderObjectPanel() {
+  var body = document.getElementById('insp-body');
+  if (!body) return;
+  if (_selCue) { renderCueEditor(); return; }
+  if (!_selObj) { body.innerHTML = '<div class="empty-insp">Select a camera from the Stage list to preview and tune its placement, or a cue from the Timeline below to edit it.</div>'; return; }
+  if (_selObj.kind === 'agent') {
+    body.innerHTML = '<div style="font-size:16px;color:var(--accent3);margin-bottom:8px">' + _selObj.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+      '<div class="empty-insp">Placement is set in the Actors tab, not here. Add a cue on this agent from the Timeline below to schedule what it does.</div>';
+    return;
+  }
+  if (_selObj.kind === 'light') {
+    var lo = _selObj;
+    function lfield(label, key, idx, val, min, max, step) {
+      return '<div class="obj-field">' +
+        '<label>' + label + ' <span id="objval-' + key + idx + '">' + val.toFixed(2) + '</span></label>' +
+        '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" ' +
+        'oninput="setLightProp(\'' + key + '\',' + idx + ',parseFloat(this.value))">' +
+        '</div>';
+    }
+    var lhtml = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--pink);margin-bottom:2px">' +
+      lo.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+      '<div style="color:var(--dim);font-size:13px;margin-bottom:8px">' + lo.lightType + '</div>';
+    lhtml += lfield('X', 'translation', 0, lo.translation[0], -50, 50, 0.1);
+    lhtml += lfield('Y (height)', 'translation', 1, lo.translation[1], 0, 30, 0.1);
+    lhtml += lfield('Z', 'translation', 2, lo.translation[2], -50, 50, 0.1);
+    lhtml += '<div style="color:var(--dim);font-size:12px;margin:8px 0 2px">Rotation (axis + angle, radians) — raw, no yaw/pitch/roll wrapper yet, see stage-panel comment</div>';
+    lhtml += lfield('Axis X', 'rotation', 0, lo.rotation[0], -1, 1, 0.05);
+    lhtml += lfield('Axis Y', 'rotation', 1, lo.rotation[1], -1, 1, 0.05);
+    lhtml += lfield('Axis Z', 'rotation', 2, lo.rotation[2], -1, 1, 0.05);
+    lhtml += lfield('Angle', 'rotation', 3, lo.rotation[3], -3.1416, 3.1416, 0.05);
+    lhtml += '<div style="display:flex;gap:8px;margin-top:10px">' +
+      '<button class="tb-btn accent" onclick="saveObjectPlacement()">Save to Composer</button>' +
+      '<button class="tb-btn" onclick="selectObject(\'light\',' + JSON.stringify(lo.name).replace(/"/g,'&quot;') + ')">Revert</button>' +
+      '</div>';
+    body.innerHTML = lhtml;
+    return;
+  }
+  if (_selObj.kind === 'audio') {
+    var ao = _selObj;
+    function afield(label, key, idx, val, min, max, step) {
+      return '<div class="obj-field">' +
+        '<label>' + label + ' <span id="objval-' + key + idx + '">' + val.toFixed(2) + '</span></label>' +
+        '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" ' +
+        'oninput="setAudioProp(\'' + key + '\',' + idx + ',parseFloat(this.value))">' +
+        '</div>';
+    }
+    var ahtml = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--pink);margin-bottom:2px">' +
+      ao.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+      '<div style="color:var(--dim);font-size:13px;margin-bottom:8px;word-break:break-all">' + (ao.url||'(no file)').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+    ahtml += afield('X', 'translation', 0, ao.translation[0], -50, 50, 0.1);
+    ahtml += afield('Y (height)', 'translation', 1, ao.translation[1], 0, 20, 0.1);
+    ahtml += afield('Z', 'translation', 2, ao.translation[2], -50, 50, 0.1);
+    ahtml += '<div class="empty-insp" style="margin-top:8px">File / loop / gain are set in Place, not here — this panel only adjusts position.</div>';
+    ahtml += '<div style="display:flex;gap:8px;margin-top:10px">' +
+      '<button class="tb-btn accent" onclick="saveObjectPlacement()">Save to Composer</button>' +
+      '<button class="tb-btn" onclick="selectObject(\'audio\',' + JSON.stringify(ao.name).replace(/"/g,'&quot;') + ')">Revert</button>' +
+      '</div>';
+    body.innerHTML = ahtml;
+    return;
+  }
+  var o = _selObj;
+  function field(label, key, idx, val, min, max, step) {
+    return '<div class="obj-field">' +
+      '<label>' + label + ' <span id="objval-' + key + (idx!==undefined?idx:'') + '">' + val.toFixed(2) + '</span></label>' +
+      '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" ' +
+      'oninput="setObjProp(\'' + key + '\',' + (idx!==undefined?idx:'null') + ',parseFloat(this.value))">' +
+      '</div>';
+  }
+  var html = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--accent,#7fd);margin-bottom:8px">' +
+    o.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  html += field('X', 'position', 0, o.position[0], -50, 50, 0.1);
+  html += field('Y (height)', 'position', 1, o.position[1], 0, 20, 0.1);
+  html += field('Z', 'position', 2, o.position[2], -50, 50, 0.1);
+  html += field('Heading (hAngle)', 'hAngle', undefined, o.hAngle, -180, 180, 1);
+  html += field('Tilt (vAngle)', 'vAngle', undefined, o.vAngle, -90, 90, 1);
+  html += field('Roll', 'roll', undefined, o.roll, -180, 180, 1);
+  html += '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button class="tb-btn accent" onclick="saveObjectPlacement()">Save to Composer</button>' +
+    '<button class="tb-btn" onclick="selectObject(\'camera\',' + JSON.stringify(o.name).replace(/"/g,'&quot;') + ')">Revert</button>' +
+    '</div>';
+  body.innerHTML = html;
+}
+
+function setObjProp(key, idx, val) {
+  if (!_selObj) return;
+  if (key === 'position') _selObj.position[idx] = val;
+  else _selObj[key] = val;
+  var labelEl = document.getElementById('objval-' + key + (idx!==null?idx:''));
+  if (labelEl) labelEl.textContent = val.toFixed(2);
+  _previewPlacedCamera();
+}
+function setLightProp(key, idx, val) {
+  if (!_selObj || _selObj.kind !== 'light') return;
+  _selObj[key][idx] = val;
+  var labelEl = document.getElementById('objval-' + key + idx);
+  if (labelEl) labelEl.textContent = val.toFixed(2);
+  // No live-preview call here — unlike cameras, there's no "jump the
+  // viewport to this light" equivalent; you'd want to SEE the light's
+  // effect on the scene, which this simple slider panel doesn't render.
+}
+function setAudioProp(key, idx, val) {
+  if (!_selObj || _selObj.kind !== 'audio') return;
+  _selObj[key][idx] = val;
+  var labelEl = document.getElementById('objval-' + key + idx);
+  if (labelEl) labelEl.textContent = val.toFixed(2);
+}
+
+// Combine a placed camera's own hAngle/vAngle/roll into a single X3D SFRotation
+// (axis-angle) for the generic preview vessel (CAM_Free_Transform), which takes
+// one combined rotation field, not the three separate yaw/pitch/roll fields the
+// real exported <FreeCamera> proto instance takes (see buildFreeCamerasX3D in
+// Composer). Composition order assumed to match that proto's own field
+// declaration order (yaw, then pitch, then roll, applied as sequential
+// intrinsic rotations) — the proto's own source (mccf_camera_protos.x3d)
+// isn't in hand to confirm directly. If a tuned camera previews correctly here
+// but looks rotated differently after a real export/reload, this composition
+// order is the first thing to check, not the position math (verified
+// separately, no ambiguity there).
+function _placedCamOrientation(hAngleDeg, vAngleDeg, rollDeg) {
+  function axisAngleQuat(ax, ay, az, angle) {
+    var s = Math.sin(angle / 2);
+    return { w: Math.cos(angle / 2), x: ax * s, y: ay * s, z: az * s };
+  }
+  function qMul(a, b) {
+    return {
+      w: a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+      x: a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+      y: a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+      z: a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w
+    };
+  }
+  var qYaw   = axisAngleQuat(0, 1, 0, (hAngleDeg || 0) * Math.PI / 180);
+  var qPitch = axisAngleQuat(1, 0, 0, (vAngleDeg || 0) * Math.PI / 180);
+  var qRoll  = axisAngleQuat(0, 0, 1, (rollDeg   || 0) * Math.PI / 180);
+  var q = qMul(qMul(qYaw, qPitch), qRoll);
+  var w = Math.min(1, Math.max(-1, q.w));
+  var angle = 2 * Math.acos(w);
+  var s = Math.sqrt(1 - w * w);
+  if (s < 1e-6) return [0, 1, 0, 0];
+  return [q.x / s, q.y / s, q.z / s, angle];
+}
+
+// Drives the same CAM_Free_Transform/VP_Free preview vessel the old cue
+// system used (Day 77's direct-property-assignment SAI fix, unchanged) —
+// just fed a placed object's own placement instead of subject-relative shot
+// math. Debounced via _previewRaf, safe to call on every slider drag.
+function _previewPlacedCamera() {
   if (_previewRaf) { cancelAnimationFrame(_previewRaf); _previewRaf = null; }
-
-  if (!_selCue) return;
-  var track = _tracks[_selCue.ti];
-  var cue   = track && track.cues[_selCue.ci];
-  if (!track || track.type !== 'camera' || !cue) return;
-  if (cue.viewpoint !== undefined) return; // named VP — nothing to preview
-  if (SHOT_ATTACHED[cue.shot]) return;      // agent-attached — no free camera position
-
+  if (!_selObj) return;
   var x3d = document.getElementById('vp-x3d');
-  if (!x3d || !x3d.browser) return;        // viewport not loaded
-
+  if (!x3d || !x3d.browser) return;
   _previewRaf = requestAnimationFrame(function() {
     _previewRaf = null;
     try {
@@ -1518,280 +1047,46 @@ function _previewCameraShot() {
         console.warn('[Preview] CAM_Free_Transform or VP_Free not found in viewport scene');
         return;
       }
-
-      var subjectPos = _prevResolveSubjectPos(cue.subject);
-      var distance   = cue.distance  !== undefined ? cue.distance  : 5;
-      var height     = cue.height    !== undefined ? cue.height    : 1.7;
-      var hAngle     = cue.hAngle    !== undefined ? cue.hAngle    : 0;
-      var vAngle     = cue.vAngle    !== undefined ? cue.vAngle    : -8;
-
-      var camPos = _prevComputeCamPos(subjectPos, distance, height, hAngle);
-      var orient = _prevLookAtOrientation(camPos, subjectPos, vAngle);
-
-      // Day 77 fix: getField().setValue() is the SAI pattern Camera System Spec
-      // v1.3 §4 confirmed unreliable during the Day 62 agent_orbit debugging —
-      // direct property assignment is the proven, standardized replacement.
-      camXform.translation = new X3D.SFVec3f(camPos[0], camPos[1], camPos[2]);
+      var p = _selObj.position;
+      var orient = _placedCamOrientation(_selObj.hAngle, _selObj.vAngle, _selObj.roll);
+      camXform.translation = new X3D.SFVec3f(p[0], p[1], p[2]);
       camXform.rotation    = new X3D.SFRotation(orient[0], orient[1], orient[2], orient[3]);
       requestAnimationFrame(function() { vpFree.set_bind = true; });
-
-      // Update corner label to show it's in preview mode
       var statusEl = document.getElementById('vp-status');
-      if (statusEl) statusEl.textContent = 'PREVIEW — ' + (cue.shot || '') + ' / ' + (cue.subject || '');
+      if (statusEl) statusEl.textContent = 'PREVIEW — ' + _selObj.name;
     } catch(e) {
       console.warn('[Preview] camera preview failed:', e.message);
     }
   });
 }
 
-function applyShotPreset(shotValue) {
-  if (!_selCue) return;
-  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
-
-  // Named VP path (baked) — mutually exclusive with shot= path
-  if (shotValue === 'named_vp') {
-    delete cue.shot;
-    delete cue.distance; delete cue.height;
-    delete cue.hAngle;   delete cue.vAngle;
-    delete cue.roll;     delete cue.transition;
-    delete cue.flyDuration;
-    // Preserve existing viewpoint name if already set, else empty string
-    if (!cue.viewpoint) cue.viewpoint = '';
-    if (!cue.subject) cue.subject = AGENTS[0] || '';
-    cue.label = 'vp ' + (cue.viewpoint || 'unnamed');
-    renderTimeline(); renderInspector(); drawStage();
-    return;
-  }
-
-  // Runtime shot path — clear any baked viewpoint (Day 60 bug fix: applyShotPreset
-  // was not clearing cue.viewpoint, causing both shot= and viewpoint= to be set)
-  delete cue.viewpoint;
-
-  var preset = SHOT_PRESETS[shotValue] || [3, 1.7, 0, -8, 0];
-  cue.shot       = shotValue;
-  if (shotValue === 'free_camera') {
-    // Static, placed camera — no framing fields apply at all (position/orientation are
-    // fixed at placement time in Composer). Only cue.camera matters to the Loader.
-    delete cue.distance; delete cue.height; delete cue.hAngle; delete cue.vAngle;
-    delete cue.roll;     delete cue.trackOffset; delete cue.trackOffsetEnd; delete cue.trackDepth;
-    if (cue.camera === undefined) cue.camera = '';
-  } else if (shotValue === 'agent_track') {
-    // Dedicated field set — lateral offset is signed and doesn't fit the generic
-    // positive-only distance slider, so agent_track uses its own fields rather
-    // than reusing distance/hAngle. See renderInspector's isAgentTrack block.
-    delete cue.distance; delete cue.hAngle; delete cue.roll;
-    if (cue.trackOffset    === undefined) cue.trackOffset    = -3;
-    if (cue.trackOffsetEnd === undefined) cue.trackOffsetEnd = 3;
-    if (cue.trackDepth     === undefined) cue.trackDepth     = 4;
-    cue.height = (cue.height !== undefined) ? cue.height : 1.7;
-    cue.vAngle = (cue.vAngle !== undefined) ? cue.vAngle : -8;
-  } else {
-    cue.distance   = preset[0];
-    cue.height     = preset[1];
-    cue.hAngle     = preset[2];
-    cue.vAngle     = preset[3];
-    cue.roll       = preset[4];
-    delete cue.trackOffset; delete cue.trackOffsetEnd; delete cue.trackDepth;
-    // Day 63 fix: persist real End-field defaults at creation time for shots that
-    // need a start→end sweep (orbit/agent_orbit excluded — they have no End fields).
-    if (SHOT_MOVES[shotValue] && shotValue !== 'orbit' && shotValue !== 'agent_orbit') {
-      var _ends = _defaultMoveEnds(shotValue, cue.distance, cue.height, cue.hAngle, cue.vAngle);
-      cue.distanceEnd = _ends.distanceEnd;
-      cue.heightEnd   = _ends.heightEnd;
-      cue.hAngleEnd   = _ends.hAngleEnd;
-      cue.vAngleEnd   = _ends.vAngleEnd;
-    }
-  }
-  // Move shots always fly; attached shots have no transition
-  if (SHOT_MOVES[shotValue])    { cue.transition = 'fly'; }
-  else                          { delete cue.loop; }  // loop only meaningful for move shots
-  if (SHOT_ATTACHED[shotValue]) { delete cue.transition; }
-  else if (!cue.transition)     { cue.transition = 'cut'; }
-  // Auto-update label with shot + subject
-  // Ensure subject is set — if missing, default to first agent.
-  // This fixes the case where a cue was restored from XML without a subject= attribute.
-  if (!cue.subject) cue.subject = AGENTS[0] || '';
-  cue.label = (shotValue === 'free_camera')
-    ? 'free camera ' + (cue.camera || 'unset')
-    : shotValue.replace(/_/g,' ') + (cue.subject ? ' ' + cue.subject : '');
-  renderTimeline();
-  renderInspector();
-  drawStage();
-  _previewCameraShot();
-}
-
-function deleteCue() {
-  if (!_selCue) return;
-  _tracks[_selCue.ti].cues.splice(_selCue.ci, 1);
-  _selCue = null;
-  renderTimeline(); renderInspector();
-}
-
-function clearTrack(ti) {
-  if (!_tracks[ti]) return;
-  if (!_tracks[ti].cues.length) return;
-  if (!confirm('Clear all cues on ' + _tracks[ti].label + '?')) return;
-  _tracks[ti].cues = [];
-  if (_selCue && _selCue.ti === ti) _selCue = null;
-  renderTimeline(); renderInspector();
-}
-
-// ── Transport ─────────────────────────────────────────────────────────────────
-function rewind() {
-  stopPlay(); _playT = 0;
-  updatePlayhead();
-  document.getElementById('t-display').textContent = 'T 0.0s';
-  document.getElementById('vp-t-badge').textContent = 'T 0.0s';
-  document.getElementById('vp-frame-label').textContent = 'FRAME 0';
-  document.getElementById('vp-wp-label').textContent = '→ WP1';
-}
-function togglePlay() { if (_playing) stopPlay(); else startPlay(); }
-function startPlay() {
-  _playing = true;
-  _playStart = performance.now() - _playT * 1000;
-  document.getElementById('play-btn').textContent = '⏸';
-  tick();
-}
-function stopPlay() {
-  _playing = false;
-  if (_playRaf) cancelAnimationFrame(_playRaf);
-  document.getElementById('play-btn').textContent = '▶';
-}
-function tick() {
-  if (!_playing) return;
-  _playT = (performance.now() - _playStart) / 1000;
-  if (_playT >= SCENE_END) { _playT = SCENE_END; stopPlay(); }
-  var tStr = 'T ' + _playT.toFixed(1) + 's';
-  document.getElementById('t-display').textContent = tStr;
-  document.getElementById('vp-t-badge').textContent = tStr;
-  document.getElementById('vp-frame-label').textContent = 'FRAME ' + Math.floor(_playT * 30);
-  // nearest WP
-  var nWP = WPS.reduce(function(a,b){ return Math.abs(b.t-_playT) < Math.abs(a.t-_playT) ? b : a; });
-  document.getElementById('vp-wp-label').textContent = '→ ' + nWP.name;
-  updatePlayhead();
-  _playRaf = requestAnimationFrame(tick);
-}
-function updatePlayhead() {
-  var px = toPx(_playT);
-  _tracks.forEach(function(t, i) {
-    var ph = document.getElementById('ph-' + i);
-    if (ph) ph.style.left = px + 'px';
-  });
-  var phr = document.getElementById('ph-ruler');
-  if (phr) phr.style.left = px + 'px';
-}
-
-// ── Toolbar actions ───────────────────────────────────────────────────────────
-function snapToWP() {
-  if (!_selCue) { alert('Select a cue first.'); return; }
-  var cue = _tracks[_selCue.ti].cues[_selCue.ci];
-  var nearest = WPS.reduce(function(a, b){ return Math.abs(b.t-cue.t) < Math.abs(a.t-cue.t) ? b : a; });
-  cue.t = nearest.t;
-  renderTimeline(); renderInspector();
-}
-function addCue() {
-  var ti = _selCue ? _selCue.ti : 0;
-  var track = _tracks[ti];
-  if (!track) return;
-  // Place new cue after the last cue on this track, or at _playT — whichever is later.
-  // This prevents silent overlap when multiple cues land at t=0.
-  var lastEnd = 0;
-  track.cues.forEach(function(c) { lastEnd = Math.max(lastEnd, c.t + (c.dur || 4)); });
-  var startT = Math.max(_playT, lastEnd);
-  var newCue = { label: 'new cue', t: startT, dur: 4, trigger: 'manual' };
-  // Camera-track defaults (spec v1.0 — inline per-cue shot system)
-  if (track.type === 'camera') {
-    var preset = SHOT_PRESETS['closeup'];
-    newCue.shot       = 'closeup';
-    newCue.subject    = AGENTS[0] || '';
-    newCue.transition = 'cut';
-    newCue.flyDuration= 1.5;
-    newCue.distance   = preset[0];
-    newCue.height     = preset[1];
-    newCue.hAngle     = preset[2];
-    newCue.vAngle     = preset[3];
-    newCue.roll       = preset[4];
-    newCue.delay      = 0;
-    newCue.label      = 'closeup ' + (AGENTS[0] || 'agent');
-  }
-  track.cues.push(newCue);
-  _selCue = { ti: ti, ci: track.cues.length - 1 };
-  renderTimeline(); renderInspector();
-}
-function addTrack() {
-  var types = Object.keys(TRACK_TYPES);
-  var type = types[_tracks.length % types.length];
-  _tracks.push({ type: type, label: TRACK_TYPES[type].label, cues: [] });
-  renderTimeline();
-}
-function addCamera() {
-  _tracks.unshift({ type: 'camera', label: 'Camera '+(_tracks.filter(function(t){ return t.type==='camera'; }).length+1), cues: [] });
-  renderTimeline();
-}
-function addLight() {
-  _tracks.push({ type: 'light', label: 'Light '+(_tracks.filter(function(t){ return t.type==='light'; }).length+1), cues: [] });
-  renderTimeline();
-}
-function exportCues() {
-  // Send tracks directly to Composer via mccf_save_cues — no alert, no round-trip race.
-  // Composer handles _doExportSceneXML(tracks) then sendToLauncher().
+// Write-back to Composer — placedCameras is the one source of truth, this
+// panel never keeps its own persistent copy. Same storage-owner role
+// Composer already plays for recorded paths.
+function saveObjectPlacement() {
+  if (!_selObj) return;
   if (window.parent && window.parent !== window) {
-    var totalCues = _tracks.reduce(function(n,t){ return n+(t.cues||[]).length; }, 0);
-    console.log('[Events Editor] exportCues → mccf_save_cues tracks:', _tracks.length, 'cues:', totalCues);
-    window.parent.postMessage({ type: 'mccf_save_cues', tracks: _tracks }, '*');
+    if (_selObj.kind === 'light') {
+      window.parent.postMessage({ type: 'mccf_update_light', data: {
+        name: _selObj.name, lightType: _selObj.lightType,
+        translation: _selObj.translation, rotation: _selObj.rotation
+      } }, '*');
+    } else if (_selObj.kind === 'audio') {
+      window.parent.postMessage({ type: 'mccf_update_audio', data: {
+        name: _selObj.name, translation: _selObj.translation,
+        gain: _selObj.gain, loop: _selObj.loop
+      } }, '*');
+    } else {
+      window.parent.postMessage({ type: 'mccf_update_camera', data: {
+        name: _selObj.name, position: _selObj.position,
+        hAngle: _selObj.hAngle, vAngle: _selObj.vAngle, roll: _selObj.roll
+      } }, '*');
+    }
   } else {
-    // Standalone fallback — show XML for debugging
-    var xml = '<EventCues>\n';
-    _tracks.forEach(function(track) {
-      track.cues.forEach(function(cue) {
-        xml += '  <Cue track="'+track.type+'" label="'+cue.label+'" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+(cue.trigger||'manual')+'"';
-        if (track.type === 'camera') {
-          if (cue.viewpoint !== undefined && cue.viewpoint !== null) {
-            // Baked named VP path — emit viewpoint= only, no shot= or framing fields
-            xml += ' viewpoint="'+cue.viewpoint+'"';
-            xml += ' subject="'+(cue.subject||'')+'"';
-          } else {
-            // Runtime shot path — emit shot= and framing fields, never viewpoint=
-            xml += ' shot="'+(cue.shot||'closeup')+'"';
-            xml += ' subject="'+(cue.subject||'')+'"';
-            if (cue.subject2)      xml += ' subject2="'+cue.subject2+'"';
-            xml += ' transition="'+(cue.transition||'cut')+'"';
-            if ((cue.transition==='fly')||SHOT_MOVES[cue.shot]) xml += ' flyDuration="'+(cue.flyDuration||1.5)+'"';
-            if (!SHOT_ATTACHED[cue.shot]) {
-              xml += ' distance="'+(cue.distance||3)+'"';
-              xml += ' height="'+(cue.height||1.7)+'"';
-              xml += ' hAngle="'+(cue.hAngle||0)+'"';
-              xml += ' vAngle="'+(cue.vAngle||-8)+'"';
-              if (cue.roll) xml += ' roll="'+cue.roll+'"';
-              if (SHOT_MOVES[cue.shot]) {
-                xml += ' distanceEnd="'+(cue.distanceEnd||1)+'"';
-                xml += ' heightEnd="'+(cue.heightEnd||5)+'"';
-                xml += ' hAngleEnd="'+(cue.hAngleEnd||0)+'"';
-                xml += ' vAngleEnd="'+(cue.vAngleEnd||-20)+'"';
-                if (cue.shot === 'crane_up') xml += ' arcDepth="'+(cue.arcDepth||3)+'"';
-                if (cue.loop) xml += ' loop="true"';
-              }
-              if (cue.shot === 'agent_track') {
-                xml += ' trackOffset="'+(cue.trackOffset!==undefined?cue.trackOffset:-3)+'"';
-                xml += ' trackOffsetEnd="'+(cue.trackOffsetEnd!==undefined?cue.trackOffsetEnd:3)+'"';
-                xml += ' trackDepth="'+(cue.trackDepth!==undefined?cue.trackDepth:4)+'"';
-              }
-            }
-          }
-          xml += ' delay="'+(cue.delay||0)+'"';
-        } else if (cue.node) {
-          xml += ' node="'+cue.node+'" intensity="'+(cue.intensity||0.8)+'"';
-        } else if (cue.agent) {
-          xml += ' agent="'+cue.agent+'" clip="'+(cue.clip||'')+'"';
-        }
-        xml += '/>\n';
-      });
-    });
-    xml += '</EventCues>';
-    console.log('[Events Editor] standalone exportCues XML:\n' + xml);
-    alert('XML preview:\n\n' + xml);
+    console.log('[Events Editor] standalone — would save:', _selObj);
   }
 }
+
 function refreshViewport() {
   var btn = document.getElementById('vp-refresh-btn');
   if (btn) { btn.textContent = '↺ exporting…'; btn.style.color = 'var(--accent4)'; }
@@ -1826,7 +1121,78 @@ function refreshViewport() {
   }
 }
 
+// Mute every AudioDestination in the loaded scene (Day 79 cleanup pass —
+// fixes the "autostart audio" complaint). The previous version of this
+// walked for a classic X3D `Sound` node and set `enabled = false` — but
+// this codebase's own audio graphs (confirmed by reading exportX3D/
+// buildX3DString: Music, Bed, every zone's ambient/dwell chain) are all
+// built on X3D4's AudioDestination/Gain/AudioClip nodes, never the classic
+// `Sound` type. That walk matched zero real nodes and muted nothing —
+// "Sound nodes muted in viewport" was logging a false success. Zeroing
+// every AudioDestination's own gain is the actual fix: every audio chain
+// in this project routes through exactly one before reaching speakers
+// (confirmed by reading every AudioDestination call site), so this is one
+// robust point of control regardless of what's built deeper in each
+// chain (Convolver, BiquadFilter, loop settings, startTime quirks).
+// Deliberately NOT reusing MCCFSoundMaster's existing masterVolume fan-out
+// (mccf_x3d_loader.html) — that only reaches zone ambient SoundFaders, not
+// Music/Bed, and depends on the optional "MCCFMaster Script stub" export
+// toggle actually having been checked. This works regardless, and this is
+// a preview viewport being permanently silenced, not something that needs
+// SoundFader's own ramp logic.
+function _muteAllAudio(x3d) {
+  try {
+    var scene = x3d.browser.currentScene;
+    var muted = 0;
+    var walk = function(node) {
+      try {
+        if (node.getTypeName && node.getTypeName() === 'AudioDestination') {
+          node.gain = 0;
+          muted++;
+        }
+        if (node.children) node.children.forEach(walk);
+      } catch(e) {}
+    };
+    scene.rootNodes.forEach(walk);
+    console.log('[Events Editor] muted ' + muted + ' AudioDestination node(s) in viewport');
+  } catch(e) { console.warn('[Events Editor] could not mute audio:', e); }
+}
+
+// Rebuild the viewpoint dropdown from what actually resolves in the live,
+// now-loaded scene, instead of trusting VIEWS (Composer's pre-computed
+// guess, which doesn't know whether an agent's avatar file has a camera
+// rig manifest — see the load handler's own comment for the full story).
+function _rebuildViewpointDropdown(x3d) {
+  var sel = document.getElementById('vp-cam-select');
+  if (!sel) return;
+  var browser = x3d.browser;
+  var resolved = [];
+  VIEWS.forEach(function(name) {
+    try {
+      if (browser.currentScene.getNamedNode(name)) resolved.push(name);
+    } catch(e) { /* not in this scene */ }
+  });
+  if (!resolved.length) {
+    sel.innerHTML = '<option value="">— no viewpoints found in this scene —</option>';
+    return;
+  }
+  var prevValue = sel.value;
+  sel.innerHTML = resolved.map(function(v) {
+    return '<option value="'+v+'">'+v+'</option>';
+  }).join('');
+  sel.value = resolved.indexOf(prevValue) !== -1 ? prevValue : resolved[0];
+  switchViewpoint(sel.value);
+}
+
 function loadX3DViewport(url, force) {
+  // Day 78: a path recording in progress is scoped to the CURRENT viewport's
+  // live browser instance — genuinely reloading (this function's whole job)
+  // orphans that instance regardless, so an active recording has to stop
+  // now rather than silently keep polling a browser object nothing else
+  // references anymore. force=true (discard, no save prompt): whatever was
+  // being captured was against the scene that's going away.
+  if (_pathRec.active) stopPathRecording(true);
+
   var x3d    = document.getElementById('vp-x3d');
   var canvas = document.getElementById('vp-canvas');
   var ph     = document.getElementById('vp-placeholder');
@@ -1875,24 +1241,21 @@ function loadX3DViewport(url, force) {
   x3d.addEventListener('load', function onLoad() {
     x3d.removeEventListener('load', onLoad);
     status.textContent = url.split('/').pop() + ' ✓';
-    // Silence all Sound nodes — the viewport is a preview, not a playback surface.
-    // X_ITE autoplays any Sound with loop=true; we kill them all via SAI immediately.
-    try {
-      var scene = x3d.browser.currentScene;
-      var walk = function(node) {
-        try {
-          if (node.getTypeName && node.getTypeName() === 'Sound') {
-            node.enabled = false;
-          }
-          if (node.children) node.children.forEach(walk);
-        } catch(e) {}
-      };
-      scene.rootNodes.forEach(walk);
-      console.log('[Events Editor] Sound nodes muted in viewport');
-    } catch(e) { console.warn('[Events Editor] could not mute sounds:', e); }
-    // Bind initial viewpoint
-    var sel = document.getElementById('vp-cam-select');
-    if (sel && sel.value) switchViewpoint(sel.value);
+    // Mute all audio in this preview viewport — see _muteAllAudio below for
+    // why this walks AudioDestination nodes, not the classic X3D Sound type.
+    _muteAllAudio(x3d);
+    // Viewpoint dropdown fix (Day 79 cleanup pass): the candidate list
+    // (VIEWS, built from Composer's own guess) includes a VP_<name>_Eye/Side
+    // pair for every placed agent unconditionally — but exportX3D only
+    // actually emits those if that agent's avatar file has a camera rig
+    // manifest (Day 77 decision, buildAX3D's own comment: "Composer-side
+    // generic fallback rig... rejected as polluting the viewpoint menu").
+    // An agent with no rig manifest was showing up as a selectable option
+    // that silently did nothing when picked (switchViewpoint's own
+    // try/catch swallows the "not found" case with no visible error at
+    // all) — this is that bug, fixed by validating against the real,
+    // now-loaded scene instead of trusting the guess.
+    _rebuildViewpointDropdown(x3d);
   }, { once: true });
 
   x3d.addEventListener('error', function onErr() {
@@ -1916,55 +1279,299 @@ function switchViewpoint(vp) {
     if (vpNode) vpNode.set_bind = true;
   } catch(e) { /* viewpoint not yet in scene */ }
 }
+
+// ── Path recorder — Day 78, V5 Tasklist Phase 2 tasks 2-4 ──────────────────
+// Captures the live navigated camera pose while the author flies/walks the
+// viewport (native X_ITE navigation), samples it on a fixed interval, and on
+// Stop runs RDP decimation (path-recorder.js) to produce a real, savable path.
+//
+// Mechanism history — two real findings, not assumptions, both confirmed
+// against this actual X_ITE build before being acted on:
+//
+// 1. First cut read getActiveViewpoint().getField('position'/'orientation')
+//    on a polling timer. Reasoning at the time: this file's OWN existing code
+//    (updateCamTelemetry, mccf_x3d_loader.html) had confirmed-working
+//    precedent for reading a Viewpoint field via .getField(name).toString(),
+//    so build on that rather than the Tasklist's untested addFieldCallback
+//    suggestion. That reasoning was sound but the conclusion was wrong —
+//    updateCamTelemetry was always reading back a value *this codebase had
+//    itself just written* (CAM_Free_Transform, via script), never reading
+//    live mouse/keyboard navigation. Those are different claims, and only
+//    the first one had real precedent.
+// 2. Confirmed directly (author test, Day 78): binding a different named
+//    Viewpoint changed the read value; freely navigating while staying bound
+//    to the SAME Viewpoint did not, even though the viewport visibly moved.
+//    Cross-checked against X_ITE's own docs — "Controlling the Viewpoint"
+//    states navigation is tracked as an offset separate from the bound
+//    node's own position/orientation fields; "Sensing the Viewer" states
+//    outright that ProximitySensor.position_changed/orientation_changed is
+//    the documented mechanism for the live viewer pose. Neither polling nor
+//    addFieldCallback on a Viewpoint's fields was ever going to work — both
+//    were reading the wrong node. Fixed by reading a scene-covering
+//    ProximitySensor (MCCF_PathRecorderProx, added to Composer's X3D export)
+//    instead. Polling is kept as the read mechanism (still the one with real
+//    precedent in this codebase) — only WHAT gets read changed.
+var _pathRec = {
+  active: false,
+  samples: [],      // { t, position:[x,y,z], orientation:[x,y,z,angle] }
+  startTime: null,  // performance.now() at record start — same basis _playStart uses
+  pollTimer: null,
+  lastBuilt: null,  // most recent buildRecordedPath() result, kept for Save/tolerance re-run
+  sensorNode: null, // MCCF_PathRecorderProx, looked up once at record-start
+  leftRegionWarned: false, // so the "outside sensed region" console warning fires once per excursion, not every tick
+};
+var PATH_REC_POLL_MS = 100; // 10Hz — dense enough for RDP to have real curve data to work with
+
+// X_ITE field objects format as "x y z" (SFVec3f) / "x y z angle" (SFRotation)
+// per the confirmed-working pattern in mccf_x3d_loader.html's updateCamTelemetry.
+function _parseFieldVec(str, count) {
+  var parts = String(str).trim().split(/\s+/).map(Number);
+  if (parts.length !== count || parts.some(isNaN)) return null;
+  return parts;
+}
+
+function _pathRecTick() {
+  if (!_pathRec.sensorNode) return;
+  try {
+    // Day 78 rewrite: was reading getActiveViewpoint().position/orientation —
+    // confirmed by direct empirical test (not assumption) that those fields
+    // hold the Viewpoint's AUTHORED value and do not track live navigation
+    // at all. ProximitySensor.position_changed/orientation_changed is
+    // X_ITE's own documented mechanism for the live viewer pose (see
+    // MCCF_PathRecorderProx's own comment in exportX3D, mccf_scene_composer.html).
+    var activeStr = _pathRec.sensorNode.getField('isActive').toString();
+    if (activeStr !== 'TRUE' && activeStr !== 'true') {
+      if (!_pathRec.leftRegionWarned) {
+        console.warn('[PathRecorder] camera is currently outside MCCF_PathRecorderProx\'s sensed region — no samples will be captured until you fly back inside it.');
+        _pathRec.leftRegionWarned = true;
+      }
+      return; // not inside the region — sensor isn't reporting a live pose right now
+    }
+    _pathRec.leftRegionWarned = false;
+    var pos = _parseFieldVec(_pathRec.sensorNode.getField('position_changed').toString(), 3);
+    var rot = _parseFieldVec(_pathRec.sensorNode.getField('orientation_changed').toString(), 4);
+    if (!pos || !rot) return; // malformed read this tick — skip, don't record a bad sample
+    _pathRec.samples.push({
+      t: (performance.now() - _pathRec.startTime) / 1000,
+      position: pos,
+      orientation: rot,
+    });
+    var statusEl = document.getElementById('path-rec-status');
+    if (statusEl) statusEl.textContent = 'REC ' + (( performance.now() - _pathRec.startTime) / 1000).toFixed(1) + 's — ' + _pathRec.samples.length + ' samples';
+  } catch (e) {
+    // Same discipline as every other SAI callback in this codebase: never
+    // let one bad tick take down the poll loop or anything else running
+    // alongside it.
+    console.warn('[PathRecorder] tick failed:', e.message);
+  }
+}
+
+function togglePathRecording() {
+  if (_pathRec.active) { stopPathRecording(); } else { startPathRecording(); }
+}
+
+function startPathRecording() {
+  var x3d = document.getElementById('vp-x3d');
+  if (!x3d || !x3d.browser) { alert('No scene loaded in viewport — export from Composer first.'); return; }
+  if (typeof MCCFPathRecorder === 'undefined') { alert('path-recorder.js not loaded — check /static/js/path-recorder.js is reachable.'); return; }
+  var sensorNode;
+  try { sensorNode = x3d.browser.currentScene.getNamedNode('MCCF_PathRecorderProx'); } catch (e) { sensorNode = null; }
+  if (!sensorNode) {
+    alert('This scene doesn\'t have the path-recorder sensor (MCCF_PathRecorderProx) — it was added to Composer\'s X3D export Day 78. Re-export/refresh the scene from Composer, then try again.');
+    return;
+  }
+  _pathRec.sensorNode = sensorNode;
+  _pathRec.leftRegionWarned = false;
+  _pathRec.active = true;
+  _pathRec.samples = [];
+  _pathRec.startTime = performance.now();
+  // Diagnostic (see _pathRecRebuild): which viewpoint the UI believes was
+  // bound when recording started — read from vp-status rather than the
+  // node object itself, since that's the one thing already confirmed
+  // reliable to read (switchViewpoint sets it on every bind). Kept even
+  // though capture no longer reads the Viewpoint node at all — still
+  // useful context (which camera the author was looking through) in the
+  // diagnostic log.
+  _pathRec.viewpointName = (document.getElementById('vp-status') || {}).textContent || '(unknown)';
+  _pathRec.pollTimer = setInterval(_pathRecTick, PATH_REC_POLL_MS);
+
+  var btn = document.getElementById('path-rec-btn');
+  if (btn) { btn.textContent = '■ Stop'; btn.style.background = 'var(--accent2)'; btn.style.color = 'var(--bg)'; }
+  var statusEl = document.getElementById('path-rec-status');
+  if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'REC 0.0s — 0 samples'; }
+  var panel = document.getElementById('path-rec-panel');
+  if (panel) panel.style.display = 'none'; // hide any previous unsaved capture's panel
+}
+
+// force: true when called from viewport teardown (loadX3DViewport) — stops
+// the poll loop immediately without trying to build/show a save panel for
+// whatever was captured, since the scene the capture was against is being
+// torn down anyway (destroy-on-close discipline, same as the viewport
+// context itself — see loadX3DViewport's own comments).
+function stopPathRecording(force) {
+  if (!_pathRec.active) return;
+  _pathRec.active = false;
+  clearInterval(_pathRec.pollTimer);
+  _pathRec.pollTimer = null;
+
+  var btn = document.getElementById('path-rec-btn');
+  if (btn) { btn.textContent = '\u25CF Record Path'; btn.style.background = 'transparent'; btn.style.color = 'var(--accent2)'; }
+  var statusEl = document.getElementById('path-rec-status');
+  if (statusEl) statusEl.style.display = 'none';
+  _pathRec.sensorNode = null; // don't hold a reference into a scene that might get torn down before the next recording
+
+  if (force || _pathRec.samples.length < 2) {
+    if (!force && _pathRec.samples.length < 2) alert('Recording too short (need at least 2 samples) — not saved.');
+    _pathRec.samples = [];
+    return;
+  }
+
+  _pathRecRebuild();
+  var panel = document.getElementById('path-rec-panel');
+  if (panel) panel.style.display = 'flex';
+}
+
+// Re-runs decimation against whatever was last captured, at the tolerance
+// currently in the panel's input — called once right after Stop, and again
+// whenever the author edits the tolerance field, so they can see the
+// before/after sample count before committing to Save.
+function _pathRecRebuild() {
+  if (!_pathRec.samples || _pathRec.samples.length < 2) return;
+  var tolInput = document.getElementById('path-rec-tolerance');
+  var tolerance = tolInput ? (parseFloat(tolInput.value) || 0.15) : 0.15;
+  _pathRec.lastBuilt = MCCFPathRecorder.buildRecordedPath(_pathRec.samples, { tolerance: tolerance });
+
+  // Diagnostic, added Day 78 after a real "flew a curve, got 2 keys back"
+  // report — isolates WHERE the discrepancy is before assuming RDP is at
+  // fault. Computed straight off the raw, undecimated samples: bounding-
+  // box spread (how far position actually ranged across the whole capture)
+  // and total travel distance (sum of consecutive-sample distances). If
+  // spread/travel are near-zero despite a real, deliberately-flown curve,
+  // that points at the CAPTURE side (the bound Viewpoint's position field
+  // not actually reflecting live navigation — a stale/cached read, the
+  // same category of X_ITE surprise this project has hit before), not a
+  // decimation bug. If spread/travel are large and it STILL collapses to
+  // 2 keys, that points at RDP itself instead.
+  var xs = _pathRec.samples.map(function(s){return s.position[0];});
+  var ys = _pathRec.samples.map(function(s){return s.position[1];});
+  var zs = _pathRec.samples.map(function(s){return s.position[2];});
+  var spread = [Math.max.apply(null,xs)-Math.min.apply(null,xs), Math.max.apply(null,ys)-Math.min.apply(null,ys), Math.max.apply(null,zs)-Math.min.apply(null,zs)];
+  var travel = 0;
+  for (var i = 1; i < _pathRec.samples.length; i++) {
+    var a = _pathRec.samples[i-1].position, b = _pathRec.samples[i].position;
+    travel += Math.sqrt(Math.pow(b[0]-a[0],2) + Math.pow(b[1]-a[1],2) + Math.pow(b[2]-a[2],2));
+  }
+  _pathRec.lastDiagnostic = { spread: spread, travel: travel };
+  console.log('[PathRecorder diagnostic] viewpoint bound during capture:', _pathRec.viewpointName);
+  console.log('[PathRecorder diagnostic] raw bounding-box spread (x,y,z, meters):', spread.map(function(v){return v.toFixed(3);}));
+  console.log('[PathRecorder diagnostic] total travel distance across all raw samples (meters):', travel.toFixed(3));
+  console.log('[PathRecorder diagnostic] first/mid/last raw samples:', _pathRec.samples[0], _pathRec.samples[Math.floor(_pathRec.samples.length/2)], _pathRec.samples[_pathRec.samples.length-1]);
+  if (travel < 0.05) {
+    console.warn('[PathRecorder diagnostic] total travel under 5cm across the whole capture — if you deliberately flew a real path, this strongly suggests the capture is reading a STALE/static field value, not live navigation. Check which viewpoint was bound (see above) and whether it supports free navigation at all.');
+  }
+
+  var statsEl = document.getElementById('path-rec-stats');
+  if (statsEl) {
+    var s = _pathRec.lastBuilt.stats;
+    statsEl.innerHTML = s.rawSampleCount + ' \u2192 ' + s.decimatedKeyCount + ' keys (\u2212' + s.reductionPct + '%)'
+      + '<br><span style="font-size:14px">raw travel ' + travel.toFixed(2) + 'm &middot; spread '
+      + spread.map(function(v){return v.toFixed(2);}).join('/') + 'm (x/y/z) &middot; vp: ' + _pathRec.viewpointName + '</span>';
+  }
+}
+
+// Sends the built path to Composer (parent window) for storage — this file
+// has no server access of its own and no independent-path storage; Composer
+// owns scene-level data the same way it already owns zones/placedAgents/
+// placedCameras. Composer-side receiver: see mccf_scene_composer.html's
+// mccf_recorded_path message handler.
+function savePathRecording() {
+  if (!_pathRec.lastBuilt) return;
+  var idInput = document.getElementById('path-rec-id');
+  var id = (idInput && idInput.value.trim()) || '';
+  if (!id) { alert('Name this path before saving.'); return; }
+  var path = Object.assign({}, _pathRec.lastBuilt, { id: id });
+  var v = MCCFPathRecorder.validateRecordedPath(path);
+  if (!v.valid) { alert('Could not save — ' + v.errors.join('; ')); return; }
+
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_recorded_path', data: path }, '*');
+  }
+  var panel = document.getElementById('path-rec-panel');
+  if (panel) panel.style.display = 'none';
+  _pathRec.samples = [];
+  _pathRec.lastBuilt = null;
+  if (idInput) idInput.value = '';
+}
+
+function discardPathRecording() {
+  var panel = document.getElementById('path-rec-panel');
+  if (panel) panel.style.display = 'none';
+  _pathRec.samples = [];
+  _pathRec.lastBuilt = null;
+}
+
+function _toggleRecordedPathsPanel() {
+  var panel = document.getElementById('saved-paths-panel');
+  if (!panel) return;
+  if (panel.style.display === 'none' || !panel.style.display) {
+    _renderRecordedPathsPanel();
+    panel.style.display = 'block';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+function _renderRecordedPathsPanel() {
+  var countEl = document.getElementById('saved-paths-count');
+  if (countEl) countEl.textContent = RECORDED_PATHS.length;
+  var panel = document.getElementById('saved-paths-panel');
+  if (!panel) return;
+  if (!RECORDED_PATHS.length) {
+    panel.innerHTML = '<div style="color:var(--dim)">No recorded paths saved yet.</div>';
+    return;
+  }
+  panel.innerHTML = RECORDED_PATHS.map(function(rp) {
+    var reduction = rp.rawSampleCount ? (rp.rawSampleCount + ' \u2192 ' + rp.keyCount + ' keys') : (rp.keyCount + ' keys');
+    var tol = (rp.tolerance !== undefined && rp.tolerance !== null && !isNaN(rp.tolerance)) ? rp.tolerance : '—';
+    return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">'
+      + '<div style="color:var(--purple);font-weight:600;overflow-wrap:anywhere">' + rp.id.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+      + '<div style="color:var(--dim);font-size:14px;margin-top:2px">' + reduction + ' &middot; tol ' + tol + '</div>'
+      + '</div>';
+  }).join('');
+}
+
 function setStageTab(tab, el) {
   document.querySelectorAll('.stage-tab').forEach(function(t){ t.classList.remove('active'); });
   el.classList.add('active');
+  // Day 79 cleanup pass: previously only toggled the tab's own highlight —
+  // clicking Assets visibly did nothing else, since no content view ever
+  // switched. No asset browser exists anywhere in this codebase to back a
+  // real one (no asset list data, no asset-browsing code in Composer
+  // either) — this is an honest "not implemented yet" state, matching
+  // this project's own stub discipline, not invented functionality.
+  var wrap = document.getElementById('stage-object-list');
+  if (!wrap) return;
+  if (tab === 'assets') {
+    wrap.innerHTML = '<div class="empty-insp" style="padding:16px">Asset browser not implemented yet.</div>';
+  } else {
+    drawStage();
+  }
 }
 
-// ── Drag resize for timeline dock ─────────────────────────────────────────────
-(function() {
-  var handle = document.getElementById('tl-resize-handle');
-  var dock   = document.getElementById('tl-dock');
-  var dragging = false;
-  var startY = 0, startH = 0;
-  handle.addEventListener('mousedown', function(e) {
-    dragging = true; startY = e.clientY;
-    startH = dock.offsetHeight;
-    document.body.style.cursor = 'ns-resize';
-    document.body.style.userSelect = 'none';
-  });
-  document.addEventListener('mousemove', function(e) {
-    if (!dragging) return;
-    var delta = startY - e.clientY; // dragging up = bigger timeline
-    var newH = Math.max(120, Math.min(500, startH + delta));
-    dock.style.height = newH + 'px';
-  });
-  document.addEventListener('mouseup', function() {
-    if (dragging) {
-      dragging = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-  });
-})();
-
-// ── Sync label column scroll with track scroll area ───────────────────────────
-(function() {
-  var scrollArea = document.getElementById('tl-scroll-area');
-  var labelRows  = document.getElementById('tl-label-rows');
-  scrollArea.addEventListener('scroll', function() {
-    labelRows.scrollTop = scrollArea.scrollTop;
-  });
-})();
-
-// ── postMessage bridge — receives data from Scene Composer ───────────────────
-// Signal to parent that listener is registered and we're ready for scene data
+// ── Signal ready to parent ────────────────────────────────────────────────
 (function() {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: 'mccf_ready' }, '*');
   }
 })();
 
+
+// ── postMessage bridge — receives data from Scene Composer ───────────────────
+// Day 79: cue-related handling (mccf_request_cues/mccf_load_cues, the
+// _tracksAreStub replacement block) is gone along with the cue system itself.
+// This tool no longer has anything to export back to Composer via the old
+// path — placement edits go out through mccf_update_camera instead (see
+// saveObjectPlacement above), fired only on an explicit Save click, not on
+// every scene-data push.
 window.addEventListener('message', function(evt) {
   if (!evt.data || !evt.data.type) return;
 
@@ -1972,28 +1579,31 @@ window.addEventListener('message', function(evt) {
   if (evt.data.type === 'mccf_scene_data') {
     var d = evt.data.data || {};
     if (d.agents   && d.agents.length)   AGENTS   = d.agents;
-    if (d.cameras)                       CAMERAS  = d.cameras; // Day 64: may legitimately be empty — no fallback to a placeholder list
+    if (d.agentClips)                    AGENT_CLIPS = d.agentClips; // {agentName: [clipName,...]} — see Gesture cue editor
+    if (d.cameras)                       CAMERAS  = d.cameras; // Day 79: now {name,position,hAngle,vAngle,roll}[], not bare names — see _buildSceneData
+    if (d.lights)                        LIGHTS   = d.lights;
+    if (d.audio)                         AUDIO_SOURCES = d.audio;
     if (d.wps      && d.wps.length)      WPS      = d.wps;
     if (d.views    && d.views.length)    VIEWS    = d.views;
-    if (d.clips    && d.clips.length)    CLIPS    = d.clips;
-    if (d.triggers && d.triggers.length) TRIGGERS = d.triggers;
-    if (d.sceneEnd)                      _sceneEndFloor = d.sceneEnd;
-    // If still showing hardcoded stub tracks, replace with clean empty tracks
-    // (saved scenes will have already called mccf_load_cues before this)
-    if (_tracksAreStub) {
-      _tracks = [
-        { type: 'camera',   label: 'Camera',     cues: [] },
-        { type: 'light',    label: 'Lights',     cues: [] },
-        { type: 'fog',      label: 'Fog',        cues: [] },
-        { type: 'bg',       label: 'Background', cues: [] },
-        { type: 'fx',       label: 'FX',         cues: [] },
-        { type: 'behavior', label: 'Behavior',   cues: [] },
-      ];
-      _tracksAreStub = false;
-      _selCue = null;
+    if (d.recordedPaths)                 { RECORDED_PATHS = d.recordedPaths; _renderRecordedPathsPanel(); }
+
+    // If the currently-selected CAMERA still exists in the fresh data, keep it
+    // selected but refresh its working copy from Composer's own values —
+    // otherwise a save-and-rebroadcast round trip would silently overwrite an
+    // author's still-in-progress slider drag. If it's gone (renamed/deleted
+    // in Composer), drop the selection rather than show a stale panel.
+    // Agent selections have no working-copy state (read-only context, see
+    // renderObjectPanel) so they're left alone here — this used to run
+    // unconditionally and would incorrectly clear an agent selection on
+    // every scene-data push, since CAMERAS.find() can never match an agent
+    // name.
+    if (_selObj && _selObj.kind === 'camera') {
+      var still = CAMERAS.find(function(c) { return c.name === _selObj.name; });
+      if (still) selectObject('camera', still.name); else { _selObj = null; renderObjectPanel(); }
     }
+
+    drawStage();
     renderTimeline();
-    renderInspector();
     // Update viewport camera select
     var sel = document.getElementById('vp-cam-select');
     if (sel) {
@@ -2001,12 +1611,11 @@ window.addEventListener('message', function(evt) {
         return '<option value="'+v+'">'+v+'</option>';
       }).join('');
     }
-    // Update stage and VP labels
+    // Update VP label
     document.getElementById('vp-wp-label').textContent = WPS.length ? ('→ ' + WPS[0].name) : '—';
-    drawStage();
     // Load X3D scene into viewport if URL provided
     if (d.x3dUrl) loadX3DViewport(d.x3dUrl);
-    console.log('[Events Editor] scene data received — agents:', AGENTS.length, 'wps:', WPS.length, 'x3d:', d.x3dUrl||'none');
+    console.log('[Events Editor] scene data received — agents:', AGENTS.length, 'cameras:', CAMERAS.length, 'x3d:', d.x3dUrl||'none');
   }
 
   // Composer finished X3D export — load the confirmed URL immediately
@@ -2016,86 +1625,313 @@ window.addEventListener('message', function(evt) {
     if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
     return;
   }
-
-  // Scene Composer requesting cue data for export
-  if (evt.data.type === 'mccf_request_cues') {
-    if (evt.source) {
-      evt.source.postMessage({ type: 'mccf_cue_data', tracks: _tracks }, '*');
-    }
-  }
-
-  // Scene Composer pushing saved EventCues back on scene load
-  if (evt.data.type === 'mccf_load_cues') {
-    var incoming = evt.data.tracks || [];
-    if (incoming.length) {
-      // Merge incoming cues into the standard 6-track layout.
-      // Incoming tracks from Composer restore are keyed by type (one track per type).
-      // We preserve the full standard track list and graft cues into the matching
-      // type slot — so the editor always shows all 6 rows.
-      var STANDARD_TRACKS = [
-        { type: 'camera',   label: 'Camera'     },
-        { type: 'light',    label: 'Lights'     },
-        { type: 'fog',      label: 'Fog'        },
-        { type: 'bg',       label: 'Background' },
-        { type: 'fx',       label: 'FX'         },
-        { type: 'behavior', label: 'Behavior'   },
-      ];
-      // Build a map: type → [cues] from incoming
-      var incomingCueMap = {};
-      incoming.forEach(function(t) {
-        if (!incomingCueMap[t.type]) incomingCueMap[t.type] = [];
-        // incoming may already be multi-track per type from editor; collect all cues
-        (t.cues || []).forEach(function(c) { incomingCueMap[t.type].push(c); });
-      });
-      // Rebuild _tracks: use current track labels where they exist, else standard labels;
-      // replace cues for any type that has incoming data, preserve existing cues otherwise.
-      var merged = STANDARD_TRACKS.map(function(st) {
-        // Find existing track of this type (preserves custom label if user renamed it)
-        var existing = _tracks.find(function(t){ return t.type === st.type; });
-        var label = existing ? existing.label : st.label;
-        var cues  = incomingCueMap.hasOwnProperty(st.type) ? incomingCueMap[st.type] : (existing ? existing.cues : []);
-        // Auto-spread cues that overlap at the same t so they're all visible.
-        // Sort by t, then push any cue that overlaps its predecessor to the right.
-        cues = cues.slice().sort(function(a, b) { return a.t - b.t; });
-        var cursor = 0;
-        cues = cues.map(function(c) {
-          var t = Math.max(c.t, cursor);
-          cursor = t + (c.dur || 4);
-          return Object.assign({}, c, { t: t });
-        });
-        return { type: st.type, label: label, cues: cues };
-      });
-      // Ensure camera cues always have a subject — default to first agent if absent.
-      // Cues restored from old XML (pre-Day-58) may lack subject= attribute.
-      merged.forEach(function(track) {
-        if (track.type !== 'camera') return;
-        track.cues.forEach(function(cue) {
-          if (cue.shot && !cue.subject) cue.subject = AGENTS[0] || '';
-        });
-      });
-      _tracks = merged;
-      _tracksAreStub = false;
-      _selCue = null;
-      renderTimeline();
-      renderInspector();
-      console.log('[Events Editor] cues loaded —', _tracks.length, 'tracks,',
-        _tracks.reduce(function(n,t){ return n+t.cues.length; }, 0), 'cues total');
-    }
-  }
 });
 
 window.addEventListener('load', function() {
   drawStage();
   drawVPCanvas();
-  renderTimeline();
-  renderInspector();
+  renderObjectPanel();
   document.getElementById('vp-wp-label').textContent = '→ WP1';
   window.addEventListener('resize', function() {
     drawStage();
     drawVPCanvas();
-    renderTimeline();
   });
+  renderTimeline();
 });
+</script>
+
+<script>
+
+// ── Timeline / production-cue state (Day 81) ────────────────────────────
+// One flat CUES array, each {id, track, target, label, t0, duration, params}.
+// track ∈ 'camera'|'light'|'gesture'|'path' — deliberately not extensible
+// to a 'dialogue' or 'sensed' track here; those belong to the other two
+// tools (Timeline/Dialogue, and eventually the route graph) per the Day 81
+// event-architecture note's scheduled/sensed split.
+// Day 81: multiLane — Camera stays one shared lane (only one camera is
+// ever active, no split-screen plan, so cues just need to not overlap in
+// time, not in target). Light/Gesture/Path fan out — multiple lights or
+// multiple agents' gestures/paths can genuinely fire simultaneously, so
+// each distinct TARGET gets its own lane, derived automatically from
+// whichever targets actually have cues (see renderTimeline below) — no
+// manual "Add Track"/"Delete Track" management needed, lanes just
+// track the data. Adding a future object type (fog, particle systems)
+// is meant to be a one-line addition here, nothing else — the render
+// logic below is generic over multiLane, not hardcoded per track.
+var TRACKS = [
+  { id:'camera',  label:'Camera',  multiLane:false },
+  { id:'light',   label:'Light',   multiLane:true  },
+  { id:'gesture', label:'Gesture', multiLane:true  },
+  { id:'path',    label:'Path',    multiLane:true  },
+  { id:'audio',   label:'Audio',   multiLane:true  },
+];
+var CUES = [];
+var _cueSeq = 0;
+var _playheadT = 0;
+var _tlMaxT = 30;          // ruler extent in seconds — auto-grows as cues are added past it
+var _tlPxPerSec = 40;      // horizontal scale
+var _selCue = null;        // working copy of the selected cue, or null
+
+function _fmtT(t) { return t.toFixed(2) + 's'; }
+
+function _tlCueBlockHtml(c, trackId) {
+  var left  = c.t0 * _tlPxPerSec;
+  var width = Math.max(18, c.duration * _tlPxPerSec);
+  var sel   = _selCue && _selCue.id === c.id;
+  return '<div class="cue-block cue-' + trackId + (sel?' selected':'') + '" style="left:' + left + 'px;width:' + width + 'px" ' +
+    'onclick="event.stopPropagation();selectCue(' + JSON.stringify(c.id).replace(/"/g,'&quot;') + ')" title="' +
+    (c.target||'').replace(/"/g,'&quot;') + ' — ' + _fmtT(c.t0) + ' to ' + _fmtT(c.t0+c.duration) + '">' +
+    '<span class="cue-target">' + (c.target||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' +
+    (c.label||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
+    '</div>';
+}
+function _tlRowHtml(labelHtml, addTitle, addTrackId, addTarget, blocksHtml, widthPx) {
+  var addArgs = JSON.stringify(addTrackId).replace(/"/g,'&quot;') + ',' +
+    (addTarget ? JSON.stringify(addTarget).replace(/"/g,'&quot;') : 'null');
+  return '<div class="timeline-row">' +
+    '<div class="timeline-track-label">' + labelHtml +
+    '<span class="timeline-track-add" onclick="addCueAtPlayhead(' + addArgs + ')" title="' + addTitle + '">+</span>' +
+    '</div>' +
+    '<div class="timeline-scroll" onscroll="_tlSyncScroll(this)"><div class="timeline-lane" style="width:' + widthPx + 'px">' + blocksHtml + '</div></div>' +
+    '</div>';
+}
+
+function renderTimeline() {
+  var readout = document.getElementById('tl-time-readout');
+  if (readout) readout.textContent = 't = ' + _fmtT(_playheadT);
+
+  var widthPx = _tlMaxT * _tlPxPerSec;
+
+  // Ruler ticks, every 2s, plus the playhead marker.
+  var ruler = document.getElementById('tl-ruler');
+  if (ruler) {
+    ruler.style.width = widthPx + 'px';
+    var html = '';
+    for (var s = 0; s <= _tlMaxT; s += 2) {
+      html += '<div class="timeline-ruler-tick" style="left:' + (s*_tlPxPerSec) + 'px">' + s + 's</div>';
+    }
+    html += '<div class="timeline-playhead" style="left:' + (_playheadT*_tlPxPerSec) + 'px"></div>';
+    ruler.innerHTML = html;
+  }
+
+  var wrap = document.getElementById('tl-tracks');
+  if (!wrap) return;
+  wrap.innerHTML = TRACKS.map(function(tr) {
+    var cues = CUES.filter(function(c) { return c.track === tr.id; });
+
+    if (!tr.multiLane) {
+      var blocks = cues.map(function(c) { return _tlCueBlockHtml(c, tr.id); }).join('');
+      return _tlRowHtml(tr.label, 'Add ' + tr.label + ' cue at current playhead time', tr.id, null, blocks, widthPx);
+    }
+
+    // Multi-lane: one row per distinct target actually in use, in order
+    // of first appearance — no separate lane list to manage, it's purely
+    // derived from CUES, so a lane can never exist without cues and never
+    // needs manual deletion either.
+    var targets = [];
+    cues.forEach(function(c) { if (targets.indexOf(c.target) === -1) targets.push(c.target); });
+
+    // Always show one generic, unscoped row for a multi-lane track — this
+    // used to only appear when the track had ZERO cues at all, which meant
+    // the moment one lane existed (say, Cindy's), its + button became
+    // permanently scoped to Cindy (correctly, per the per-lane fix above),
+    // and there was no longer ANY unscoped + left to create a first lane
+    // for a second target (Salida). Confirmed real bug from live testing,
+    // not theoretical. This generic row is the permanent "add for whatever
+    // is selected in Stage" affordance; per-target rows below it are for
+    // adding MORE cues to an already-established lane.
+    var genericRow = _tlRowHtml(tr.label, 'Add ' + tr.label + ' cue at current playhead time (targets whatever is selected in Stage)', tr.id, null, '', widthPx);
+    if (!targets.length) return genericRow;
+
+    var laneRows = targets.map(function(target) {
+      var laneCues = cues.filter(function(c) { return c.target === target; });
+      var blocks = laneCues.map(function(c) { return _tlCueBlockHtml(c, tr.id); }).join('');
+      var labelHtml = '<span style="color:var(--dim);font-size:12px">' + tr.label + '</span><br>' + (target||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      return _tlRowHtml(labelHtml, 'Add ' + tr.label + ' cue for ' + target + ' at current playhead time', tr.id, target, blocks, widthPx);
+    }).join('');
+    return genericRow + laneRows;
+  }).join('');
+}
+
+// All lanes + the ruler scroll together — a cue has to line up with the
+// same ruler position regardless of which track it's in.
+function _tlSyncScroll(fromEl) {
+  var x = fromEl.scrollLeft;
+  document.querySelectorAll('.timeline-scroll').forEach(function(el) { el.scrollLeft = x; });
+}
+
+function _tlRulerClick(evt) {
+  var rect = evt.currentTarget.getBoundingClientRect();
+  var t = Math.max(0, (evt.clientX - rect.left) / _tlPxPerSec);
+  _playheadT = Math.round(t * 20) / 20; // snap to 0.05s
+  renderTimeline();
+}
+
+// "copy times from the timeline scrubber position and assign those to
+// actions in each track" — the primary path for this is addCueAtPlayhead
+// below (a new cue is born at the exact playhead position, no copy/paste
+// needed). This is the literal-copy fallback for editing an EXISTING
+// cue's start time by hand: clicking the readout puts the value on the
+// clipboard so it can be pasted into the t0 field in the inspector.
+// Guarded — clipboard API can be unavailable in a sandboxed iframe (this
+// tool normally runs inside Composer's iframe), and this must never be
+// the only way to set a cue's time if it silently fails.
+function _tlCopyPlayhead() {
+  var text = _playheadT.toFixed(2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(function() {
+      console.log('[Events Editor] clipboard write blocked — playhead time: ' + text);
+    });
+  }
+}
+
+function addCueAtPlayhead(trackId, explicitTarget) {
+  _cueSeq++;
+  // explicitTarget comes from a specific per-object lane's own + button
+  // (multi-lane tracks — see renderTimeline) and is authoritative: that
+  // lane IS a specific target, no guessing needed. Only fall back to the
+  // Stage-panel-selection guess (or first-in-list) for the generic
+  // single + shown when a multi-lane track has no lanes yet, or for
+  // Camera's one shared lane.
+  var selCam   = (_selObj && _selObj.kind === 'camera') ? _selObj.name : null;
+  var selAgent = (_selObj && _selObj.kind === 'agent')  ? _selObj.name : null;
+  var selLight = (_selObj && _selObj.kind === 'light')  ? _selObj.name : null;
+  var selAudio = (_selObj && _selObj.kind === 'audio')  ? _selObj.name : null;
+  var gestureTarget = explicitTarget || selAgent || AGENTS[0] || '';
+  var pathTarget    = explicitTarget || selAgent || AGENTS[0] || '';
+  var lightTarget   = explicitTarget || selLight || (LIGHTS[0] && LIGHTS[0].name) || '';
+  var audioTarget   = explicitTarget || selAudio || (AUDIO_SOURCES[0] && AUDIO_SOURCES[0].name) || '';
+  var defaults = {
+    camera:  { target: explicitTarget || selCam || (CAMERAS[0] && CAMERAS[0].name) || '', label: 'cut',   duration: 3 },
+    light:   { target: lightTarget, label: 'fade', duration: 3 },
+    gesture: { target: gestureTarget, label: (AGENT_CLIPS[gestureTarget] && AGENT_CLIPS[gestureTarget][0]) || 'Default', duration: 2 },
+    path:    { target: pathTarget,    label: '', duration: 6,
+               params: { pathId: (RECORDED_PATHS[0] && RECORDED_PATHS[0].id) || '' } },
+    audio:   { target: audioTarget,   label: 'play', duration: 4 },
+  }[trackId] || { target: explicitTarget || '', label:'', duration: 2 };
+  var cue = Object.assign({ id: 'cue_' + _cueSeq, track: trackId, t0: _playheadT, params: {} }, defaults);
+  CUES.push(cue);
+  if (cue.t0 + cue.duration > _tlMaxT) _tlMaxT = Math.ceil(cue.t0 + cue.duration + 4);
+  selectCue(cue.id);
+}
+
+function selectCue(id) {
+  var c = CUES.find(function(x) { return x.id === id; });
+  if (!c) return;
+  _selCue = Object.assign({}, c, { params: Object.assign({}, c.params) });
+  _selObj = null; // stage-object selection and cue selection share the one Inspector — only one at a time
+  drawStage();
+  renderTimeline();
+  renderObjectPanel();
+}
+
+function deleteCue() {
+  if (!_selCue) return;
+  CUES = CUES.filter(function(c) { return c.id !== _selCue.id; });
+  _selCue = null;
+  renderTimeline();
+  renderObjectPanel();
+}
+
+function _cueField(label, key, val, type) {
+  type = type || 'text';
+  var inputHtml = type === 'number'
+    ? '<input type="number" step="0.05" value="' + val + '" oninput="setCueProp(\'' + key + '\',this.value,true)">'
+    : '<input type="text" value="' + String(val==null?'':val).replace(/"/g,'&quot;') + '" oninput="setCueProp(\'' + key + '\',this.value,false)">';
+  return '<div class="obj-field"><label>' + label + '</label>' + inputHtml + '</div>';
+}
+
+function renderCueEditor() {
+  var body = document.getElementById('insp-body');
+  if (!body || !_selCue) return;
+  var c = _selCue;
+  var trackLabel = (TRACKS.find(function(t){return t.id===c.track;}) || {}).label || c.track;
+  var html = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--accent,#7fd);margin-bottom:8px">' +
+    trackLabel + ' cue</div>';
+
+  // Target picker — real dropdown for every track now (Day 82 gave Light
+  // and Audio real lists, closing the gaps that used to force free text).
+  if (c.track === 'camera' || c.track === 'gesture' || c.track === 'path' || c.track === 'light' || c.track === 'audio') {
+    var opts = (c.track === 'camera') ? CAMERAS.map(function(x){return x.name;})
+             : (c.track === 'light')  ? LIGHTS.map(function(x){return x.name;})
+             : (c.track === 'audio')  ? AUDIO_SOURCES.map(function(x){return x.name;})
+             : AGENTS;
+    // Gesture's clip dropdown below depends on WHICH agent is targeted —
+    // re-render the whole editor on target change so that dropdown always
+    // reflects the newly selected agent's actual clips, not the previous
+    // agent's. Cheap (this panel is small), and correctness here matters
+    // more than avoiding one extra render.
+    var targetOnChange = (c.track === 'gesture')
+      ? "setCueProp('target',this.value,false);renderCueEditor();"
+      : "setCueProp('target',this.value,false)";
+    html += '<div class="obj-field"><label>Target</label><select oninput="'+targetOnChange+'">' +
+      (opts.length ? opts.map(function(n) { return '<option value="'+n+'"'+(n===c.target?' selected':'')+'>'+n+'</option>'; }).join('')
+                   : '<option value="">— none placed yet —</option>') +
+      '</select></div>';
+  } else {
+    html += _cueField('Target', 'target', c.target);
+  }
+
+  if (c.track === 'path') {
+    html += '<div class="obj-field"><label>Recorded path</label><select oninput="setCueParam(\'pathId\',this.value)">' +
+      (RECORDED_PATHS.length
+        ? RECORDED_PATHS.map(function(rp) { return '<option value="'+rp.id+'"'+(rp.id===c.params.pathId?' selected':'')+'>'+rp.id+' ('+rp.keyCount+' keys)</option>'; }).join('')
+        : '<option value="">— none recorded yet —</option>') +
+      '</select></div>';
+  } else if (c.track === 'gesture') {
+    // Real dropdown, sourced from the target agent's actual authored
+    // clips (AGENT_CLIPS, populated from /cultivars/xml via Composer —
+    // confirmed real data, not guessed) — this used to be a free-text
+    // Label field with no connection to what the avatar can actually do.
+    var clipOpts = AGENT_CLIPS[c.target] || ['Default'];
+    html += '<div class="obj-field"><label>Gesture (clip)</label><select oninput="setCueProp(\'label\',this.value,false)">' +
+      clipOpts.map(function(n) { return '<option value="'+n+'"'+(n===c.label?' selected':'')+'>'+n+'</option>'; }).join('') +
+      '</select></div>';
+  } else {
+    html += _cueField('Label', 'label', c.label);
+  }
+
+  html += _cueField('Start time (t0, seconds)', 't0', c.t0, 'number');
+  html += '<div style="margin:-6px 0 10px;"><span class="timeline-track-add" style="color:var(--dim);font-size:13px;cursor:pointer" onclick="setCueProp(\'t0\',' + _playheadT + ',true)">↳ use current playhead (' + _fmtT(_playheadT) + ')</span></div>';
+  html += _cueField(c.track === 'path' ? 'Duration — timer cycle interval (seconds)' : 'Duration (seconds)', 'duration', c.duration, 'number');
+
+  html += '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button class="tb-btn accent" onclick="saveCue()">Apply</button>' +
+    '<button class="tb-btn" onclick="deleteCue()">Delete</button>' +
+    '</div>';
+  body.innerHTML = html;
+}
+
+function setCueProp(key, val, isNum) {
+  if (!_selCue) return;
+  _selCue[key] = isNum ? (parseFloat(val) || 0) : val;
+}
+function setCueParam(key, val) {
+  if (!_selCue) return;
+  _selCue.params[key] = val;
+}
+function saveCue() {
+  if (!_selCue) return;
+  var idx = CUES.findIndex(function(c) { return c.id === _selCue.id; });
+  if (idx === -1) return;
+  CUES[idx] = Object.assign({}, _selCue, { params: Object.assign({}, _selCue.params) });
+  if (_selCue.t0 + _selCue.duration > _tlMaxT) _tlMaxT = Math.ceil(_selCue.t0 + _selCue.duration + 4);
+  renderTimeline();
+}
+
+// Composer has no receiver for this message type yet — this sends the
+// authored cue set out so one can be built, the same honest gap this
+// project has flagged elsewhere (e.g. recorded-path playback consumption)
+// rather than inventing a wire format silently.
+function exportProductionCues() {
+  var payload = { cues: CUES };
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_production_cues', data: payload }, '*');
+    console.log('[Events Editor] sent mccf_production_cues — Composer does not have a receiver for this yet (Day 81 prototype).', payload);
+  } else {
+    console.log('[Events Editor] standalone — would send mccf_production_cues:', payload);
+  }
+}
 </script>
 </body>
 </html>

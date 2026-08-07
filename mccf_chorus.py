@@ -52,7 +52,21 @@ Day 73 — REVISION to a previously-stated constraint, on record, not silent:
   ChorusManager.captured_lines()).
 
 Authors: Len Bullard, Claude Sonnet 4.6 (Tae)
-MCCF V4, Day 13 (voice_actor extension: Day 73)
+MCCF V4, Day 13 (voice_actor extension: Day 73; character_voice_prompt: Day 78)
+
+Day 78 — voice_actor now actually produces the character's real voice.
+  Per MCCF_Dialogue_Chorus_LLM_Voice_Spec_v0.1.md §2/§3: _build_system_prompt
+  now calls the new character_voice_prompt() when config.voice_actor is set,
+  instead of always using config.persona/config.tone regardless of
+  voice_actor (which is what this module did through Day 77 — voice_actor
+  affected the captured Line's `actor` field and dialogue-schema shape, but
+  never actually changed which system prompt built the LLM's response).
+  config.persona/config.tone remain the mute/uncredited-observer path only.
+  Real gap this landed with, now closed same session: this module had no
+  way to load a full Cultivar record by actor name. Confirmed directly by
+  the author against real cultivars/*.xml files (see _default_cultivar_loader) —
+  Description/Weights/Regulation/FailureMode/SignaturePhrases, no
+  "Disposition" field (an earlier assumption in this module, now corrected).
 """
 
 import os
@@ -60,7 +74,7 @@ import time
 import threading
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Callable
 
 from flask import Blueprint, jsonify, request
 
@@ -196,6 +210,197 @@ def parse_chorus_from_zone_xml(zone_xml_str: str, target_zone_id: str = None) ->
 # Transcript builder
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Shared character-voice mechanism — Day 78
+# MCCF_Dialogue_Chorus_LLM_Voice_Spec_v0.1.md §2: ONE mechanism for "the LLM
+# speaks as a character," used both by Chorus (when voice_actor is set,
+# wired below in _build_system_prompt) and by regular mode="improv" dialogue
+# Lines (§4 of that spec — NOT wired here; that call site doesn't exist yet
+# anywhere in this codebase, per the spec's own note that dialogue-xml.js/
+# dispatcher.js have no LLM dispatch logic at all today. This function is
+# built so that work has something real to call when it lands, not a
+# Chorus-only mechanism with a shared name.)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+
+# Day 78 — real file format confirmed directly by the author (cultivars/*.xml,
+# e.g. cultivar_Jack.xml, cultivar_Salida.xml, cultivar_The_Steward.xml), not
+# guessed. Earlier draft of this module assumed a "Disposition" field — that
+# was wrong; no such field exists anywhere in the real schema or Character
+# Creator UI. Real shape, confirmed:
+#
+#   <CultivarDefinition name="Cindy" version="1.0" color="#aab0be"
+#       xmlns="http://mccf.artistinprocess.com/cultivar/v3">
+#     <Weights E="0.33" B="0.24" P="0.25" S="0.19"/>
+#     <Regulation value="0.7"/>
+#     <ShadowContext lambda="0.7" note="..."/>
+#     <Description>...</Description>
+#     <SignaturePhrases><Phrase>...</Phrase>...</SignaturePhrases>
+#     <Voice name="..." lang="..." rate="1.0" pitch="1.0"/>
+#     <Alias>...</Alias>                      <!-- optional -->
+#     <FailureMode>...</FailureMode>          <!-- optional — absent in Cindy's own file -->
+#     <HAnimFigure src="..." loa="4"/>
+#   </CultivarDefinition>
+#
+# Filenames are NOT perfectly systematic (cultivar_Jack.xml, cultivar_Salida.xml
+# — proper names — vs cultivar_the_advocate.xml, cultivar_The_Steward.xml —
+# role names, inconsistent casing) — confirmed directly from the author's own
+# directory listing. So this doesn't trust a filename convention alone: it
+# tries the fast direct-filename path first, then falls back to scanning the
+# directory and matching by the file's own `name` attribute, case-insensitively.
+CULTIVARS_DIR = "cultivars"  # relative to the Flask app's working directory —
+                              # adjust here if mccf_api.py runs from elsewhere.
+
+
+def _strip_xml_namespace(xml_str: str) -> str:
+    """
+    Same namespace-stripping pattern already proven elsewhere in this exact
+    file (build_transcript, load_config_from_scene_xml) — not reinvented,
+    reused, since Cultivar files carry a default xmlns that would otherwise
+    require namespace-qualified tags on every ET.find()/get() call below.
+    """
+    import re
+    clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_str)
+    clean = re.sub(r'<(\w+):(\w+)',  r'<\2',  clean)
+    clean = re.sub(r'</(\w+):(\w+)', r'</\2', clean)
+    return clean
+
+
+def _parse_cultivar_xml(xml_str: str) -> Optional[dict]:
+    """Parse one cultivars/*.xml file's text into the dict shape
+    character_voice_prompt() expects. Returns None on any parse failure
+    rather than raising — a malformed Cultivar file should degrade this one
+    lookup, not take down whatever called cultivar_loader()."""
+    try:
+        root = ET.fromstring(_strip_xml_namespace(xml_str))
+    except ET.ParseError:
+        return None
+    if root.tag != "CultivarDefinition":
+        return None
+
+    desc_el = root.find("Description")
+    fm_el = root.find("FailureMode")
+    phrases = [
+        (p.text or "").strip()
+        for p in root.findall("./SignaturePhrases/Phrase")
+        if (p.text or "").strip()
+    ]
+
+    return {
+        "name": root.get("name", ""),
+        "Description": (desc_el.text or "").strip() if desc_el is not None else "",
+        "FailureMode": (fm_el.text or "").strip() if fm_el is not None else "",
+        "CharacteristicPhrases": phrases,
+        # Weights/Regulation kept as raw values, not folded into the prompt
+        # text by _default_cultivar_loader's caller directly — available on
+        # the dict for anything that wants them (e.g. a future numeric
+        # cross-check against scene_context's live E/B/P/S), but
+        # character_voice_prompt() only reads the four keys above today.
+    }
+
+
+def _default_cultivar_loader(actor_id: str) -> Optional[dict]:
+    import os as _os
+    fast_path = _os.path.join(CULTIVARS_DIR, f"cultivar_{actor_id}.xml")
+    if _os.path.isfile(fast_path):
+        try:
+            with open(fast_path, "r", encoding="utf-8") as f:
+                record = _parse_cultivar_xml(f.read())
+            if record is not None:
+                return record
+        except OSError as e:
+            print(f"  Chorus: cultivar file read failed for {fast_path!r}: {e}")
+
+    # Fast path missed (filenames aren't systematic — confirmed directly by
+    # the author) — scan the directory and match by the file's own `name`
+    # attribute instead of trusting the filename.
+    try:
+        entries = _os.listdir(CULTIVARS_DIR)
+    except OSError as e:
+        print(f"  Chorus: cannot list {CULTIVARS_DIR!r}: {e}")
+        return None
+
+    for fname in entries:
+        if not (fname.startswith("cultivar_") and fname.endswith(".xml")):
+            continue
+        fpath = _os.path.join(CULTIVARS_DIR, fname)
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                record = _parse_cultivar_xml(f.read())
+        except OSError:
+            continue
+        if record is not None and record.get("name", "").lower() == actor_id.lower():
+            return record
+
+    return None
+
+
+# Wired to the real, confirmed implementation by default — override this
+# (e.g. from mccf_api.py at startup) only if CULTIVARS_DIR needs to differ
+# from the Flask process's working directory, or a non-file-based Cultivar
+# store is ever introduced.
+cultivar_loader = _default_cultivar_loader  # type: Optional[Callable[[str], Optional[dict]]]
+
+
+def character_voice_prompt(actor_id: str, scene_context: dict) -> str:
+    """
+    Build a system prompt for "the LLM speaks as actor_id," from that
+    actor's real Cultivar record plus scene_context (the live E/B/P/S field
+    snapshot at fire time — same shape/keys as the `cv` dict already
+    threaded through this module's _build_user_prompt/_dispatch_llm).
+
+    Deliberately does NOT include Chorus-specific formatting instructions
+    (token limits, "speak to the audience only") — those belong to
+    whichever call site invokes this (Chorus's own _build_system_prompt
+    appends them after calling this; a future regular-dialogue call site
+    would append its own, different ones instead). This function's only
+    job is the character's voice itself, shared identically by both.
+
+    Never raises on a missing Cultivar — logs loudly and falls back to a
+    generic, clearly-labeled placeholder persona instead, so a firing
+    degrades visibly rather than crashing or silently guessing.
+    """
+    cv_record = None
+    if cultivar_loader is not None:
+        try:
+            cv_record = cultivar_loader(actor_id)
+        except Exception as e:
+            print(f"  Chorus: cultivar_loader raised for actor={actor_id!r}: {e}")
+            cv_record = None
+
+    if not cv_record:
+        print(
+            f"  Chorus: no Cultivar record available for actor={actor_id!r} "
+            f"({'cultivar_loader not wired' if cultivar_loader is None else 'loader returned nothing'}) "
+            "— falling back to a generic persona, not the character's real voice. "
+            "Wire mccf_chorus.cultivar_loader to fix this for real."
+        )
+        persona_lines = [f"You are {actor_id}.", "(No Cultivar record available — speak generically.)"]
+    else:
+        persona_lines = [f"You are {actor_id}."]
+        description = cv_record.get("Description", "")
+        failure_mode = cv_record.get("FailureMode", "")
+        phrases = cv_record.get("CharacteristicPhrases", []) or []
+        if description:
+            persona_lines.append(description)
+        if failure_mode:
+            persona_lines.append(f"Under strain, your failure mode is: {failure_mode}")
+        if phrases:
+            sample = "; ".join(phrases[:3])
+            persona_lines.append(
+                f"Characteristic phrases (tone reference — do not repeat verbatim every time): {sample}"
+            )
+
+    e = scene_context.get("E", 0.5)
+    b = scene_context.get("B", 0.5)
+    p = scene_context.get("P", 0.5)
+    s = scene_context.get("S", 0.5)
+    persona_lines.append(f"Current emotional field: E={e:.3f} B={b:.3f} P={p:.3f} S={s:.3f}")
+    persona_lines.append("Speak as this character, in character.")
+    return "\n".join(persona_lines)
+
+
 def build_transcript(arc_xml_str: str) -> str:
     """
     Walk Waypoints in stepno order, emit dialog elements in document order.
@@ -250,8 +455,17 @@ def _call_stub(config: ChorusConfig, transcript: str, cv: dict) -> str:
     return STUB_RESPONSES[idx]
 
 
-def _build_system_prompt(config: ChorusConfig) -> str:
-    if config.persona:
+def _build_system_prompt(config: ChorusConfig, cv: dict) -> str:
+    # Day 78 (MCCF_Dialogue_Chorus_LLM_Voice_Spec_v0.1.md §3): once a
+    # voice_actor is assigned, the Cultivar-driven prompt is authoritative —
+    # config.persona/config.tone stop being used at all, per spec ("Cultivar
+    # wins whenever voice_actor is set" — the spec flags overridability as
+    # an open question, not blocking, default answer no). Only the mute/
+    # uncredited-observer case (no voice_actor) still uses persona/tone,
+    # exactly as before this change.
+    if config.voice_actor:
+        persona_text = character_voice_prompt(config.voice_actor, cv)
+    elif config.persona:
         persona_text = config.persona
     else:
         persona_text = _TONE_PROMPTS.get(config.tone,
@@ -284,7 +498,7 @@ def _build_user_prompt(config: ChorusConfig, transcript: str, cv: dict) -> str:
 def _call_ollama(config: ChorusConfig, transcript: str, cv: dict) -> str:
     import urllib.request, json
     _, model = config.llm.split(":", 1)
-    system   = _build_system_prompt(config)
+    system   = _build_system_prompt(config, cv)
     user     = _build_user_prompt(config, transcript, cv)
     payload  = json.dumps({
         "model":  model,
@@ -307,7 +521,7 @@ def _call_openai(config: ChorusConfig, transcript: str, cv: dict) -> str:
     import urllib.request, json
     _, model  = config.llm.split(":", 1)
     api_key   = os.environ.get("OPENAI_API_KEY", "")
-    system    = _build_system_prompt(config)
+    system    = _build_system_prompt(config, cv)
     user      = _build_user_prompt(config, transcript, cv)
     payload   = json.dumps({
         "model": model,

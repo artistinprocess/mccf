@@ -2501,27 +2501,62 @@ async function saveCharacter() {
     voice_pitch:  parseFloat(data.voicePitch),
     // H-Anim — stub, populated when H-Anim integration complete
     hanim_src:    data.hanimSrc,
-    hanim_loa:    data.hanimLoa || 4
+    hanim_loa:    data.hanimLoa || 4,
+    // Day 83: real bug fix, confirmed by direct test (H-Anim Editor exports
+    // the cultivar with only Default even though real, working clips exist
+    // and fire from this editor's own playback buttons). behavior_clips was
+    // never in this payload at all before now — not even on the "NOTE FOR
+    // API EXTENSION" TODO comment above, a genuinely untracked gap.
+    //
+    // Serializes _hePlaybackClips, NOT _heClips — these are two different
+    // lists (see _hePlaybackClips's own comment a few hundred lines down:
+    // "pre-existing animation clips baked into the X3D file. Distinct from
+    // authoring clips (_heClips) which are new keyframe sequences.").
+    // _hePlaybackClips comes straight from the server's own parse of the
+    // loaded H-Anim file (GET /hanim/joints' d.clips) and carries the REAL
+    // timerDEF values — exactly what this editor's own buttons fire.
+    // _heClips is a mostly-empty pose-authoring scratchpad that self-seeds
+    // with one hardcoded "Default" entry whenever empty, independent of how
+    // many real clips the loaded file actually has — wiring THAT list in
+    // instead would still only ever save "Default" in the common case,
+    // which is exactly the second half of the double-whammy reported.
+    behavior_clips: _hePlaybackClips.map(function(c) {
+      return {
+        name:          c.name,
+        timerDEF:      c.timerDEF,
+        loop:          c.loop !== false,
+        cycleInterval: c.cycleInterval || 6.0,
+        // Not discoverable from the X3D file itself — real priority
+        // authoring (EBPS-conditional selection order, cv_conditions) is a
+        // separate, not-yet-built concern. Left at 0 rather than fabricated.
+        priority:      0
+      };
+    })
   };
 
   /*
-   * NOTE FOR API EXTENSION:
-   * The /cultivars/xml POST endpoint in mccf_api.py currently writes:
-   *   disposition, description, weights, regulation, color, phrases,
-   *   failure_mode, zones, waypoint_questions
+   * API STATUS — verified directly against mccf_cultivar_lambda.py (Day 83),
+   * not assumed. This comment previously said Voice/HAnimFigure still needed
+   * server-side extension and left behavior_clips off the list entirely —
+   * both were stale. Confirmed instead:
    *
-   * It needs to be extended to also write:
-   *   <Voice name="..." lang="..." rate="..." pitch="..."/>
-   *   <HAnimFigure src="..." loa="2"/>   (when H-Anim is ready)
+   * POST /cultivars/xml (JSON path, post_cultivar_xml()) already accepts
+   * every field this payload sends, including behavior_clips and
+   * behavior_default, directly into the CultivarDefinition constructor.
+   * CultivarDefinition.to_xml() → _serialize_behavior_clips() writes them
+   * out as real <Behaviors><Clip .../></Behaviors> elements.
    *
-   * And /cultivars/xml GET needs to parse and return:
-   *   voice_name, voice_lang, voice_rate, voice_pitch, hanim_src
+   * GET /cultivars/xml (get_cultivars_xml()) returns behavior_clips straight
+   * from the parsed definition, same shape this file's loadForm() already
+   * reads back into _heClips.
    *
-   * The scene composer reads voice from the cultivar at arc build time
-   * and writes it to <EmotionalArc voice="..."> in the arc XML.
-   * mccf_x3d_loader.html _buildSceneVoiceMap() reads it from there.
-   * Once the API is extended, _buildSceneVoiceMap can read directly
-   * from /cultivars/xml instead of the arc XML.
+   * So the round trip — save here, re-open, real clips present — is
+   * confirmed complete on the server side. If a saved character still only
+   * shows Default after this, the bug is upstream of the server: check
+   * whether _hePlaybackClips actually held real clips at the moment Save
+   * was clicked (i.e. whether an H-Anim file was loaded and GET
+   * /hanim/joints returned more than the empty/unwired case — see
+   * _heLoadJoints's unwired/mixamoRaw handling above).
    */
 
   try {

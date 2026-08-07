@@ -31,6 +31,10 @@
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
   <HAnimFigure src="SalidaAnimations_repaired_test.x3d" loa="4"/>
 
+  <!-- Attentional filter: per-channel receptivity to coupler influence -->
+  <!-- 1.0 = fully receptive; 0.0 = fully resistant -->
+  <Receptivity E="0.71" B="0.61" P="0.71" S="0.83"/>
+
   <!-- HAnim behavior clip selection table -->
   <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
   <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->

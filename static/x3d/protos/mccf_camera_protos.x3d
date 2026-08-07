@@ -43,6 +43,21 @@
     <field accessType="inputOutput" type="SFBool"     name="enabled"           value="false"/>
     <field accessType="inputOutput" type="SFTime"     name="startTime"         value="0"/>
     <field accessType="inputOutput" type="SFString"   name="description"      value="Orbit"/>
+    <!-- Day 83: cinematic lens/transition controls, confirmed against X_ITE's
+         own Viewpoint field docs (create3000.github.io/x_ite, Navigation
+         component) — real Viewpoint fields this proto never wired before now,
+         not custom additions. Defaults match Viewpoint's own real defaults
+         (fieldOfView pi/4, near/farDistance -1 meaning "no effect", jump
+         TRUE) so an un-overridden instance behaves exactly as it did before
+         this addition. centerOfRotation/viewAll/retainUserOffsets
+         deliberately NOT added — X_ITE's docs describe those as EXAMINE/
+         LOOKAT interactive-navigation fields; every camera in this library
+         is a bound/jumped cinematic viewpoint, never user-orbited, so those
+         three fields would have no meaningful effect here. -->
+    <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"      value="0.785398"/>
+    <field accessType="inputOutput" type="SFFloat"    name="nearDistance"     value="-1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="farDistance"      value="-1"/>
+    <field accessType="inputOutput" type="SFBool"     name="jump"             value="true"/>
     <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
   </ProtoInterface>
   <ProtoBody>
@@ -52,10 +67,15 @@
         <connect nodeField="translation" protoField="initialTranslation"/>
         <connect nodeField="rotation"    protoField="initialRotation"/>
       </IS>
-      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true" description="Orbit">
+      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true"
+                 fieldOfView="0.785398" nearDistance="-1" farDistance="-1" description="Orbit">
         <IS>
-          <connect nodeField="description" protoField="description"/>
-          <connect nodeField="set_bind"    protoField="set_bind"/>
+          <connect nodeField="description"  protoField="description"/>
+          <connect nodeField="set_bind"     protoField="set_bind"/>
+          <connect nodeField="fieldOfView"  protoField="fieldOfView"/>
+          <connect nodeField="nearDistance" protoField="nearDistance"/>
+          <connect nodeField="farDistance"  protoField="farDistance"/>
+          <connect nodeField="jump"         protoField="jump"/>
         </IS>
       </Viewpoint>
     </Transform>
@@ -123,6 +143,13 @@
     <field accessType="inputOutput" type="SFRotation" name="pitch"       value="1 0 0 0"/>
     <field accessType="inputOutput" type="SFRotation" name="roll"        value="0 0 1 0"/>
     <field accessType="inputOutput" type="SFString"   name="description" value="Free Camera"/>
+    <!-- Day 83: same cinematic field set/reasoning as AgentOrbitCamera above
+         — see that proto's comment for the X_ITE-docs confirmation and why
+         centerOfRotation/viewAll/retainUserOffsets are deliberately excluded. -->
+    <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"  value="0.785398"/>
+    <field accessType="inputOutput" type="SFFloat"    name="nearDistance" value="-1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="farDistance"  value="-1"/>
+    <field accessType="inputOutput" type="SFBool"     name="jump"         value="true"/>
     <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
   </ProtoInterface>
   <ProtoBody>
@@ -139,10 +166,15 @@
           <IS>
             <connect nodeField="rotation" protoField="roll"/>
           </IS>
-          <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0" jump="true" description="Free Camera">
+          <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0" jump="true"
+                     fieldOfView="0.785398" nearDistance="-1" farDistance="-1" description="Free Camera">
             <IS>
-              <connect nodeField="description" protoField="description"/>
-              <connect nodeField="set_bind"    protoField="set_bind"/>
+              <connect nodeField="description"  protoField="description"/>
+              <connect nodeField="set_bind"     protoField="set_bind"/>
+              <connect nodeField="fieldOfView"  protoField="fieldOfView"/>
+              <connect nodeField="nearDistance" protoField="nearDistance"/>
+              <connect nodeField="farDistance"  protoField="farDistance"/>
+              <connect nodeField="jump"         protoField="jump"/>
             </IS>
           </Viewpoint>
         </Transform>
@@ -173,6 +205,13 @@
     <field accessType="inputOutput" type="SFBool"     name="enabled"           value="false"/>
     <field accessType="inputOutput" type="SFTime"     name="startTime"         value="0"/>
     <field accessType="inputOutput" type="SFString"   name="description"      value="Track"/>
+    <!-- Day 83: same cinematic field set/reasoning as AgentOrbitCamera above
+         — see that proto's comment for the X_ITE-docs confirmation and why
+         centerOfRotation/viewAll/retainUserOffsets are deliberately excluded. -->
+    <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"      value="0.785398"/>
+    <field accessType="inputOutput" type="SFFloat"    name="nearDistance"     value="-1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="farDistance"      value="-1"/>
+    <field accessType="inputOutput" type="SFBool"     name="jump"             value="true"/>
     <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
   </ProtoInterface>
   <ProtoBody>
@@ -182,10 +221,15 @@
         <connect nodeField="translation" protoField="initialTranslation"/>
         <connect nodeField="rotation"    protoField="initialRotation"/>
       </IS>
-      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true" description="Track">
+      <Viewpoint DEF="VP" position="0 0 0" orientation="0 1 0 0.0001" jump="true"
+                 fieldOfView="0.785398" nearDistance="-1" farDistance="-1" description="Track">
         <IS>
-          <connect nodeField="description" protoField="description"/>
-          <connect nodeField="set_bind"    protoField="set_bind"/>
+          <connect nodeField="description"  protoField="description"/>
+          <connect nodeField="set_bind"     protoField="set_bind"/>
+          <connect nodeField="fieldOfView"  protoField="fieldOfView"/>
+          <connect nodeField="nearDistance" protoField="nearDistance"/>
+          <connect nodeField="farDistance"  protoField="farDistance"/>
+          <connect nodeField="jump"         protoField="jump"/>
         </IS>
       </Viewpoint>
     </Transform>

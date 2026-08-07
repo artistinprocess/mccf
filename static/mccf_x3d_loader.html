@@ -1168,7 +1168,15 @@ function applyArcCV(data) {
         if (avatarNode) {
           const x = parseFloat(data.pos_x) || 0;
           const z = parseFloat(data.pos_z) || 0;
-          avatarNode.translation = new X3D.SFVec3f(x, 0, z);
+          // Day 78, V5 Tasklist Phase 2 task 6: was hardcoded to 0 regardless
+          // of a waypoint's actual elevation — composer's own _sceneArcAdvance
+          // has real pos[1] available and now sends it (data.pos_y); this just
+          // has to stop discarding it. Real correctness bug, not part of the
+          // separate smooth-vs-snap decision (this preview stays a rough
+          // snap-to-point on purpose, per the same Tasklist item) — only the Y
+          // component was wrong before, not the interpolation approach.
+          const y = parseFloat(data.pos_y) || 0;
+          avatarNode.translation = new X3D.SFVec3f(x, y, z);
         }
       } else {
         console.log('applyArcCV: position write suppressed — X3D driving', avatarNodeName);
@@ -2199,6 +2207,14 @@ function _fireCameraEventCue(cue) {
   if (shot === 'agent_eye' || shot === 'agent_side') {
     var suffix = (shot === 'agent_eye') ? 'Eye' : 'Side';
     var subjectSafe = (cue.subject || '').replace(/[^A-Za-z0-9_]/g, '_');
+    // Day 83: fly is NOT yet supported for avatar-attached viewpoints — the
+    // target pose is local to the avatar's own (possibly moving) Transform,
+    // and _flyCameraTo needs a flat world-space destination. Logged, not
+    // silently dropped — falls back to the existing jump toggle (cut-only).
+    if (cue.transition === 'fly') {
+      console.warn('[EventCues] camera: fly requested for ' + shot + ' «' + (cue.subject||'?') +
+        '» — not yet supported for avatar-attached viewpoints, falling back to cut');
+    }
     _bindNamedViewpoint('VP_' + subjectSafe + '_' + suffix, cue.transition !== 'fly');
     return;
   }
@@ -2237,14 +2253,64 @@ function _fireCameraEventCue(cue) {
   // doesn't exist from the outside.
   if (shot === 'free_camera' && cue.camera) {
     var freeCamSafe = cue.camera.replace(/[^A-Za-z0-9_]/g, '_');
+    // Day 83: fly is NOT yet supported for placed FreeCamera destinations —
+    // its world orientation is composed from three nested rotations (yaw/
+    // pitch/roll, see mccf_camera_protos.x3d's FreeCamera ProtoBody), and
+    // combining those into one axis-angle by hand is exactly the custom
+    // rotation math this project's house style avoids. Logged, not silently
+    // dropped — falls back to the existing instant bind.
+    if (cue.transition === 'fly') {
+      console.warn('[EventCues] camera: fly requested for free_camera «' + cue.camera +
+        '» — not yet supported for placed FreeCamera destinations, falling back to cut');
+    }
     _bindFreeCamera(freeCamSafe);
     return;
   }
 
   // ── BAKED PATH: explicitly authored named viewpoint ───────
-  // Author placed a named VP in the scene and referenced it by name in the cue.
-  // This is the only other case where _bindNamedViewpoint is called.
+  // Author placed a named VP in the scene and referenced it by name in the cue
+  // (VP_Overview, VP_Origin, a zone VP, or any other author-DEF'd top-level
+  // Viewpoint). This is the only other case where _bindNamedViewpoint is called.
   if (cue.viewpoint) {
+    // Day 83: fly support. Only safe here because these are plain top-level
+    // <Viewpoint> nodes (see mccf_scene_composer.html's own export of
+    // VP_Overview/VP_Origin/zone VPs) — position/orientation are already a
+    // flat world-space value with no proto-wrapping or parenting to unwind,
+    // unlike FreeCamera/agent-attached targets (see those two branches
+    // above). Read directly via SAI field access, same pattern already used
+    // throughout this file for reading authored node values.
+    if (cue.transition === 'fly') {
+      var _flyAttempts = 0;
+      (function tryFlyToNamedVP() {
+        _flyAttempts++;
+        try {
+          var scene = canvas.browser.currentScene;
+          var targetVp = null;
+          try { targetVp = scene.getImportedNode(cue.viewpoint); } catch(ie) {}
+          if (!targetVp) { try { targetVp = scene.getNamedNode(cue.viewpoint); } catch(ne) {} }
+          if (targetVp) {
+            var toPosStr = targetVp.getField('position').toString();
+            var toRotStr = targetVp.getField('orientation').toString();
+            var toPos = String(toPosStr).trim().split(/\s+/).map(Number);
+            var toRot = String(toRotStr).trim().split(/\s+/).map(Number);
+            if (toPos.length === 3 && !toPos.some(isNaN) && toRot.length === 4 && !toRot.some(isNaN)) {
+              console.log('[EventCues] camera: fly to baked VP «' + cue.viewpoint + '»');
+              _flyCameraTo(toPos, toRot, cue.flyDuration || 2, cue.viewpoint);
+              return;
+            }
+            console.warn('[EventCues] camera: fly «' + cue.viewpoint + '» — could not parse position/orientation, falling back to cut');
+          } else if (_flyAttempts < 10) {
+            setTimeout(tryFlyToNamedVP, 200);
+            return;
+          } else {
+            console.warn('[EventCues] camera: fly target «' + cue.viewpoint + '» not found after retries, falling back to cut');
+          }
+        } catch(e) { console.warn('[EventCues] camera: fly «' + cue.viewpoint + '» exception:', e.message); }
+        // Any failure above falls through to the ordinary cut bind, rather than doing nothing.
+        _bindNamedViewpoint(cue.viewpoint, cue.jump !== false);
+      })();
+      return;
+    }
     console.log('[EventCues] camera: baked VP «' + cue.viewpoint + '»');
     _bindNamedViewpoint(cue.viewpoint, cue.jump !== false);
     return;
@@ -2472,6 +2538,155 @@ function _bindFreeCamera(nameSafe) {
   trySet();
 }
 
+// Day 83: generic point-to-point camera "fly" transition, using a dedicated
+// CAM_FlyTimer/CAM_FlyEase/CAM_FlyPosInterp/CAM_FlyOriInterp vessel (see
+// mccf_scene_composer.html's exportX3D()/its alternate export path for the
+// static nodes/ROUTEs — kept deliberately separate from the move-shot vessel
+// CAM_Timer/CAM_PosInterp/CAM_OriInterp so the two TimeSensors never fan into
+// CAM_Free_Transform's set_translation/set_rotation simultaneously). Real bug
+// fix, not a new feature bolted on: the previous 'fly' transition
+// (_bindNamedViewpoint toggling Viewpoint.jump=false via SAI before set_bind)
+// did not animate anything at all. Per the real X3D spec (ISO/IEC
+// 19775-1:2023 §23.3.1), jump=FALSE means "the view remains unchanged" on
+// bind — not "smoothly transition". This function replaces that with a
+// genuine 2-keyframe PositionInterpolator/OrientationInterpolator animation,
+// eased through CAM_FlyEase (a fixed cosine ease-in-out curve, 0.5-0.5*cos(pi*t),
+// authored once as static XML and never touched by the Loader at runtime).
+// X3D's own OrientationInterpolator does correct SLERP between the two real
+// keyframes for whatever fraction it's fed — no hand-rolled rotation math,
+// regardless of the eased (non-linear) fraction feeding it. The Loader
+// computes and writes the two keyframes once per fly, then does nothing
+// further — the browser's own ROUTE chain drives every subsequent frame
+// natively. Same "compute keyframes in JS, hand off to native interpolation"
+// pattern already established by AgentOrbitCamera/AgentTrackCamera and every
+// existing move shot — not a new architecture.
+//
+// FROM pose is read live via MCCF_PathRecorderProx.position_changed/
+// orientation_changed — the same confirmed-working mechanism the Events
+// Editor's own path recorder already uses (Day 78 finding: Viewpoint.position/
+// orientation hold authored values only and do NOT reflect a live bound
+// camera's actual world pose for any proto-wrapped or parented camera type —
+// FreeCamera, AgentOrbitCamera/Track, agent_eye/side all fail that read).
+// Reading the ProximitySensor instead works uniformly regardless of what's
+// currently bound, with no proto-internal digging needed.
+//
+// Scope, deliberately: the TO pose must arrive pre-resolved into flat
+// world-space position + ONE combined SFRotation. Callers that already have
+// this cleanly — explicit named top-level Viewpoints (direct field read);
+// static/move shot destinations (already computed via _lookAtOrientation) —
+// are wired to this below. Callers that would need to combine multiple
+// rotations to get there (a placed FreeCamera's yaw/pitch/roll; agent_eye/
+// agent_side's avatar-local pose) are NOT wired to this yet — hand-combining
+// nested rotations into one axis-angle is exactly the custom rotation math
+// this project's house style avoids (see FreeCamera's own comment in
+// mccf_camera_protos.x3d). Deferred, not silently dropped — see each
+// unsupported caller's own diagnostic in _fireCameraEventCue below.
+function _flyCameraTo(toPos, toRot, duration, label) {
+  var attempts = 0;
+  function trySet() {
+    attempts++;
+    try {
+      var scene = canvas.browser.currentScene;
+      var camXform   = scene.getNamedNode('CAM_Free_Transform');
+      var vpFree     = scene.getNamedNode('VP_Free');
+      var camTimer   = scene.getNamedNode('CAM_FlyTimer');
+      var easeInterp = scene.getNamedNode('CAM_FlyEase');
+      var posInterp  = scene.getNamedNode('CAM_FlyPosInterp');
+      var oriInterp  = scene.getNamedNode('CAM_FlyOriInterp');
+      var proxSensor = scene.getNamedNode('MCCF_PathRecorderProx');
+
+      if (camXform && vpFree && camTimer && easeInterp && posInterp && oriInterp) {
+        // FROM pose — live read via the ProximitySensor, same mechanism and
+        // same field-parse convention as the Events Editor's path recorder
+        // (_pathRecTick, mccf_events_editor_prototype_2.html). Falls back to
+        // an instant snap+bind (old cut behavior) if the sensor is missing or
+        // the camera is currently outside its sensed region — interpolating
+        // from a bad/stale FROM pose would be worse than not interpolating.
+        var fromPos = null, fromRot = null;
+        if (proxSensor) {
+          try {
+            var activeStr = proxSensor.getField('isActive').toString();
+            if (activeStr === 'TRUE' || activeStr === 'true') {
+              var pParts = String(proxSensor.getField('position_changed').toString()).trim().split(/\s+/).map(Number);
+              var rParts = String(proxSensor.getField('orientation_changed').toString()).trim().split(/\s+/).map(Number);
+              if (pParts.length === 3 && !pParts.some(isNaN)) fromPos = pParts;
+              if (rParts.length === 4 && !rParts.some(isNaN)) fromRot = rParts;
+            }
+          } catch (pe) { console.warn('[EventCues] camera: fly — ProximitySensor read failed:', pe.message); }
+        }
+        if (!fromPos || !fromRot) {
+          console.warn('[EventCues] camera: fly «' + (label||'?') + '» — could not read a live FROM pose ' +
+            '(sensor missing or camera outside sensed region) — falling back to instant cut');
+          camXform.translation = new X3D.SFVec3f(toPos[0], toPos[1], toPos[2]);
+          camXform.rotation    = new X3D.SFRotation(toRot[0], toRot[1], toRot[2], toRot[3]);
+          requestAnimationFrame(function() { vpFree.set_bind = true; });
+          return;
+        }
+
+        // Two-keyframe animation: 0 = current live pose, 1 = destination.
+        // Same indexed MF array assignment pattern as _executeMoveShot (confirmed
+        // against X_ITE's own README — bulk MFVec3f/MFRotation constructors don't
+        // exist in X_ITE's SAI).
+        posInterp.key.length = 0; posInterp.keyValue.length = 0;
+        oriInterp.key.length = 0; oriInterp.keyValue.length = 0;
+        posInterp.key[0] = 0; posInterp.keyValue[0] = new X3D.SFVec3f(fromPos[0], fromPos[1], fromPos[2]);
+        posInterp.key[1] = 1; posInterp.keyValue[1] = new X3D.SFVec3f(toPos[0], toPos[1], toPos[2]);
+        oriInterp.key[0] = 0; oriInterp.keyValue[0] = new X3D.SFRotation(fromRot[0], fromRot[1], fromRot[2], fromRot[3]);
+        oriInterp.key[1] = 1; oriInterp.keyValue[1] = new X3D.SFRotation(toRot[0], toRot[1], toRot[2], toRot[3]);
+
+        // Belt-and-suspenders — same as _executeMoveShot: rely on the static XML
+        // ROUTEs from the Composer export, but confirm the chain at runtime too.
+        // Topology here has one extra hop vs the move-shot vessel: CAM_FlyTimer
+        // feeds CAM_FlyEase (the ease curve), and CAM_FlyEase's eased output —
+        // not CAM_FlyTimer's raw linear fraction — feeds the two interpolators.
+        try {
+          canvas.browser.addRoute(camTimer,  'fraction_changed', easeInterp, 'set_fraction');
+          canvas.browser.addRoute(easeInterp,'value_changed',    posInterp,  'set_fraction');
+          canvas.browser.addRoute(easeInterp,'value_changed',    oriInterp,  'set_fraction');
+          canvas.browser.addRoute(posInterp, 'value_changed',    camXform,   'set_translation');
+          canvas.browser.addRoute(oriInterp, 'value_changed',    camXform,   'set_rotation');
+        } catch(e) { console.warn('[EventCues] camera: fly addRoute via SAI failed:', e.message); }
+
+        camTimer.cycleInterval = duration;
+        camTimer.loop = false;
+
+        // Snap to the FROM pose first — matches the live pose exactly, so this
+        // is visually a no-op — then bind VP_Free, same sequencing as
+        // _executeMoveShot's "snap to start, then bind, then start timer".
+        camXform.translation = new X3D.SFVec3f(fromPos[0], fromPos[1], fromPos[2]);
+        camXform.rotation    = new X3D.SFRotation(fromRot[0], fromRot[1], fromRot[2], fromRot[3]);
+
+        requestAnimationFrame(function() {
+          vpFree.set_bind = true;
+          requestAnimationFrame(function() {
+            // canvas.browser.currentTime returns 0 in some X_ITE builds — same
+            // fallback every other startTime write in this file already uses.
+            var _flyStartTime = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+              ? canvas.browser.currentTime : (performance.now() / 1000);
+            camTimer.startTime = _flyStartTime;
+            camTimer.enabled   = true;
+            console.log('[EventCues] camera: fly «' + (label||'?') + '» started, dur=' + duration +
+              ' from=[' + fromPos.map(function(v){return v.toFixed(2);}).join(',') + ']' +
+              ' to=[' + toPos.map(function(v){return v.toFixed(2);}).join(',') + ']');
+          });
+        });
+        return;
+      }
+      var missing = [];
+      if (!camXform)   missing.push('CAM_Free_Transform');
+      if (!vpFree)     missing.push('VP_Free');
+      if (!camTimer)   missing.push('CAM_FlyTimer');
+      if (!easeInterp) missing.push('CAM_FlyEase');
+      if (!posInterp)  missing.push('CAM_FlyPosInterp');
+      if (!oriInterp)  missing.push('CAM_FlyOriInterp');
+      console.warn('[EventCues] camera: fly — missing vessel nodes:', missing.join(', '), '— re-export scene from Composer');
+    } catch(e) { console.warn('[EventCues] camera: fly trySet exception:', e.message); }
+    if (attempts < 10) setTimeout(trySet, 200);
+    else console.warn('[EventCues] camera: fly — vessel nodes not found after retries');
+  }
+  trySet();
+}
+
 function _executeStaticCameraShot(cue) {
   var subjectPos = _resolveSubjectPos(cue.subject) || [0, 0, 0];
   var distance  = (cue.distance  !== null && cue.distance  !== undefined) ? cue.distance  : 8;
@@ -2481,6 +2696,16 @@ function _executeStaticCameraShot(cue) {
 
   var camPos = _computeCamPosition(subjectPos, distance, height, hAngle);
   var orient = _lookAtOrientation(camPos, subjectPos, vAngle);
+
+  // Day 83: real fly support. Destination is already a flat world position +
+  // single combined orientation (computed above via _lookAtOrientation) —
+  // exactly the shape _flyCameraTo needs, no extra work required for this
+  // shot type. cut (the default) keeps the original direct-write+bind path
+  // below, unchanged.
+  if (cue.transition === 'fly') {
+    _flyCameraTo(camPos, orient, cue.flyDuration || 2, cue.shot || cue.label);
+    return;
+  }
 
   var attempts = 0;
   function trySet() {

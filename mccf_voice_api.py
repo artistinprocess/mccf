@@ -11,6 +11,10 @@ Endpoints:
   POST /voice/configure - set active adapter, persona, params
   GET  /voice/state     - current voice agent state
   POST /voice/prosody   - receive audio features from Web Audio API
+  POST /voice/preview   - stateless dialogue-line tag/ttsText suggestion
+  GET  /voice/lexicon   - view the active /voice/preview supplemental
+                           vocabulary pack (Day 80 — see that section)
+  POST /voice/lexicon   - extend/trim the active pack
 """
 
 import json
@@ -456,6 +460,139 @@ def build_tts_text(text, tag):
     return f'[{tag}] {text}' if tag else text
 
 
+import os
+
+# ── Day 80: /voice/preview-only supplemental lexicon ("lexicon packs") ────
+# Two-speed fix agreed on Day 80. Speed 1 (this section): a scoped, SAFE
+# fix — narrative/dramatic dialogue vocabulary layered ONLY on top of the
+# preview path's own hit-counting below. This NEVER touches _POS_WORDS,
+# _NEG_WORDS, _UNCERTAINTY_WORDS, _S_WORDS, _E_WORDS, _P_WORDS, _B_WORDS,
+# _sentiment_hit_counts, _channel_hit_counts, _estimate_sentiment, or
+# _decompose_to_channels — all of those are shared with /arc/record's
+# live-field coherence computation and stay exactly as tuned. Confirmed
+# root cause of the "everything tags dismissive" bug: those core lists are
+# explicitly calibrated for constitutional-arc/Ollama language, which has
+# almost no overlap with ordinary narrative dialogue ("excited," "terrified,"
+# "beautiful" aren't in any of them) — not a coding bug, a vocabulary/genre
+# mismatch from pointing a therapeutic-register lexicon at dramatic dialogue.
+#
+# Speed 2 (this section too): the "expose the word dict" idea has been
+# discussed before but never built. Design landed on Day 80: NOT a single
+# global editable dict (word-emotion association varies by culture/genre,
+# and editing the core lists directly would silently destabilize
+# /arc/record's tuning) — instead, named, swappable, data-file-backed
+# packs, the same shape as the existing "cultivar" concept (a named preset
+# a project selects) rather than a shared mutable global. Explicitly OUT of
+# scope for now: any culture/region-specific pack — that needs real
+# research to build responsibly, not a guessed word list (Day 80
+# discussion). What ships now is one general-purpose narrative/dramatic
+# English pack (the concrete need: the Garden of the Goddess opening
+# scene), with the mechanism built to hold future packs, not the packs
+# themselves. Natural future hook, not built yet: seeding a per-cultivar
+# supplemental pack from the Character Creator's existing "favorite
+# phrases" field, once that's used to drive behavior.
+_LEXICON_PACK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lexicon_packs')
+_DEFAULT_PACK_PATH = os.path.join(_LEXICON_PACK_DIR, 'default_narrative.json')
+
+# Inline fallback — used only if default_narrative.json isn't present
+# alongside this file (e.g. a partial file copy). Kept in sync with the
+# shipped pack; the JSON file is the source of truth once present.
+_FALLBACK_PACK = {
+    "pack_id": "default_narrative",
+    "label": "Narrative / Dramatic Dialogue (default)",
+    "description": "General-purpose supplemental vocabulary for authored "
+                    "scene dialogue that the core constitutional-arc-tuned "
+                    "lexicon doesn't cover. English only, no cultural/"
+                    "regional framing.",
+    "pos": ["beautiful", "wonder", "wondrous", "magic", "magical", "glow",
+            "glowing", "bloom", "blooming", "alive", "excited", "thrilled",
+            "delighted", "enchanted", "serene", "radiant", "sunlight",
+            "bright", "brilliant"],
+    "neg": ["terrified", "afraid", "fearful", "dread", "dreadful",
+            "lurking", "ominous", "menacing", "haunted", "shadow",
+            "shadows", "watching", "empty", "silence", "silent",
+            "darkness", "unease", "uneasy"],
+}
+
+_active_pack = None  # lazily loaded, see _get_active_pack()
+
+
+def _load_pack_from_disk(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return {
+        "pack_id": data.get("pack_id", "unknown"),
+        "label": data.get("label", data.get("pack_id", "unknown")),
+        "description": data.get("description", ""),
+        "pos": set(w.lower() for w in data.get("pos", [])),
+        "neg": set(w.lower() for w in data.get("neg", [])),
+    }
+
+
+def _get_active_pack():
+    """Loaded once per process, not per-request — re-save via
+    /voice/lexicon POST also updates this in-memory copy so a change is
+    visible immediately without a restart."""
+    global _active_pack
+    if _active_pack is None:
+        try:
+            _active_pack = _load_pack_from_disk(_DEFAULT_PACK_PATH)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            _active_pack = dict(_FALLBACK_PACK)
+            _active_pack["pos"] = set(w.lower() for w in _FALLBACK_PACK["pos"])
+            _active_pack["neg"] = set(w.lower() for w in _FALLBACK_PACK["neg"])
+    return _active_pack
+
+
+def _save_active_pack():
+    """Persist the in-memory pack back to disk. Best-effort — if the
+    directory isn't writable (e.g. read-only deploy), the in-memory copy
+    still takes effect for the running process, it just won't survive a
+    restart; POST /voice/lexicon reports which happened."""
+    pack = _get_active_pack()
+    os.makedirs(_LEXICON_PACK_DIR, exist_ok=True)
+    payload = {
+        "pack_id": pack["pack_id"], "label": pack["label"],
+        "description": pack["description"],
+        "pos": sorted(pack["pos"]), "neg": sorted(pack["neg"]),
+    }
+    with open(_DEFAULT_PACK_PATH, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+    return payload
+
+
+def _sentiment_hit_counts_preview(text: str) -> dict:
+    """Preview-only: core _sentiment_hit_counts (untouched) plus the
+    active supplemental pack's pos/neg words, counted separately so the
+    caller can tell how much of the signal came from the curated
+    supplement (see the relaxed-threshold reasoning in
+    _tag_valence_from_hits below)."""
+    core = _sentiment_hit_counts(text)
+    words = set(re.findall(r'\b\w+\b', text.lower()))
+    pack = _get_active_pack()
+    supp_pos = len(words & pack["pos"])
+    supp_neg = len(words & pack["neg"])
+    return {
+        "pos": core["pos"] + supp_pos, "neg": core["neg"] + supp_neg,
+        "unc": core["unc"], "word_count": core["word_count"],
+        "supplement_hits": supp_pos + supp_neg,
+    }
+
+
+def _channel_hit_counts_preview(text: str) -> dict:
+    """Preview-only: core _channel_hit_counts (untouched) plus supplement
+    pos/neg hits folded in as general emotional-signal weight for the
+    arousal/engagement proxies — those proxies measure "how much charged
+    language is present," not per-channel attribution, so lexicon-pack
+    words don't need their own E/B/P/S split to be useful here."""
+    core = dict(_channel_hit_counts(text))
+    words = set(re.findall(r'\b\w+\b', text.lower()))
+    pack = _get_active_pack()
+    supplement_hits = len(words & pack["pos"]) + len(words & pack["neg"])
+    core["_supplement"] = supplement_hits
+    return core
+
+
 def _tag_valence_from_hits(hits: dict) -> float:
     """
     Preview/tag-suggestion valence — Day 73 calibration fix.
@@ -483,16 +620,25 @@ def _tag_valence_from_hits(hits: dict) -> float:
     signal, uncertainty still nudges the result, just far more lightly
     (0.15 weight vs. 0.5) so a genuinely mixed line isn't flattened to
     pure pos-vs-neg either.
+
+    Day 80: caller may now be _sentiment_hit_counts_preview's output,
+    which folds lexicon-pack hits into pos/neg and also reports
+    supplement_hits separately. The >=2 guard above was tuned against
+    long multi-sentence constitutional-arc text and confirmed too strict
+    for short single-clause dialogue lines, where one strong word
+    ("terrified") is often the entire signal. Rather than loosen the
+    guard globally (which would reopen the original "unclear"-style
+    single-word-noise failure for the CORE vocabulary), it's loosened
+    only when at least one hit came from the curated supplement pack —
+    those words were chosen to be unambiguous (no overlap with
+    _UNCERTAINTY_WORDS), so they don't carry the same noise risk the
+    original >=2 guard was protecting against.
     """
     pos, neg, unc = hits["pos"], hits["neg"], hits["unc"]
     real_signal = pos + neg
+    threshold = 1 if hits.get("supplement_hits", 0) > 0 else 2
 
-    # A single pos/neg hit is noise-prone for short authored lines — some
-    # words (e.g. "unclear") sit in both _NEG_WORDS and _UNCERTAINTY_WORDS,
-    # so one incidental match plus a run of ordinary hedging language could
-    # otherwise swing this to a strong negative on the strength of one word.
-    # Require at least 2 real signal hits before trusting pos/neg at all.
-    if real_signal < 2:
+    if real_signal < threshold:
         return 0.0
 
     total = pos + neg + unc * 0.15
@@ -517,16 +663,69 @@ def _preview_arousal_engagement(channel_hits: dict) -> tuple:
     engagement) are a deliberately generous ceiling for ordinary dialogue
     line lengths — see tests/test_voice_preview_calibration.py for the
     worked cases this was checked against.
+
+    Day 80: channel_hits may now carry a "_supplement" key (from
+    _channel_hit_counts_preview) — lexicon-pack hits, folded into both the
+    arousal total and the engagement count. Without this, a short line
+    whose only charged word is a supplement word (e.g. "terrified") stays
+    floored at the arousal baseline and gets misrouted into the `arousal <
+    0.35 -> whisper` branch even after tag_valence correctly detects it as
+    strongly negative — confirmed while testing the Day 80 fix.
     """
-    total_hits = sum(channel_hits.values())
+    supplement = channel_hits.get("_supplement", 0)
+    total_hits = sum(v for k, v in channel_hits.items() if k != "_supplement") + supplement
     intensity  = min(1.0, total_hits / 8.0)
     arousal_proxy = round(0.3 + 0.6 * intensity, 4)
 
-    engagement_hits     = channel_hits.get("S", 0) + channel_hits.get("E", 0)
+    engagement_hits     = channel_hits.get("S", 0) + channel_hits.get("E", 0) + supplement
     engagement_intensity = min(1.0, engagement_hits / 4.0)
     engagement_proxy = round(0.3 + 0.6 * engagement_intensity, 4)
 
     return arousal_proxy, engagement_proxy
+
+
+@voice_bp.route('/voice/lexicon', methods=['GET'])
+def get_lexicon():
+    """Inspect the active supplemental pack — /voice/preview only, never
+    the core constitutional-arc-tuned lists (those aren't exposed for
+    editing anywhere; see this section's module-level comment for why)."""
+    pack = _get_active_pack()
+    return jsonify({
+        "pack_id": pack["pack_id"], "label": pack["label"],
+        "description": pack["description"],
+        "pos": sorted(pack["pos"]), "neg": sorted(pack["neg"]),
+        "pos_count": len(pack["pos"]), "neg_count": len(pack["neg"]),
+    })
+
+
+@voice_bp.route('/voice/lexicon', methods=['POST'])
+def update_lexicon():
+    """
+    Body: { "add_pos": [...]?, "add_neg": [...]?, "remove_pos": [...]?,
+            "remove_neg": [...]? }
+    Extends (or trims) the active pack and persists it to
+    lexicon_packs/default_narrative.json. This is the ONLY lexicon a user
+    can edit through this API — the core word lists /arc/record depends
+    on are not reachable here, by design.
+    """
+    data = request.get_json() or {}
+    pack = _get_active_pack()
+    for w in data.get("add_pos", []):
+        pack["pos"].add(str(w).lower().strip())
+    for w in data.get("add_neg", []):
+        pack["neg"].add(str(w).lower().strip())
+    for w in data.get("remove_pos", []):
+        pack["pos"].discard(str(w).lower().strip())
+    for w in data.get("remove_neg", []):
+        pack["neg"].discard(str(w).lower().strip())
+    try:
+        persisted = _save_active_pack()
+        return jsonify({"status": "saved", "persisted": True,
+                         "pos_count": len(persisted["pos"]), "neg_count": len(persisted["neg"])})
+    except OSError as e:
+        return jsonify({"status": "updated in-memory only", "persisted": False,
+                         "error": str(e),
+                         "pos_count": len(pack["pos"]), "neg_count": len(pack["neg"])}), 200
 
 
 @voice_bp.route('/voice/preview', methods=['POST'])
@@ -564,10 +763,10 @@ def voice_preview():
         for ch in ['E', 'B', 'P', 'S']
     }
 
-    sentiment_hits = _sentiment_hit_counts(text)
+    sentiment_hits = _sentiment_hit_counts_preview(text)
     tag_valence = _tag_valence_from_hits(sentiment_hits)
 
-    channel_hits = _channel_hit_counts(text)
+    channel_hits = _channel_hit_counts_preview(text)
     arousal_proxy, engagement_proxy = _preview_arousal_engagement(channel_hits)
 
     suggested_tag = derive_emotion_tag(tag_valence, arousal_proxy, engagement_proxy)

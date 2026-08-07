@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Timeline</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* Day 81. Split out of mccf_events_editor_prototype_3.html — that file
+   fused object placement (Events' job) and scheduled-cue authoring
+   (this tool's job) into one iframe with the timeline as a bottom pane.
+   Decided against: "the route editor doesn't need to be a pane on the
+   events editor — they both need full screen." Same principle applied
+   here — this is its own tab now, Events stays exactly what it already
+   was (mccf_events_editor_prototype_2.html, untouched). This tool only
+   authors camera/light/gesture/path cues — no placement editing (that
+   stays Events'/Place's job, so there's only ever one place a static
+   position can be set) and no dialogue (a separate future module) and no
+   sensed content (mccf_route_graph_prototype.html's job). */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 17px;
+  background: #0a0c10;
+  color: #c8d0e0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+:root {
+  --bg:      #0a0c10;
+  --surface: #111318;
+  --surface2:#181c24;
+  --border:  #252a36;
+  --accent:  #4af0a8;
+  --accent2: #f06060;
+  --accent3: #60a8f0;
+  --accent4: #f0c060;
+  --purple:  #a880f0;
+  --dim:     #6a7890;
+  --text:    #c8d0e0;
+  --radius:  4px;
+  --stage-w: 220px;
+  --insp-w:  300px;
+}
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.logo { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--accent4); }
+.logo span { color: var(--dim); font-weight: 400; }
+
+.top-row { display: grid; grid-template-columns: var(--stage-w) 1fr var(--insp-w); flex: 1 1 auto; min-height: 0; overflow: hidden; border-bottom: 2px solid var(--border); }
+.stage-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.stage-head { padding: 8px 10px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--border); }
+.stage-object-list { padding: 8px; overflow-y: auto; flex: 1; }
+.stage-object-section-label { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding: 4px; }
+.stage-object-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius); cursor: pointer; font-size: 16px; color: var(--text); }
+.stage-object-row:hover { background: var(--surface2); }
+.stage-object-row.selected { background: var(--surface2); color: var(--accent3); }
+.stage-object-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent3); flex-shrink: 0; }
+.stage-object-dot.agent { background: var(--purple); }
+
+.center-panel { display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 15px; text-align: center; line-height: 1.9; padding: 20px; }
+
+.insp-panel { display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-left: 1px solid var(--border); }
+.insp-head { padding: 8px 10px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--border); }
+.insp-body { padding: 12px; overflow-y: auto; flex: 1; }
+.empty-insp { color: var(--dim); font-size: 15px; line-height: 1.8; padding: 8px 0; }
+.obj-field { margin-bottom: 10px; }
+.obj-field label { display: block; font-size: 14px; color: var(--dim); margin-bottom: 3px; }
+.obj-field input[type="text"], .obj-field input[type="number"], .obj-field select {
+  width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 15px; padding: 4px 6px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text);
+}
+.obj-field input:focus, .obj-field select:focus { outline: none; border-color: var(--accent3); }
+.tb-btn { font-family: 'IBM Plex Mono', monospace; font-size: 15px; padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--dim); cursor: pointer; }
+.tb-btn:hover { color: var(--text); border-color: var(--text); }
+.tb-btn.accent { border-color: var(--accent3); color: var(--accent3); }
+.tb-btn.accent:hover { background: var(--accent3); color: var(--bg); }
+
+/* ── TIMELINE PANEL (production tracks: camera/light/gesture/path) ──
+   Day 81. Scheduled events only — camera cuts, gesture cues, path/timer
+   assignments, light cues. Deliberately does NOT include dialogue (owned
+   by mccf_timeline_dialogue_prototype_v2.html) or anything sensed
+   (waypoint arrival, zone entry — those don't have an authored duration,
+   so a timeline can't represent them honestly; see the Day 81 event-
+   architecture note). A recorded path DOES belong here — once captured
+   it has a fixed, authored duration (the timer's cycle interval), same
+   as any other scheduled cue. */
+.timeline-panel {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+}
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.timeline-title {
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.timeline-time-readout {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  color: var(--accent4);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  cursor: pointer;
+  user-select: all;
+}
+.timeline-time-readout:hover { border-color: var(--accent4); }
+.timeline-head-btn {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  padding: 3px 10px;
+  border: 1px solid var(--accent3);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent3);
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.timeline-head-btn:hover { background: var(--accent3); color: var(--bg); }
+.timeline-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+/* Track label column (left) is fixed; ruler + lanes scroll horizontally
+   together via .timeline-scroll so a track's cues always line up under
+   the same ruler position, matching "camera cuts, gesture, dialogue" all
+   reading off one shared clock. */
+.timeline-row { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.timeline-track-label {
+  width: 110px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.timeline-track-add {
+  font-size: 15px;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius);
+  line-height: 1;
+}
+.timeline-track-add:hover { color: var(--accent3); background: var(--surface2); }
+.timeline-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+.timeline-ruler {
+  height: 26px;
+  position: relative;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.timeline-ruler-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--dim);
+  padding-left: 3px;
+  padding-top: 2px;
+  white-space: nowrap;
+}
+.timeline-lanes { position: relative; }
+.timeline-lane {
+  height: 46px;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-lane:nth-child(odd) { background: rgba(255,255,255,0.015); }
+.timeline-playhead {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--accent4);
+  z-index: 6;
+  pointer-events: none;
+}
+.timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -5px;
+  border: 5px solid transparent;
+  border-top-color: var(--accent4);
+}
+/* Cue blocks — a filled bar spanning [t0, t0+duration], so overlap and
+   length are visible at a glance instead of guessed. Color = track type,
+   distinct from coupler/type-badge colors used elsewhere so the two
+   systems (relational vs. production timing) don't visually blur together. */
+.cue-block {
+  position: absolute;
+  top: 6px;
+  height: 34px;
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.cue-block.selected { border-color: #fff; }
+.cue-camera  { background: rgba(96,168,240,0.28); color: var(--accent3); }
+.cue-light   { background: rgba(240,192,96,0.28); color: var(--accent4); }
+.cue-gesture { background: rgba(168,128,240,0.28); color: var(--purple); }
+.cue-path    { background: rgba(74,240,168,0.28); color: var(--accent); }
+.cue-block .cue-target { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>/ Timeline</span></div>
+</header>
+
+<div class="top-row">
+  <div class="stage-panel">
+    <div class="stage-head">Objects</div>
+    <div class="stage-object-list" id="stage-object-list"></div>
+  </div>
+  <div class="center-panel">
+    Select an object to see it here, or a cue on the timeline below to edit it in the right pane.<br><br>
+    Static placement (position/orientation) isn't edited here — that's Events'/Place's job, so
+    there's only ever one place a position can be set. This tool only authors <i>when</i> and
+    <i>what</i> — camera cuts, gesture cues, light cues, and which recorded path an agent follows.
+  </div>
+  <div class="insp-panel">
+    <div class="insp-head">Inspector</div>
+    <div class="insp-body" id="insp-body">
+      <div class="empty-insp">Select an object from the left, or a cue from the Timeline below.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIMELINE PANEL — Day 81: scheduled production cues only. See this
+     file's CSS comment above for exactly what does and doesn't belong
+     here (no dialogue, no sensed/waypoint content). -->
+<div class="timeline-panel">
+  <div class="timeline-head">
+    <span class="timeline-title">Timeline</span>
+    <span class="timeline-time-readout" id="tl-time-readout" onclick="_tlCopyPlayhead()" title="Click to copy this time — paste into a cue's start-time field">t = 0.00s</span>
+    <button class="timeline-head-btn" onclick="exportProductionCues()">Save to Composer</button>
+  </div>
+  <div class="timeline-body">
+    <div class="timeline-row" style="border-bottom:none;">
+      <div class="timeline-track-label" style="border-right:1px solid var(--border);color:var(--dim);font-size:13px;">clock</div>
+      <div class="timeline-scroll" id="tl-ruler-scroll">
+        <div class="timeline-ruler" id="tl-ruler" onclick="_tlRulerClick(event)"></div>
+      </div>
+    </div>
+    <div id="tl-tracks"></div>
+  </div>
+</div>
+
+<script>
+// ── Timeline / production-cue state (Day 81) ────────────────────────────
+// One flat CUES array, each {id, track, target, label, t0, duration, params}.
+// track ∈ 'camera'|'light'|'gesture'|'path' — deliberately not extensible
+// to a 'dialogue' or 'sensed' track here; those belong to the other two
+// tools (Timeline/Dialogue, and eventually the route graph) per the Day 81
+// event-architecture note's scheduled/sensed split.
+var TRACKS = [
+  { id:'camera',  label:'Camera'  },
+  { id:'light',   label:'Light'   },
+  { id:'gesture', label:'Gesture' },
+  { id:'path',    label:'Path'    },
+];
+var CUES = [];
+var _cueSeq = 0;
+var _playheadT = 0;
+var _tlMaxT = 30;          // ruler extent in seconds — auto-grows as cues are added past it
+var _tlPxPerSec = 40;      // horizontal scale
+var _selCue = null;        // working copy of the selected cue, or null
+
+function _fmtT(t) { return t.toFixed(2) + 's'; }
+
+function renderTimeline() {
+  var readout = document.getElementById('tl-time-readout');
+  if (readout) readout.textContent = 't = ' + _fmtT(_playheadT);
+
+  var widthPx = _tlMaxT * _tlPxPerSec;
+
+  // Ruler ticks, every 2s, plus the playhead marker.
+  var ruler = document.getElementById('tl-ruler');
+  if (ruler) {
+    ruler.style.width = widthPx + 'px';
+    var html = '';
+    for (var s = 0; s <= _tlMaxT; s += 2) {
+      html += '<div class="timeline-ruler-tick" style="left:' + (s*_tlPxPerSec) + 'px">' + s + 's</div>';
+    }
+    html += '<div class="timeline-playhead" style="left:' + (_playheadT*_tlPxPerSec) + 'px"></div>';
+    ruler.innerHTML = html;
+  }
+
+  var wrap = document.getElementById('tl-tracks');
+  if (!wrap) return;
+  wrap.innerHTML = TRACKS.map(function(tr) {
+    var cues = CUES.filter(function(c) { return c.track === tr.id; });
+    var blocks = cues.map(function(c) {
+      var left  = c.t0 * _tlPxPerSec;
+      var width = Math.max(18, c.duration * _tlPxPerSec);
+      var sel   = _selCue && _selCue.id === c.id;
+      return '<div class="cue-block cue-' + tr.id + (sel?' selected':'') + '" style="left:' + left + 'px;width:' + width + 'px" ' +
+        'onclick="event.stopPropagation();selectCue(' + JSON.stringify(c.id) + ')" title="' +
+        (c.target||'').replace(/"/g,'&quot;') + ' — ' + _fmtT(c.t0) + ' to ' + _fmtT(c.t0+c.duration) + '">' +
+        '<span class="cue-target">' + (c.target||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' +
+        (c.label||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') +
+        '</div>';
+    }).join('');
+    return '<div class="timeline-row">' +
+      '<div class="timeline-track-label">' + tr.label +
+      '<span class="timeline-track-add" onclick="addCueAtPlayhead(' + JSON.stringify(tr.id) + ')" title="Add ' + tr.label + ' cue at current playhead time">+</span>' +
+      '</div>' +
+      '<div class="timeline-scroll" onscroll="_tlSyncScroll(this)"><div class="timeline-lane" style="width:' + widthPx + 'px">' + blocks + '</div></div>' +
+      '</div>';
+  }).join('');
+}
+
+// All lanes + the ruler scroll together — a cue has to line up with the
+// same ruler position regardless of which track it's in.
+function _tlSyncScroll(fromEl) {
+  var x = fromEl.scrollLeft;
+  document.querySelectorAll('.timeline-scroll').forEach(function(el) { el.scrollLeft = x; });
+}
+
+function _tlRulerClick(evt) {
+  var rect = evt.currentTarget.getBoundingClientRect();
+  var t = Math.max(0, (evt.clientX - rect.left) / _tlPxPerSec);
+  _playheadT = Math.round(t * 20) / 20; // snap to 0.05s
+  renderTimeline();
+}
+
+// "copy times from the timeline scrubber position and assign those to
+// actions in each track" — the primary path for this is addCueAtPlayhead
+// below (a new cue is born at the exact playhead position, no copy/paste
+// needed). This is the literal-copy fallback for editing an EXISTING
+// cue's start time by hand: clicking the readout puts the value on the
+// clipboard so it can be pasted into the t0 field in the inspector.
+// Guarded — clipboard API can be unavailable in a sandboxed iframe (this
+// tool normally runs inside Composer's iframe), and this must never be
+// the only way to set a cue's time if it silently fails.
+function _tlCopyPlayhead() {
+  var text = _playheadT.toFixed(2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(function() {
+      console.log('[Events Editor] clipboard write blocked — playhead time: ' + text);
+    });
+  }
+}
+
+function addCueAtPlayhead(trackId) {
+  _cueSeq++;
+  var defaults = {
+    camera:  { target: (CAMERAS[0] && CAMERAS[0].name) || '', label: 'cut',    duration: 3 },
+    light:   { target: '',                                    label: 'fade',  duration: 3 },
+    gesture: { target: AGENTS[0] || '',                        label: '',      duration: 2 },
+    path:    { target: AGENTS[0] || '',                        label: '',      duration: (RECORDED_PATHS[0] && RECORDED_PATHS[0].keyCount) ? 6 : 6,
+               params: { pathId: (RECORDED_PATHS[0] && RECORDED_PATHS[0].id) || '' } },
+  }[trackId] || { target:'', label:'', duration: 2 };
+  var cue = Object.assign({ id: 'cue_' + _cueSeq, track: trackId, t0: _playheadT, params: {} }, defaults);
+  CUES.push(cue);
+  if (cue.t0 + cue.duration > _tlMaxT) _tlMaxT = Math.ceil(cue.t0 + cue.duration + 4);
+  selectCue(cue.id);
+}
+
+function selectCue(id) {
+  var c = CUES.find(function(x) { return x.id === id; });
+  if (!c) return;
+  _selCue = Object.assign({}, c, { params: Object.assign({}, c.params) });
+  _selObj = null; // stage-object selection and cue selection share the one Inspector — only one at a time
+  drawStage();
+  renderTimeline();
+  renderObjectPanel();
+}
+
+function deleteCue() {
+  if (!_selCue) return;
+  CUES = CUES.filter(function(c) { return c.id !== _selCue.id; });
+  _selCue = null;
+  renderTimeline();
+  renderObjectPanel();
+}
+
+function _cueField(label, key, val, type) {
+  type = type || 'text';
+  var inputHtml = type === 'number'
+    ? '<input type="number" step="0.05" value="' + val + '" oninput="setCueProp(\'' + key + '\',this.value,true)">'
+    : '<input type="text" value="' + String(val==null?'':val).replace(/"/g,'&quot;') + '" oninput="setCueProp(\'' + key + '\',this.value,false)">';
+  return '<div class="obj-field"><label>' + label + '</label>' + inputHtml + '</div>';
+}
+
+function renderCueEditor() {
+  var body = document.getElementById('insp-body');
+  if (!body || !_selCue) return;
+  var c = _selCue;
+  var trackLabel = (TRACKS.find(function(t){return t.id===c.track;}) || {}).label || c.track;
+  var html = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--accent,#7fd);margin-bottom:8px">' +
+    trackLabel + ' cue</div>';
+
+  // Target picker — dropdown against known names where we have a real
+  // list (camera/agent), free text where we don't (lights: this tool has
+  // never had light placement data — see the Stage panel's own "Lights:
+  // not yet implemented" note. A free-text target here doesn't pretend
+  // that gap is closed, it just doesn't block cue authoring on it.)
+  if (c.track === 'camera' || c.track === 'gesture' || c.track === 'path') {
+    var opts = (c.track === 'camera' ? CAMERAS.map(function(x){return x.name;}) : AGENTS);
+    html += '<div class="obj-field"><label>Target</label><select oninput="setCueProp(\'target\',this.value,false)">' +
+      opts.map(function(n) { return '<option value="'+n+'"'+(n===c.target?' selected':'')+'>'+n+'</option>'; }).join('') +
+      '</select></div>';
+  } else {
+    html += _cueField('Target (light name — free text, no light list yet)', 'target', c.target);
+  }
+
+  if (c.track === 'path') {
+    html += '<div class="obj-field"><label>Recorded path</label><select oninput="setCueParam(\'pathId\',this.value)">' +
+      (RECORDED_PATHS.length
+        ? RECORDED_PATHS.map(function(rp) { return '<option value="'+rp.id+'"'+(rp.id===c.params.pathId?' selected':'')+'>'+rp.id+' ('+rp.keyCount+' keys)</option>'; }).join('')
+        : '<option value="">— none recorded yet —</option>') +
+      '</select></div>';
+  } else {
+    html += _cueField('Label', 'label', c.label);
+  }
+
+  html += _cueField('Start time (t0, seconds)', 't0', c.t0, 'number');
+  html += '<div style="margin:-6px 0 10px;"><span class="timeline-track-add" style="color:var(--dim);font-size:13px;cursor:pointer" onclick="setCueProp(\'t0\',' + _playheadT + ',true)">↳ use current playhead (' + _fmtT(_playheadT) + ')</span></div>';
+  html += _cueField(c.track === 'path' ? 'Duration — timer cycle interval (seconds)' : 'Duration (seconds)', 'duration', c.duration, 'number');
+
+  html += '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button class="tb-btn accent" onclick="saveCue()">Apply</button>' +
+    '<button class="tb-btn" onclick="deleteCue()">Delete</button>' +
+    '</div>';
+  body.innerHTML = html;
+}
+
+function setCueProp(key, val, isNum) {
+  if (!_selCue) return;
+  _selCue[key] = isNum ? (parseFloat(val) || 0) : val;
+}
+function setCueParam(key, val) {
+  if (!_selCue) return;
+  _selCue.params[key] = val;
+}
+function saveCue() {
+  if (!_selCue) return;
+  var idx = CUES.findIndex(function(c) { return c.id === _selCue.id; });
+  if (idx === -1) return;
+  CUES[idx] = Object.assign({}, _selCue, { params: Object.assign({}, _selCue.params) });
+  if (_selCue.t0 + _selCue.duration > _tlMaxT) _tlMaxT = Math.ceil(_selCue.t0 + _selCue.duration + 4);
+  renderTimeline();
+}
+
+// Composer has no receiver for this message type yet — this sends the
+// authored cue set out so one can be built, the same honest gap this
+// project has flagged elsewhere (e.g. recorded-path playback consumption)
+// rather than inventing a wire format silently.
+function exportProductionCues() {
+  var payload = { cues: CUES };
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_production_cues', data: payload }, '*');
+    console.log('[Events Editor] sent mccf_production_cues — Composer does not have a receiver for this yet (Day 81 prototype).', payload);
+  } else {
+    console.log('[Events Editor] standalone — would send mccf_production_cues:', payload);
+  }
+}
+</script>
+
+<script>
+// ── State fed by Composer via mccf_scene_data ─────────────────────────────
+var AGENTS = [];
+var CAMERAS = [];
+var RECORDED_PATHS = [];
+var _selObj = null; // selected stage object (read-only summary — see below)
+
+function drawStage() {
+  var wrap = document.getElementById('stage-object-list');
+  if (!wrap) return;
+  var html = '<div class="stage-object-section-label">Cameras</div>';
+  html += CAMERAS.length ? CAMERAS.map(function(c) {
+    var sel = _selObj && _selObj.kind === 'camera' && _selObj.name === c.name;
+    return '<div class="stage-object-row' + (sel?' selected':'') + '" onclick="selectObject(\'camera\',' + JSON.stringify(c.name).replace(/"/g,'&quot;') + ')">' +
+      '<span class="stage-object-dot"></span>' + c.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  }).join('') : '<div class="empty-insp" style="padding:6px 4px;font-size:14px">None placed — see Place tab.</div>';
+
+  html += '<div class="stage-object-section-label" style="margin-top:10px">Agents</div>';
+  html += AGENTS.length ? AGENTS.map(function(name) {
+    var sel = _selObj && _selObj.kind === 'agent' && _selObj.name === name;
+    return '<div class="stage-object-row' + (sel?' selected':'') + '" onclick="selectObject(\'agent\',' + JSON.stringify(name).replace(/"/g,'&quot;') + ')">' +
+      '<span class="stage-object-dot agent"></span>' + name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  }).join('') : '<div class="empty-insp" style="padding:6px 4px;font-size:14px">None placed — see Actors tab.</div>';
+  wrap.innerHTML = html;
+}
+
+// Read-only summary only — this tool deliberately does not edit placement,
+// see the center-panel note. Selecting a stage object here is for context
+// ("what exists to put on a cue's Target field") and clears any selected
+// cue, same as selectCue() clears this in the other direction — the
+// Inspector is one shared surface, only one thing selected at a time.
+function selectObject(kind, name) {
+  _selCue = null;
+  _selObj = { kind: kind, name: name };
+  drawStage();
+  renderTimeline();
+  renderObjectPanel();
+}
+
+function renderObjectPanel() {
+  var body = document.getElementById('insp-body');
+  if (!body) return;
+  if (_selCue) { renderCueEditor(); return; }
+  if (!_selObj) { body.innerHTML = '<div class="empty-insp">Select an object from the left, or a cue from the Timeline below.</div>'; return; }
+  var extra = '';
+  if (_selObj.kind === 'camera') {
+    var c = CAMERAS.find(function(x) { return x.name === _selObj.name; });
+    if (c && c.position) extra = '<div class="obj-field"><label>Position</label><div style="color:var(--text)">' + c.position.map(function(v){return v.toFixed(1);}).join(', ') + '</div></div>';
+  }
+  body.innerHTML = '<div style="font-size:16px;color:var(--accent3);margin-bottom:8px">' + _selObj.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+    extra +
+    '<div class="empty-insp">Placement is edited in Events/Place, not here — this panel is read-only context. Add a cue on this object from the Timeline below to author when/what it does.</div>';
+}
+
+// ── postMessage bridge to Composer ────────────────────────────────────────
+(function() {
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_ready' }, '*');
+})();
+window.addEventListener('message', function(evt) {
+  if (!evt.data || !evt.data.type) return;
+  if (evt.data.type === 'mccf_scene_data') {
+    var d = evt.data.data || {};
+    if (d.agents) AGENTS = d.agents;
+    if (d.cameras) CAMERAS = d.cameras;
+    if (d.recordedPaths) RECORDED_PATHS = d.recordedPaths;
+    drawStage();
+    renderTimeline(); // target/path dropdowns depend on fresh AGENTS/CAMERAS/RECORDED_PATHS
+  }
+});
+
+window.addEventListener('load', function() {
+  drawStage();
+  renderObjectPanel();
+  renderTimeline();
+});
+</script>
+</body>
+</html>

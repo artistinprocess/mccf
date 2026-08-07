@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
+<X3D profile="Immersive" version="4.0">
+<head><meta name="title" content="MCCF Light Proto Library"/>
+<meta name="generator" content="MCCF — Day 82 lighting research pass"/>
+<meta name="info" content="Shared PROTO library for MCCF's three basic light types. Referenced by scene files via ExternProtoDeclare (XML encoding — not the classic-encoding EXTERNPROTO keyword), never edited per-scene. Same pattern as mccf_camera_protos.x3d, deliberately — see that file's own head comment. Add new fixture types here as new ProtoDeclare blocks; scenes only ever change which ExternProtoDeclares they declare and which fields a ProtoInstance overrides."/>
+</head>
+<Scene>
+
+<!--
+  Day 82. Three static base protos only — Point/Spot/Directional, matching X3D core's
+  own three-type ceiling (MCCF_Lighting_System_Spec_v0.1's §2). Placement-only, no
+  TimeSensor, no Interpolators, no runtime wiring from the Loader beyond field writes —
+  same shape as FreeCamera in mccf_camera_protos.x3d, not AgentOrbitCamera/AgentTrackCamera.
+  Deliberately no animated or combined-fixture protos yet: the spec's own class model is
+  still explicitly deferred pending research this file doesn't attempt to resolve. A
+  swinging moving-head light or a composite fixture is a *different*, not-yet-drafted
+  proto that would build on top of these, the same way AgentOrbitCamera builds on the
+  same Transform/Viewpoint shape FreeCamera establishes — not a field added to these.
+
+  X_ITE 11.6.0 confirmed support this proto library assumes but doesn't yet use (checked
+  against create3000.github.io/x_ite's own docs, Day 82): OrientationInterpolator and
+  SquadOrientationInterpolator (13 documented interpolator types) for a future swinging
+  light's rotation; OrientationChaser/PositionChaser (14 documented Follower nodes) for a
+  future follow-spot's eased tracking, confirmed to progressively ease toward a
+  destination rather than snap; ComposedShader/ShaderPart, with one live caution — X_ITE's
+  own changelog shows a past breaking shader-system rewrite (x3d_Num* variables removed
+  outright in v7.0.0), so any future shader work here needs testing against 11.6.0
+  specifically, not assumed stable from older examples. None of this is used below; noted
+  here so the next revision of this file doesn't have to re-derive it.
+
+  Placement pattern matches AgentOrbitCamera/FreeCamera exactly: a wrapping Transform
+  carries the real placement (translation/rotation), the light node's own location/
+  direction fields stay at fixed, near-default local values. Real X3D PointLight/
+  SpotLight `location` and SpotLight/DirectionalLight `direction` fields already work
+  this way natively (parent-local coordinates) — wrapping in a Transform the same way
+  cameras are is consistency with house style, not a workaround for a gap.
+
+  No `description` field, unlike the camera protos — real X3D light nodes have no such
+  field (Viewpoint does; that's why cameras expose it). A placed light's author-facing
+  label is its ProtoInstance DEF name, same as how Composer already labels placed
+  cameras by DEF name, not by a proto-internal field.
+-->
+
+<!--
+  BasicPointLight — omnidirectional, radiates from a point. Closest analog to a
+  practical or bare-bulb fill (spec §2). No direction/beamWidth/cutOffAngle — a point
+  light doesn't aim.
+-->
+<ProtoDeclare name="BasicPointLight">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"  name="translation"      value="0 3 0"/>
+    <field accessType="inputOutput" type="SFRotation" name="rotation"       value="0 1 0 0"/>
+    <field accessType="inputOutput" type="SFBool"   name="on"               value="true"/>
+    <field accessType="inputOutput" type="SFColor"  name="color"            value="1 1 1"/>
+    <field accessType="inputOutput" type="SFFloat"  name="intensity"        value="1"/>
+    <field accessType="inputOutput" type="SFFloat"  name="ambientIntensity" value="0"/>
+    <field accessType="inputOutput" type="SFVec3f"  name="attenuation"      value="1 0 0"/>
+    <field accessType="inputOutput" type="SFFloat"  name="radius"           value="100"/>
+  </ProtoInterface>
+  <ProtoBody>
+    <Transform DEF="LightXform">
+      <IS>
+        <connect nodeField="translation" protoField="translation"/>
+        <connect nodeField="rotation"    protoField="rotation"/>
+      </IS>
+      <PointLight DEF="Light" location="0 0 0">
+        <IS>
+          <connect nodeField="on"               protoField="on"/>
+          <connect nodeField="color"             protoField="color"/>
+          <connect nodeField="intensity"         protoField="intensity"/>
+          <connect nodeField="ambientIntensity"  protoField="ambientIntensity"/>
+          <connect nodeField="attenuation"       protoField="attenuation"/>
+          <connect nodeField="radius"            protoField="radius"/>
+        </IS>
+      </PointLight>
+    </Transform>
+  </ProtoBody>
+</ProtoDeclare>
+
+<!--
+  BasicSpotLight — location + direction + beamWidth/cutOffAngle + attenuation. Closest
+  analog to nearly every focused-beam fixture type (spec §2): PAR, Fresnel,
+  ellipsoidal-minus-gobo, moving head (once animated — not this proto), follow spot
+  (once Chaser-driven — not this proto).
+-->
+<ProtoDeclare name="BasicSpotLight">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"    name="translation"      value="0 4 4"/>
+    <field accessType="inputOutput" type="SFRotation" name="rotation"         value="1 0 0 -0.7854"/>
+    <field accessType="inputOutput" type="SFBool"     name="on"               value="true"/>
+    <field accessType="inputOutput" type="SFColor"    name="color"            value="1 1 1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="intensity"        value="1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity" value="0"/>
+    <field accessType="inputOutput" type="SFVec3f"    name="attenuation"      value="1 0 0"/>
+    <field accessType="inputOutput" type="SFFloat"    name="radius"           value="100"/>
+    <field accessType="inputOutput" type="SFFloat"    name="cutOffAngle"      value="0.785398"/>
+    <field accessType="inputOutput" type="SFFloat"    name="beamWidth"        value="0.785398"/>
+  </ProtoInterface>
+  <ProtoBody>
+    <Transform DEF="LightXform">
+      <IS>
+        <connect nodeField="translation" protoField="translation"/>
+        <connect nodeField="rotation"    protoField="rotation"/>
+      </IS>
+      <!-- direction stays at the local default (straight down local -Z) — the wrapping
+           Transform's rotation does the aiming, same reasoning as VP's near-default
+           orientation in AgentOrbitCamera/FreeCamera. -->
+      <SpotLight DEF="Light" location="0 0 0" direction="0 0 -1">
+        <IS>
+          <connect nodeField="on"               protoField="on"/>
+          <connect nodeField="color"             protoField="color"/>
+          <connect nodeField="intensity"         protoField="intensity"/>
+          <connect nodeField="ambientIntensity"  protoField="ambientIntensity"/>
+          <connect nodeField="attenuation"       protoField="attenuation"/>
+          <connect nodeField="radius"            protoField="radius"/>
+          <connect nodeField="cutOffAngle"       protoField="cutOffAngle"/>
+          <connect nodeField="beamWidth"         protoField="beamWidth"/>
+        </IS>
+      </SpotLight>
+    </Transform>
+  </ProtoBody>
+</ProtoDeclare>
+
+<!--
+  BasicDirectionalLight — parallel rays, no position, no falloff. Closest analog to an
+  overall wash or "sun" (spec §2). translation is exposed for structural consistency
+  with the other two protos (and because grouping/organizing placed lights the same way
+  benefits from it) but has no visual effect — a DirectionalLight's rays are parallel
+  everywhere in the scene regardless of where its Transform sits; only rotation (via
+  the light's local `direction`) matters.
+-->
+<ProtoDeclare name="BasicDirectionalLight">
+  <ProtoInterface>
+    <field accessType="inputOutput" type="SFVec3f"    name="translation"      value="0 0 0"/>
+    <field accessType="inputOutput" type="SFRotation" name="rotation"         value="1 0 0 -0.7854"/>
+    <field accessType="inputOutput" type="SFBool"     name="on"               value="true"/>
+    <field accessType="inputOutput" type="SFColor"    name="color"            value="1 1 1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="intensity"        value="1"/>
+    <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity" value="0"/>
+  </ProtoInterface>
+  <ProtoBody>
+    <Transform DEF="LightXform">
+      <IS>
+        <connect nodeField="translation" protoField="translation"/>
+        <connect nodeField="rotation"    protoField="rotation"/>
+      </IS>
+      <DirectionalLight DEF="Light" direction="0 0 -1">
+        <IS>
+          <connect nodeField="on"               protoField="on"/>
+          <connect nodeField="color"             protoField="color"/>
+          <connect nodeField="intensity"         protoField="intensity"/>
+          <connect nodeField="ambientIntensity"  protoField="ambientIntensity"/>
+        </IS>
+      </DirectionalLight>
+    </Transform>
+  </ProtoBody>
+</ProtoDeclare>
+
+</Scene>
+</X3D>

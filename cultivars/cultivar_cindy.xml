@@ -25,6 +25,20 @@
   <Alias>Salida</Alias>
 
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
-  <HAnimFigure src="cindy_hanim.x3d" loa="4"/>
+  <HAnimFigure src="/static/avatars/cindy_hanim.x3d" loa="4"/>
+
+  <!-- HAnim behavior clip selection table -->
+  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
+  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->
+  <Behaviors default="Default">
+    <Clip name="Default" timerDEF="DefaultTimer" loop="true" priority="0"/>
+    <Clip name="Pitch" timerDEF="PitchTimer" loop="true" priority="0"/>
+    <Clip name="Yaw" timerDEF="YawTimer" loop="true" priority="0"/>
+    <Clip name="Roll" timerDEF="RollTimer" loop="true" priority="0"/>
+    <Clip name="Walk" timerDEF="WalkTimer" loop="true" priority="0"/>
+    <Clip name="Run" timerDEF="RunTimer" loop="true" priority="0"/>
+    <Clip name="Jump" timerDEF="JumpTimer" loop="true" priority="0"/>
+    <Clip name="Kick" timerDEF="KickTimer" loop="true" priority="0"/>
+  </Behaviors>
 
 </CultivarDefinition>

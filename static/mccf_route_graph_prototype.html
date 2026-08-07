@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCCF Route Graph — sensed events</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* Day 81. Companion to mccf_events_editor_prototype_3.html (scheduled/
+   timeline cues). This tool is for the OTHER half of the split from the
+   Day 81 event-architecture note: sensed sources (zone/proximity, path
+   start-triggers) routed to consumers (avatars, other transforms) via
+   typed field connections — no clock, no duration bars, because sensed
+   events don't have an authored "when."
+
+   Visual language follows the reference screenshot directly: full X3D
+   field introspection per node (every exposedField is a port, not a
+   curated per-type subset) — this resolves the Day 81 note's open
+   "curated manifest vs. free introspection" question in favor of the
+   latter, at least for what this prototype shows.
+
+   Port color legend reuses the exact 5-accent palette already
+   established across the rest of this toolset (--accent/--accent2/
+   --accent3/--accent4/--purple), rather than inventing a sixth palette
+   for a sixth tool — same family, same meaning throughout MCCF's
+   editors. SFTime/SFBool/SFColor already meant this in the Events
+   Composer S2 prototype; SFVec3f/SFNode are new here (Transform/
+   ProximitySensor need them, S2's CameraRig/LightRig didn't). */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  background: #0a0c10;
+  color: #c8d0e0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+:root {
+  --bg:      #0a0c10;
+  --surface: #111318;
+  --surface2:#181c24;
+  --border:  #252a36;
+  --accent:  #4af0a8;   /* SFTime */
+  --accent2: #f06060;   /* SFNode / MFNode (structural, not data) */
+  --accent3: #60a8f0;   /* SFVec3f */
+  --accent4: #f0c060;   /* SFBool */
+  --purple:  #a880f0;   /* SFRotation */
+  --pink:    #f078c8;   /* SFColor — new, Day 82: lights are the first node type with a real color field */
+  --lime:    #b8e068;   /* SFFloat — new, Day 82: was folded into SFTime as a one-off fudge for TimeSensor's
+                            fraction_changed (a single odd field); lights bring five real SFFloat fields
+                            (intensity/ambientIntensity/radius/cutOffAngle/beamWidth), too many to keep
+                            stretching that fudge without it becoming actively misleading — a genuine
+                            dedicated color is correct now, and fraction_changed is fixed to use it too,
+                            since the original justification for folding it no longer holds. */
+  --dim:     #6a7890;
+  --text:    #c8d0e0;
+  --radius:  5px;
+}
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 14px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+.logo { font-family: 'Syne', sans-serif; font-size: 19px; font-weight: 800; color: var(--accent4); }
+.logo span { color: var(--dim); font-weight: 400; }
+.toolbar { display: flex; align-items: center; gap: 6px; }
+.toolbar select, .toolbar input {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  padding: 4px 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.toolbar select:focus, .toolbar input:focus { outline: none; border-color: var(--accent3); }
+.tb-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent3);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent3);
+  cursor: pointer;
+}
+.tb-btn:hover { background: var(--accent3); color: var(--bg); }
+.legend {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.legend-note { color: var(--dim); font-size: 12px; }
+
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  background-image: radial-gradient(circle, #1a1f2a 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-color: #0d0f14;
+}
+.canvas-inner { position: relative; width: 2400px; height: 1400px; }
+svg.wire-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+svg.wire-layer path.wire-hit { pointer-events: stroke; cursor: pointer; }
+.wire-del-btn {
+  position: absolute;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  color: var(--bg);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 15;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.node {
+  position: absolute;
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(74,240,168,0.15), 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 5;
+  user-select: none; /* belt-and-braces alongside preventDefault — no drag gesture should ever be able to trigger text selection across node labels */
+}
+.node.dragging { z-index: 12; cursor: grabbing; }
+.node-head {
+  padding: 8px 10px 6px;
+  cursor: grab;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.node-def { font-size: 12px; color: var(--accent2); letter-spacing: 0.04em; }
+.node-def b { color: var(--accent2); font-weight: 600; }
+.node-type { font-size: 15px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+.node-del {
+  position: absolute; top: 6px; right: 6px;
+  width: 16px; height: 16px; text-align: center; line-height: 16px;
+  font-size: 13px; color: var(--dim); cursor: pointer; border-radius: 3px;
+}
+.node-del:hover { color: var(--accent2); background: rgba(240,96,96,0.15); }
+.node-body { padding: 4px 0; }
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--dim);
+  position: relative;
+  height: 20px;
+}
+.field-row .fname { padding: 0 10px; }
+.port-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: crosshair;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.25);
+}
+.port-dot.left  { margin-left: -5px; }
+.port-dot.right { margin-right: -5px; }
+.port-dot:hover { box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
+.port-dot.compatible { box-shadow: 0 0 0 4px rgba(255,255,255,0.35); animation: portPulse 1s ease-in-out infinite; }
+@keyframes portPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+.port-spacer { width: 10px; }
+
+.empty-canvas-note {
+  position: absolute; top: 40px; left: 40px;
+  color: var(--dim); font-size: 14px; max-width: 420px; line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MCCF <span>/ Route Graph — sensed events</span></div>
+  <div class="toolbar">
+    <select id="add-type"></select>
+    <select id="add-instance"></select>
+    <button class="tb-btn" onclick="addNodeFromToolbar()">+ Add node</button>
+    <button class="tb-btn" style="border-color:var(--accent4);color:var(--accent4)" onclick="saveRouteGraph()">Save to Composer</button>
+  </div>
+  <div class="legend" id="legend"></div>
+</header>
+
+<div class="canvas-wrap" id="canvas-wrap">
+  <div class="canvas-inner" id="canvas-inner">
+    <svg class="wire-layer" id="wire-layer"></svg>
+    <div class="empty-canvas-note" id="empty-note">
+      Add a node from the toolbar above. Drag from a colored port to a
+      same-colored port on another node to connect them — only matching
+      types connect, and circular routes are rejected automatically.
+      Click a wire to select it, then the × to delete. Includes
+      RecordedPath nodes so a captured path can be routed straight into
+      any Transform's translation/rotation — same "route or master-clock
+      trigger" choice agreed in the Day 81 design note.
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Field-type → color, and legend ──────────────────────────────────────
+var FTYPE_COLOR = {
+  Time:     'var(--accent)',
+  Bool:     'var(--accent4)',
+  Vec3:     'var(--accent3)',
+  Rotation: 'var(--purple)',
+  Node:     'var(--accent2)',
+  Color:    'var(--pink)',
+  Float:    'var(--lime)',
+};
+var FTYPE_LABEL = { Time:'SFTime', Bool:'SFBool', Vec3:'SFVec3f', Rotation:'SFRotation', Node:'SFNode/MFNode', Color:'SFColor', Float:'SFFloat' };
+
+(function renderLegend() {
+  var el = document.getElementById('legend');
+  var html = Object.keys(FTYPE_COLOR).map(function(k) {
+    return '<span class="legend-item"><span class="legend-dot" style="background:' + FTYPE_COLOR[k] + '"></span>' + FTYPE_LABEL[k] + '</span>';
+  }).join('');
+  html += '<span class="legend-note">— only matching colors connect</span>';
+  el.innerHTML = html;
+})();
+
+// ── Node type manifests (Day 81 prototype — seed data, not live-wired to
+// Composer; a real build would source this from field-map.js-style
+// per-type manifests or genuine SAI introspection of a loaded scene,
+// neither of which this standalone file has access to). Field sets are
+// real X3D exposedFields / sensor outputs, not invented — Transform's
+// matches the reference screenshot; ProximitySensor's and TimeSensor's
+// match what's actually used elsewhere in this project (see
+// mccf_x3d_loader.html's _pathRec/_pbAdvanceSeg code read earlier today).
+// io: 'both' renders a port on both sides of the row (an exposedField is
+// simultaneously a set_/​_changed pair in real X3D); 'in'/'out' renders
+// one side only. Row order here is NOT mirrored left/right the way the
+// reference screenshot does it — same order both sides, which is easier
+// to trace by eye when wiring, at the cost of not literally matching the
+// screenshot's layout.
+var NODE_TYPES = {
+  Transform: {
+    fields: [
+      { name:'metadata',         type:'Node',     io:'both' },
+      { name:'children',         type:'Node',     io:'both' },
+      { name:'visible',          type:'Bool',     io:'both' },
+      { name:'translation',      type:'Vec3',     io:'both' },
+      { name:'rotation',         type:'Rotation', io:'both' },
+      { name:'scale',            type:'Vec3',     io:'both' },
+      { name:'scaleOrientation', type:'Rotation', io:'both' },
+      { name:'center',           type:'Vec3',     io:'both' },
+    ],
+    instances: ['Cindy','Jack','Salida','The Gardener','CAM_Free_Transform'],
+  },
+  ProximitySensor: {
+    fields: [
+      { name:'enabled',            type:'Bool',     io:'in'  },
+      { name:'center',             type:'Vec3',     io:'in'  },
+      { name:'size',               type:'Vec3',     io:'in'  },
+      { name:'isActive',           type:'Bool',     io:'out' },
+      { name:'position_changed',   type:'Vec3',     io:'out' },
+      { name:'orientation_changed',type:'Rotation', io:'out' },
+      { name:'enterTime',          type:'Time',     io:'out' },
+      { name:'exitTime',           type:'Time',     io:'out' },
+    ],
+    instances: ["Enhedhuanna's Garden · zone","Temple of Nanna · zone","The Pool · zone"],
+  },
+  TimeSensor: {
+    fields: [
+      { name:'enabled',          type:'Bool', io:'in'  },
+      { name:'cycleInterval',    type:'Time', io:'in'  },
+      { name:'isActive',         type:'Bool', io:'out' },
+      { name:'cycleTime',        type:'Time', io:'out' },
+      { name:'fraction_changed', type:'Float', io:'out' }, // was folded into Time as a one-off fudge — see the CSS var comment on --lime for why that no longer holds
+    ],
+    instances: ['MasterClock','Timer_Cindy_1'],
+  },
+  RecordedPath: {
+    fields: [
+      { name:'startTrigger', type:'Bool',     io:'in'  }, // route-triggered start — the "or routed from another event" case from the Day 81 note
+      { name:'isActive',     type:'Bool',     io:'out' },
+      { name:'position',     type:'Vec3',     io:'out' },
+      { name:'orientation',  type:'Rotation', io:'out' },
+    ],
+    instances: ['crane_shot_1','flyover_2'], // seed fallback — replaced by RECORDED_PATHS once mccf_scene_data arrives
+  },
+  // Day 82: field sets match mccf_light_protos.x3d's three static base protos exactly —
+  // BasicPointLight/BasicSpotLight/BasicDirectionalLight, drafted the same evening these
+  // node types were added here. translation/rotation are the wrapping Transform's
+  // fields (same placement pattern as Transform/AgentOrbitCamera — the light node's own
+  // location/direction stay at fixed local defaults, the Transform does the aiming).
+  // io:'both' throughout, same reasoning as Transform above: every one of these is a real
+  // X3D exposedField (inputOutput), not a true inputOnly/outputOnly like a sensor's isActive
+  // — so, same as Transform, routing either direction is genuinely valid X3D, not just a UI
+  // convenience. This is also the concrete case that motivated tonight's "audio triggers a
+  // light" example: AudioClip.isActive (Bool, out) -> BasicSpotLight/BasicPointLight.on
+  // (Bool, in-capable via 'both') is now a real, typeable connection.
+  BasicPointLight: {
+    fields: [
+      { name:'translation',      type:'Vec3',  io:'both' },
+      { name:'rotation',         type:'Rotation', io:'both' },
+      { name:'on',               type:'Bool',  io:'both' },
+      { name:'color',            type:'Color', io:'both' },
+      { name:'intensity',        type:'Float', io:'both' },
+      { name:'ambientIntensity', type:'Float', io:'both' },
+      { name:'attenuation',      type:'Vec3',  io:'both' },
+      { name:'radius',           type:'Float', io:'both' },
+    ],
+    instances: [],
+  },
+  BasicSpotLight: {
+    fields: [
+      { name:'translation',      type:'Vec3',  io:'both' },
+      { name:'rotation',         type:'Rotation', io:'both' },
+      { name:'on',               type:'Bool',  io:'both' },
+      { name:'color',            type:'Color', io:'both' },
+      { name:'intensity',        type:'Float', io:'both' },
+      { name:'ambientIntensity', type:'Float', io:'both' },
+      { name:'attenuation',      type:'Vec3',  io:'both' },
+      { name:'radius',           type:'Float', io:'both' },
+      { name:'cutOffAngle',      type:'Float', io:'both' },
+      { name:'beamWidth',        type:'Float', io:'both' },
+    ],
+    instances: [],
+  },
+  BasicDirectionalLight: {
+    fields: [
+      { name:'translation',      type:'Vec3',  io:'both' }, // no visual effect (parallel rays) — kept for structural consistency, same note as the proto file itself
+      { name:'rotation',         type:'Rotation', io:'both' },
+      { name:'on',               type:'Bool',  io:'both' },
+      { name:'color',            type:'Color', io:'both' },
+      { name:'intensity',        type:'Float', io:'both' },
+      { name:'ambientIntensity', type:'Float', io:'both' },
+    ],
+    instances: [],
+  },
+  // Day 81 resolution: a TimelineTrigger node does NOT own an editable
+  // clock value here. The Timeline tab is the sole authority on cue
+  // times (avoids the exact "two places disagree" problem this whole
+  // redesign exists to prevent) — this node REFERENCES an existing
+  // Timeline cue (relayed from Composer, which relays it from the
+  // Timeline tab's own "Save to Composer") and exposes one output: the
+  // moment that cue's start time is reached. No input ports — nothing
+  // routes INTO when a scheduled cue fires, that's authored on the
+  // clock, not sensed.
+  TimelineTrigger: {
+    fields: [
+      { name:'fired', type:'Time', io:'out' },
+    ],
+    instances: [], // populated only from live TIMELINE_CUES — no seed fallback, since a fake cue reference would be actively misleading
+  },
+  // Grounded in this project's own audio architecture, not invented —
+  // confirmed earlier this session (mccf_events_editor_prototype_2.html's
+  // _muteAllAudio comment): every audio chain here (Music, Bed, zone
+  // ambient/dwell) routes through X3D4's AudioClip → Gain →
+  // AudioDestination, never the classic Sound node. AudioClip's
+  // duration_changed/elapsedTime/isActive are real SFTime/SFBool outputs,
+  // not proposed ones — "audio has time values that can trigger a timer"
+  // is already true of the actual scene graph, just never exposed as a
+  // route-graph source before now.
+  // Day 82: renamed from a generic 'AudioClip' node to match
+  // mccf_audio_protos.x3d's BasicAudioSource exactly — same "node name
+  // matches proto name" convention as the light types. Field set and io
+  // directions confirmed against X_ITE's own real AudioClip docs (fetched
+  // directly, not assumed): gain/loop/startTime/stopTime are genuinely
+  // exposedField [in,out] in the real node, not inputOnly — 'both' here,
+  // same treatment Transform/lights already get, not the earlier
+  // in-only guess. isActive/duration_changed/elapsedTime are genuinely
+  // outputOnly [out] in the real node — confirmed, unchanged. url is
+  // deliberately NOT a port — it's an author-time Place-tab property, not
+  // something routed at runtime, same reasoning already applied elsewhere
+  // (e.g. RecordedPath's own geometry isn't routable either, only its
+  // motion outputs are).
+  BasicAudioSource: {
+    fields: [
+      { name:'translation',      type:'Vec3',  io:'both' },
+      { name:'gain',             type:'Float', io:'both' },
+      { name:'loop',             type:'Bool',  io:'both' },
+      { name:'startTime',        type:'Time',  io:'both' },
+      { name:'stopTime',         type:'Time',  io:'both' },
+      { name:'isActive',         type:'Bool',  io:'out' },
+      { name:'duration_changed', type:'Time',  io:'out' }, // fires once, when the clip's real length becomes known
+      { name:'elapsedTime',      type:'Time',  io:'out' },
+    ],
+    instances: [], // seed fallback removed — populated from live placed audio sources, same as every other real object type
+  },
+  // Classic X3D sensor, never discussed until now. Real fields — not the
+  // full set (hitNormal_changed/hitTexCoord_changed omitted, same density
+  // choice already made for ProximitySensor/TimeSensor above, not a
+  // capability gap). This project has real precedent for exactly this
+  // sensor: the "River of Life" TouchSensor-in-avatar-Transform pattern
+  // discussed earlier this session (click avatar -> bind its viewpoint) —
+  // that was one hand-built special case; this makes the same mechanism
+  // generally available to route anywhere.
+  TouchSensor: {
+    fields: [
+      { name:'enabled',          type:'Bool', io:'in'  },
+      { name:'isOver',           type:'Bool', io:'out' },
+      { name:'isActive',         type:'Bool', io:'out' },
+      { name:'touchTime',        type:'Time', io:'out' },
+      { name:'hitPoint_changed', type:'Vec3', io:'out' },
+    ],
+    instances: ['Cindy','Jack','Salida'], // touch sensors are typically parented inside an avatar's own Transform
+  },
+};
+
+// Live data from Composer (mccf_scene_data) — falls back to each type's
+// seed `instances` above until a real scene is loaded, same as the seed
+// discipline documented on the manifest itself.
+var TIMELINE_CUES = []; // [{id, track, target, label, t0}, ...] relayed from the Timeline tab via Composer
+function _refreshInstancesFromLiveData() {
+  if (window.AGENTS && (AGENTS.length || CAMERAS.length)) {
+    NODE_TYPES.Transform.instances = AGENTS.concat(CAMERAS.map(function(c){ return c.name; }));
+  }
+  if (window.ZONES && ZONES.length) {
+    NODE_TYPES.ProximitySensor.instances = ZONES.map(function(z) { return z + ' · zone'; });
+  }
+  if (window.RECORDED_PATHS_RG && RECORDED_PATHS_RG.length) {
+    NODE_TYPES.RecordedPath.instances = RECORDED_PATHS_RG.map(function(p) { return p.id; });
+  }
+  // Day 82: LIGHTS carries {name, type} per placed light — type distinguishes
+  // which of the three node types below it belongs under, since a single
+  // flat name list (like AGENTS) can't do that on its own.
+  if (window.LIGHTS && LIGHTS.length) {
+    NODE_TYPES.BasicPointLight.instances       = LIGHTS.filter(function(l){ return l.type==='point'; }).map(function(l){ return l.name; });
+    NODE_TYPES.BasicSpotLight.instances        = LIGHTS.filter(function(l){ return l.type==='spot'; }).map(function(l){ return l.name; });
+    NODE_TYPES.BasicDirectionalLight.instances = LIGHTS.filter(function(l){ return l.type==='directional'; }).map(function(l){ return l.name; });
+  }
+  if (window.AUDIO_SOURCES && AUDIO_SOURCES.length) {
+    NODE_TYPES.BasicAudioSource.instances = AUDIO_SOURCES.map(function(a){ return a.name; });
+  }
+  NODE_TYPES.TimelineTrigger.instances = TIMELINE_CUES.map(function(c) {
+    return c.id + ' — ' + c.track + ':' + (c.target||'?') + ' @' + c.t0.toFixed(2) + 's';
+  });
+  populateInstanceDropdown();
+}
+
+// ── Graph state ──────────────────────────────────────────────────────────
+var AGENTS = [], CAMERAS = [], ZONES = [], RECORDED_PATHS_RG = [], LIGHTS = [], AUDIO_SOURCES = [];
+var nodes = [];        // {id, type, name, x, y}
+var connections = [];  // {id, fromNode, fromField, toNode, toField, type}
+var _nodeSeq = 0, _connSeq = 0;
+var _selectedConn = null;
+var _drag = null;      // node-drag state
+var _wireDrag = null;  // in-progress connection-drag state
+
+(function populateToolbar() {
+  var typeSel = document.getElementById('add-type');
+  typeSel.innerHTML = Object.keys(NODE_TYPES).map(function(t) { return '<option value="'+t+'">'+t+'</option>'; }).join('');
+  typeSel.onchange = populateInstanceDropdown;
+  populateInstanceDropdown();
+})();
+function populateInstanceDropdown() {
+  var type = document.getElementById('add-type').value;
+  var instSel = document.getElementById('add-instance');
+  var list = NODE_TYPES[type].instances;
+  instSel.innerHTML = list.length
+    ? list.map(function(n) { return '<option value="'+n+'">'+n+'</option>'; }).join('')
+    : '<option value="">— none available —</option>';
+}
+function addNodeFromToolbar() {
+  var type = document.getElementById('add-type').value;
+  var name = document.getElementById('add-instance').value;
+  if (!name) { alert((type==='TimelineTrigger') ? 'No Timeline cues yet — author and save one from the Timeline tab first.' : 'Nothing to add — no ' + type + ' instances available yet.'); return; }
+  addNode(type, name, 60 + (nodes.length % 5) * 40, 60 + Math.floor(nodes.length / 5) * 260);
+}
+function addNode(type, name, x, y) {
+  _nodeSeq++;
+  nodes.push({ id: 'n' + _nodeSeq, type: type, name: name, x: x, y: y });
+  document.getElementById('empty-note').style.display = 'none';
+  renderGraph();
+}
+function deleteNode(id) {
+  nodes = nodes.filter(function(n) { return n.id !== id; });
+  connections = connections.filter(function(c) { return c.fromNode !== id && c.toNode !== id; });
+  renderGraph();
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────
+function renderGraph() {
+  var inner = document.getElementById('canvas-inner');
+  // Remove existing node elements (keep the svg + empty-note siblings)
+  inner.querySelectorAll('.node').forEach(function(el) { el.remove(); });
+
+  nodes.forEach(function(n) {
+    var def = NODE_TYPES[n.type];
+    var el = document.createElement('div');
+    el.className = 'node';
+    el.id = 'node-' + n.id;
+    el.style.left = n.x + 'px';
+    el.style.top  = n.y + 'px';
+
+    var rows = def.fields.map(function(f) {
+      var leftDot  = (f.io === 'in'  || f.io === 'both') ? '<span class="port-dot left" style="background:'+FTYPE_COLOR[f.type]+'" data-node="'+n.id+'" data-field="'+f.name+'" data-io="in" data-type="'+f.type+'" onmousedown="startWireDrag(event)" onmouseup="finishWireDrag(event)"></span>' : '<span class="port-spacer"></span>';
+      var rightDot = (f.io === 'out' || f.io === 'both') ? '<span class="port-dot right" style="background:'+FTYPE_COLOR[f.type]+'" data-node="'+n.id+'" data-field="'+f.name+'" data-io="out" data-type="'+f.type+'" onmousedown="startWireDrag(event)" onmouseup="finishWireDrag(event)"></span>' : '<span class="port-spacer"></span>';
+      return '<div class="field-row">' + leftDot + '<span class="fname">' + f.name + '</span>' + rightDot + '</div>';
+    }).join('');
+
+    el.innerHTML =
+      '<div class="node-head" onmousedown="startNodeDrag(event,\''+n.id+'\')">' +
+        '<span class="node-del" onclick="event.stopPropagation();deleteNode(\''+n.id+'\')" title="Delete node">×</span>' +
+        '<div class="node-def">DEF: <b>' + n.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</b></div>' +
+        '<div class="node-type">' + n.type + '</div>' +
+      '</div>' +
+      '<div class="node-body">' + rows + '</div>';
+    inner.appendChild(el);
+  });
+
+  renderWires();
+}
+
+function _portPos(nodeId, fieldName, io) {
+  var dot = document.querySelector('.port-dot[data-node="'+nodeId+'"][data-field="'+fieldName+'"][data-io="'+io+'"]');
+  var canvas = document.getElementById('canvas-inner');
+  if (!dot) return null;
+  var dr = dot.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+  return { x: dr.left - cr.left + dr.width/2, y: dr.top - cr.top + dr.height/2 };
+}
+
+function _bezier(p1, p2) {
+  var dx = Math.max(40, Math.abs(p2.x - p1.x) * 0.5);
+  return 'M ' + p1.x + ' ' + p1.y + ' C ' + (p1.x+dx) + ' ' + p1.y + ', ' + (p2.x-dx) + ' ' + p2.y + ', ' + p2.x + ' ' + p2.y;
+}
+
+function _resolveColor(cssVarExpr) {
+  // FTYPE_COLOR entries are 'var(--accent)' etc. — SVG presentation
+  // attributes set via setAttribute don't reliably resolve var() in every
+  // browser, so resolve to the actual hex value once here instead of
+  // trusting the string through.
+  var name = cssVarExpr.slice(4, -1); // 'var(--accent)' -> '--accent'
+  var val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return val || '#4af0a8';
+}
+
+function renderWires() {
+  var svg = document.getElementById('wire-layer');
+  svg.querySelectorAll('path,g.wire-del-wrap').forEach(function(e){ e.remove(); });
+  document.querySelectorAll('.wire-del-btn').forEach(function(e){ e.remove(); });
+
+  connections.forEach(function(c) {
+    var p1 = _portPos(c.fromNode, c.fromField, 'out');
+    var p2 = _portPos(c.toNode, c.toField, 'in');
+    if (!p1 || !p2) return;
+    var d = _bezier(p1, p2);
+    var color = FTYPE_COLOR[c.type];
+    var selected = _selectedConn === c.id;
+
+    var hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('class', 'wire-hit');
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '14');
+    hit.setAttribute('fill', 'none');
+    hit.setAttribute('style', 'pointer-events:stroke;cursor:pointer;');
+    hit.onclick = (function(cid) { return function(e) { e.stopPropagation(); selectConnection(cid); }; })(c.id);
+    svg.appendChild(hit);
+
+    var vis = document.createElementNS('http://www.w3.org/2000/svg','path');
+    vis.setAttribute('d', d);
+    vis.setAttribute('stroke', _resolveColor(color));
+    vis.setAttribute('stroke-width', selected ? '3' : '2');
+    vis.setAttribute('fill', 'none');
+    vis.setAttribute('opacity', selected ? '1' : '0.75');
+    if (selected) vis.setAttribute('stroke-dasharray', '5,3');
+    svg.appendChild(vis);
+
+    if (selected) {
+      var mid = { x: (p1.x+p2.x)/2, y: (p1.y+p2.y)/2 };
+      var btn = document.createElement('div');
+      btn.className = 'wire-del-btn';
+      btn.style.left = (mid.x - 9) + 'px';
+      btn.style.top  = (mid.y - 9) + 'px';
+      btn.textContent = '×';
+      btn.title = 'Delete this route';
+      btn.onclick = function(e) { e.stopPropagation(); deleteConnection(c.id); };
+      document.getElementById('canvas-inner').appendChild(btn);
+    }
+  });
+
+  // In-progress wire being dragged
+  if (_wireDrag && _wireDrag.current) {
+    var d2 = _bezier(_wireDrag.origin, _wireDrag.current);
+    var ghost = document.createElementNS('http://www.w3.org/2000/svg','path');
+    ghost.setAttribute('d', d2);
+    ghost.setAttribute('stroke', _resolveColor(FTYPE_COLOR[_wireDrag.type]));
+    ghost.setAttribute('stroke-width', '2');
+    ghost.setAttribute('stroke-dasharray', '4,4');
+    ghost.setAttribute('fill', 'none');
+    ghost.setAttribute('opacity', '0.85');
+    svg.appendChild(ghost);
+  }
+}
+
+function selectConnection(id) { _selectedConn = (_selectedConn === id) ? null : id; renderWires(); }
+function deleteConnection(id) {
+  connections = connections.filter(function(c) { return c.id !== id; });
+  _selectedConn = null;
+  renderWires();
+}
+document.addEventListener('keydown', function(e) {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && _selectedConn) { deleteConnection(_selectedConn); }
+});
+document.getElementById('canvas-wrap').addEventListener('click', function() {
+  if (_selectedConn) { _selectedConn = null; renderWires(); }
+});
+
+// ── Node dragging ────────────────────────────────────────────────────────
+function startNodeDrag(evt, nodeId) {
+  if (evt.target.classList.contains('node-del')) return;
+  var n = nodes.find(function(x) { return x.id === nodeId; });
+  if (!n) return;
+  var el = document.getElementById('node-' + nodeId);
+  el.classList.add('dragging');
+  _drag = { id: nodeId, startX: evt.clientX, startY: evt.clientY, origX: n.x, origY: n.y };
+  document.addEventListener('mousemove', onNodeDragMove);
+  document.addEventListener('mouseup', onNodeDragEnd);
+  evt.preventDefault();
+}
+function onNodeDragMove(evt) {
+  if (!_drag) return;
+  var n = nodes.find(function(x) { return x.id === _drag.id; });
+  if (!n) return;
+  n.x = Math.max(0, _drag.origX + (evt.clientX - _drag.startX));
+  n.y = Math.max(0, _drag.origY + (evt.clientY - _drag.startY));
+  var el = document.getElementById('node-' + n.id);
+  if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+  renderWires();
+}
+function onNodeDragEnd() {
+  if (_drag) { var el = document.getElementById('node-' + _drag.id); if (el) el.classList.remove('dragging'); }
+  _drag = null;
+  document.removeEventListener('mousemove', onNodeDragMove);
+  document.removeEventListener('mouseup', onNodeDragEnd);
+}
+
+// ── Wire (connection) dragging ──────────────────────────────────────────
+// Start only fires from an output port's mousedown OR an input port's
+// mousedown (dragging "backwards" from an input is allowed too — same
+// convention as most node editors — direction is normalized below based
+// on which end you released on).
+// While dragging from a port, mark every compatible landing port (same
+// type, opposite direction, different node — self-loops are rejected
+// anyway) so it's visible where a valid connection can land instead of
+// finding out only after a failed drop.
+function _highlightCompatiblePorts(sourceNodeId, sourceIo, type) {
+  var wantIo = sourceIo === 'out' ? 'in' : 'out';
+  document.querySelectorAll('.port-dot[data-io="'+wantIo+'"][data-type="'+type+'"]').forEach(function(dot) {
+    if (dot.dataset.node !== sourceNodeId) dot.classList.add('compatible');
+  });
+}
+function _clearPortHighlights() {
+  document.querySelectorAll('.port-dot.compatible').forEach(function(dot) { dot.classList.remove('compatible'); });
+}
+
+function startWireDrag(evt) {
+  evt.stopPropagation();
+  evt.preventDefault(); // was missing — native browser drag/text-select was intercepting the gesture mid-drag, causing both the connection to sometimes not complete and the multi-node text-highlight artifact
+  var dot = evt.currentTarget;
+  var origin = _portPos(dot.dataset.node, dot.dataset.field, dot.dataset.io);
+  _wireDrag = {
+    fromNode: dot.dataset.node, fromField: dot.dataset.field, fromIo: dot.dataset.io,
+    type: dot.dataset.type, origin: origin, current: origin,
+  };
+  _highlightCompatiblePorts(dot.dataset.node, dot.dataset.io, dot.dataset.type);
+  document.addEventListener('mousemove', onWireDragMove);
+  document.addEventListener('mouseup', cancelWireDrag);
+}
+function onWireDragMove(evt) {
+  if (!_wireDrag) return;
+  var canvas = document.getElementById('canvas-inner');
+  var cr = canvas.getBoundingClientRect();
+  _wireDrag.current = { x: evt.clientX - cr.left, y: evt.clientY - cr.top };
+  renderWires();
+}
+function cancelWireDrag() {
+  _wireDrag = null;
+  _clearPortHighlights();
+  document.removeEventListener('mousemove', onWireDragMove);
+  document.removeEventListener('mouseup', cancelWireDrag);
+  renderWires();
+}
+// Detects whether targetNode already reaches sourceNode via existing
+// connections — i.e. whether adding sourceNode → targetNode would close a
+// cycle. Plain BFS forward from targetNode over connections' fromNode →
+// toNode edges. Named directly in the Day 81 design note as a promised
+// behavior ("circular routes detected and blocked automatically") — built
+// for real here, not just asserted.
+function _wouldCreateCycle(sourceNodeId, targetNodeId) {
+  if (sourceNodeId === targetNodeId) return true;
+  var seen = {}; var queue = [targetNodeId];
+  while (queue.length) {
+    var cur = queue.pop();
+    if (cur === sourceNodeId) return true;
+    if (seen[cur]) continue;
+    seen[cur] = true;
+    connections.forEach(function(c) { if (c.fromNode === cur) queue.push(c.toNode); });
+  }
+  return false;
+}
+function finishWireDrag(evt) {
+  if (!_wireDrag) return;
+  evt.stopPropagation();
+  var dot = evt.currentTarget;
+  var target = { node: dot.dataset.node, field: dot.dataset.field, io: dot.dataset.io, type: dot.dataset.type };
+
+  // Normalize to (outNode/outField) -> (inNode/inField) regardless of
+  // which end the drag started/ended on.
+  var src = _wireDrag, out, inn;
+  if (src.fromIo === 'out' && target.io === 'in')      { out = {node:src.fromNode, field:src.fromField}; inn = {node:target.node, field:target.field}; }
+  else if (src.fromIo === 'in' && target.io === 'out') { out = {node:target.node, field:target.field}; inn = {node:src.fromNode, field:src.fromField}; }
+  else { console.warn('[RouteGraph] connect must be one output + one input port'); cancelWireDrag(); return; }
+
+  if (target.type !== src.type) { console.warn('[RouteGraph] type mismatch — ' + src.type + ' does not connect to ' + target.type); cancelWireDrag(); return; }
+  if (out.node === inn.node) { console.warn('[RouteGraph] a node cannot route to itself'); cancelWireDrag(); return; }
+  if (_wouldCreateCycle(out.node, inn.node)) { console.warn('[RouteGraph] rejected — this route would create a cycle'); cancelWireDrag(); return; }
+
+  _connSeq++;
+  connections.push({ id:'c'+_connSeq, fromNode:out.node, fromField:out.field, toNode:inn.node, toField:inn.field, type:target.type });
+  cancelWireDrag();
+}
+
+// ── postMessage bridge to Composer ────────────────────────────────────────
+// Day 81: gives this graph real persistence across tab switches within a
+// session — Composer stores whatever's saved and re-sends it back on the
+// next load, same pattern already used for recordedPaths/legacyWaypoint
+// Dialogue elsewhere in this project. Does NOT reach X3D export yet — that
+// consumption step doesn't exist for this graph any more than it does for
+// recorded paths (see the Day 81 design note's own §3 on that exact gap).
+// This closes the "vanishes on refresh" problem the design note flagged
+// for this file specifically; it does not close the export gap.
+function saveRouteGraph() {
+  var payload = { nodes: nodes, connections: connections };
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'mccf_route_graph_save', data: payload }, '*');
+  } else {
+    console.log('[RouteGraph] standalone — would send mccf_route_graph_save:', payload);
+  }
+}
+(function() {
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_ready' }, '*');
+})();
+window.addEventListener('message', function(evt) {
+  if (!evt.data || !evt.data.type) return;
+  if (evt.data.type === 'mccf_scene_data') {
+    var d = evt.data.data || {};
+    if (d.agents) AGENTS = d.agents;
+    if (d.cameras) CAMERAS = d.cameras;
+    if (d.zones) ZONES = d.zones;
+    if (d.lights) LIGHTS = d.lights;
+    if (d.audio) AUDIO_SOURCES = d.audio;
+    if (d.recordedPaths) RECORDED_PATHS_RG = d.recordedPaths;
+    if (d.timelineCues) TIMELINE_CUES = d.timelineCues;
+    _refreshInstancesFromLiveData();
+    // Restore a previously-saved graph exactly once — only when this
+    // graph is still empty (a fresh load), so a scene-data refresh mid-
+    // session (e.g. after placing a new agent) never clobbers in-progress
+    // editing with the last-saved snapshot.
+    if (d.routeGraph && !nodes.length && !connections.length && d.routeGraph.nodes && d.routeGraph.nodes.length) {
+      nodes = d.routeGraph.nodes;
+      connections = d.routeGraph.connections || [];
+      _nodeSeq = nodes.length; _connSeq = connections.length;
+      document.getElementById('empty-note').style.display = 'none';
+      renderGraph();
+    }
+  }
+});
+
+renderGraph();
+</script>
+</body>
+</html>
