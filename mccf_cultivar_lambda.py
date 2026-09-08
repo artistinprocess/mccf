@@ -278,6 +278,11 @@ class CultivarDefinition:
     # Alias — optional narrative name (e.g. Cherokee name vs family name)
     # XSD: minOccurs="0" — never required, never breaks validation if absent
     alias: str = ""
+    # Portrait — node icon in the Composer Affects graph, authored in
+    # Character Creator's right panel. Optional, same minOccurs="0"
+    # reasoning as alias/hanim_src: never required, absent = the graph
+    # falls back to its default glyph (see Composer's _iconThumbHtml).
+    portrait: str = ""
     # H-Anim figure — optional, character property authored in Character Creator
     # XSD: minOccurs="0" — cylinder placeholder used in scene when absent
     hanim_src: str = ""
@@ -329,6 +334,7 @@ class CultivarDefinition:
             "voice_rate":  self.voice_rate,
             "voice_pitch": self.voice_pitch,
             "alias":          self.alias,
+            "portrait":       self.portrait,
             "hanim_src":      self.hanim_src,
             "hanim_loa":      self.hanim_loa,
             "behavior_clips":   self.behavior_clips,
@@ -391,6 +397,11 @@ class CultivarDefinition:
             lines.append(f'')
             lines.append(f'  <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->')
             lines.append(f'  <Alias>{self.alias}</Alias>')
+
+        if self.portrait:
+            lines.append(f'')
+            lines.append(f'  <!-- Portrait: node icon in the Composer Affects graph -->')
+            lines.append(f'  <Portrait src="{self.portrait}"/>')
 
         if self.hanim_src:
             lines.append(f'')
@@ -497,6 +508,9 @@ class CultivarDefinition:
         alias_el = root.find("{*}Alias")
         alias    = alias_el.text.strip() if (alias_el is not None and alias_el.text) else ""
 
+        portrait_el = root.find("{*}Portrait")
+        portrait    = portrait_el.get("src", "") if portrait_el is not None else ""
+
         # HAnimFigure — optional, minOccurs=0
         hanim_el  = root.find("{*}HAnimFigure")
         hanim_src = hanim_el.get("src", "") if hanim_el is not None else ""
@@ -541,6 +555,7 @@ class CultivarDefinition:
             voice_rate=voice_rate,
             voice_pitch=voice_pitch,
             alias=alias,
+            portrait=portrait,
             hanim_src=hanim_src,
             hanim_loa=hanim_loa,
             behavior_clips=behavior_clips,
@@ -580,6 +595,7 @@ class CultivarDefinition:
             voice_rate=float(data.get("voice_rate", 1.0)),
             voice_pitch=float(data.get("voice_pitch", 1.0)),
             alias=data.get("alias", ""),
+            portrait=data.get("portrait", ""),
             hanim_src=data.get("hanim_src", ""),
             hanim_loa=int(data.get("hanim_loa", 4)),
             behavior_clips=data.get("behavior_clips", []),
@@ -708,6 +724,8 @@ class CultivarRegistry:
                         failure_mode=_text(cultivar_el, "FailureMode"),
                         signature_phrases=phrases,
                         alias=_text(cultivar_el, "Alias"),
+                        portrait=(cultivar_el.find("Portrait").get("src", "")
+                                  if cultivar_el.find("Portrait") is not None else ""),
                         voice_name=voice_el.get("name", "")         if voice_el is not None else "",
                         voice_lang=voice_el.get("lang", "en-US")    if voice_el is not None else "en-US",
                         voice_rate=float(voice_el.get("rate", 1.0))  if voice_el is not None else 1.0,
@@ -835,6 +853,7 @@ def get_cultivars_xml():
             "voice_rate":       d.voice_rate,
             "voice_pitch":      d.voice_pitch,
             "alias":            d.alias,
+            "portrait":         d.portrait,
             "hanim_src":        d.hanim_src,
             "hanim_loa":        d.hanim_loa,
             "behavior_clips":   d.behavior_clips,
@@ -889,9 +908,12 @@ def post_cultivar_xml():
             voice_lang=data.get("voice_lang", "en-US"),
             voice_rate=float(data.get("voice_rate", 1.0)),
             voice_pitch=float(data.get("voice_pitch", 1.0)),
+            constitutional_notes=data.get("constitutional_notes", ""),
             alias=data.get("alias", ""),
+            portrait=data.get("portrait", ""),
             hanim_src=data.get("hanim_src", ""),
             hanim_loa=int(data.get("hanim_loa", 4)),
+            receptivity=data.get("receptivity", {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}),
             behavior_clips=data.get("behavior_clips", []),
             behavior_default=data.get("behavior_default", "Default"),
         )
@@ -987,3 +1009,4 @@ def patch_cultivars_dict(cultivars_dict: dict) -> dict:
                 "note": _lambda_note(lam),
             }
     return cultivars_dict
+
