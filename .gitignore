@@ -64,5 +64,8 @@ zones/*_zones.xml
 # --- Media assets — large binaries, environment-specific, not source ---
 static/x3d/media/
 
+# --- X3D asset library — large binaries, not source ---
+static/x3d/X3DAssets/
+
 # --- Generated/test X3D scene exports (per-scene output, not the proto library) ---
 static/x3d/*.x3d

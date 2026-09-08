@@ -605,6 +605,16 @@ x3d-canvas {
         padding:2px 8px;border:1px solid var(--accent2);border-radius:var(--radius);
         background:transparent;color:var(--accent2);cursor:pointer;letter-spacing:0.06em;
         text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">&#9679; Record Path</button>
+      <!-- Day 88: real, requested need — this viewport is where paths
+           actually get recorded, and the scene ships headlight=FALSE by
+           design, so a dark scene made it hard to see what was being
+           recorded. Pure live SAI toggle, same as the Loader's own
+           headlight checkbox — never touches the export, never persists,
+           resets on the next scene reload. Turn on to see, off before
+           exporting so it never gets baked in by accident. -->
+      <label style="margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer" title="Live-only debug light for this viewport — never affects the export">
+        <input type="checkbox" id="vp-headlight" onchange="vpHeadlightChanged()" style="width:auto">headlight
+      </label>
       <span class="x3d-status" id="path-rec-status" style="display:none"></span>
       <button id="saved-paths-btn" onclick="_toggleRecordedPathsPanel()" title="Paths already recorded and saved to Composer" style="
         margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;
@@ -1084,6 +1094,26 @@ function saveObjectPlacement() {
     }
   } else {
     console.log('[Events Editor] standalone — would save:', _selObj);
+  }
+}
+
+// Day 88: pure debug convenience, mirrors the Loader's own pbHeadlightChanged()
+// exactly — live SAI write only, never written back to any file, never
+// touches sceneConfig/export. This viewport's own <x3d-canvas> is
+// id="vp-x3d" (not "vp-canvas" — that's a separate, plain 2D overlay
+// canvas used elsewhere in this file for path-trail drawing, a real
+// distinction worth not confusing). Resets to whatever the export
+// actually says (currently always headlight=FALSE) on the next scene
+// reload, same as the Loader's version.
+function vpHeadlightChanged() {
+  var cb = document.getElementById('vp-headlight');
+  try {
+    var x3dCanvas = document.getElementById('vp-x3d');
+    var navInfo = x3dCanvas.browser.currentScene.getNamedNode('MainNavInfo');
+    navInfo.headlight = cb.checked;
+    console.log('[debug] viewport headlight (live only, not exported) ->', cb.checked);
+  } catch(e) {
+    console.warn('[debug] viewport headlight toggle failed — scene not loaded yet, or MainNavInfo not found (older export, predates this feature):', e.message);
   }
 }
 
@@ -2031,13 +2061,20 @@ function renderCueEditor() {
     var opts = (c.track === 'light')  ? LIGHTS.map(function(x){return x.name;})
              : (c.track === 'audio')  ? AUDIO_SOURCES.map(function(x){return x.name;})
              : (c.track === 'movie' || c.track === 'animation') ? ASSETS
+             // Day 88: Path can target either — recorded-path playback
+             // works identically for an agent's Avatar_ Transform or an
+             // asset's PlacedAsset_ Transform (see buildRecordedPathInterpNodes'
+             // own comment). AGENTS listed first since that's the more
+             // common case (an author walking a character somewhere).
+             : (c.track === 'path') ? AGENTS.concat(ASSETS)
              : AGENTS;
     // Gesture's clip dropdown below depends on WHICH agent is targeted —
     // re-render the whole editor on target change so that dropdown always
     // reflects the newly selected agent's actual clips, not the previous
     // agent's. Cheap (this panel is small), and correctness here matters
-    // more than avoiding one extra render.
-    var targetOnChange = (c.track === 'gesture')
+    // more than avoiding one extra render. Path's optional walk-gesture
+    // dropdown has the exact same dependency, same reasoning.
+    var targetOnChange = (c.track === 'gesture' || c.track === 'path')
       ? "setCueProp('target',this.value,false);renderCueEditor();"
       : "setCueProp('target',this.value,false)";
     html += '<div class="obj-field"><label>Target</label><select oninput="'+targetOnChange+'">' +
@@ -2054,6 +2091,17 @@ function renderCueEditor() {
         ? RECORDED_PATHS.map(function(rp) { return '<option value="'+rp.id+'"'+(rp.id===c.params.pathId?' selected':'')+'>'+rp.id+' ('+rp.keyCount+' keys)</option>'; }).join('')
         : '<option value="">— none recorded yet —</option>') +
       '</select></div>';
+    // Day 88: real, new capability — optional, agent-only. AGENT_CLIPS
+    // only has real data for an agent target; showing this for an asset
+    // target would offer a control that does nothing (assets have no
+    // gestures), so it's simply not rendered in that case rather than
+    // shown disabled or with a confusing empty list.
+    if (AGENTS.indexOf(c.target) !== -1) {
+      var walkClipOpts = ['', ].concat(AGENT_CLIPS[c.target] || ['Default']);
+      html += '<div class="obj-field"><label>Walk gesture (optional — plays while the path moves)</label><select oninput="setCueProp(\'walkGesture\',this.value,false)">' +
+        walkClipOpts.map(function(n) { return '<option value="'+n+'"'+(n===(c.walkGesture||'')?' selected':'')+'>'+(n||'— none —')+'</option>'; }).join('') +
+        '</select></div>';
+    }
   } else if (c.track === 'gesture') {
     // Real dropdown, sourced from the target agent's actual authored
     // clips (AGENT_CLIPS, populated from /cultivars/xml via Composer —
