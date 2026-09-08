@@ -1760,7 +1760,13 @@ def export_python():
 def arc_export_save():
     """
     Save arc export as XML.
-    Body: { cultivar, timestamp, genre, seed, rows, scene_name, take_name }
+    Body: { cultivar, timestamp, genre, seed, seed_source, rows, scene_name, take_name }
+    seed_source: 'explicit' | 'randomized' | None — whether the seed was
+    pinned in Scene Setup or auto-generated for this take (gesture
+    constellation §6). Recorded on the <Seed> tag so a past export shows
+    whether re-entering its seed value in Scene Setup will actually
+    reproduce that run (explicit) or whether that specific run's seed was
+    a one-off, never re-enterable by design (randomized).
 
     Day 67 directory redesign: an arc belongs to a scene, and multiple
     agents' arcs recorded as part of the same working session belong
@@ -1785,6 +1791,7 @@ def arc_export_save():
     rows      = data.get("rows", [])
     genre     = data.get("genre", "")
     seed      = data.get("seed", None)
+    seed_source = data.get("seed_source", None)
 
     if not rows:
         return jsonify({"status": "error", "message": "no rows"}), 400
@@ -1825,7 +1832,8 @@ def arc_export_save():
     if genre:
         xml += f'    <Genre narrative="{xml_esc(genre)}"/>\n'
     if seed is not None:
-        xml += f'    <Seed value="{seed}" note="arc noise locked for reproducibility"/>\n'
+        source_attr = f' source="{xml_esc(seed_source)}"' if seed_source else ''
+        xml += f'    <Seed value="{seed}"{source_attr} note="arc noise locked for reproducibility"/>\n'
 
     for row in rows:
         # Use waypoint name as-is — no uppercase mangling.

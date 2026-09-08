@@ -1115,6 +1115,16 @@
 </style>
 </head>
 <body>
+<!-- Portrait lightbox — full-size view, click anywhere to close. Generic
+     enough it could be reused for other image previews later, but only
+     wired to the portrait thumb for now. -->
+<div id="portrait-lightbox" onclick="closePortraitLightbox()"
+     style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.85);
+            align-items:center;justify-content:center;cursor:zoom-out;">
+  <img id="portrait-lightbox-img" src="" alt="Portrait"
+       style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+</div>
+
 
 <!-- ══════════════════════════════════════════════════════ HEADER -->
 <header>
@@ -1336,7 +1346,7 @@
          convention (subdir=icons) so both apps share the same folder. -->
     <div class="section-head">Portrait</div>
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
-      <div id="portrait-thumb"
+      <div id="portrait-thumb" onclick="showPortraitLightbox()"
            style="width:56px;height:56px;border-radius:6px;background:var(--panel-2,#0d1520);
                   border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
                   font-size:26px;overflow:hidden;flex-shrink:0;">👤</div>
@@ -2096,10 +2106,21 @@ function clearPortrait() {
 function updatePortraitThumb() {
   var el = document.getElementById('portrait-thumb');
   if (!el) return;
-  if (!_portraitSrc) { el.innerHTML = '👤'; return; }
+  if (!_portraitSrc) { el.innerHTML = '👤'; el.style.cursor = 'default'; return; }
   var url = _portraitSrc.indexOf('data:') === 0 ? _portraitSrc : '/static/x3d/' + _portraitSrc;
   el.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;" ' +
                  'onerror="this.parentElement.innerHTML=\'👤\'">';
+  el.style.cursor = 'pointer';
+}
+
+function showPortraitLightbox() {
+  if (!_portraitSrc) return;  // placeholder glyph — nothing to show full-size
+  var url = _portraitSrc.indexOf('data:') === 0 ? _portraitSrc : '/static/x3d/' + _portraitSrc;
+  document.getElementById('portrait-lightbox-img').src = url;
+  document.getElementById('portrait-lightbox').style.display = 'flex';
+}
+function closePortraitLightbox() {
+  document.getElementById('portrait-lightbox').style.display = 'none';
 }
 
 // ── API helpers ────────────────────────────────────────────────────────
@@ -3083,16 +3104,38 @@ function heDrawAtlasCanvas(src) {
   // Draw placeholder atlas colour map (real image loads via Image below)
   ctx.fillStyle = '#0d1117';
   ctx.fillRect(0, 0, 80, 80);
-  // Try to load the actual texture for the thumbnail
+  // Try to load the actual texture for the thumbnail.
+  // BUG FIX: this used to derive the filename from `src` (_hanimPath, the
+  // AVATAR's own .x3d path) — meaning it tried to load e.g.
+  // '/static/avatars/cindy_hanim.x3d' as an <img>, which can never
+  // succeed (it's not an image), always fell through to the placeholder
+  // blocks below, and never once showed a real saved skin regardless of
+  // whether one existed. The server (mccf_hanim_api.py's hanim_export/
+  // hanim_skin_upload) actually saves skins as <cultivar-slug>_skin.png,
+  // a different filename entirely, derived from the CULTIVAR name, not
+  // the avatar path — same slug convention reproduced here
+  // (re.sub(r'[^A-Za-z0-9_-]','_',name).lower() server-side).
+  // This was also the reason he-skin-url always looked empty on reopen:
+  // nothing had ever tried the right filename to populate it with.
   var img = new Image();
   img.crossOrigin = 'anonymous';
+  var skinUrlEl = document.getElementById('he-skin-url');
+  var realSkinPath = null;
+  if (_selectedName) {
+    var slug = _selectedName.replace(/[^A-Za-z0-9_-]/g, '_').toLowerCase();
+    realSkinPath = '/static/avatars/' + slug + '_skin.png';
+  }
   img.onload = function() {
     ctx.drawImage(img, 0, 0, 80, 80);
+    // Confirmed a real skin exists at this path — reflect it in the UI
+    // instead of leaving the field looking unset. Only on a real find:
+    // never write a guessed path the image load didn't actually confirm.
+    if (skinUrlEl && !_heSkinPending) skinUrlEl.value = realSkinPath;
   };
-  // Flask serves static files; use /static/avatars/<filename>
-  var filename = src.split('/').pop();
-  img.src = '/static/avatars/' + filename;
-  // Fallback: draw region colour blocks
+  // Fallback: draw region colour blocks — no skin found at the real path
+  // (never saved yet, or this cultivar's slug doesn't match any file).
+  // Defined before use below — realSkinPath being null calls this directly,
+  // so it has to exist first, not after the if/else that might invoke it.
   img.onerror = function() {
     ctx.fillStyle = '#1a3a5c'; ctx.fillRect(0,  0, 40, 40);
     ctx.fillStyle = '#2d1f3d'; ctx.fillRect(40, 0, 40, 40);
@@ -3107,6 +3150,11 @@ function heDrawAtlasCanvas(src) {
     ctx.fillStyle = 'rgba(210,153,34,0.5)';
     ctx.fillText('limbs', 43, 53);
   };
+  if (realSkinPath) {
+    img.src = realSkinPath;
+  } else {
+    img.onerror();
+  }
 }
 
 function heSkinFileSelected(evt) {

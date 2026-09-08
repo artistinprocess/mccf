@@ -172,6 +172,18 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 </style>
 </head>
 <body>
+<!-- Icon lightbox — double-click an Affects graph node's portrait/zone
+     image to view it full-size. Same pattern as Character Creator's
+     portrait lightbox, reimplemented here rather than shared, since these
+     are two separate HTML files/JS scopes with no import mechanism
+     between them. -->
+<div id="icon-lightbox" onclick="closeIconLightbox()"
+     style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.85);
+            align-items:center;justify-content:center;cursor:zoom-out;">
+  <img id="icon-lightbox-img" src="" alt="Icon"
+       style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+</div>
+
 <header>
   <div class="logo">MCCF <span>Scene Composer</span></div>
   <div class="vbadge">V5</div>
@@ -182,9 +194,9 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="mtab" onclick="setMode('characters')">Characters</button>
     <button class="mtab" onclick="setMode('events')">Events</button>
     <button class="mtab" onclick="setMode('dialogue')">Dialogue</button>
-    <button class="mtab" onclick="setMode('route')">Route Graph</button>
-    <button class="mtab" onclick="setMode('network')">Network</button>
-    <button class="mtab" onclick="setMode('run')">Record Scene Arc</button>
+    <button class="mtab" onclick="setMode('route')">Routes</button>
+    <button class="mtab" onclick="setMode('network')">Affects</button>
+    <button class="mtab" onclick="setMode('run')">Record Arc</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
   </div>
   <div class="api-row">
@@ -196,6 +208,17 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 </header>
 <div class="panel" id="left-panel">
   <div id="mode-scene">
+    <div class="sh">Load Existing Scene</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:17px;font-family:monospace">
+          <option value="">— saved scenes —</option>
+        </select>
+        <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:17px" title="Refresh list">↺</button>
+      </div>
+      <button class="btn pri full" onclick="loadSceneFromDropdown()">Load Scene</button>
+      <div id="scene-load-log" style="font-size:16px;color:var(--dim);min-height:14px;margin-top:4px"></div>
+    </div>
     <div class="sh">Scene Setup</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <label>Scene Name</label>
@@ -206,6 +229,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
       <label>Description</label>
       <textarea id="sc-desc" rows="2" placeholder="Garden of the Goddess"></textarea>
+      <!-- Gesture constellation §6: base/default seed for this scene's
+           seeded PRNG. Blank = unset = randomize a fresh seed each take;
+           the seed actually used gets recorded per-take in the Scene Arc
+           export (see _saveSceneArc), so a randomized run can still be
+           identified and re-run later even though it wasn't pinned here. -->
+      <label style="margin-top:8px">Seed <span style="color:var(--dim);font-size:16px">(blank = randomize each take)</span></label>
+      <input id="sc-seed" type="text" placeholder="unset — randomizes" onchange="sceneChanged()">
+      <div id="sc-seed-resolved" style="font-size:15px;color:var(--dim);min-height:14px;margin-top:2px"></div>
       <!-- Day 88: real, new capability — multi-stop sky/ground gradient
            authoring, per the author's own tested example (a 5-stop night
            sky). Background MUST sit at true root level, never inlined,
@@ -268,17 +299,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <button class="btn pri full" onclick="applyScene()">Apply Grid</button>
       </div>
     </div>
-    <div class="sh">Load Existing Scene</div>
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
-        <select id="scene-load-select" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:17px;font-family:monospace">
-          <option value="">— saved scenes —</option>
-        </select>
-        <button class="btn cool" onclick="refreshSceneList()" style="padding:3px 8px;font-size:17px" title="Refresh list">↺</button>
-      </div>
-      <button class="btn pri full" onclick="loadSceneFromDropdown()">Load Scene</button>
-      <div id="scene-load-log" style="font-size:16px;color:var(--dim);min-height:14px;margin-top:4px"></div>
-    </div>
     <div class="sh">Scene Summary</div>
     <div class="dsect" id="scene-summary"><div style="color:var(--dim);font-size:21px">Apply grid to begin.</div></div>
     <div class="sh">Zone Set</div>
@@ -318,6 +338,19 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <option value="threat">threat zone</option><option value="sacred">sacred / memorial</option>
       </select>
       <label>Radius (m)</label><input id="z-radius" type="number" value="4" min="1" max="20" step="0.5">
+      <label>Zone Image <span style="color:var(--dim);font-size:16px">(icon shown in Affects graph — same media/icons/ folder as Character portraits)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <div id="z-image-thumb" style="width:36px;height:36px;border-radius:4px;background:#0d1520;border:1px solid #2a3545;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0">🗺️</div>
+        <select id="z-image-select" onchange="onZoneImageSelectChange()" style="flex:1;background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:15px;font-family:monospace">
+          <option value="">— default —</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <label class="btn" style="flex:1;text-align:center;cursor:pointer;font-size:15px;padding:3px 6px;margin:0">📂 Upload…
+          <input type="file" id="z-image-file" accept="image/png,image/jpeg,image/webp" onchange="onZoneImageFileSelected(event)" style="display:none">
+        </label>
+        <button class="btn" style="font-size:15px;padding:3px 10px" onclick="clearZoneImage()" title="Reset to default">✕</button>
+      </div>
       <label>Descriptor</label>
       <textarea id="z-desc" rows="2" placeholder="care warmth vulnerability comfort"></textarea>
       <label>Noise</label><input id="z-noise" type="number" value="0.10" min="0" max="1" step="0.01">
@@ -560,7 +593,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       Place and tune camera/light objects, and schedule camera, light, gesture,
       and recorded-path cues on a master clock — duration bars, not guesswork.
       Deliberately excludes dialogue (its own future module) and sensed content
-      (see Route Graph).
+      (see Routes).
     </div>
   </div>
   <div id="mode-dialogue" style="display:none">
@@ -573,7 +606,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
   </div>
   <div id="mode-route" style="display:none">
-    <div class="sh">Route Graph</div>
+    <div class="sh">Routes</div>
     <div style="font-size:18px;color:var(--dim);line-height:1.7">
       Wire sensed sources (zone entry, path start-triggers) and scheduled
       Timeline cue references to consumers via typed field connections —
@@ -581,7 +614,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
   </div>
   <div id="mode-run" style="display:none">
-    <div class="sh">Record Scene Arc</div>
+    <div class="sh">Record Arc</div>
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <label>Paths — select one or more (Ctrl/Cmd-click). Paths sharing a Waypoint Order run concurrently; higher orders wait for lower ones to finish.</label>
       <select id="run-path" multiple size="4"></select>
@@ -595,7 +628,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <label>API Key (if needed)</label>
       <input id="run-apikey" type="text" placeholder="sk-... or leave blank for ollama">
       <div class="btn-row" style="margin-top:8px">
-        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Scene Arc</button>
+        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Arc</button>
         <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
         <button class="btn" onclick="resetSceneArc()">&#8635; Reset</button>
       </div>
@@ -626,8 +659,32 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
     <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="net-show-links" onchange="toggleShowLinks()">
-      Show links on grid
+      Show links on Place/Scene map <span style="color:var(--dim);font-size:15px">(this Affects tab always shows them)</span>
     </label>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:10px">
+      <div class="sh" style="margin-top:0">Graph layers</div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:0">
+        <input type="checkbox" id="net-show-agents" checked onchange="toggleNetShowAgents()"> Characters
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+        <input type="checkbox" id="net-show-zones" checked onchange="toggleNetShowZones()"> Zones
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px">
+        <input type="checkbox" id="net-show-trails" checked onchange="toggleNetShowTrails()"> Settling trails</label>
+      <button class="btn" style="width:100%;margin-top:8px" onclick="startNetLayout()" title="Nodes are positioned by coupler links and by how alike their E/B/P/S profiles are — not by scene placement. Re-run if it looks tangled.">&#8635; Re-layout graph</button>
+    </div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:10px">
+      <div class="sh" style="margin-top:0">Saved paths (user)</div>
+      <div style="font-size:15px;color:var(--dim);margin-bottom:6px">
+        Recorded settling paths and harvested trajectories you've saved. Save one from an agent/zone's detail panel, or from the Harvest trajectory toolbar button.
+      </div>
+      <select id="net-asset-select" style="width:100%;margin-bottom:6px"></select>
+      <div class="btn-row">
+        <button class="btn cool" style="flex:1;font-size:15px" onclick="loadNetAsset()">Load</button>
+        <button class="btn" style="font-size:15px" onclick="clearLoadedNetAsset()" title="Remove the preview overlay">Clear</button>
+        <button class="btn" style="font-size:15px" onclick="refreshInterpolatorAssetsList()" title="Reload the list">&#8635;</button>
+      </div>
+    </div>
     <div id="net-link-list"><div style="color:var(--dim);font-size:18px;">No links defined.</div></div>
     <div style="margin-top:12px">
       <div class="sh">New Link</div>
@@ -984,7 +1041,49 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <div style="flex:1"><label>Z</label><input id="asset-z" type="number" step="0.1"></div>
       </div>
       <label>X3D / glTF file</label>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span></span>
+        <button type="button" class="btn cool" onclick="refreshX3DAssetsList(null,true)" style="padding:2px 8px;font-size:16px" title="Reload X3DAssets/ directory">↺ assets/</button>
+      </div>
       <select id="asset-place-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:17px;font-family:monospace;width:100%"></select>
+      <!-- XML editor for the currently-selected asset file. These are
+           lazily-loaded <Inline> references, not embedded scene content —
+           editing the file on disk has zero effect on whatever's already
+           loaded in this session; a fresh scene load (or a re-Inline) is
+           what would pick up the change. Read via the file's own plain
+           static/ URL (same direct-fetch pattern already used for the
+           compiled scene and Effect Assets); write only on an explicit
+           Save, and only after a clean client-side XML parse — "XML is
+           halt and catch fire": any parse error aborts the write entirely,
+           nothing partial or corrupt ever reaches disk. -->
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button type="button" class="btn cool" style="flex:1;padding:3px 8px;font-size:15px" onclick="editSelectedAssetXml()">&#9998; Edit XML</button>
+      </div>
+      <div id="asset-xml-editor" style="display:none;margin-top:6px">
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button type="button" class="btn cool" id="asset-view-raw-btn" style="flex:1;padding:3px 8px;font-size:14px" onclick="switchAssetEditView('raw')">Raw XML</button>
+          <button type="button" class="btn cool" id="asset-view-tree-btn" style="flex:1;padding:3px 8px;font-size:14px" onclick="switchAssetEditView('tree')">Tree</button>
+        </div>
+        <textarea id="asset-xml-text" spellcheck="false" style="width:100%;height:220px;background:#0a0f16;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:6px;font-family:monospace;font-size:13px;white-space:pre;resize:vertical"></textarea>
+        <!-- Generic/reflective tree — deliberately not schema-aware (no
+             built-in knowledge that diffuseColor means 3 floats, etc.):
+             agreed directly with the author to defer that and build the
+             simpler version first, since X_ITE's own editor tooling
+             already covers the semantic-guard end. Shows whatever
+             attributes an element actually has, as plain editable
+             key/value pairs — real structural help (no more hunting
+             through a wall of raw text for one color) without claiming
+             to understand X3D field semantics. -->
+        <div id="asset-tree-view" style="display:none;height:280px;border:1px solid #2a3545;border-radius:3px;overflow:hidden">
+          <div id="asset-tree-list" style="width:100%;height:40%;overflow:auto;background:#0a0f16;padding:4px;box-sizing:border-box;border-bottom:1px solid #2a3545"></div>
+          <div id="asset-tree-props" style="width:100%;height:60%;overflow:auto;background:#0a0f16;padding:6px;box-sizing:border-box"></div>
+        </div>
+        <div id="asset-xml-error" style="display:none;color:var(--danger);font-size:13px;margin-top:4px;white-space:pre-wrap"></div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button type="button" class="btn pri" style="flex:1" onclick="saveAssetXmlEdit()">Save</button>
+          <button type="button" class="btn" style="flex:1" onclick="document.getElementById('asset-xml-editor').style.display='none'">Cancel</button>
+        </div>
+      </div>
       <label>Height (m)</label><input id="asset-height" type="number" value="0" step="0.1">
       <div class="insp-field">
         <label style="margin:0;flex:1">Rotation (Y-axis, degrees) <span id="asset-rot-val" style="color:var(--warm)">0</span></label>
@@ -1096,6 +1195,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <button class="tool-btn active" id="tool-select" onclick="setTool('select')">Select</button>
     <button class="tool-btn" id="tool-move" onclick="setTool('move')">Move</button>
     <button class="tool-btn" id="tool-query" onclick="setTool('query')">Query</button>
+    <button class="tool-btn" id="traj-harvest-btn" onclick="toggleTrajectoryCapture()" title="Record raw mouse position over time as plain (t,x,y) triples — works in any mode, means whatever whoever reads it decides.">&#9210; Harvest trajectory</button>
+    <button class="tool-btn" id="traj-save-btn" onclick="saveHarvestedTrajectory()" title="Save the last harvested trajectory as a user-tier asset" style="display:none">&#128190; Save</button>
   </div>
   <div class="place-hint" id="place-hint">Click map to place</div>
   <div class="coord-disp" id="coord-disp">x: 0.0  z: 0.0</div>
@@ -1119,7 +1220,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
          Character Creator's simple lifecycle: loaded once, hidden/shown,
          never torn down to about:blank. -->
     <iframe id="route-graph-frame" src="/static/mccf_route_graph_prototype.html"
-      style="display:none;width:100%;height:100%;border:none;" title="Route Graph"></iframe>
+      style="display:none;width:100%;height:100%;border:none;" title="Routes"></iframe>
     <!-- Offline placeholder -->
     <div id="tool-offline" style="display:none;position:absolute;inset:0;flex-direction:column;
       align-items:center;justify-content:center;gap:14px;background:var(--s2);">
@@ -1135,10 +1236,20 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <div class="panel" id="right-panel">
   <div id="detail-zone" style="display:none">
     <div class="sh" style="margin-top:0">Zone Properties</div>
-    <div id="zd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
-    <div id="zd-type" style="font-size:21px;color:var(--dim);margin-bottom:8px;"></div>
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:2px;">
+      <div style="flex:1">
+        <div id="zd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
+        <div id="zd-type" style="font-size:21px;color:var(--dim);"></div>
+      </div>
+      <div id="zd-portrait-thumb" style="width:40px;height:40px;border-radius:6px;background:#0d1520;border:1px solid #2a3545;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0">🗺️</div>
+    </div>
+    <div style="margin-bottom:6px"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="zd-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (X3D)</div><div id="zd-pos" style="font-size:21px;color:var(--accent)"></div></div>
+    <div style="display:flex;align-items:center;gap:6px;margin:-4px 0 8px">
+      <div id="zd-interp" style="font-size:15px;color:var(--dim);flex:1"></div>
+      <button class="btn" id="zd-interp-save" style="font-size:14px;padding:2px 8px;display:none" onclick="saveZoneInterpolator()">&#128190; Save</button>
+    </div>
     <div class="dsect" id="zd-chorus-sect" style="display:none">
       <div class="sh" style="margin:0 0 4px">Greek Chorus</div>
       <div id="zd-chorus" style="font-size:18px;color:var(--purple)"></div>
@@ -1167,8 +1278,13 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <input type="color" id="ad-color" title="Agent color"
         style="width:28px;height:28px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none"
         onchange="setAgentColor(this.value)">
+      <div id="ad-portrait-thumb" style="width:40px;height:40px;border-radius:6px;background:#0d1520;border:1px solid #2a3545;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0">👤</div>
     </div>
     <div id="ad-disp" style="font-size:21px;color:var(--dim);margin-bottom:8px;"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin:-4px 0 8px">
+      <div id="ad-interp" style="font-size:15px;color:var(--dim);flex:1"></div>
+      <button class="btn" id="ad-interp-save" style="font-size:14px;padding:2px 8px;display:none" onclick="saveAgentInterpolator()">&#128190; Save</button>
+    </div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div>
       <div style="display:flex;gap:6px;margin-bottom:4px">
@@ -1353,6 +1469,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <!-- Day 78, V5 Tasklist Phase 2: RDP decimation + recorded-path (de)serialization,
      shared with the events editor's path recorder — same module, both consumers. -->
 <script src="/static/js/path-recorder.js"></script>
+<script src="/static/js/mccf_seeded_prng.js"></script>
 <script>
 // MCCF Scene Composer V5 - waypointOrder required sequencing
 var API = 'http://localhost:5000';
@@ -1361,7 +1478,9 @@ var tool = 'select';
 var placing = null;
 var pendingPos = null;
 var placingAgent = null;
-var sceneConfig = { name: '', width: 40, depth: 40, description: '', labelsEnabled: true, dialogueTTYEnabled: true };
+var sceneConfig = { name: '', width: 40, depth: 40, description: '', labelsEnabled: true, dialogueTTYEnabled: true, seed: '' };
+// seed: '' means unset — MCCF_PRNG.beginRun() treats empty string same as
+// null/undefined and randomizes (gesture constellation §6).
 // Day 88: real, new capability — multi-stop Background gradient, per the
 // author's own tested example (a 5-stop night sky). Each stop is
 // {color:[r,g,b] (0-1 floats), angle} — angle is the boundary where this
@@ -1834,6 +1953,7 @@ window.addEventListener('load',function(){
   canvas.addEventListener('mousedown',onMouseDown);
   canvas.addEventListener('mouseup',onMouseUp);
   canvas.addEventListener('click',onCanvasClick);
+  canvas.addEventListener('dblclick',onCanvasDblClick);
   setApi(document.getElementById('api-url').value);
   var bgDefInit = document.getElementById('bg-def'); if (bgDefInit) bgDefInit.value = bgConfig.def;
   renderBgStops();
@@ -1856,7 +1976,7 @@ function clamp(wx,wz){return{wx:Math.max(0,Math.min(sceneConfig.width,wx)),wz:Ma
 function setApi(url){API=url.trim();ping();}
 function ping(){
   fetch(API+'/ping',{signal:AbortSignal.timeout(2500)})
-    .then(function(r){if(r.ok){setStatus('on');loadAll();refreshMediaList();refreshX3DAssetsList();refreshZoneTemplatesList();}else setStatus('off');})
+    .then(function(r){if(r.ok){setStatus('on');loadAll();refreshMediaList();refreshX3DAssetsList();refreshZoneTemplatesList();refreshIconsList();}else setStatus('off');})
     .catch(function(){setStatus('off');});
 }
 function setStatus(s){
@@ -2048,7 +2168,7 @@ function setMode(m){
   // there are three tool frames now, not two — each mode shows its own frame and
   // hides the other two, rather than the old binary active/inactive swap.
   var TOOL_FRAME_IDS = { characters:'char-creator-frame', events:'events-editor-frame', dialogue:'dialogue-editor-frame', route:'route-graph-frame' };
-  var TOOL_LABELS    = { characters:'Character Creator', events:'Events', dialogue:'Dialogue', route:'Route Graph' };
+  var TOOL_LABELS    = { characters:'Character Creator', events:'Events', dialogue:'Dialogue', route:'Routes' };
   var isToolMode = Object.prototype.hasOwnProperty.call(TOOL_FRAME_IDS, m);
   document.body.classList.toggle('tool-fullscreen', isToolMode);
   var wrap = document.getElementById('tool-iframe-wrap');
@@ -2760,11 +2880,62 @@ window.addEventListener('message', function(evt) {
     _renderDialogueExportStatus();
     return;
   }
+  // Day 89: Events Editor's Capture Point button — a real elevation, read
+  // once from the live viewport's MCCF_PathRecorderProx sensor, handed
+  // over so an asset can be placed at it without building a full grid-
+  // height map. startPlace('asset') resets edit-trackers and opens a
+  // fresh form (same call the "+ Place" button itself uses) rather than
+  // writing into whatever form happens to already be open, so a captured
+  // point never lands in the middle of an unrelated in-progress edit.
+  if (evt.data.type === 'mccf_captured_point') {
+    var cp = evt.data.position;
+    if (!cp || cp.length !== 3 || cp.some(function(n){ return typeof n !== 'number' || isNaN(n); })) {
+      console.warn('[Composer] mccf_captured_point received a malformed position:', cp);
+      return;
+    }
+    setMode('place');
+    startPlace('asset');
+    document.getElementById('asset-x').value = cp[0].toFixed(2);
+    document.getElementById('asset-z').value = cp[2].toFixed(2);
+    document.getElementById('asset-height').value = cp[1].toFixed(2);
+    toast('Point captured: ' + cp.map(function(n){ return n.toFixed(2); }).join(', ') + ' — pick an asset and place it');
+    return;
+  }
+  if (evt.data.type === 'mccf_request_scene_x3d_url') {
+    // Import-from-Scene request from the Route Graph tool. _lastX3dUrl is
+    // only ever set by a fresh export this session (sendToLauncher/
+    // exportX3D's own response handler) — Load Scene sets sceneConfig.name
+    // but never touches _lastX3dUrl, so loading an existing scene without
+    // re-exporting first left Import with nothing to fetch, even though
+    // the compiled file almost certainly already exists on disk from
+    // whenever it was last exported. Falls back to constructing the same
+    // URL exportX3D's own upload target uses (confirmed earlier this
+    // session: POSTs to /scene/x3d/upload, saved as static/x3d/{name}.x3d)
+    // directly from sceneConfig.name, so a loaded-but-not-yet-re-exported
+    // scene can still be imported from. If that constructed path is wrong
+    // for some reason (never actually exported, ever), the fetch 404s and
+    // the Route Graph tool's own existing error handling surfaces it
+    // clearly rather than failing silently either way.
+    var rgUrl = _lastX3dUrl || (sceneConfig.name ? ('/static/x3d/' + sceneConfig.name + '.x3d') : null);
+    var rgReplyFrame = document.getElementById('route-graph-frame');
+    if (rgReplyFrame && rgReplyFrame.contentWindow) {
+      try {
+        rgReplyFrame.contentWindow.postMessage(
+          { type: 'mccf_scene_x3d_url', id: evt.data.id, url: rgUrl }, '*');
+      } catch (eRg) { console.warn('[Composer] scene_x3d_url reply failed:', eRg); }
+    }
+    return;
+  }
   if (evt.data.type === 'mccf_route_graph_save') {
     _lastRouteGraph = evt.data.data || null;
     var nodeCount = _lastRouteGraph && _lastRouteGraph.nodes ? _lastRouteGraph.nodes.length : 0;
     console.log('[Composer] mccf_route_graph_save received —', nodeCount, 'nodes.');
-    toast('Route graph saved (' + nodeCount + ' nodes). Not yet wired into X3D export.');
+    // This used to say "Not yet wired into X3D export" — stale now that
+    // buildRouteGraphNodes/buildRouteGraphRoutes actually run at export
+    // time (see their own comment for the existing-DEF-guard reasoning).
+    // Same "don't leave a misleading toast during active testing" fix
+    // already applied to the Timeline cues toast above.
+    toast('Route graph saved (' + nodeCount + ' nodes). Click "Export X3D" to write it into the scene.');
     return;
   }
   if (evt.data.type === 'mccf_timeline_save') {
@@ -2835,6 +3006,7 @@ function sceneChanged(){
   sceneConfig.name=document.getElementById('sc-name').value.trim()||'scene';
   sceneConfig.width=parseInt(document.getElementById('sc-width').value)||40;
   sceneConfig.depth=parseInt(document.getElementById('sc-depth').value)||40;
+  var seedEl=document.getElementById('sc-seed'); if(seedEl) sceneConfig.seed=seedEl.value.trim();
   var bgDefEl=document.getElementById('bg-def'); if(bgDefEl) bgConfig.def=bgDefEl.value.trim();
 }
 function applyScene(){
@@ -3118,13 +3290,24 @@ function _networkPairs(){
   return Object.values(pairs);
 }
 var _linkOverlayBoxes=[];  // pill hit-boxes from the last drawNetworkLinks() pass, read by hitTestLink
+// Resolves a networks[].from/to id to a world position regardless of
+// whether it's an agent (placedAgents, field 'position') or a zone
+// (zones, field 'location' or legacy 'position') — same shared-namespace
+// reasoning as _lookupNetNode in the Affects graph, but this one matters
+// spatially: unlike that force-layout graph, this overlay draws on real
+// world coordinates, so a zone's actual position is meaningful here.
+function _lookupSpatialPos(id){
+  if(placedAgents[id]) return placedAgents[id].position;
+  if(zones[id]) return zones[id].location||zones[id].position;
+  return null;
+}
 function drawNetworkLinks(){
   _linkOverlayBoxes=[];
   if(!_showLinks) return;
   _networkPairs().forEach(function(pr){
-    var a=placedAgents[pr.from],b=placedAgents[pr.to];
-    if(!a||!b) return;  // can't draw a link to an agent not on the grid
-    var pa=w2c(a.position[0],a.position[2]),pb=w2c(b.position[0],b.position[2]);
+    var posA=_lookupSpatialPos(pr.from),posB=_lookupSpatialPos(pr.to);
+    if(!posA||!posB) return;  // can't draw a link to an agent/zone not on the grid
+    var pa=w2c(posA[0],posA[2]),pb=w2c(posB[0],posB[2]);
     var bidir=pr.entries.length>1;
     var lk=pr.entries[0].link;
     var clist=(lk.couplers&&lk.couplers.length)?lk.couplers.join(','):(lk.type||'R');
@@ -3164,8 +3347,446 @@ function hitTestLink(cx,cy){
   });
   return r;
 }
+// ══════════════════════════════════════════════════════════════════════
+// Network / Affect graph — force-directed, not the spatial placement grid.
+//
+// The Place/Scene map answers "where is this in the X3D scene". This
+// answers "how is this agent coupled to, and emotionally like, everything
+// else" — a genuinely different question, so it gets its own coordinate
+// space (plain canvas x/y, no w2c()/world units) and its own layout
+// instead of reusing agents' placed positions.
+//
+// Two force sources combine per pair of nodes:
+//   1. Coupler-topology springs, from actual Network Links: Resonance
+//      pulls the pair close, Inversion pushes them apart, Damping is a
+//      weak pull toward a neutral middle distance, Gated is treated as a
+//      softer Resonance (gating is a runtime condition, not a spatial one
+//      — flagged here rather than silently invented).
+//   2. An EBPS-similarity force applied between EVERY pair, linked or
+//      not: nodes whose E/B/P/S vectors are close pull together, distant
+//      ones drift apart. This is the "layout the graph like an emotional
+//      field, not just a link diagram" version — a 2D spring embedding of
+//      the same 4D vector space that drives the couplers themselves.
+// Both plus a generic repulsion (so nodes don't stack) and a weak
+// centering force get summed and relaxed for a bounded number of frames,
+// then the layout freezes until Re-layout is clicked or the topology
+// changes (new/removed node or link).
+// ══════════════════════════════════════════════════════════════════════
+var _netNodes = {};        // id -> {id,type,label,col,image,weights,x,y,vx,vy}
+var _netShowAgents = true;
+var _netShowZones  = true;
+var _netShowTrails = true;
+var _netAnimHandle = null;
+var _netDragId = null;
+
+// Recorded settling paths — one per node, captured when a layout run
+// finishes. Shaped like an X3D PositionInterpolator (key = normalized
+// 0..1 fractions, keyValue = the sampled positions) but kept in 2D since
+// that's what this graph actually is — not routed through the world Z
+// axis, no fabricated third component. This is the actual storage layer;
+// nothing here builds route-style copy/drop UI (that's the Route Graph
+// editor's job, not this one) — just record, store, and expose for
+// whatever downstream part of the graph wants to read it.
+// ── Persisting recorded/harvested triple trajectories as "user" tier assets ──
+// Mirrors /effects/save and /effects/list exactly — same subdir param,
+// same filenames-only list response, same static/x3d/<Category>/<subdir>
+// layout, same three-tier convention (rich/common/user) already settled
+// for the Effect Asset library. This is uncurated, born straight out of a
+// live session, exactly the "user" case. No promotion path (user ->
+// common) built here either, same as Effects — manual for now, by design.
+
+function _triplesToXml(triples, name, source){
+  var x = xmlDecl() + '<TripleTrajectory name="'+xe(name)+'" tier="user" source="'+xe(source||'')+'" '
+    + 'capturedAt="'+new Date().toISOString()+'" count="'+triples.length+'">\n';
+  triples.forEach(function(tr){
+    x += '  <T t="'+tr[0].toFixed(6)+'" x="'+tr[1].toFixed(3)+'" y="'+tr[2].toFixed(3)+'"/>\n';
+  });
+  x += '</TripleTrajectory>\n';
+  return x;
+}
+function _xmlToAsset(xmlString){
+  var doc=new DOMParser().parseFromString(xmlString,'application/xml');
+  if(doc.querySelector('parsererror')) return null;
+  var root=doc.querySelector('TripleTrajectory');
+  var source=root?root.getAttribute('source'):'';
+  var triples=[];
+  doc.querySelectorAll('T').forEach(function(t){
+    triples.push([parseFloat(t.getAttribute('t')),parseFloat(t.getAttribute('x')),parseFloat(t.getAttribute('y'))]);
+  });
+  return {triples:triples,source:source};
+}
+
+// source is a plain string ('agent:Anna', 'zone:the_pool', 'harvested') —
+// just a label for the person browsing saved assets later, not consumed by
+// anything downstream. The triples themselves stay unlabeled, same as ever.
+function saveTriplesAsAsset(triples,suggestedName,source){
+  if(!triples||triples.length<2){ toast('Nothing to save yet',true); return; }
+  var name=prompt('Save this path as (user-tier asset name):',suggestedName||'');
+  if(!name) return;
+  name=name.trim();
+  if(!name) return;
+  var xml=_triplesToXml(triples,name,source);
+  // Matches /interpolator/save exactly (mirrors /effects/save): subdir +
+  // filename + content, not the {name,tier} shape this used to guess at.
+  // Server always writes to user/ regardless of subdir requested, same as
+  // Effects — sent anyway for the same reason Effects' own client sends it.
+  apiPost('/interpolator/save',{subdir:'user',filename:name+'.xml',content:xml})
+    .then(function(res){
+      toast('Saved path: '+(res.filename||name));
+      refreshInterpolatorAssetsList();
+    })
+    .catch(function(e){
+      toast('Path save failed: '+e.message,true);
+    });
+}
+
+function refreshInterpolatorAssetsList(){
+  // Matches /interpolator/list exactly: subdir param (not tier), returns
+  // {files:[...]} — filenames only, no embedded content. Same as
+  // /effects/list's own contract.
+  fetch(API+'/interpolator/list?subdir=user')
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data){
+      _interpolatorAssetFiles=data.files||[];
+      var sel=document.getElementById('net-asset-select');
+      if(!sel) return;
+      var prev=sel.value;
+      sel.innerHTML='<option value="">— select saved path —</option>';
+      _interpolatorAssetFiles.forEach(function(f){
+        var opt=document.createElement('option'); opt.value=f; opt.textContent=f.replace(/\.xml$/i,''); sel.appendChild(opt);
+      });
+      if(prev) sel.value=prev;
+    })
+    .catch(function(e){
+      // Endpoint doesn't exist yet — same gap as /media/upload for images,
+      // flagged the same way: leave the list empty rather than error out.
+      console.warn('refreshInterpolatorAssetsList: /interpolator/list not available ('+e.message+')');
+    });
+}
+
+// A loaded asset is archived and detached, not "this node's current
+// state" — it doesn't attach to a node's live trail. getLoadedAssetTriples()
+// always exposes it for reuse regardless of origin, but the *visual*
+// overlay only draws when the coordinate space actually matches this
+// graph: a settling path was recorded in this graph's own force-layout
+// pixel space, so it overlays correctly here. A harvested trajectory was
+// recorded in grid/world units via c2w() — a genuinely different
+// coordinate system — so drawing it as raw pixels here would place it
+// nonsensically. It still loads and is still readable, just not drawn on
+// a canvas whose coordinate system it was never recorded in.
+var _interpolatorAssetFiles=[];  // filenames from the last /interpolator/list
+var _loadedAssetTriples=null, _loadedAssetSource='';
+function getLoadedAssetTriples(){ return _loadedAssetTriples; }
+function loadNetAsset(){
+  var sel=document.getElementById('net-asset-select');
+  var filename=sel&&sel.value;
+  if(!filename) return;
+  // Content isn't in the list response (same as Effects) — fetched
+  // straight from the static URL, same convention as any other X3D asset
+  // in this app.
+  fetch('/static/x3d/Interpolators/user/'+encodeURIComponent(filename))
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(xmlText){
+      var asset=_xmlToAsset(xmlText);
+      if(!asset){ toast('Could not parse: '+filename,true); return; }
+      _loadedAssetTriples=asset.triples;
+      _loadedAssetSource=asset.source||'';
+      drawNetworkGraph();
+      if(_loadedAssetSource==='harvested'){
+        toast('Loaded '+asset.triples.length+' points from "'+filename+'" — grid-space, not drawn here (this graph isn\u2019t spatial). Read via getLoadedAssetTriples().');
+      } else {
+        toast('Loaded '+asset.triples.length+' points from "'+filename+'" — shown as a preview overlay');
+      }
+    })
+    .catch(function(e){
+      toast('Load failed: '+e.message,true);
+    });
+}
+function clearLoadedNetAsset(){
+  _loadedAssetTriples=null; _loadedAssetSource='';
+  var sel=document.getElementById('net-asset-select');
+  if(sel) sel.value='';
+  drawNetworkGraph();
+}
+
+var _netInterpolators = {};   // nodeId -> {triples:[[t,x,y],...], label, type, capturedAt}
+// NOT YET BUILT — deliberately deferred, not forgotten:
+// This is in-memory only and dies on page reload. Once it needs to survive
+// that, it doesn't get a new subsystem — it becomes a "user" tier asset,
+// same three-tier convention (rich/common/user) already settled for the
+// Route Graph's Effect Asset library: rich = curated external origin,
+// common = curated internal origin, user = uncurated, whatever came out of
+// a live save. A captured settling path is exactly that last case. Concretely:
+// a small XML fragment holding this same triple list, written via a save
+// endpoint analogous to /effects/save, landing under a user/ path analogous
+// to that library's own. No promotion path (user -> common) needed here
+// either, same as that library — manual for now, by design, not an oversight.
+//
+// Storage is a flat list of (t,x,y) triples — the generic shape, not
+// X3D's own key[]/keyValue[] split. A PositionInterpolator is one specific
+// consumer of this data, not what it's shaped for; getNetPositionInterpolator
+// below derives that view on demand. Anything else that wants triples
+// (a different interpolator type, a chart, a CSV export) reads
+// getNetTriples directly instead of unzipping a PositionInterpolator back
+// apart to get at data that was never really key/keyValue-shaped to begin
+// with.
+
+function _captureNetInterpolators(nodes){
+  nodes.forEach(function(n){
+    var trail=n.trail;
+    if(!trail||trail.length<2) return;
+    var triples=trail.map(function(p,i){
+      var t=trail.length>1 ? i/(trail.length-1) : 0;
+      return [t,p.x,p.y];
+    });
+    _netInterpolators[n.id]={triples:triples,label:n.rawId,type:n.type,capturedAt:Date.now()};
+  });
+}
+// Primary reuse point — the raw triple list, for any consumer that just
+// wants (t,x,y) records: a different interpolator type, a chart, a CSV
+// export, whatever shows up later.
+function getNetTriples(nodeId){
+  var interp=_netInterpolators[nodeId];
+  return interp ? interp.triples : null;
+}
+// Convenience view for the one consumer that specifically wants X3D's
+// PositionInterpolator shape — derived from getNetTriples, not stored
+// separately, so there's only one source of truth to keep in sync.
+function getNetPositionInterpolator(nodeId){
+  var interp=_netInterpolators[nodeId];
+  if(!interp) return null;
+  var key=[], keyValue=[];
+  interp.triples.forEach(function(tr){ key.push(tr[0]); keyValue.push(tr[1],tr[2]); });
+  return {key:key,keyValue:keyValue,label:interp.label,type:interp.type,capturedAt:interp.capturedAt};
+}
+
+function _ebpsVec(w){ w=w||{}; return [w.E||0,w.B||0,w.P||0,w.S||0]; }
+function _ebpsDist(w1,w2){
+  var a=_ebpsVec(w1),b=_ebpsVec(w2),s=0;
+  for(var i=0;i<4;i++){var d=a[i]-b[i];s+=d*d;}
+  return Math.sqrt(s);
+}
+
+function _seedTrail(prev,id){
+  // In-memory continuation takes priority (still mid-session, nothing lost).
+  // Otherwise fall back to whatever was archived last time this node's
+  // layout settled — this is the actual "autoload" step: without it,
+  // _netInterpolators holds real data that nothing ever draws.
+  if(prev&&prev.trail&&prev.trail.length) return prev.trail.slice();
+  var triples=getNetTriples(id);
+  if(triples) return triples.map(function(tr){ return {x:tr[1],y:tr[2]}; });
+  return [];
+}
+function _buildNetNodes(){
+  var next={};
+  Object.keys(placedAgents).forEach(function(name){
+    var a=placedAgents[name];
+    var prev=_netNodes['agent:'+name];
+    var id='agent:'+name;
+    var seededTrail=_seedTrail(prev,id);
+    var last=seededTrail.length?seededTrail[seededTrail.length-1]:null;
+    next[id]={id:id,rawId:name,type:'agent',ref:a,
+      x:prev?prev.x:(last?last.x:(W/2+(Math.random()-0.5)*80)),
+      y:prev?prev.y:(last?last.y:(H/2+(Math.random()-0.5)*80)),
+      vx:prev?prev.vx:0, vy:prev?prev.vy:0, trail:seededTrail};
+  });
+  Object.keys(zones).forEach(function(id){
+    var z=zones[id];
+    var prev=_netNodes['zone:'+id];
+    var nid='zone:'+id;
+    var seededTrail=_seedTrail(prev,nid);
+    var last=seededTrail.length?seededTrail[seededTrail.length-1]:null;
+    next[nid]={id:nid,rawId:id,type:'zone',ref:z,
+      x:prev?prev.x:(last?last.x:(W/2+(Math.random()-0.5)*80)),
+      y:prev?prev.y:(last?last.y:(H/2+(Math.random()-0.5)*80)),
+      vx:prev?prev.vx:0, vy:prev?prev.vy:0, trail:seededTrail};
+  });
+  _netNodes=next;
+}
+
+// Edges resolve each endpoint against either an agent or a zone node —
+// the New Link dropdowns (net-from/net-to) now list both, since zones
+// share the same flat from/to namespace as agents (see populateNetworkUI's
+// own comment on that). _lookupNetNode tries 'agent:' first only because
+// that's marginally the more common case, not because of any real
+// precedence rule — an id colliding between the two namespaces would
+// resolve to whichever happens to be checked first, same unguarded
+// collision risk noted where the dropdowns get built.
+function _lookupNetNode(id){ return _netNodes['agent:'+id] || _netNodes['zone:'+id]; }
+function _netEdges(){
+  return _networkPairs().map(function(pr){
+    var a=_lookupNetNode(pr.from), b=_lookupNetNode(pr.to);
+    if(!a||!b) return null;
+    var lk=pr.entries[0].link;
+    var couplers=(lk.couplers&&lk.couplers.length)?lk.couplers:[lk.type||'R'];
+    return {a:a,b:b,strength:parseFloat(lk.strength)||0.5,couplers:couplers,bidir:pr.entries.length>1,link:lk,idx:pr.entries[0].idx};
+  }).filter(Boolean);
+}
+
+function _netStep(nodes,edges){
+  var CENTER_X=W/2, CENTER_Y=H/2;
+  nodes.forEach(function(n){ n.fx=0; n.fy=0; });
+  // Pairwise: generic repulsion (Coulomb-ish) + EBPS-similarity spring
+  for(var i=0;i<nodes.length;i++){
+    for(var j=i+1;j<nodes.length;j++){
+      var n1=nodes[i],n2=nodes[j];
+      var dx=n2.x-n1.x, dy=n2.y-n1.y, dist=Math.max(20,Math.hypot(dx,dy));
+      var ux=dx/dist, uy=dy/dist;
+      // Generic repulsion — keeps unrelated nodes from overlapping
+      var rep=2600/(dist*dist);
+      n1.fx-=ux*rep; n1.fy-=uy*rep; n2.fx+=ux*rep; n2.fy+=uy*rep;
+      // EBPS-similarity: small emotional distance -> desired distance is
+      // small too, so this is a spring toward a rest length set by how
+      // alike their E/B/P/S vectors are, not by any explicit link.
+      var ed=_ebpsDist(n1.ref.weights,n2.ref.weights);       // ~0..2 in practice
+      var restLen=40+ed*160;
+      var k=0.02;
+      var f=(dist-restLen)*k;
+      n1.fx+=ux*f; n1.fy+=uy*f; n2.fx-=ux*f; n2.fy-=uy*f;
+    }
+  }
+  // Coupler-topology springs along real Network Links
+  edges.forEach(function(e){
+    var dx=e.b.x-e.a.x, dy=e.b.y-e.a.y, dist=Math.max(20,Math.hypot(dx,dy));
+    var ux=dx/dist, uy=dy/dist;
+    var primary=e.couplers[0];
+    var restLen, k;
+    if(primary==='I'){ restLen=260; k=0.05*e.strength; }        // Inversion: wants distance
+    else if(primary==='D'){ restLen=140; k=0.015*e.strength; }  // Damping: weak, neutral middle
+    else if(primary==='G'){ restLen=70;  k=0.02*e.strength; }   // Gated: soft Resonance
+    else { restLen=60; k=0.05*e.strength; }                     // Resonance: wants closeness
+    var f=(dist-restLen)*k;
+    e.a.fx+=ux*f; e.a.fy+=uy*f; e.b.fx-=ux*f; e.b.fy-=uy*f;
+  });
+  // Weak centering so the whole graph doesn't drift off-canvas
+  nodes.forEach(function(n){
+    n.fx+=(CENTER_X-n.x)*0.002; n.fy+=(CENTER_Y-n.y)*0.002;
+  });
+  // Integrate with friction
+  var maxDisp=0;
+  nodes.forEach(function(n){
+    if(n.id===_netDragId) return;  // being dragged by the user — don't fight it
+    n.vx=(n.vx+n.fx)*0.82; n.vy=(n.vy+n.fy)*0.82;
+    n.x+=n.vx; n.y+=n.vy;
+    n.x=Math.max(50,Math.min(W-50,n.x)); n.y=Math.max(40,Math.min(H-40,n.y));
+    maxDisp=Math.max(maxDisp,Math.abs(n.vx),Math.abs(n.vy));
+  });
+  // Trail — precise (x,y) sample every frame, capped so memory doesn't grow
+  // unbounded across a long-running or repeatedly-relaid-out session. This
+  // is a plain in-memory trace for visualizing settling behavior, not the
+  // same thing as recordedPaths (that's an X3D RecordedPath node driving
+  // actual agent motion in the scene — different domain, deliberately kept
+  // separate rather than overloading one data shape for two purposes).
+  nodes.forEach(function(n){
+    n.trail=n.trail||[];
+    n.trail.push({x:n.x,y:n.y});
+    if(n.trail.length>180) n.trail.shift();
+  });
+  return maxDisp;
+}
+
+function startNetLayout(){
+  _buildNetNodes();
+  if(_netAnimHandle) cancelAnimationFrame(_netAnimHandle);
+  var nodes=Object.values(_netNodes), edges=_netEdges(), frame=0;
+  (function tick(){
+    var maxDisp=_netStep(nodes,edges);
+    drawNetworkGraph();
+    frame++;
+    if(frame<240 && maxDisp>0.05){ _netAnimHandle=requestAnimationFrame(tick); }
+    else {
+      _netAnimHandle=null;
+      _captureNetInterpolators(nodes);
+    }
+  })();
+}
+
+function toggleNetShowAgents(){ _netShowAgents=document.getElementById('net-show-agents').checked; drawNetworkGraph(); }
+function toggleNetShowZones(){ _netShowZones=document.getElementById('net-show-zones').checked; drawNetworkGraph(); }
+function toggleNetShowTrails(){ _netShowTrails=document.getElementById('net-show-trails').checked; drawNetworkGraph(); }
+
+var _netLinkOverlayBoxes=[];
+function drawNetworkGraph(){
+  if(!ctx) return;
+  ctx.clearRect(0,0,W,H);
+  var nodes=Object.values(_netNodes);
+  _netLinkOverlayBoxes=[];
+  // Edges — same dashed pill style as the old spatial overlay, just at
+  // force-layout coordinates instead of w2c(world position).
+  _netEdges().forEach(function(e){
+    var clist=e.couplers.join(','), primary=e.couplers[0];
+    var label=primary+' '+e.strength.toFixed(2)+(e.bidir?' \u21c4':' \u2192');
+    ctx.save();
+    ctx.strokeStyle='#a060f0';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(e.a.x,e.a.y);ctx.lineTo(e.b.x,e.b.y);ctx.stroke();
+    ctx.setLineDash([]);
+    var mx=(e.a.x+e.b.x)/2, my=(e.a.y+e.b.y)/2;
+    ctx.font='12px IBM Plex Mono';
+    var tw=ctx.measureText(label).width,padX=6,boxW=tw+padX*2,boxH=16;
+    ctx.fillStyle='#1c1030';ctx.strokeStyle='#a060f0';ctx.lineWidth=1;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(mx-boxW/2,my-boxH/2,boxW,boxH,8);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(mx-boxW/2,my-boxH/2,boxW,boxH);ctx.strokeRect(mx-boxW/2,my-boxH/2,boxW,boxH);}
+    ctx.fillStyle='#c9a0f0';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(label,mx,my+1);
+    ctx.restore();
+    _netLinkOverlayBoxes.push({idx:e.idx,mx:mx,my:my,boxW:boxW,boxH:boxH});
+  });
+  // Loaded saved-path preview — a distinct dashed white line so it reads
+  // as "reference", not as a live node's own trail. Only drawn when the
+  // asset was recorded in this same force-layout pixel space; see
+  // loadNetAsset's own comment for why a harvested (grid-space) asset
+  // skips this instead of drawing somewhere meaningless.
+  if(_loadedAssetTriples&&_loadedAssetSource!=='harvested'){
+    ctx.save();
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1; ctx.setLineDash([2,3]); ctx.globalAlpha=0.5;
+    ctx.beginPath();
+    _loadedAssetTriples.forEach(function(tr,i){
+      if(i===0) ctx.moveTo(tr[1],tr[2]); else ctx.lineTo(tr[1],tr[2]);
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Settling trails — drawn first so nodes/links sit on top. Faint,
+  // fading toward the tail so the eye reads direction: a tight inward
+  // spiral means it's converging, a trail that never closes on itself
+  // means it's still moving when the sim gave up (240 frames) — worth
+  // noticing on its own, independent of anything else on screen.
+  if(_netShowTrails){
+    nodes.forEach(function(n){
+      if(n.type==='agent'&&!_netShowAgents) return;
+      if(n.type==='zone'&&!_netShowZones) return;
+      var trail=n.trail; if(!trail||trail.length<2) return;
+      var col=(n.ref.color)||'#888888';
+      for(var i=1;i<trail.length;i++){
+        var t=i/trail.length;
+        ctx.strokeStyle=col; ctx.globalAlpha=0.05+t*0.35; ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(trail[i-1].x,trail[i-1].y);ctx.lineTo(trail[i].x,trail[i].y);ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    });
+  }
+  nodes.forEach(function(n){
+    if(n.type==='agent'&&!_netShowAgents) return;
+    if(n.type==='zone'&&!_netShowZones) return;
+    var sel=selectedType===n.type&&selectedId===n.rawId;
+    if(n.type==='zone') drawZoneNode(n.ref,n.x,n.y,sel);
+    else drawAgentNode(n.ref,n.x,n.y,sel);
+  });
+}
+function _netHitTest(cx,cy){
+  var nodes=Object.values(_netNodes);
+  for(var i=nodes.length-1;i>=0;i--){
+    var n=nodes[i];
+    if(n.type==='agent'&&!_netShowAgents) continue;
+    if(n.type==='zone'&&!_netShowZones) continue;
+    if(Math.abs(cx-n.x)<38&&Math.abs(cy-n.y)<23) return n;
+  }
+  return null;
+}
+
 function drawScene(){
   if(!ctx)return;
+  if(mode==='network'){ drawNetworkGraph(); return; }
   ctx.clearRect(0,0,W,H);
   ctx.strokeStyle='#2a3450';ctx.lineWidth=1.5;ctx.setLineDash([6,4]);
   ctx.strokeRect(OX,OZ,sceneConfig.width*SCALE,sceneConfig.depth*SCALE);ctx.setLineDash([]);
@@ -3258,6 +3879,10 @@ function drawCamera(c){
   ctx.fillText(c.name,p.cx+9,p.cy-6);
 }
 function drawZone(z){
+  // Lightweight glyph for the spatial Place/Scene map. The boxed,
+  // image-and-EBPS-bar node style lives in drawZoneNode below, used only
+  // by the Network tab's own graph — putting portraits/icons on the
+  // spatial map was pure clutter for placement work.
   var pos=z.location||z.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
   var p=w2c(pos[0],pos[2]),r=Math.max(1,(z.radius||4)*SCALE);
   // Expand 3-digit hex to 6-digit so canvas gradient alpha appending is always valid
@@ -3272,11 +3897,9 @@ function drawZone(z){
   // Cylinder icon at zone center — circle body + top ellipse
   var cr = Math.max(5, SCALE * 0.35);  // cylinder radius
   var ch = Math.max(3, SCALE * 0.18);  // ellipse height (gives 3D top illusion)
-  // Cylinder body (filled circle)
   ctx.beginPath(); ctx.arc(p.cx, p.cy, cr, 0, Math.PI*2);
   ctx.fillStyle = col+'99'; ctx.fill();
   ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
-  // Top ellipse
   ctx.beginPath(); ctx.ellipse(p.cx, p.cy - cr * 0.4, cr, ch, 0, 0, Math.PI*2);
   ctx.fillStyle = col+'cc'; ctx.fill();
   ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
@@ -3299,6 +3922,19 @@ function drawAgent(a){
     ctx.fillStyle=['#f06060','#60a8f0','#f0c060','#4af0a8'][i];ctx.fill();
   });
 }
+// Boxed node with thumbnail + EBPS bars, reserved for the Network graph
+// (drawNetworkGraph), where the box's position is a force-layout canvas
+// coordinate, not a world position — no w2c() call here on purpose.
+function drawZoneNode(z,cx,cy,sel){
+  var rawCol=ZONE_COLORS[z.zone_type]||'#888888';
+  var col=rawCol.replace(/^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/,'#$1$1$2$2$3$3');
+  var box=drawNodeBox(cx,cy,z.name||z.id,col,z.image,'📍',z.weights,sel);
+  ctx.font='11px IBM Plex Mono';ctx.fillStyle=col+'aa';ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillText(z.zone_type,box.ix+31,box.iy+19);
+}
+function drawAgentNode(a,cx,cy,sel){
+  drawNodeBox(cx,cy,a.name,a.color||'#aab0be',a.portrait,'👤',a.weights,sel);
+}
 function drawWP(wp,idx){
   var pos=wp.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
   var p=w2c(pos[0],pos[2]),sel=selectedType==='waypoint'&&selectedId===wp.name;
@@ -3315,9 +3951,71 @@ function drawPath(path){
   wps.forEach(function(wp,i){var pos=wp.position||[0,0,0],p=w2c(pos[0],pos[2]);if(i===0)ctx.moveTo(p.cx,p.cy);else ctx.lineTo(p.cx,p.cy);});
   ctx.stroke();ctx.setLineDash([]);
 }
+// ══════════════════════════════════════════════════════════════════════
+// Trajectory harvester — generic, not part of the Network graph or any
+// other feature. Captures raw (t,x,z) triples from mouse movement while
+// armed, in grid/world units (same c2w() conversion the coord-disp readout
+// already uses) — not raw canvas pixels, which would be meaningless
+// outside this one canvas's current size. Regardless of mode, regardless
+// of what's under the cursor. It does not know about agents, zones,
+// nodes, or EBPS, and never will — that's the point: whoever calls
+// stopTrajectoryCapture() decides what the numbers mean, if anything.
+// t is seconds since startTrajectoryCapture(), not a normalized 0..1
+// fraction — unlike the Network graph's settling captures, a harvested
+// trajectory has no fixed endpoint to normalize against while it's still
+// being recorded.
+// ══════════════════════════════════════════════════════════════════════
+var _trajCapturing=false, _trajBuffer=[], _trajStartTime=0, _lastHarvestedTrajectory=null;
+function startTrajectoryCapture(){ _trajCapturing=true; _trajBuffer=[]; _trajStartTime=performance.now(); }
+function stopTrajectoryCapture(){
+  _trajCapturing=false;
+  _lastHarvestedTrajectory=_trajBuffer;
+  return _trajBuffer;
+}
+function _trajSample(cx,cy){
+  if(!_trajCapturing) return;
+  var wp=c2w(cx,cy);
+  _trajBuffer.push([(performance.now()-_trajStartTime)/1000, wp.wx, wp.wz]);
+}
+// Reuse point — same shape as getNetTriples, deliberately: any consumer
+// that already knows how to read a triple list reads this one the same
+// way, no adapter needed.
+function getLastHarvestedTrajectory(){ return _lastHarvestedTrajectory; }
+function toggleTrajectoryCapture(){
+  var btn=document.getElementById('traj-harvest-btn');
+  var saveBtn=document.getElementById('traj-save-btn');
+  if(_trajCapturing){
+    var t=stopTrajectoryCapture();
+    if(btn){ btn.classList.remove('active'); btn.innerHTML='&#9210; Harvest trajectory'; }
+    if(saveBtn) saveBtn.style.display=t.length>1?'inline-block':'none';
+    toast('Harvested '+t.length+' points — getLastHarvestedTrajectory() to read them');
+  } else {
+    startTrajectoryCapture();
+    if(btn){ btn.classList.add('active'); btn.innerHTML='&#9210; Recording…'; }
+    if(saveBtn) saveBtn.style.display='none';
+  }
+}
+function saveHarvestedTrajectory(){
+  saveTriplesAsAsset(getLastHarvestedTrajectory(),'harvested_'+new Date().toISOString().slice(0,19),'harvested');
+}
+
 var isDrag=false,dragTgt=null,dragTyp=null,lastMX=0,lastMY=0;
 function onMouseMove(e){
   var rect=canvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+  _trajSample(cx,cy);
+  if(mode==='network'){
+    // Same lower-left readout as Place/Scene, just labeled for graph space
+    // rather than world x/z — it's still exact pixel-precise position,
+    // the coordinate system underneath it just isn't the X3D scene.
+    var label=_netDragId?(_netNodes[_netDragId].rawId+'  '):'';
+    document.getElementById('coord-disp').textContent=label+'x: '+cx.toFixed(1)+'  y: '+cy.toFixed(1);
+    if(_netDragId&&_netNodes[_netDragId]){
+      _netNodes[_netDragId].x=cx; _netNodes[_netDragId].y=cy;
+      _netNodes[_netDragId].vx=0; _netNodes[_netDragId].vy=0;
+      drawNetworkGraph();
+    }
+    return;
+  }
   var wp=c2w(cx,cy);document.getElementById('coord-disp').textContent='x: '+wp.wx.toFixed(1)+'  z: '+wp.wz.toFixed(1);
   if(isDrag&&dragTgt&&tool==='move'){
     var dx=(cx-lastMX)/SCALE,dz=(cy-lastMY)/SCALE;
@@ -3332,13 +4030,70 @@ function onMouseMove(e){
   }
 }
 function onMouseDown(e){
-  if(tool!=='move')return;var rect=canvas.getBoundingClientRect();
-  lastMX=e.clientX-rect.left;lastMY=e.clientY-rect.top;
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  if(mode==='network'){
+    // No tool gate here on purpose — Select/Move/Query is a Place/Scene
+    // distinction (pick vs. reposition vs. inspect-pressure) that doesn't
+    // map onto this graph, where a single click already selects a node
+    // regardless of tool. Requiring 'move' just meant dragging silently
+    // did nothing unless you'd happened to click Move first, with no
+    // affordance telling you that's why.
+    lastMX=mx;lastMY=my;
+    var nhit=_netHitTest(lastMX,lastMY);
+    _netDragId=nhit?nhit.id:null;
+    return;
+  }
+  if(tool!=='move')return;
+  lastMX=mx;lastMY=my;
   var hit=hitTest(lastMX,lastMY);if(hit){isDrag=true;dragTgt=hit.id;dragTyp=hit.type;}
 }
-function onMouseUp(){isDrag=false;dragTgt=null;dragTyp=null;}
+function onMouseUp(){isDrag=false;dragTgt=null;dragTyp=null;_netDragId=null;}
+// Same URL rule _iconThumbHtml already uses (data: URL as-is, otherwise
+// relative to /static/x3d/) — pulled out so both places don't drift apart
+// if that convention ever changes.
+function _resolveIconUrl(src){
+  if(!src) return null;
+  return src.indexOf('data:')===0 ? src : '/static/x3d/'+src;
+}
+function showIconLightbox(src){
+  var url=_resolveIconUrl(src);
+  console.log('[dblclick] showIconLightbox called with src=', src, '-> url=', url);
+  if(!url) { console.log('[dblclick] no url — this node has no real image, only the fallback glyph'); return; }
+  var imgEl=document.getElementById('icon-lightbox-img'), boxEl=document.getElementById('icon-lightbox');
+  console.log('[dblclick] icon-lightbox-img found?', !!imgEl, 'icon-lightbox found?', !!boxEl);
+  if(!imgEl||!boxEl) return;
+  imgEl.src=url;
+  boxEl.style.display='flex';
+}
+function closeIconLightbox(){
+  document.getElementById('icon-lightbox').style.display='none';
+}
+// Double-click a node's portrait/zone image in the Affects graph to view
+// it full-size. Only meaningful in network mode (that's the only place
+// these boxed, imaged nodes exist) — same _netHitTest onCanvasClick
+// already uses, so a double-click hits the identical node a single click
+// would have selected, not a separately-tuned hit area.
+function onCanvasDblClick(e){
+  console.log('[dblclick] fired, mode=', mode);
+  if(mode!=='network') { console.log('[dblclick] bailing — not in network mode'); return; }
+  var rect=canvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+  var nhit=_netHitTest(cx,cy);
+  console.log('[dblclick] hit test at', cx, cy, '->', nhit ? (nhit.type+':'+nhit.rawId) : 'nothing');
+  if(!nhit) return;
+  var src = nhit.type==='zone' ? nhit.ref.image : nhit.ref.portrait;
+  console.log('[dblclick] resolved src =', src);
+  showIconLightbox(src);
+}
 function onCanvasClick(e){
   var rect=canvas.getBoundingClientRect(),cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+  if(mode==='network'){
+    var pill=_netLinkOverlayBoxes.filter(function(b){return Math.abs(cx-b.mx)<b.boxW/2&&Math.abs(cy-b.my)<b.boxH/2;})[0];
+    if(pill){highlightNetLink(pill.idx);return;}
+    var nhit=_netHitTest(cx,cy);
+    if(nhit)selectObj(nhit.type,nhit.rawId);else clearSel();
+    return;
+  }
   var wp=c2w(cx,cy);
   if(placing){var cl=clamp(wp.wx,wp.wz);pendingPos=[cl.wx,0,cl.wz];
     if(placing==='zone')confirmZone();else if(placing==='waypoint')confirmWP();
@@ -3360,7 +4115,12 @@ function onCanvasClick(e){
 }
 function hitTest(cx,cy){
   var r=null;
-  Object.keys(placedAgents).forEach(function(n){var pos=placedAgents[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<14)r={type:'agent',id:n};});if(r)return r;
+  // 19, not 14 — drawAgent's four satellite EBPS dots draw as far as
+  // 10+v*6 (up to ~16.5 for v near 1) plus their own 2.5px radius, so the
+  // actual visual glyph extends past the old 14px hit radius. Clicking
+  // directly on a dot (visually the most obvious part of the icon to grab)
+  // landed outside the draggable area and silently failed to start a drag.
+  Object.keys(placedAgents).forEach(function(n){var pos=placedAgents[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<19)r={type:'agent',id:n};});if(r)return r;
   Object.keys(waypoints).forEach(function(n){var pos=waypoints[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'waypoint',id:n};});if(r)return r;
   Object.keys(zones).forEach(function(id){var pos=zones[id].location||zones[id].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<16)r={type:'zone',id:id};});if(r)return r;
   Object.keys(placedCameras).forEach(function(n){var pos=placedCameras[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'camera',id:n};});if(r)return r;
@@ -3400,6 +4160,8 @@ function showZD(id){
   document.getElementById('detail-zone').style.display='block';
   document.getElementById('zd-name').textContent=z.name||id;
   document.getElementById('zd-type').textContent=z.zone_type||'neutral';
+  var zdThumb=document.getElementById('zd-portrait-thumb');
+  if(zdThumb) zdThumb.innerHTML=_iconThumbHtml(z.image,'🗺️');
   var pos=z.location||z.position||[0,0,0];
   document.getElementById('zd-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1)+'  r='+(z.radius||4)+'m';
   document.getElementById('zd-weights').innerHTML=chBars(z.weights);
@@ -3463,6 +4225,21 @@ function showZD(id){
   }
   // Pre-load commands into form buffer so editing an existing zone preserves them
   _loadZoneCommandsIntoForm(z.commands || []);
+  // Recorded settling path, if the Network graph's force layout has run
+  // for this node — just a fact, not a feature; see _netInterpolators.
+  var interpEl = document.getElementById('zd-interp');
+  var interpSaveBtn = document.getElementById('zd-interp-save');
+  if (interpEl) {
+    var interp = getNetPositionInterpolator('zone:'+id);
+    interpEl.textContent = interp ? ('settling path recorded: '+interp.key.length+' keyframes') : '';
+    if (interpSaveBtn) interpSaveBtn.style.display = interp ? 'inline-block' : 'none';
+  }
+}
+function saveZoneInterpolator(){
+  var id=selectedType==='zone'?selectedId:null;
+  if(!id) return;
+  var triples=getNetTriples('zone:'+id);
+  saveTriplesAsAsset(triples,(zones[id]&&zones[id].name)||id,'zone:'+id);
 }
 function saveAgentPosition(){
   var name=selectedType==='agent'?selectedId:null;
@@ -3476,6 +4253,14 @@ function saveAgentPosition(){
   toast(name+' moved to ('+x.toFixed(2)+', '+y.toFixed(2)+', '+z.toFixed(2)+')');
   _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
 }
+// Shared by the agent/zone detail panels' upper-right thumbnail — same
+// path convention as the canvas icon cache (_getIconImg) and the Place
+// tab's zone-image thumb, just returning markup instead of a canvas draw.
+function _iconThumbHtml(src, fallbackGlyph){
+  if(!src) return fallbackGlyph;
+  var url = src.indexOf('data:')===0 ? src : '/static/x3d/'+src;
+  return '<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.textContent=\''+fallbackGlyph+'\'">';
+}
 function showAD(name){
   var a=placedAgents[name];if(!a)return;
   document.getElementById('detail-agent').style.display='block';
@@ -3483,12 +4268,21 @@ function showAD(name){
   document.getElementById('ad-name').style.color=a.color||'#aab0be';
   document.getElementById('ad-color').value=a.color||'#aab0be';
   document.getElementById('ad-color').dataset.agent=name;
+  var adThumb=document.getElementById('ad-portrait-thumb');
+  if(adThumb) adThumb.innerHTML=_iconThumbHtml(a.portrait,'👤');
   document.getElementById('ad-disp').textContent=(a.disposition||'')+(a.voice?' · voice: '+a.voice:'');
   var pos=a.position||[0,0,0];
   document.getElementById('ad-pos-x').value=pos[0].toFixed(2);
   document.getElementById('ad-pos-y').value=(pos[1]!==undefined?pos[1]:0).toFixed(2);
   document.getElementById('ad-pos-z').value=pos[2].toFixed(2);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
+  var adInterpEl = document.getElementById('ad-interp');
+  var adInterpSaveBtn = document.getElementById('ad-interp-save');
+  if (adInterpEl) {
+    var adInterp = getNetPositionInterpolator('agent:'+name);
+    adInterpEl.textContent = adInterp ? ('settling path recorded: '+adInterp.key.length+' keyframes') : '';
+    if (adInterpSaveBtn) adInterpSaveBtn.style.display = adInterp ? 'inline-block' : 'none';
+  }
   // Avatar — shows hanim_src path as set by Character Creator; placeholder if none
   var hEl=document.getElementById('ad-hanim');
   if(hEl)hEl.textContent=a.hanim_src||'(placeholder — assign in Character Creator)';
@@ -3524,6 +4318,12 @@ function showAD(name){
   var sav=document.getElementById('ad-hanim-save');
   if(sel){sel.style.display='none';}
   if(sav)sav.style.display='none';
+}
+function saveAgentInterpolator(){
+  var name=selectedType==='agent'?selectedId:null;
+  if(!name) return;
+  var triples=getNetTriples('agent:'+name);
+  saveTriplesAsAsset(triples,name,'agent:'+name);
 }
 function setAgentColor(hex){
   var name=document.getElementById('ad-color').dataset.agent;
@@ -3906,6 +4706,7 @@ function clearZoneForm(){
   document.getElementById('z-name').value='';
   document.getElementById('z-type').value='neutral';
   document.getElementById('z-radius').value=4;
+  clearZoneImage();
   document.getElementById('z-desc').value='';
   document.getElementById('z-noise').value=0.10;
   document.getElementById('z-ambient').value='dorian';
@@ -4001,6 +4802,181 @@ function _populateAssetSelect(sel, currentVal) {
     sel.appendChild(opt);
   });
   if (prev) sel.value = prev;
+}
+
+// ── Edit an asset file's raw XML directly ───────────────────────────────
+var _assetEditDoc = null;   // shared parsed DOM — single source of truth once editing begins, whichever view is active
+var _assetEditView = 'raw'; // 'raw' | 'tree'
+var _selectedTreeEl = null;
+
+function editSelectedAssetXml() {
+  var sel = document.getElementById('asset-place-url');
+  var relPath = sel.value; // "X3DAssets/temple.x3d"
+  if (!relPath) { alert('Select an asset from the dropdown first.'); return; }
+  if (!/\.x3d$/i.test(relPath)) {
+    alert('Only .x3d files are editable as XML here \u2014 .glb/.gltf are binary, not plain text.');
+    return;
+  }
+  fetch('/static/x3d/' + relPath)
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(text) {
+      document.getElementById('asset-xml-text').value = text;
+      document.getElementById('asset-xml-error').style.display = 'none';
+      document.getElementById('asset-xml-editor').style.display = '';
+      _assetEditDoc = null; _selectedTreeEl = null;
+      switchAssetEditView('raw'); // always open on Raw — the already-proven view, Tree is opt-in per open
+    })
+    .catch(function(e) { alert('Could not load "' + relPath + '": ' + e.message); });
+}
+
+// Toggling views shares one parsed DOM rather than keeping Raw text and a
+// Tree's live edits as two separately-drifting copies. Raw -> Tree must
+// validate first — there's nothing sensible to build a tree from broken
+// XML, so an invalid raw edit simply can't leave Raw view until fixed,
+// same "halt and catch fire" discipline as Save itself. Tree -> Raw always
+// succeeds, since a parsed DOM serializes back to well-formed XML by
+// construction.
+function switchAssetEditView(view) {
+  var errEl = document.getElementById('asset-xml-error');
+  if (view === 'tree' && _assetEditView !== 'tree') {
+    var text = document.getElementById('asset-xml-text').value;
+    var doc = new DOMParser().parseFromString(text, 'application/xml');
+    var perr = doc.querySelector('parsererror');
+    if (perr) {
+      errEl.textContent = 'Can\u2019t switch to Tree view \u2014 fix the XML error first:\n' + perr.textContent.trim();
+      errEl.style.display = '';
+      return;
+    }
+    errEl.style.display = 'none';
+    _assetEditDoc = doc;
+    _selectedTreeEl = null;
+    renderAssetTree();
+  } else if (view === 'raw' && _assetEditView !== 'raw' && _assetEditDoc) {
+    document.getElementById('asset-xml-text').value = new XMLSerializer().serializeToString(_assetEditDoc);
+  }
+  _assetEditView = view;
+  document.getElementById('asset-xml-text').style.display = (view === 'raw') ? '' : 'none';
+  document.getElementById('asset-tree-view').style.display = (view === 'tree') ? '' : 'none';
+  document.getElementById('asset-view-raw-btn').style.borderColor  = (view === 'raw')  ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('asset-view-tree-btn').style.borderColor = (view === 'tree') ? 'var(--accent)' : 'var(--border)';
+}
+
+function renderAssetTree() {
+  var list = document.getElementById('asset-tree-list');
+  list.innerHTML = '';
+  if (!_assetEditDoc || !_assetEditDoc.documentElement) return;
+  list.appendChild(_renderTreeNode(_assetEditDoc.documentElement, 0));
+  renderAssetTreeProps();
+}
+function _renderTreeNode(el, depth) {
+  var row = document.createElement('div');
+  row.style.paddingLeft = (depth * 14) + 'px';
+  row.style.cursor = 'pointer';
+  row.style.fontSize = '13px';
+  row.style.whiteSpace = 'nowrap';
+  row.style.color = (el === _selectedTreeEl) ? 'var(--accent)' : 'var(--text)';
+  var defAttr = el.getAttribute && el.getAttribute('DEF');
+  var useAttr = el.getAttribute && el.getAttribute('USE');
+  var label = el.tagName + (defAttr ? ' [' + defAttr + ']' : useAttr ? ' (USE ' + useAttr + ')' : '');
+  row.textContent = label;
+  row.onclick = function(e) { e.stopPropagation(); _selectedTreeEl = el; renderAssetTree(); };
+  var wrap = document.createElement('div');
+  wrap.appendChild(row);
+  Array.from(el.children || []).forEach(function(child) {
+    wrap.appendChild(_renderTreeNode(child, depth + 1));
+  });
+  return wrap;
+}
+
+// Generic/reflective by design — no built-in knowledge of what any
+// attribute "should" contain (deferred deliberately, see this function's
+// own place in the conversation this came from). Shows exactly the
+// attributes the selected element actually has, editable as plain text,
+// plus the ability to add a new one or remove an existing one. Edits
+// write straight to the live element in _assetEditDoc — there's no
+// intermediate state to keep in sync, the DOM element IS the source of
+// truth.
+function renderAssetTreeProps() {
+  var panel = document.getElementById('asset-tree-props');
+  if (!_selectedTreeEl) {
+    panel.innerHTML = '<div style="color:var(--dim);font-size:13px">Click a node in the tree to edit its attributes.</div>';
+    return;
+  }
+  var el = _selectedTreeEl;
+  var html = '<div style="color:var(--accent);font-weight:600;margin-bottom:6px">' + el.tagName + '</div>';
+  Array.from(el.attributes).forEach(function(attr) {
+    html += '<div style="display:flex;gap:4px;margin-bottom:4px;align-items:center">' +
+      '<span style="width:38%;font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis" title="' + attr.name + '">' + attr.name + '</span>' +
+      '<input type="text" value="' + attr.value.replace(/"/g,'&quot;') + '" style="flex:1;font-size:13px;background:#0d1520;color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px" ' +
+        'onchange="setTreeNodeAttr(\'' + attr.name.replace(/'/g,"\\'") + '\',this.value)">' +
+      '<span style="cursor:pointer;color:var(--dim);padding:0 4px" title="Remove attribute" onclick="removeTreeNodeAttr(\'' + attr.name.replace(/'/g,"\\'") + '\')">\u00D7</span>' +
+    '</div>';
+  });
+  html += '<div style="display:flex;gap:4px;margin-top:8px;border-top:1px solid var(--border);padding-top:6px">' +
+    '<input type="text" id="asset-tree-newattr-name" placeholder="attribute" style="width:38%;font-size:13px;background:#0d1520;color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px">' +
+    '<input type="text" id="asset-tree-newattr-value" placeholder="value" style="flex:1;font-size:13px;background:#0d1520;color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px">' +
+    '<button type="button" class="btn cool" style="padding:2px 8px;font-size:13px" onclick="addTreeNodeAttr()">+</button>' +
+  '</div>';
+  panel.innerHTML = html;
+}
+function setTreeNodeAttr(name, value) {
+  if (_selectedTreeEl) _selectedTreeEl.setAttribute(name, value);
+}
+function removeTreeNodeAttr(name) {
+  if (_selectedTreeEl) { _selectedTreeEl.removeAttribute(name); renderAssetTreeProps(); }
+}
+function addTreeNodeAttr() {
+  var nameEl = document.getElementById('asset-tree-newattr-name');
+  var valEl = document.getElementById('asset-tree-newattr-value');
+  var name = nameEl.value.trim();
+  if (!name || !_selectedTreeEl) return;
+  _selectedTreeEl.setAttribute(name, valEl.value);
+  renderAssetTreeProps();
+}
+
+function saveAssetXmlEdit() {
+  var sel = document.getElementById('asset-place-url');
+  var relPath = sel.value;
+  var errEl = document.getElementById('asset-xml-error');
+  // Whichever view is active is the one being saved from. Tree view
+  // serializes its live DOM back to text first — it's always well-formed
+  // by construction, but still goes through the exact same validation
+  // path below rather than being special-cased as "already known good".
+  var text = (_assetEditView === 'tree' && _assetEditDoc)
+    ? new XMLSerializer().serializeToString(_assetEditDoc)
+    : document.getElementById('asset-xml-text').value;
+
+  // "XML is halt and catch fire" — validate BEFORE any network call at
+  // all. Any parse error aborts the save completely; nothing partial or
+  // broken ever reaches disk. Same DOMParser + parsererror check this
+  // whole project already uses everywhere else, not a new convention.
+  var doc = new DOMParser().parseFromString(text, 'application/xml');
+  var perr = doc.querySelector('parsererror');
+  if (perr) {
+    errEl.textContent = 'Not saved \u2014 invalid XML, fix and try again:\n' + perr.textContent.trim();
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  // Matches the endpoint's real, pre-existing contract (also used by the
+  // Events Editor's own asset-file viewer, discovered live when this
+  // duplicated the same route under a second, incompatible implementation
+  // — path via a header, raw text body, not JSON) rather than the
+  // conflicting shape this used to send.
+  fetch('/x3d/assets/save', {
+    method: 'POST', headers: { 'X-Asset-Path': relPath },
+    body: text,
+  }).then(function(r) {
+    if (!r.ok) return r.json().then(function(j) { throw new Error(j.error || r.status); });
+    return r.json();
+  }).then(function(res) {
+    toast('Saved ' + res.path + ' \u2014 takes effect next time this asset is (re)loaded, not on anything already in the scene.');
+    document.getElementById('asset-xml-editor').style.display = 'none';
+  }).catch(function(e) {
+    errEl.textContent = 'Save failed: ' + e.message;
+    errEl.style.display = '';
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -4190,6 +5166,131 @@ function saveZoneAsTemplate() {
 // Media directory listing — populates all sound pickers
 // ─────────────────────────────────────────────
 var _mediaFiles = [];  // cached from last fetch
+
+// ── Node icons (Character portraits / Zone images) ──────────────────────
+// Shared by drawAgent/drawZone below. Same /media/list?subdir= convention
+// as the audio media lists further down — files live in
+// static/x3d/X3DAssets/media/icons/.
+var _iconFiles = [];
+function refreshIconsList() {
+  fetch(API + '/media/list?subdir=icons')
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      _iconFiles = (data.files || []).filter(function(f) { return /\.(png|jpe?g|webp|gif)$/i.test(f); });
+      _populateIconSelect(document.getElementById('z-image-select'));
+    })
+    .catch(function(e) {
+      console.warn('refreshIconsList: /media/list?subdir=icons not available (' + e.message + ')');
+    });
+}
+function _populateIconSelect(sel, currentVal) {
+  if (!sel) return;
+  var prev = currentVal !== undefined ? currentVal : sel.value;
+  sel.innerHTML = '<option value="">— default —</option>';
+  _iconFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'X3DAssets/media/' + f;
+    opt.textContent = f.replace(/^icons\//, '');
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+
+var _zoneImageSrc = '';
+function onZoneImageSelectChange() {
+  _zoneImageSrc = document.getElementById('z-image-select').value;
+  var fi = document.getElementById('z-image-file'); if (fi) fi.value = '';
+  updateZoneImageThumb();
+}
+function onZoneImageFileSelected(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Choose a PNG, JPG, or WEBP image', true); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    // No /media/upload endpoint for images exists yet (same gap flagged in
+    // the Character Creator's portrait field) — previews and saves as a
+    // data URL on the zone until that endpoint is built.
+    _zoneImageSrc = ev.target.result;
+    document.getElementById('z-image-select').value = '';
+    updateZoneImageThumb();
+  };
+  reader.readAsDataURL(file);
+}
+function clearZoneImage() {
+  _zoneImageSrc = '';
+  document.getElementById('z-image-select').value = '';
+  var fi = document.getElementById('z-image-file'); if (fi) fi.value = '';
+  updateZoneImageThumb();
+}
+function updateZoneImageThumb() {
+  var el = document.getElementById('z-image-thumb');
+  if (!el) return;
+  if (!_zoneImageSrc) { el.innerHTML = '🗺️'; return; }
+  var url = _zoneImageSrc.indexOf('data:') === 0 ? _zoneImageSrc : '/static/x3d/' + _zoneImageSrc;
+  el.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.innerHTML=\'🗺️\'">';
+}
+
+// Loaded-image cache for canvas drawing — drawAgent/drawZone read from this
+// rather than creating a new Image() every frame. A miss returns null (so
+// the caller falls back to its default glyph this frame) and triggers a
+// redraw once the image finishes loading.
+var _iconImgCache = {};
+function _getIconImg(src) {
+  if (!src) return null;
+  var cached = _iconImgCache[src];
+  if (cached === 'error') return null;
+  if (cached) return cached.complete ? cached : null;
+  var img = new Image();
+  img.onload  = function() { drawScene(); };
+  img.onerror = function() { _iconImgCache[src] = 'error'; };
+  img.src = src.indexOf('data:') === 0 ? src : '/static/x3d/' + src;
+  _iconImgCache[src] = img;
+  return null;
+}
+// Draws a node as a small box: image thumbnail upper-left, label beside it,
+// four EBPS bars along the bottom ("active exposed fields"). Falls back to
+// fallbackGlyph when no image is registered or it hasn't loaded yet.
+function drawNodeBox(cx, cy, label, col, iconSrc, fallbackGlyph, weights, selected) {
+  var bw = 76, bh = 46, ix = cx - bw / 2, iy = cy - bh / 2;
+  ctx.save();
+  ctx.fillStyle = '#10182a'; ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(ix, iy, bw, bh, 6); ctx.fill(); ctx.stroke(); }
+  else { ctx.fillRect(ix, iy, bw, bh); ctx.strokeRect(ix, iy, bw, bh); }
+  // Thumbnail, upper-left
+  var tsz = 20, tx = ix + 5, ty = iy + 5;
+  var img = _getIconImg(iconSrc);
+  ctx.save(); ctx.beginPath(); ctx.rect(tx, ty, tsz, tsz); ctx.clip();
+  if (img) { ctx.drawImage(img, tx, ty, tsz, tsz); }
+  else {
+    ctx.fillStyle = col + '33'; ctx.fillRect(tx, ty, tsz, tsz);
+    ctx.fillStyle = col; ctx.font = '13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(fallbackGlyph, tx + tsz / 2, ty + tsz / 2 + 1);
+  }
+  ctx.restore();
+  ctx.strokeStyle = col + '88'; ctx.lineWidth = 0.75; ctx.strokeRect(tx, ty, tsz, tsz);
+  // Label beside thumbnail
+  ctx.fillStyle = col; ctx.font = 'bold 12px Syne, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(label, tx + tsz + 5, iy + 6);
+  // Exposed EBPS fields — four thin bars along the box's bottom edge
+  if (weights) {
+    var chans = ['E','B','P','S'], cols = ['#f06060','#60a8f0','#f0c060','#4af0a8'];
+    var gap = 2, barW = (bw - 10 - gap * 3) / 4, baseY = iy + bh - 6;
+    chans.forEach(function(ch, i) {
+      var v = (weights[ch] !== undefined) ? weights[ch] : 0.25, hgt = Math.max(2, v * 16);
+      var bx = ix + 5 + i * (barW + gap);
+      ctx.fillStyle = cols[i] + '44'; ctx.fillRect(bx, baseY - 16, barW, 16);
+      ctx.fillStyle = cols[i];        ctx.fillRect(bx, baseY - hgt, barW, hgt);
+    });
+  }
+  if (selected) {
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(ix - 1, iy - 1, bw + 2, bh + 2, 7); ctx.stroke(); }
+    else { ctx.strokeRect(ix - 1, iy - 1, bw + 2, bh + 2); }
+  }
+  ctx.restore();
+  return { ix: ix, iy: iy, bw: bw, bh: bh };
+}
 
 function refreshMediaList() {
   refreshConvolverList();
@@ -4413,7 +5514,7 @@ function confirmZone(){
   if(wasEditingZone && _editingZoneId!==id) delete zones[_editingZoneId];  // rename
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
     descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus,
-    commands:_zoneCommandRules.slice(),sound:sound,asset:asset,template:templateName};
+    commands:_zoneCommandRules.slice(),sound:sound,asset:asset,template:templateName,image:_zoneImageSrc||''};
   _editingZoneId=null;
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
     channel_bias:{E:w.E-0.25,B:w.B-0.25,P:w.P-0.25,S:w.S-0.25},description:desc}).catch(function(){});
@@ -4433,6 +5534,13 @@ function editZone(id){
   document.getElementById('z-name').value=z.name||'';
   document.getElementById('z-type').value=z.zone_type||'neutral';
   document.getElementById('z-radius').value=z.radius||4;
+  // Zone image — select the matching option if it's a registered file,
+  // otherwise still preview it (e.g. a data URL saved before /media/upload
+  // for images existed, or a file since removed from media/icons/).
+  _zoneImageSrc = z.image || '';
+  var zSel = document.getElementById('z-image-select');
+  if (zSel) zSel.value = [].slice.call(zSel.options).some(function(o){ return o.value === _zoneImageSrc; }) ? _zoneImageSrc : '';
+  updateZoneImageThumb();
   document.getElementById('z-desc').value=z.descriptor||'';
   document.getElementById('z-noise').value=(z.noise_coefficient!==undefined)?z.noise_coefficient:0.10;
   document.getElementById('z-ambient').value=(z.ambient_theme&&z.ambient_theme.scale)||'dorian';
@@ -4531,7 +5639,7 @@ function placeAgentAt(name,wx,wz){
   // reads) is built from placedAgents, not agents, so the dropdown fell
   // back to ['Default'] for every agent placed this way. Matches hanim_src/
   // hanim_loa's existing carry-through pattern on this same line.
-  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice,hanim_src:a.hanim_src||'',hanim_loa:a.hanim_loa||4,behavior_clips:a.behavior_clips||[]};
+  placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice,hanim_src:a.hanim_src||'',hanim_loa:a.hanim_loa||4,behavior_clips:a.behavior_clips||[],portrait:a.portrait||''};
   placing=null;placingAgent=null;pendingPos=null;hideHint();renderAll();toast(name+' placed ('+wx.toFixed(1)+',0,'+wz.toFixed(1)+')');
 }
 function confirmWP(){
@@ -5190,6 +6298,30 @@ async function exportX3D(silent){
   await Promise.all(Object.values(placedAgents)
     .filter(function(a){ return a.hanim_src; })
     .map(function(a){ console.log('[camRig] priming fresh manifest for agent', a.name||a, 'hanim_src=', a.hanim_src); return camRigFetchManifestFresh(a.hanim_src); }));
+  // Same exact race, different data source, found live: buildAX3D's
+  // per-clip IMPORTs (<IMPORT ... exportedDEF="Timer1" AS="Timer1_Anna"/>,
+  // one per real cultivar clip) read a.behavior_clips as a pure in-memory
+  // value -- nothing inside buildAX3D ever fetches it fresh. behavior_clips
+  // only ever gets populated by loadAll()/loadAgents(), whichever bulk
+  // page-load refresh happened to run earlier in this session -- there was
+  // no guarantee either had actually completed, or completed with current
+  // data, by the time Export ran. Confirmed live: a real export produced
+  // only the 8 legacy BEHAVIOR_TIMER_BASES imports and zero imports for
+  // Anna's real Timer1-Timer7 clips, even though her avatar file and its
+  // EXPORT statements were both independently confirmed correct -- every
+  // gesture cue failed with "timer map never resolved" as a direct result.
+  // Fixed the same way as the manifest race: fetch fresh, await it, then
+  // build -- never trust whatever happens to already be in memory.
+  try {
+    var _cxFresh = await apiGet('/cultivars/xml');
+    ((_cxFresh||{}).cultivars||[]).forEach(function(c){
+      if (c.agentname && placedAgents[c.agentname]) {
+        placedAgents[c.agentname].behavior_clips = c.behavior_clips || [];
+      }
+    });
+  } catch (eCx) {
+    console.warn('[export] fresh /cultivars/xml fetch failed (' + eCx.message + ') — behavior_clips may be stale for this export');
+  }
   Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a,showLabels);});
   Object.values(placedAssets).forEach(function(pa){x+=buildAssetX3D(pa);});
   // Day 88: real, new capability — Movie/Animation EventCues need an
@@ -5206,6 +6338,9 @@ async function exportX3D(silent){
       if (cue.track === 'path' && cue.params && cue.params.pathId) {
         x += buildRecordedPathInterpNodes(cue);
       }
+      if (cue.track === 'turn') {
+        x += buildTurnCueNodes(cue);
+      }
     });
     _lastTimelineCues.cues.forEach(function(cue) {
       if ((cue.track !== 'movie' && cue.track !== 'animation') || !cue.internalDef || !cue.target) return;
@@ -5215,6 +6350,7 @@ async function exportX3D(silent){
       x += '<IMPORT inlineDEF="AssetInline_'+assetSid+'" exportedDEF="'+xe(cue.internalDef)+'" AS="EC_'+safeId(String(cue.id))+'"/>\n';
     });
   }
+  x += buildRouteGraphNodes(x); // Route Graph tool's own baked utility nodes — see its own comment for the existing-DEF-guard reasoning
   x+='\n';
   var an=Object.keys(placedAgents);
   if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
@@ -5231,7 +6367,9 @@ async function exportX3D(silent){
   // therefore this cue's ROUTEs) would be skipped entirely when nothing
   // else happened to need it.
   var _hasPathCues = !!(_lastTimelineCues && _lastTimelineCues.cues && _lastTimelineCues.cues.some(function(c){ return c.track==='path' && c.params && c.params.pathId; }));
-  var _hasRoutes=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0)||_hasPathCues;
+  var _hasTurnCues = !!(_lastTimelineCues && _lastTimelineCues.cues && _lastTimelineCues.cues.some(function(c){ return c.track==='turn'; }));
+  var _hasRouteGraph = !!(_lastRouteGraph && _lastRouteGraph.connections && _lastRouteGraph.connections.length);
+  var _hasRoutes=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0)||_hasPathCues||_hasTurnCues||_hasRouteGraph;
   if(_hasRoutes){
     x+='\n<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->\n';
     if(iI&&Object.keys(paths).length>0){
@@ -5242,6 +6380,12 @@ async function exportX3D(silent){
         if (cue.track === 'path' && cue.params && cue.params.pathId) x += buildRecordedPathRoutes(cue);
       });
     }
+    if(_hasTurnCues){
+      _lastTimelineCues.cues.forEach(function(cue) {
+        if (cue.track === 'turn') x += buildTurnCueRoutes(cue);
+      });
+    }
+    x += buildRouteGraphRoutes(x); // Route Graph tool's own routes — see its own comment for the dedup-against-existing-routes reasoning
     // SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
     // Day 53: emitted even when scene has no paths (was incorrectly gated on paths.length>0)
     if(iS){
@@ -5942,6 +7086,147 @@ function buildRecordedPathRoutes(cue) {
   }
   return s;
 }
+// Turn cue — one-shot Y-axis rotation, fired from the Events Timeline,
+// routable to any placed agent or static asset. Same baked-node pattern as
+// PathEaseTimer/PathEaseInterp and CAM_FlyTimer: built once per cue at
+// export time, mutated (never recreated) by the Loader at fire time. Actual
+// start/end angle isn't known at export time (depends on the target's live
+// orientation when the cue fires), so keyValue here is a placeholder,
+// always overwritten via indexed SFRotation assignment before use — same
+// reasoning as PathEaseInterp's own placeholder.
+function buildTurnCueNodes(cue) {
+  var cueSafe = safeId(String(cue.id));
+  // cue.duration is the same field every other cue type already writes as
+  // the plain `dur=` XML attribute — no new duration field needed.
+  var dur = (cue.duration && cue.duration > 0) ? cue.duration : 2;
+  var s = '<TimeSensor DEF="TurnTimer_EC_'+cueSafe+'" cycleInterval="'+dur+'" loop="false"/>\n';
+  s += '<OrientationInterpolator DEF="TurnInterp_EC_'+cueSafe+'" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>\n';
+  return s;
+}
+function buildTurnCueRoutes(cue) {
+  // Same target-resolution convention as buildRecordedPathRoutes — an
+  // avatar or a static placed asset, not yet a camera rig node (turning a
+  // baked camera would need a third prefix convention; not built until
+  // there's an actual use case for it).
+  var targetPrefix = placedAgents[cue.target] ? 'Avatar_' : placedAssets[cue.target] ? 'PlacedAsset_' : null;
+  if (!targetPrefix) return '';
+  var targetDef = targetPrefix + safeId(cue.target);
+  var cueSafe = safeId(String(cue.id));
+  var s = '<ROUTE fromNode="TurnTimer_EC_'+cueSafe+'" fromField="fraction_changed" toNode="TurnInterp_EC_'+cueSafe+'" toField="set_fraction"/>\n';
+  s += '<ROUTE fromNode="TurnInterp_EC_'+cueSafe+'" fromField="value_changed" toNode="'+targetDef+'" toField="set_rotation"/>\n';
+  return s;
+}
+
+// Route Graph tool export wiring — turns a saved graph (_lastRouteGraph,
+// received via mccf_route_graph_save) into real X3D. Two rules, both hard
+// requirements, not style choices:
+//
+// 1. NEVER create a node whose DEF already exists anywhere else in the
+//    scene being built. A route-graph node can mean two very different
+//    things — a brand-new utility node the author dropped in with a
+//    custom name (TimeSensor used generically, or one of the four
+//    interpolators — the only types this tool ever lets you create fresh,
+//    see mccf_route_graph_prototype.html's own `creatable` flag), or a
+//    reference to something that already exists (imported from the scene,
+//    or picked from an existing-instance dropdown — an Agent's Transform,
+//    a placed Light, an existing Script). Baking a duplicate DEF for the
+//    second case is exactly the corruption class this project spent real
+//    effort eliminating earlier (duplicate-DEF collisions breaking the
+//    ROUTE block outright) — so this checks the ACTUAL scene being built,
+//    not a flag on the route-graph node itself, since that's the one
+//    source of truth that can't be stale or mismatched.
+// 2. NEVER duplicate a ROUTE that already exists (also checked against the
+//    real scene being built, not assumed from where the route-graph data
+//    came from) — a saved graph that included routes originally pulled in
+//    via Import shouldn't double them up on export.
+//
+// Both checks scan the ALREADY-BUILT export string `x` directly (regex
+// over DEF="..." and ROUTE fromNode=... toNode=... attributes) rather than
+// tracking a running Set through every other builder function in this
+// file — self-contained, touches nothing else, and reflects the true
+// state of the scene at the exact moment this runs (late, after
+// everything else has already written its own DEFs/ROUTEs).
+var _ROUTE_GRAPH_CREATABLE_TAGS = {
+  TimeSensor: 'TimeSensor',
+  ScalarInterpolator: 'ScalarInterpolator',
+  ColorInterpolator: 'ColorInterpolator',
+  PositionInterpolator: 'PositionInterpolator',
+  OrientationInterpolator: 'OrientationInterpolator',
+};
+// Turns a route-graph node's authored props (set via its properties panel
+// — see mccf_route_graph_prototype.html's renderPropsPanel/propsSchema)
+// into the real attribute string for its baked tag. Matches this file's
+// own established key/keyValue convention exactly (key="0,1", comma
+// between value-groups, space within one — confirmed against
+// buildRecordedPathInterpNodes/buildTurnCueNodes's own PathEase/Turn
+// output rather than assumed). Interpolators carry an arbitrary-length
+// keyframes array (not fixed at two — corrected after checking a real
+// reference file with 6 real keyframes cycling a full colour wheel),
+// sorted by fraction before baking since the author can add/reorder
+// keyframes in any order in the editor but X3D expects them ascending.
+// Falls back to the same defaults the properties panel itself uses if a
+// node was never actually opened/edited there (props may be entirely
+// absent — a node added from the toolbar and left untouched is still
+// valid, just inert until routed and given real values), so baking never
+// depends on the author having visited the panel.
+function _routeGraphNodeAttrs(n) {
+  var p = n.props || {};
+  if (n.type === 'TimeSensor') {
+    var ci = (p.cycleInterval !== undefined) ? p.cycleInterval : 4;
+    var loop = !!p.loop;
+    return ' cycleInterval="' + ci + '" loop="' + (loop?'true':'false') + '"';
+  }
+  var kfs = (p.keyframes && p.keyframes.length >= 2) ? p.keyframes.slice().sort(function(a,b){ return a.fraction-b.fraction; }) : null;
+  if (!kfs) {
+    // No real keyframes authored (panel never opened) — same conservative
+    // two-key fallback the panel itself defaults to, per type.
+    if (n.type === 'ScalarInterpolator') kfs = [{fraction:0,value:0},{fraction:1,value:1}];
+    else if (n.type === 'ColorInterpolator') kfs = [{fraction:0,value:[1,1,1]},{fraction:1,value:[0,0,0]}];
+    else if (n.type === 'PositionInterpolator') kfs = [{fraction:0,value:[0,0,0]},{fraction:1,value:[0,0,0]}];
+    else if (n.type === 'OrientationInterpolator') kfs = [{fraction:0,value:[0,1,0,0]},{fraction:1,value:[0,1,0,0]}];
+    else return '';
+  }
+  var keyStr = kfs.map(function(kf){ return kf.fraction; }).join(',');
+  var keyValueStr = kfs.map(function(kf){
+    return Array.isArray(kf.value) ? kf.value.join(' ') : kf.value;
+  }).join(',');
+  return ' key="' + keyStr + '" keyValue="' + keyValueStr + '"';
+}
+function buildRouteGraphNodes(builtSoFar) {
+  if (!_lastRouteGraph || !_lastRouteGraph.nodes || !_lastRouteGraph.nodes.length) return '';
+  var existingDefs = {};
+  var defRe = /DEF="([^"]+)"/g, dm;
+  while ((dm = defRe.exec(builtSoFar))) existingDefs[dm[1]] = true;
+  var s = '';
+  _lastRouteGraph.nodes.forEach(function(n) {
+    if (existingDefs[n.name]) return; // already real somewhere else in this scene — never re-create it
+    var tag = _ROUTE_GRAPH_CREATABLE_TAGS[n.type];
+    if (!tag) return; // not a creatable utility type (Transform/Light/Script/etc. instance) — expected to already exist; if it genuinely doesn't, the ROUTE below simply won't resolve at runtime, same as any other missing-node case elsewhere in this project, not a reason to fabricate a wrong-typed placeholder here
+    s += '<' + tag + ' DEF="' + xe(n.name) + '"' + _routeGraphNodeAttrs(n) + '/>\n';
+    existingDefs[n.name] = true; // guards a second route-graph node reusing the same name within this same export pass too
+  });
+  return s;
+}
+function buildRouteGraphRoutes(builtSoFar) {
+  if (!_lastRouteGraph || !_lastRouteGraph.connections || !_lastRouteGraph.connections.length) return '';
+  var existingRoutes = {};
+  var routeRe = /<ROUTE fromNode="([^"]+)" fromField="([^"]+)" toNode="([^"]+)" toField="([^"]+)"/g, rm;
+  while ((rm = routeRe.exec(builtSoFar))) existingRoutes[rm[1]+'.'+rm[2]+'->'+rm[3]+'.'+rm[4]] = true;
+  var byId = {};
+  _lastRouteGraph.nodes.forEach(function(n) { byId[n.id] = n; });
+  var s = '';
+  _lastRouteGraph.connections.forEach(function(c) {
+    var fromN = byId[c.fromNode], toN = byId[c.toNode];
+    if (!fromN || !toN) return;
+    var key = fromN.name+'.'+c.fromField+'->'+toN.name+'.'+c.toField;
+    if (existingRoutes[key]) return; // already wired — e.g. re-exporting a graph that included routes originally pulled in via Import
+    s += '<ROUTE fromNode="'+xe(fromN.name)+'" fromField="'+xe(c.fromField)+
+         '" toNode="'+xe(toN.name)+'" toField="'+xe(c.toField)+'"/>\n';
+    existingRoutes[key] = true;
+  });
+  return s;
+}
+
 function buildInterpNodes(path){
   // Emits all DEF nodes: Interpolators, TimeSensors, Arrival_ Script, Kill_ Script.
   // ROUTEs emitted separately by buildInterpRoutes — always the last items in the X3D scene.
@@ -6329,10 +7614,22 @@ function toggleCoupler(key, event) {
   if (!cb || !panel) return;
   if (event && event.target === cb) {
     panel.classList.toggle('open', cb.checked);
-    return;
+  } else {
+    cb.checked = !cb.checked;
+    panel.classList.toggle('open', cb.checked);
   }
-  cb.checked = !cb.checked;
-  panel.classList.toggle('open', cb.checked);
+  // The "select at least one coupler" error toast (addNetLink/addNetLinkBidi)
+  // doesn't auto-dismiss by design (Day 78 — error toasts persist until
+  // clicked, so they're actually seen). That's correct for making sure the
+  // message gets read, but it means checking a coupler afterward doesn't
+  // un-stick a toast that's now stale — the condition it was complaining
+  // about is already fixed, the message just doesn't know that yet.
+  // Only clears that exact stale message, not any other toast that might
+  // legitimately be showing for an unrelated reason.
+  var toastEl = document.getElementById('toast');
+  if (toastEl && toastEl.textContent === 'Select at least one coupler' && readSelectedCouplers().couplers.length) {
+    toastEl.className = '';
+  }
 }
 
 function resetCouplerForm() {
@@ -6389,19 +7686,41 @@ function readSelectedCouplers() {
 
 function populateNetworkUI() {
   var agentNames = Object.keys(placedAgents);
+  var zoneIds = Object.keys(zones);
+  // Zones and agents share one flat namespace in networks[].from/.to —
+  // "if zones are agents, just put them in the list with the actors,"
+  // not a separate zone-link data model. Zone's id (not its display
+  // name) is the value, same key _buildNetNodes() already uses for
+  // 'zone:'+id — keeps this consistent with the Affects graph's own
+  // node identity rather than introducing a second naming scheme.
+  // A zone id colliding with an agent name would be ambiguous in this
+  // flat namespace — not guarded against here, same as agent names
+  // were never guarded against colliding with each other either.
   ['net-from','net-to'].forEach(function(id) {
     var sel = document.getElementById(id);
     if (!sel) return;
     var prev = sel.value;
-    sel.innerHTML = '<option value="">-- select agent --</option>';
-    agentNames.forEach(function(name) {
-      var opt = document.createElement('option');
-      opt.value = name; opt.textContent = name;
-      sel.appendChild(opt);
-    });
+    sel.innerHTML = '<option value="">-- select agent or zone --</option>';
+    if (agentNames.length) {
+      var agentGroup = document.createElement('optgroup'); agentGroup.label = 'Characters';
+      agentNames.forEach(function(name) {
+        var opt = document.createElement('option'); opt.value = name; opt.textContent = name;
+        agentGroup.appendChild(opt);
+      });
+      sel.appendChild(agentGroup);
+    }
+    if (zoneIds.length) {
+      var zoneGroup = document.createElement('optgroup'); zoneGroup.label = 'Zones';
+      zoneIds.forEach(function(id2) {
+        var opt = document.createElement('option'); opt.value = id2; opt.textContent = zones[id2].name || id2;
+        zoneGroup.appendChild(opt);
+      });
+      sel.appendChild(zoneGroup);
+    }
     if (prev) sel.value = prev;
   });
   renderNetLinks();
+  refreshInterpolatorAssetsList();
 }
 
 function renderNetLinks() {
@@ -6423,6 +7742,7 @@ function renderNetLinks() {
       '</div>';
   }).join('');
   updateSummary();
+  if(mode==='network') startNetLayout();
 }
 function toggleShowLinks(){
   _showLinks = document.getElementById('net-show-links').checked;
@@ -6617,7 +7937,7 @@ function exportSceneXML(){
 function _doExportSceneXML(_eventTracks){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
-  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'" labelsEnabled="'+(sceneConfig.labelsEnabled!==false?'true':'false')+'" dialogueTTYEnabled="'+(sceneConfig.dialogueTTYEnabled!==false?'true':'false')+'">\n';
+  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'" labelsEnabled="'+(sceneConfig.labelsEnabled!==false?'true':'false')+'" dialogueTTYEnabled="'+(sceneConfig.dialogueTTYEnabled!==false?'true':'false')+'" seed="'+xe(sceneConfig.seed||'')+'">\n';
   // Scene-level sound (Music + Bed) — read from DOM directly, no Apply Grid required
   var snd = {
     musicUrl:  document.getElementById('sc-music-url').value || '',
@@ -6835,6 +8155,19 @@ function _doExportSceneXML(_eventTracks){
     });
     x += '</Network>\n';
   }
+  // Route Graph tool's own saved state — full node objects (positions,
+  // props, imported flags) plus display state (hidden layers/nodes), not
+  // just the structural nodes/connections that get baked into the
+  // compiled X3D by buildRouteGraphNodes/buildRouteGraphRoutes elsewhere.
+  // That baking is one-way and lossy (a TimeSensor in the compiled scene
+  // carries no memory of where it was drawn in a graph editor) — this is
+  // the actual persistence layer, read back on scene load below so a
+  // reopened graph looks the way it was left, not freshly auto-laid-out.
+  // Same JSON-in-attribute convention as coupler_params just above, not a
+  // new pattern invented for this.
+  if (_lastRouteGraph && _lastRouteGraph.nodes && _lastRouteGraph.nodes.length) {
+    x += '<RouteGraph data=\'' + JSON.stringify(_lastRouteGraph).replace(/'/g,'&apos;') + '\'/>\n';
+  }
   // ── EventCues block from Events Editor ──────────────────────────────────
   // Day 85: real bug fix, confirmed by reading both sides directly. This
   // block used to assume _eventTracks was an array of TRACK objects, each
@@ -6875,6 +8208,11 @@ function _doExportSceneXML(_eventTracks){
       // now survives export; cue.clip stays checked first for anything
       // (e.g. a restored cue) that already carries it explicitly.
       if (cue.track === 'gesture' && (cue.clip || cue.label)) x += ' clip="'+xe(cue.clip || cue.label)+'"';
+      if (cue.track === 'turn') {
+        x += ' degrees="'+(cue.degrees||0)+'"';
+        x += ' triggerRef="TurnTimer_EC_'+safeId(String(cue.id))+'"';
+        if (cue.invert) x += ' invert="true"';
+      }
       if (cue.track === 'path' && cue.params && cue.params.pathId) {
         x += ' pathId="'+xe(cue.params.pathId)+'"';
         // Day 88: real bug fix — this was writing the bare "EC_<id>" name,
@@ -7142,6 +8480,10 @@ function _restoreChorusFromXml(xml) {
         sceneConfig.dialogueTTYEnabled = sceneEl.getAttribute('dialogueTTYEnabled') !== 'false';
         var ttyEl = document.getElementById('exp-dialogue-tty'); if (ttyEl) ttyEl.checked = sceneConfig.dialogueTTYEnabled;
       }
+      if (sceneEl.hasAttribute('seed')) {
+        sceneConfig.seed = sceneEl.getAttribute('seed') || '';
+        var seedEl = document.getElementById('sc-seed'); if (seedEl) seedEl.value = sceneConfig.seed;
+      }
     }
 
     // ── 2. Restore zones from <Zones><Zone> ────────────────────────────────
@@ -7334,6 +8676,22 @@ function _restoreChorusFromXml(xml) {
         }
         if (from && to) networks.push({ from:from, to:to, strength:strength, couplers:couplers, coupler_params:coupler_params });
       });
+    }
+
+    // ── 5c. Restore the Route Graph tool's saved state ─────────────────────
+    // Populates _lastRouteGraph directly from the loaded scene, same
+    // "restore state before the tool that needs it ever opens" pattern
+    // already used for dialogue lines/timeline cues elsewhere in this
+    // function — the Route Graph tool's own restore-on-load logic already
+    // existed and was ready to use this; it just never had real saved
+    // data to read before now.
+    var rgEl = doc.querySelector('RouteGraph');
+    if (rgEl) {
+      var rgData = rgEl.getAttribute('data');
+      if (rgData) {
+        try { _lastRouteGraph = JSON.parse(rgData); }
+        catch (eRgParse) { console.warn('[Composer] RouteGraph data failed to parse on load:', eRgParse); _lastRouteGraph = null; }
+      }
     }
 
     // ── 5b. Restore free cameras from <Cameras><Camera> ────────────────────
@@ -7533,7 +8891,8 @@ function _restoreChorusFromXml(xml) {
           voice:       voice,
           hanim_src:   xmlHanim || ag.hanim_src || '',
           hanim_loa:   ag.hanim_loa   || 4,
-          behavior_clips: ag.behavior_clips || []
+          behavior_clips: ag.behavior_clips || [],
+          portrait:    ag.portrait || ''
         };
         if(placedAgents[name].hanim_src) camRigFetchManifest(placedAgents[name].hanim_src);
       } else {
@@ -7541,6 +8900,10 @@ function _restoreChorusFromXml(xml) {
         // from XML, which is the only authoritative source for these fields (path b).
         if (xmlHanim) { placedAgents[name].hanim_src = xmlHanim; camRigFetchManifest(xmlHanim); }
         if (voice)    placedAgents[name].voice      = voice;
+        // Portrait isn't carried in the scene XML at all (it's a cultivar-only
+        // property) — always patch from /cultivars/xml's ag, same reasoning
+        // as hanim_src falling back to ag.hanim_src above.
+        if (ag.portrait) placedAgents[name].portrait = ag.portrait;
         // Also patch position from XML — server may return a stale start position
         if (px3 || py3 || pz3) placedAgents[name].position = [px3, py3, pz3];
         // Day 83: same behavior_clips bug/fix as path (a) above — the server
@@ -8126,6 +9489,15 @@ function _ensureTakeId(sceneName){
   _currentTakeScene = sceneName;
   var el = document.getElementById('take-current');
   if (el) el.textContent = _currentTakeId + ' (auto-started)';
+  // Gesture constellation §6: a take IS a run. Resolve the PRNG seed once
+  // here (base seed from sceneConfig.seed, or randomized if unset) so it's
+  // locked in before anything else this take draws randomness.
+  if (typeof MCCF_PRNG !== 'undefined') {
+    MCCF_PRNG.beginRun(sceneConfig.seed || null);
+    var seedInfo = MCCF_PRNG.getResolvedSeedForExport();
+    var resEl = document.getElementById('sc-seed-resolved');
+    if (resEl) resEl.textContent = 'This take: ' + seedInfo.resolvedSeed + ' (' + seedInfo.source + ')';
+  }
   return _currentTakeId;
 }
 
@@ -8139,6 +9511,14 @@ function _startNewTake(label){
   if (el) el.textContent = _currentTakeId;
   var lbl = document.getElementById('take-label');
   if (lbl) lbl.value = '';
+  // Gesture constellation §6 — same as _ensureTakeId's auto-start path:
+  // an explicit new take resolves a fresh PRNG seed too.
+  if (typeof MCCF_PRNG !== 'undefined') {
+    MCCF_PRNG.beginRun(sceneConfig.seed || null);
+    var seedInfo = MCCF_PRNG.getResolvedSeedForExport();
+    var resEl = document.getElementById('sc-seed-resolved');
+    if (resEl) resEl.textContent = 'This take: ' + seedInfo.resolvedSeed + ' (' + seedInfo.source + ')';
+  }
   toast('New take started: ' + _currentTakeId);
 }
 
@@ -8150,7 +9530,23 @@ function _saveSceneArc(pname){
   var ts=new Date().toISOString().slice(0,19);
   var sceneName=document.getElementById('sc-name').value.trim()||'unknown';
   var takeName=_ensureTakeId(sceneName);
-  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,scene_name:sceneName,take_name:takeName,rows:st.rows})
+  // Gesture constellation §6: "the resolved seed actually used for a
+  // given run is recorded in that run's own Scene Arc export ... since
+  // only a per-run record makes 're-run this exact run' possible."
+  // takeName was already ensured above via _ensureTakeId, which is what
+  // resolves/locks the seed for this take — so by this point
+  // MCCF_PRNG's resolved seed already matches this exact take.
+  // Field name confirmed against mccf_api.py's arc_export_save(): backend
+  // reads exactly `seed` (data.get("seed", None)) and writes it into the
+  // exported XML as <Seed value="..." .../>. seed_source (explicit vs.
+  // randomized) is included too but NOT currently persisted server-side —
+  // the backend's <Seed> tag only stores the resolved value. Harmless to
+  // send (Flask ignores unknown keys), but if per-take provenance needs
+  // to survive into the XML, arc_export_save() needs a small extension.
+  var seedInfo = (typeof MCCF_PRNG !== 'undefined')
+    ? MCCF_PRNG.getResolvedSeedForExport()
+    : { resolvedSeed: null, source: null };
+  apiPost('/arc/export',{cultivar:cultivar,path_name:pathName,timestamp:ts,scene_name:sceneName,take_name:takeName,rows:st.rows,seed:seedInfo.resolvedSeed,seed_source:seedInfo.source})
     .then(function(res){
       document.getElementById('run-log').innerHTML+=
         '<div style="color:var(--accent)">Saved: '+res.filename+'</div>'+
