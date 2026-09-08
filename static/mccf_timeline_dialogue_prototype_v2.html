@@ -41,38 +41,6 @@
   .verb-badge{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
   .verb-badge .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
   .v-start{background:var(--blue-dim);color:var(--blue);} .v-start .dot{background:var(--blue);}
-  .type-badge{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:10px;white-space:nowrap;}
-  .type-question{background:var(--amber-dim);color:var(--amber);}
-  .type-response{background:var(--teal-dim);color:var(--teal);}
-  .type-statement{background:var(--grey-dim);color:var(--grey);}
-  #legacyWaypointDialoguePanel{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);}
-  #legacyWaypointDialoguePanel:empty{display:none;}
-  .legacy-wp-header h3{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px;}
-  .legacy-tag{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);background:var(--bg-lane-b);border:1px solid var(--line);border-radius:8px;padding:2px 7px;}
-  .legacy-wp-note{font-size:13px;color:var(--text-faint);margin-bottom:14px;max-width:680px;}
-  .legacy-wp-group{margin-bottom:14px;}
-  .legacy-wp-name{font-size:14px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
-  .legacy-wp-line{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:15px;}
-  .legacy-wp-speaker{color:var(--text-dim);font-weight:600;white-space:nowrap;}
-  .legacy-wp-text{color:var(--text);}
-  .voicetag-block label{display:flex;align-items:center;gap:8px;}
-  .tagsource-badge{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:8px;}
-  .tagsource-none{background:var(--bg-lane-b);color:var(--text-faint);border:1px solid var(--line);}
-  .tagsource-authored{background:var(--teal-dim);color:var(--teal);}
-  .tagsource-algorithmic{background:var(--violet-dim);color:var(--violet);}
-  .tagsource-llm-interpreted{background:var(--rose-dim);color:var(--rose);}
-  .quicktag-row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;}
-  .quicktag-btn{font-family:var(--mono);font-size:12px;padding:3px 9px;border-radius:10px;background:var(--bg-lane-b);border:1px solid var(--line);color:var(--text-dim);cursor:pointer;}
-  .quicktag-btn:hover{border-color:var(--violet);color:var(--violet);}
-  .voicetag-actions{display:flex;align-items:center;gap:10px;margin-top:6px;}
-  .btn-small{font-size:13px;padding:5px 12px;border-radius:8px;background:var(--violet-dim);color:var(--violet);border:1px solid transparent;cursor:pointer;}
-  .btn-small-ghost{background:transparent;border:1px solid var(--line);color:var(--text-dim);}
-  .voicetag-status{font-size:13px;color:var(--text-faint);}
-  .affect-toggle-label{display:flex;align-items:center;gap:8px;font-size:14px;}
-  .affect-grid{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;}
-  .affect-chan{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:13px;color:var(--text-dim);}
-  .affect-chan input{width:64px;}
-  .affect-interpreter{flex:1;min-width:140px;}
   .v-stop{background:var(--grey-dim);color:var(--grey);} .v-stop .dot{background:var(--grey);}
   .v-arrived{background:var(--teal-dim);color:var(--teal);} .v-arrived .dot{background:var(--teal);}
   .v-blocked{background:var(--coral-dim);color:var(--coral);} .v-blocked .dot{background:var(--coral);animation:pulse 1.4s infinite;}
@@ -341,7 +309,6 @@
             <button class="add-line-btn" id="addLineBtn">+ Add line</button>
           </div>
           <div id="dlgSteps"></div>
-          <div id="legacyWaypointDialoguePanel"></div>
         </div>
       </div>
     </section>
@@ -401,16 +368,6 @@ const FIELD_MAP = {
 const state = {
   sceneName:'newDirectoryTestScene',
   scrubTime:0,
-  recordedPaths:[],
-  // Read-only mirror of Composer's <Waypoints><Waypoint><Question/Response/
-  // Statement> dialogue, populated by importSceneXml() via
-  // MCCFDialogue.parseLegacyWaypointLines(). Deliberately NOT part of
-  // state.actors — exportSceneXml() only ever walks state.actors, so this
-  // can never be written back out as a <Actor><Dialogue> block. That's the
-  // whole point: Composer alone owns and exports <Waypoints>, so keeping
-  // this out of the exportable model means viewing it here can never create
-  // a second, divergent copy of the same conversation. See renderLegacyRail.
-  legacyWaypointDialogue:[],
   zones:[
     {id:'Zone1',name:'The Garden',at:8},
     {id:'Pool',name:'The Pool',at:22},
@@ -568,65 +525,20 @@ function xmlStepToState(attrs){
 }
 
 function dialogueTrackToXml(actorId, track, allStepIds){
-  const lines = track.steps.map(s => {
-    const line = {
-      id:s.id, actor:actorId, type:s.type||'Statement', mode:s.mode, blocking:!!s.blocks,
-      trigger: dlgTriggerToWireTrigger(s.trigger), text: s.content||'',
-    };
-    // ttsText/tagSource and channelE-S/emotionalInterpreter used to be
-    // dropped silently here — this function only ever read id/type/mode/
-    // blocking/trigger/text from the step, so any line carrying voice-
-    // engine delivery tags or affect-channel tags that got edited in this
-    // tab (even just re-ordered) would come back out of export with those
-    // tags gone, no error, nothing to signal it happened. Both are
-    // co-required pairs/groups per validateDialogueLines — write them only
-    // when actually present, exactly as authored, never invented here.
-    if (s.ttsText !== undefined && s.ttsText !== null) {
-      line.ttsText = s.ttsText;
-      line.tagSource = s.tagSource || { type: 'authored' };
-    }
-    if (s.channelE !== undefined && s.channelE !== null) {
-      line.channelE = s.channelE; line.channelB = s.channelB;
-      line.channelP = s.channelP; line.channelS = s.channelS;
-      line.emotionalInterpreter = s.emotionalInterpreter || '';
-    }
-    return line;
-  });
+  const lines = track.steps.map(s => ({
+    id:s.id, actor:actorId, type:'Statement', mode:s.mode, blocking:!!s.blocks,
+    trigger: dlgTriggerToWireTrigger(s.trigger), text: s.content||'',
+  }));
   return MCCFDialogue.serializeDialogueBlock(lines, {additionalValidIds: allStepIds||[]});
 }
 function dialogueLineToStateStep(line){
   const trigger = xmlStringToStateTrigger(MCCFDialogue.serializeTrigger(line.trigger));
-  const step = {
+  return {
     id:line.id, label:`"${line.text.slice(0,30)}${line.text.length>30?'…':''}"`,
     verb:'start', trigger, durationKind: line.mode==='improv'?'estimate':'fixed', status:'ok',
     content:line.text, mode:line.mode, voice:'', rate:'1.0', blocks:line.blocking,
-    // Question/Response/Statement — was silently dropped on import before
-    // (this step shape had no `type` field at all), which combined with
-    // dialogueTrackToXml's old hardcoded 'Statement' on export meant a
-    // round trip through this editor quietly flattened every line's real
-    // conversational role to Statement. Default only used for lines that
-    // somehow arrive with no type at all (shouldn't happen from a
-    // well-formed <Dialogue> block, but MCCFDialogue.parseDialogueBlock
-    // doesn't require the attribute, so this is a real fallback, not
-    // defensive dead code).
-    type: line.type || 'Statement',
     t0:0, t1: line.mode==='improv'?4:Math.max(2, line.text.length/15),
   };
-  // Carry the voice-engine tag and affect-channel tag through unchanged if
-  // present, so a line authored/tagged elsewhere (an earlier tool, Kate,
-  // hand-edited XML) survives a load into this editor even before the
-  // Voice Tag panel below has touched it. Matching dialogueTrackToXml's
-  // co-required-pair handling above.
-  if (line.ttsText !== undefined && line.ttsText !== null) {
-    step.ttsText = line.ttsText;
-    step.tagSource = line.tagSource || { type: 'authored' };
-  }
-  if (line.channelE !== undefined && line.channelE !== null) {
-    step.channelE = line.channelE; step.channelB = line.channelB;
-    step.channelP = line.channelP; step.channelS = line.channelS;
-    step.emotionalInterpreter = line.emotionalInterpreter || '';
-  }
-  return step;
 }
 
 function exportSceneXml(){
@@ -757,28 +669,11 @@ function importSceneXml(xml){
   state.actors.length = 0;
   actorsRaw.forEach(a=>state.actors.push(a));
 
-  // Read-only merge of Composer's legacy <Waypoint><Question/Response/
-  // Statement> dialogue — see state.legacyWaypointDialogue's own comment
-  // for why this stays out of state.actors entirely (no export path, so
-  // no collision risk with the real per-Actor <Dialogue> tracks above).
-  // Grouped by waypoint (the only scoping legacy lines actually have —
-  // `speaker` is free-text authored per line in Composer's waypoint panel,
-  // not guaranteed to match any real Actor id, so lines aren't attributed
-  // to an Actor lane here).
-  const legacyLines = MCCFDialogue.parseLegacyWaypointLines(xml);
-  const byWaypoint = {};
-  legacyLines.forEach(line => {
-    if(!byWaypoint[line.trigger.waypoint]) byWaypoint[line.trigger.waypoint] = [];
-    byWaypoint[line.trigger.waypoint].push(line); // line.type (Question/Response/Statement) preserved as-is
-  });
-  state.legacyWaypointDialogue = Object.keys(byWaypoint).map(wp => ({ waypoint: wp, lines: byWaypoint[wp] }));
-
   const newCueNames = {};
   result.cues.forEach(c => { newCueNames[c.id] = state.cueNames[c.id] || c.id; });
   state.cueNames = newCueNames;
 
-  return { actorCount: actorsRaw.length, stepCount: result.stepCount, cues: result.cues,
-    legacyWaypointDialogueCount: legacyLines.length };
+  return { actorCount: actorsRaw.length, stepCount: result.stepCount, cues: result.cues };
 }
 
 document.getElementById('exportXmlBtn').addEventListener('click', ()=>{
@@ -805,7 +700,7 @@ document.getElementById('xmlPanelActionBtn').addEventListener('click', ()=>{
     const result = importSceneXml(document.getElementById('xmlPanelText').value);
     statusEl.style.color = 'var(--teal)';
     statusEl.textContent = `Loaded: ${result.actorCount} actors, ${result.stepCount} steps, ${result.cues.length} cues.`;
-    renderTimeline(); renderDialogueRail(); renderDialogueSteps(); renderLegacyWaypointDialogue();
+    renderTimeline(); renderDialogueRail(); renderDialogueSteps();
   }catch(err){
     statusEl.style.color = 'var(--coral)';
     statusEl.textContent = 'Load failed: ' + err.message;
@@ -953,22 +848,6 @@ function renderStepBlock(s){
       <span class="sdot"></span>${lbl}
     </div>`;
   }
-  // Day 79: show the picked clip/path at a glance, same reasoning as
-  // cameraStepLabel above — without this, a gesture/path step just shows
-  // its free-text label, giving no visual indication of whether a real
-  // clip/path is actually bound or the step is still empty.
-  if(kind==='gesture'){
-    const lbl = s.clipTimerDEF ? (s.label+' \u00b7 '+s.clipTimerDEF) : (s.label+' \u00b7 (no clip)');
-    return `<div class="step ${s.clipTimerDEF?'st-'+s.verb:'st-blocked'} ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${lbl}">
-      <span class="sdot"></span>${lbl}
-    </div>`;
-  }
-  if(kind==='path'){
-    const lbl = s.recordedPathId ? (s.label+' \u00b7 '+s.recordedPathId) : s.label;
-    return `<div class="step st-${s.verb} ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${lbl}">
-      <span class="sdot"></span>${lbl}
-    </div>`;
-  }
   const v = VERBS[s.status==='blocked' ? 'blocked' : s.verb];
   const vcls = s.status==='blocked' ? 'st-blocked' : ('st-'+s.verb);
   return `<div class="step ${vcls} ${trigClass} ${durClass}" data-id="${s.id}" style="left:${left}px;width:${width}px" title="${s.label}">
@@ -1037,44 +916,6 @@ function selectStep(id){
       <div class="insp-row"><div class="v" style="color:var(--text-faint);font-size:14px">Only one camera cut is bound at a time \u2014 same single-owner arbitration as a gesture track. The next cut on this track always displaces the previous one; nothing needs a <span class="verb-badge v-stop" style="padding:1px 5px"><span class="dot"></span>stop</span> authored explicitly.</div></div>`;
   }
 
-  // Day 79: gesture-clip picker. Sourced from THIS SPECIFIC actor's own
-  // availableClips (Composer's per-avatar list: 8 standard timer bases +
-  // that avatar's own cultivar clips) — not one flat scene-wide list. An
-  // Avatar actor always has availableClips once real scene data has
-  // connected (Composer sends it unconditionally for every Avatar); an
-  // empty array before that connection is a real, honest state (nothing
-  // to pick from yet), not an error.
-  let gestureRow='';
-  if(track.kind==='gesture'){
-    const clips = actor.availableClips || [];
-    gestureRow = `<div class="insp-row"><div class="k">Gesture clip</div>
-      <select id="clipSel">
-        <option value="">\u2014 none selected \u2014</option>
-        ${clips.map(c=>`<option value="${c.timerDEF}" ${step.clipTimerDEF===c.timerDEF?'selected':''}>${c.label}</option>`).join('')}
-      </select>
-      ${!clips.length ? `<div class="warn" style="margin-top:6px">No clips available for ${actor.id} yet \u2014 open this tab after Composer has real scene data connected.</div>` : ''}
-      </div>`;
-  }
-
-  // Day 79: recorded-path picker. state.recordedPaths is Composer's own
-  // read-only summary list (id + key/sample counts, not the actual key
-  // geometry \u2014 Composer stays the one place that lives). Selecting one
-  // just records which path this step should play; nothing executes it
-  // yet (buildRecordedPathX3D exists in path-recorder.js but nothing
-  // calls it from the export pipeline \u2014 a separate, later step).
-  let pathRow='';
-  if(track.kind==='path'){
-    const paths = state.recordedPaths || [];
-    pathRow = `<div class="insp-row"><div class="k">Recorded path</div>
-      <select id="pathSel">
-        <option value="">\u2014 none selected \u2014</option>
-        ${paths.map(p=>`<option value="${p.id}" ${step.recordedPathId===p.id?'selected':''}>${p.id} (${p.keyCount} keys)</option>`).join('')}
-      </select>
-      ${!paths.length ? `<div class="warn" style="margin-top:6px">No recorded paths yet \u2014 record one in the Events Editor's Stage panel first.</div>` : ''}
-      <div class="v" style="color:var(--text-faint);font-size:14px;margin-top:6px">Selecting a path here doesn't play it yet \u2014 export-time playback wiring is separate, upcoming work.</div>
-      </div>`;
-  }
-
   let collisionRow='';
   if(step.trigger.type==='declared'){
     collisionRow = `<div class="insp-row"><div class="k">On collision (declared cue vs. running track)</div>
@@ -1100,8 +941,6 @@ function selectStep(id){
     <div class="insp-row"><div class="k">Duration</div><div class="v">${(step.t1-step.t0).toFixed(1)}s — ${step.durationKind==='fixed'?'fixed (computed / authored)':'runtime estimate (may drift)'}</div></div>
     ${collisionRow}
     ${cameraRow}
-    ${gestureRow}
-    ${pathRow}
     ${fieldRow}
     ${step.status==='blocked' ? '<div class="insp-row"><div class="k">Status</div><div class="v" style="color:var(--coral)">blocked — surfaced instead of failing silently</div></div>' : ''}
   `;
@@ -1113,10 +952,6 @@ function selectStep(id){
   if(camTargetSel) camTargetSel.addEventListener('change', e=>{ step.targetActor=e.target.value; renderLanes(); requestAnimationFrame(drawOverlay); });
   const camVpSel=document.getElementById('camVpSel');
   if(camVpSel) camVpSel.addEventListener('change', e=>{ step.viewpointRef=e.target.value; renderLanes(); requestAnimationFrame(drawOverlay); });
-  const clipSel=document.getElementById('clipSel');
-  if(clipSel) clipSel.addEventListener('change', e=>{ step.clipTimerDEF=e.target.value||undefined; });
-  const pathSel=document.getElementById('pathSel');
-  if(pathSel) pathSel.addEventListener('change', e=>{ step.recordedPathId=e.target.value||undefined; });
   const setValueInput=document.getElementById('setValueInput');
   if(setValueInput) setValueInput.addEventListener('change', e=>{
     const n = Number(e.target.value);
@@ -1572,21 +1407,6 @@ function renderDialogueRail(){
   }));
 }
 
-// ElevenLabs v3 accepts inline bracket delivery tags like [whispers], [sighs]
-// directly in the text sent to the API — this is that convention, not a
-// custom one, so ttsText authored here should paste straight into an
-// ElevenLabs request. Not exhaustive — anything can be typed by hand,
-// these are just fast one-click starting points for the common cases.
-const QUICK_VOICE_TAGS = ['warmly','whispers','sighs','laughs','excited','sad','angry','curious','hesitant'];
-
-function tagSourceLabel(s){
-  if(!s.ttsText) return 'not tagged';
-  const src = s.tagSource;
-  if(!src) return 'authored'; // ttsText with no tagSource shouldn't normally happen (co-required), but don't crash the render if it does
-  if(src.type==='llm-interpreted') return 'llm: '+(src.name||'?');
-  return src.type;
-}
-
 function renderDialogueSteps(){
   const actor=state.actors.find(a=>a.id===dlgActorId);
   if(!actor){
@@ -1612,7 +1432,6 @@ function renderDialogueSteps(){
           <button data-act="down" ${i===track.steps.length-1?'disabled':''}>▼</button>
         </div>
         <span class="verb-badge v-start"><span class="dot"></span>start</span>
-        <span class="type-badge type-${(s.type||'Statement').toLowerCase()}" title="Question/Response/Statement">${s.type||'Statement'}</span>
         <span style="font-size:15px;color:var(--text-dim)">${s.label}</span>
         <button class="dlg-remove" data-act="remove">remove</button>
       </div>
@@ -1630,12 +1449,6 @@ function renderDialogueSteps(){
             ${['Cindy — warm alto','Jack — low tenor','Narrator — neutral'].map(v=>`<option ${v===s.voice?'selected':''}>${v}</option>`).join('')}
           </select>
         </div>
-        <div class="field-block">
-          <label>Type</label>
-          <select data-field="type">
-            ${['Question','Response','Statement'].map(t=>`<option ${t===(s.type||'Statement')?'selected':''}>${t}</option>`).join('')}
-          </select>
-        </div>
         <div class="field-block span2">
           <label>Content</label>
           <div class="mode-toggle">
@@ -1645,34 +1458,6 @@ function renderDialogueSteps(){
           ${s.mode==='static'
             ? `<textarea data-field="content" placeholder="Line text...">${s.content||''}</textarea>`
             : `<div class="improv-note">Generated live via ollama at runtime, using current affective context. Duration is a runtime estimate — "arrived" fires when TTS finishes, not at an authored time.</div>`}
-        </div>
-        <div class="field-block span2 voicetag-block">
-          <label>Voice tag (ElevenLabs delivery text)
-            <span class="tagsource-badge tagsource-${s.ttsText?((s.tagSource&&s.tagSource.type)||'authored'):'none'}">${tagSourceLabel(s)}</span>
-          </label>
-          <div class="quicktag-row">
-            ${QUICK_VOICE_TAGS.map(t=>`<button type="button" class="quicktag-btn" data-tag="${t}">[${t}]</button>`).join('')}
-          </div>
-          <textarea data-field="ttsText" placeholder="Tagged text for the voice engine, e.g. [warmly] This is the Garden. It hasn't changed since I was small.">${s.ttsText||''}</textarea>
-          <div class="voicetag-actions">
-            <button type="button" class="btn-small" data-act="generate-tag">Generate tag (sentiment)</button>
-            <button type="button" class="btn-small btn-small-ghost" data-act="clear-tag">Clear tag</button>
-            <span class="voicetag-status" data-role="voicetag-status"></span>
-          </div>
-        </div>
-        <div class="field-block span2 affect-block">
-          <label class="affect-toggle-label">
-            <input type="checkbox" data-field="affect-enabled" ${s.channelE!==undefined?'checked':''}>
-            Affect channels (E/B/P/S) — interpreted emotional read for this line
-          </label>
-          ${s.channelE!==undefined ? `
-          <div class="affect-grid">
-            <div class="affect-chan"><span>E</span><input type="number" min="0" max="1" step="0.05" data-field="channelE" value="${s.channelE}"></div>
-            <div class="affect-chan"><span>B</span><input type="number" min="0" max="1" step="0.05" data-field="channelB" value="${s.channelB}"></div>
-            <div class="affect-chan"><span>P</span><input type="number" min="0" max="1" step="0.05" data-field="channelP" value="${s.channelP}"></div>
-            <div class="affect-chan"><span>S</span><input type="number" min="0" max="1" step="0.05" data-field="channelS" value="${s.channelS}"></div>
-            <input type="text" class="affect-interpreter" data-field="emotionalInterpreter" placeholder="Interpreter (e.g. Kate)" value="${s.emotionalInterpreter||''}">
-          </div>` : ''}
         </div>
         <div class="field-block">
           <label>Rate</label>
@@ -1710,141 +1495,13 @@ function renderDialogueSteps(){
     if(customTime) customTime.addEventListener('change', e=>{ step.trigger={type:'declared',at:parseFloat(e.target.value)||0,cue:null}; });
     const voiceSel=card.querySelector('[data-field="voice"]');
     if(voiceSel) voiceSel.addEventListener('change', e=>{ step.voice=e.target.value; });
-    const typeSel=card.querySelector('[data-field="type"]');
-    if(typeSel) typeSel.addEventListener('change', e=>{ step.type=e.target.value; renderDialogueSteps(); });
     const rateSel=card.querySelector('[data-field="rate"]');
     if(rateSel) rateSel.addEventListener('change', e=>{ step.rate=e.target.value; });
     const contentTa=card.querySelector('[data-field="content"]');
     if(contentTa) contentTa.addEventListener('input', e=>{ step.content=e.target.value; });
     const blockCb=card.querySelector('[data-field="blocks"]');
     if(blockCb) blockCb.addEventListener('change', e=>{ step.blocks=e.target.checked; });
-
-    // ── Voice tag (ttsText/tagSource) ─────────────────────────────────
-    const ttsTa=card.querySelector('[data-field="ttsText"]');
-    if(ttsTa) ttsTa.addEventListener('input', e=>{
-      const v=e.target.value;
-      if(!v.trim()){
-        // ttsText/tagSource are co-required (validateDialogueLines) — clear
-        // both together, never leave a dangling tagSource with no text.
-        delete step.ttsText; delete step.tagSource;
-      } else {
-        step.ttsText=v;
-        // "the editor is expected to auto-promote algorithmic -> authored
-        // the instant a human edits a tag" — dialogue-xml.js's own
-        // documented contract for this field (see its tagSource comment).
-        // A brand-new tag typed by hand starts as authored too.
-        if(!step.tagSource || step.tagSource.type==='algorithmic') step.tagSource={type:'authored'};
-      }
-      const badge=card.querySelector('.tagsource-badge');
-      if(badge){ badge.textContent=tagSourceLabel(step); badge.className='tagsource-badge tagsource-'+(step.ttsText?((step.tagSource&&step.tagSource.type)||'authored'):'none'); }
-    });
-    card.querySelectorAll('.quicktag-btn').forEach(qb=>{
-      qb.addEventListener('click', ()=>{
-        if(!ttsTa) return;
-        const tag='['+qb.dataset.tag+'] ';
-        const start=ttsTa.selectionStart||0, end=ttsTa.selectionEnd||0;
-        const cur=ttsTa.value||step.content||'';
-        ttsTa.value = cur.slice(0,start)+tag+cur.slice(end);
-        ttsTa.focus(); ttsTa.selectionStart=ttsTa.selectionEnd=start+tag.length;
-        ttsTa.dispatchEvent(new Event('input'));
-      });
-    });
-    const genBtn=card.querySelector('[data-act="generate-tag"]');
-    if(genBtn) genBtn.addEventListener('click', async ()=>{
-      const statusEl=card.querySelector('[data-role="voicetag-status"]');
-      if(!step.content || !step.content.trim()){
-        if(statusEl) statusEl.textContent='No line text to analyze yet.';
-        return;
-      }
-      if(statusEl) statusEl.textContent='Analyzing…';
-      // Contract assumed here (documented in dialogue-xml.js as the source
-      // of 'algorithmic' tags, but no server implementation was included
-      // with the files this editor was built from — this call has NOT
-      // been verified against a real /voice/preview route): POST
-      // {text: step.content} -> {tag: "[warmly] ..."} (or {ttsText: "..."}
-      // accepted as a fallback shape). If your server doesn't have this
-      // route yet, this fails gracefully below rather than breaking the
-      // editor — you'll see the actual error inline instead of a silent
-      // no-op, so it's obvious a server route still needs to be added or
-      // pointed at correctly.
-      try{
-        const resp = await fetch('/voice/preview', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({text: step.content})
-        });
-        if(!resp.ok) throw new Error('server returned '+resp.status);
-        const data = await resp.json();
-        const tagged = data.tag || data.ttsText || data.text;
-        if(!tagged) throw new Error('response had no tag/ttsText/text field');
-        step.ttsText = tagged;
-        step.tagSource = {type:'algorithmic'};
-        renderDialogueSteps();
-      }catch(err){
-        if(statusEl) statusEl.textContent='Sentiment tagging unavailable ('+err.message+') — enter a tag by hand or use a quick-tag button instead.';
-      }
-    });
-    const clearBtn=card.querySelector('[data-act="clear-tag"]');
-    if(clearBtn) clearBtn.addEventListener('click', ()=>{
-      delete step.ttsText; delete step.tagSource; renderDialogueSteps();
-    });
-
-    // ── Affect channels (E/B/P/S + emotionalInterpreter) ─────────────────
-    const affectCb=card.querySelector('[data-field="affect-enabled"]');
-    if(affectCb) affectCb.addEventListener('change', e=>{
-      if(e.target.checked){
-        // All four channels + interpreter are co-required as one group
-        // (validateDialogueLines) — seed with neutral 0.25 defaults (same
-        // starting point mccf_scene_composer.html's own arc/record
-        // placeholder channels use) rather than 0, since 0 across all four
-        // isn't a meaningful "neutral" affect reading, just an unset one.
-        step.channelE=0.25; step.channelB=0.25; step.channelP=0.25; step.channelS=0.25;
-        step.emotionalInterpreter='';
-      } else {
-        delete step.channelE; delete step.channelB; delete step.channelP; delete step.channelS;
-        delete step.emotionalInterpreter;
-      }
-      renderDialogueSteps();
-    });
-    ['channelE','channelB','channelP','channelS'].forEach(ch=>{
-      const inp=card.querySelector('[data-field="'+ch+'"]');
-      if(inp) inp.addEventListener('change', e=>{
-        let v=parseFloat(e.target.value); if(Number.isNaN(v)) v=0;
-        step[ch]=Math.max(0,Math.min(1,v)); e.target.value=step[ch];
-      });
-    });
-    const interpInp=card.querySelector('[data-field="emotionalInterpreter"]');
-    if(interpInp) interpInp.addEventListener('input', e=>{ step.emotionalInterpreter=e.target.value; });
   });
-}
-
-// Read-only merge view of Composer's legacy per-waypoint Question/Response/
-// Statement dialogue (state.legacyWaypointDialogue — see its own comment on
-// the state object for why this never feeds into export). Shown underneath
-// the per-Actor dialogue editor so both dialogue sources are visible in one
-// place, without letting them collide: this panel never writes back to
-// Composer, edits to this dialogue still happen in Composer's own Waypoint
-// panel, same as before this merge existed.
-function renderLegacyWaypointDialogue(){
-  const el = document.getElementById('legacyWaypointDialoguePanel');
-  if(!el) return;
-  const groups = state.legacyWaypointDialogue || [];
-  if(!groups.length){ el.innerHTML=''; return; }
-  el.innerHTML = `
-    <div class="legacy-wp-header">
-      <h3>Waypoint Dialogue <span class="legacy-tag">legacy · read-only</span></h3>
-      <div class="legacy-wp-note">Authored in Composer's Waypoint panel, not here — edit there, this is a merged view so you can see it alongside per-Actor dialogue. Not part of this tab's export; Composer exports it separately via &lt;Waypoints&gt;.</div>
-    </div>
-    ${groups.map(g => `
-      <div class="legacy-wp-group">
-        <div class="legacy-wp-name">${xmlAttrEscape(g.waypoint)}</div>
-        ${g.lines.map(l => `
-          <div class="legacy-wp-line">
-            <span class="type-badge type-${(l.type||'Statement').toLowerCase()}">${l.type||'Statement'}</span>
-            ${l.actor ? `<span class="legacy-wp-speaker">${xmlAttrEscape(l.actor)}</span>` : ''}
-            <span class="legacy-wp-text">${xmlAttrEscape(l.text)}</span>
-          </div>`).join('')}
-      </div>`).join('')}
-  `;
 }
 
 document.getElementById('addLineBtn').addEventListener('click', ()=>{
@@ -1854,26 +1511,13 @@ document.getElementById('addLineBtn').addEventListener('click', ()=>{
   track.steps.push({
     id:dlgActorId.toLowerCase()+'-d'+Date.now(), label:'New line', verb:'start',
     trigger:{type:'scene-start'}, t0:0, t1:3, durationKind:'estimate', status:'ok',
-    content:'', mode:'static', voice:'Narrator — neutral', rate:'1.0', blocks:false,
-    // Default new lines to Statement rather than Question/Response. Ambient/
-    // environment-voiced lines (the zone-level Chorus narrator, per Composer's
-    // "Greek Chorus" — see mccf_scene_composer.html's z-chorus-* UI) are always
-    // Statement by nature (they narrate, they don't ask or answer), and that's
-    // also just the safest default for any new line before the author has
-    // decided its conversational role. Chorus itself doesn't appear as an
-    // Actor in this editor yet (it's a zone-level property, not an Actor
-    // entity), so there's no live code path that could mis-type a real Chorus
-    // line today — but if/when Chorus authoring is added here, its lines
-    // should stay locked to 'Statement', not left user-editable like a normal
-    // Actor's Question/Response lines.
-    type:'Statement',
+    content:'', mode:'static', voice:'Narrator — neutral', rate:'1.0', blocks:false
   });
   renderDialogueRail(); renderDialogueSteps();
 });
 
 renderDialogueRail();
 renderDialogueSteps();
-renderLegacyWaypointDialogue();
 
 // ── Composer data bridge (Day 79) ───────────────────────────────────────────
 // Replaces this file's own bundled demo state.actors/state.zones (Cindy/Jack/
@@ -1907,11 +1551,6 @@ function _mergeSceneData(incoming) {
     incoming.actors.forEach(function(inA) {
       var existing = state.actors.find(function(a) { return a.id === inA.id; });
       if (!existing) { state.actors.push(inA); return; }
-      // availableClips is read-only reference data from Composer (which
-      // clips this avatar's cultivar actually has), not something authored
-      // in this tab — always refresh it, even for an already-known actor,
-      // unlike tracks/steps below which are deliberately left untouched.
-      existing.availableClips = inA.availableClips;
       inA.tracks.forEach(function(inT) {
         if (!existing.tracks.find(function(t) { return t.id === inT.id; })) existing.tracks.push(inT);
       });
@@ -1920,15 +1559,6 @@ function _mergeSceneData(incoming) {
       if (!state.zones.find(function(z) { return z.id === inZ.id; })) state.zones.push(inZ);
     });
   }
-  // Recorded paths are Composer's own read-only reference data too (nothing
-  // in this tab authors or edits them) — always refresh wholesale, same
-  // reasoning as availableClips above.
-  state.recordedPaths = incoming.recordedPaths || [];
-  // Same read-only, always-refresh treatment: Composer's legacy per-
-  // waypoint Question/Response/Statement dialogue, for the merged view
-  // below. Never fed into state.actors, so it never gets exported from
-  // this tab — see state.legacyWaypointDialogue's own comment.
-  state.legacyWaypointDialogue = incoming.legacyWaypointDialogue || [];
   // Dialogue authoring needs a track to write into. Real Actors from
   // actor-adapter.js only ever carry 'path'/'cuts' tracks (Design Doc §6/§7 —
   // dialogue/gesture tracks are for the authoring UI to add, not seeded at
@@ -1952,7 +1582,6 @@ function _mergeSceneData(incoming) {
   renderTimeline();
   renderDialogueRail();
   renderDialogueSteps();
-  renderLegacyWaypointDialogue();
 }
 
 window.addEventListener('message', function(evt) {

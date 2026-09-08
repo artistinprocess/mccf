@@ -86,12 +86,7 @@
 
   function safeId(s) { return String(s || '').replace(/[^a-zA-Z0-9_]/g, '_'); }
   function xmlEscape(s) {
-    // Also escapes apostrophes (&apos;) — see the matching fix and comment
-    // on xe() in mccf_scene_composer.html. Same bug class: any attribute
-    // built with single-quote delimiters breaks on an unescaped apostrophe
-    // in the value, and &apos; is safe inside double-quoted attributes too,
-    // so escaping it unconditionally here costs nothing.
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // Timeline authoring shape -> dispatcher.js's addStep shape. Timeline's

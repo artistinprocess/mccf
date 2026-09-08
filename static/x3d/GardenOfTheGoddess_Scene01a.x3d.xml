@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">
+<X3D profile="Immersive" version="4.0">
+<!-- MCCF Scene: GardenOfTheGoddess_Scene01 Generated: 2026-09-03T02:23:54 Grid: 80mx80m -->
+<head><meta name="title" content="GardenOfTheGoddess_Scene01"/><meta name="generator" content="MCCF Scene Composer V3"/></head>
+<Scene>
+
+<!-- Camera proto library (Day 64) — see mccf_camera_protos.x3d for ProtoBody definitions -->
+<ExternProtoDeclare name="AgentOrbitCamera" url='"protos/mccf_camera_protos.x3d#AgentOrbitCamera"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation"/>
+  <field accessType="inputOutput" type="SFRotation" name="initialRotation"/>
+  <field accessType="inputOutput" type="MFFloat"    name="key"/>
+  <field accessType="inputOutput" type="MFVec3f"    name="keyValue"/>
+  <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"/>
+  <field accessType="inputOutput" type="SFTime"     name="cycleInterval"/>
+  <field accessType="inputOutput" type="SFBool"     name="loop"/>
+  <field accessType="inputOutput" type="SFBool"     name="enabled"/>
+  <field accessType="inputOutput" type="SFTime"     name="startTime"/>
+  <field accessType="inputOutput" type="SFString"   name="description"/>
+  <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"/>
+  <field accessType="inputOutput" type="SFFloat"    name="nearDistance"/>
+  <field accessType="inputOutput" type="SFFloat"    name="farDistance"/>
+  <field accessType="inputOutput" type="SFBool"     name="jump"/>
+  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+</ExternProtoDeclare>
+
+<ExternProtoDeclare name="AgentTrackCamera" url='"protos/mccf_camera_protos.x3d#AgentTrackCamera"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="initialTranslation"/>
+  <field accessType="inputOutput" type="SFRotation" name="initialRotation"/>
+  <field accessType="inputOutput" type="MFFloat"    name="key"/>
+  <field accessType="inputOutput" type="MFVec3f"    name="keyValue"/>
+  <field accessType="inputOutput" type="MFRotation" name="oriKeyValue"/>
+  <field accessType="inputOutput" type="SFTime"     name="cycleInterval"/>
+  <field accessType="inputOutput" type="SFBool"     name="loop"/>
+  <field accessType="inputOutput" type="SFBool"     name="enabled"/>
+  <field accessType="inputOutput" type="SFTime"     name="startTime"/>
+  <field accessType="inputOutput" type="SFString"   name="description"/>
+  <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"/>
+  <field accessType="inputOutput" type="SFFloat"    name="nearDistance"/>
+  <field accessType="inputOutput" type="SFFloat"    name="farDistance"/>
+  <field accessType="inputOutput" type="SFBool"     name="jump"/>
+  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+</ExternProtoDeclare>
+
+<ExternProtoDeclare name="FreeCamera" url='"protos/mccf_camera_protos.x3d#FreeCamera"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="position"/>
+  <field accessType="inputOutput" type="SFRotation" name="yaw"/>
+  <field accessType="inputOutput" type="SFRotation" name="pitch"/>
+  <field accessType="inputOutput" type="SFRotation" name="roll"/>
+  <field accessType="inputOutput" type="SFString"   name="description"/>
+  <field accessType="inputOutput" type="SFFloat"    name="fieldOfView"/>
+  <field accessType="inputOutput" type="SFFloat"    name="nearDistance"/>
+  <field accessType="inputOutput" type="SFFloat"    name="farDistance"/>
+  <field accessType="inputOutput" type="SFBool"     name="jump"/>
+  <field accessType="inputOnly"   type="SFBool"     name="set_bind"/>
+</ExternProtoDeclare>
+
+<!-- Light proto library (Day 82) — see mccf_light_protos.x3d for ProtoBody definitions -->
+<ExternProtoDeclare name="BasicPointLight" url='"protos/mccf_light_protos.x3d#BasicPointLight"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="translation"/>
+  <field accessType="inputOutput" type="SFRotation" name="rotation"/>
+  <field accessType="inputOutput" type="SFBool"     name="on"/>
+  <field accessType="inputOutput" type="SFColor"    name="color"/>
+  <field accessType="inputOutput" type="SFFloat"    name="intensity"/>
+  <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity"/>
+  <field accessType="inputOutput" type="SFVec3f"    name="attenuation"/>
+  <field accessType="inputOutput" type="SFFloat"    name="radius"/>
+</ExternProtoDeclare>
+
+<ExternProtoDeclare name="BasicSpotLight" url='"protos/mccf_light_protos.x3d#BasicSpotLight"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="translation"/>
+  <field accessType="inputOutput" type="SFRotation" name="rotation"/>
+  <field accessType="inputOutput" type="SFBool"     name="on"/>
+  <field accessType="inputOutput" type="SFColor"    name="color"/>
+  <field accessType="inputOutput" type="SFFloat"    name="intensity"/>
+  <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity"/>
+  <field accessType="inputOutput" type="SFVec3f"    name="attenuation"/>
+  <field accessType="inputOutput" type="SFFloat"    name="radius"/>
+  <field accessType="inputOutput" type="SFFloat"    name="cutOffAngle"/>
+  <field accessType="inputOutput" type="SFFloat"    name="beamWidth"/>
+</ExternProtoDeclare>
+
+<ExternProtoDeclare name="BasicDirectionalLight" url='"protos/mccf_light_protos.x3d#BasicDirectionalLight"'>
+  <field accessType="inputOutput" type="SFVec3f"    name="translation"/>
+  <field accessType="inputOutput" type="SFRotation" name="rotation"/>
+  <field accessType="inputOutput" type="SFBool"     name="on"/>
+  <field accessType="inputOutput" type="SFColor"    name="color"/>
+  <field accessType="inputOutput" type="SFFloat"    name="intensity"/>
+  <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity"/>
+</ExternProtoDeclare>
+
+<!-- Audio proto library (Day 82) — see mccf_audio_protos.x3d for ProtoBody definitions -->
+<ExternProtoDeclare name="BasicAudioSource" url='"protos/mccf_audio_protos.x3d#BasicAudioSource"'>
+  <field accessType="inputOutput" type="SFVec3f"  name="translation"/>
+  <field accessType="inputOutput" type="MFString" name="url"/>
+  <field accessType="inputOutput" type="SFBool"   name="loop"/>
+  <field accessType="inputOutput" type="SFFloat"  name="gain"/>
+  <field accessType="inputOutput" type="SFTime"   name="startTime"/>
+  <field accessType="inputOutput" type="SFTime"   name="stopTime"/>
+  <field accessType="outputOnly"  type="SFBool"   name="isActive"/>
+  <field accessType="outputOnly"  type="SFTime"   name="duration_changed"/>
+  <field accessType="outputOnly"  type="SFTime"   name="elapsedTime"/>
+</ExternProtoDeclare>
+
+<ProtoDeclare name="MCCFAgent"><ProtoInterface>
+<field name="agentName" accessType="initializeOnly" type="MFString" value='"Agent"'/>
+<field name="position" accessType="inputOutput" type="SFVec3f" value="0 0 0"/>
+<field name="coherenceLevel" accessType="inputOutput" type="SFFloat" value="0.5"/>
+</ProtoInterface><ProtoBody><Transform>
+<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>
+<Transform translation="0 0.9 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>
+<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>
+<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>
+<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+</Transform></ProtoBody></ProtoDeclare>
+
+<ProtoDeclare name="MCCFZone"><ProtoInterface>
+<field name="zoneId" accessType="initializeOnly" type="SFString" value="zone"/>
+<field name="active" accessType="inputOutput" type="SFBool" value="false"/>
+</ProtoInterface><ProtoBody><Transform>
+<Transform translation="0 0.15 0"><Shape><Appearance><Material emissiveColor="0.9 0.9 0.9" transparency="0.2"/></Appearance><Sphere radius="0.18"/></Shape></Transform>
+<Transform translation="0 1.2 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.7 0.7 0.8"/></Appearance>
+<Text string='"zone"'><FontStyle size="0.24" family='"SANS"' justify='"MIDDLE"'/></Text></Shape></Billboard></Transform>
+</Transform></ProtoBody></ProtoDeclare>
+
+<NavigationInfo DEF="MainNavInfo" headlight="TRUE" type='"FLY"  "EXAMINE" "WALK" "ANY"' transitionType='"animate"' visibilityLimit="300"/>
+<Background DEF="MainBackground" skyColor="0.0392 0.0392 0.9471, 0.0588 0.0745 0.9098, 0.051 0.0667 0.9588, 0.0471 0.0627 0.9275, 0.12 0.0902 0.09098" skyAngle="0.8, 1.3, 1.4, 1.5708" groundColor="0 0 0, 0 0 0, 0 0 0, 0 0 0, 0 0 0" groundAngle="0.6, 1.2, 1.3, 1.5708"/>
+    <Fog DEF='scene' fogType='EXPONENTIAL'
+        color='0.6 0.7 0.9'
+        visibilityRange='80'/>z
+		
+        <DirectionalLight
+            direction='0 -1 -1'
+            shadows='true'/>
+		
+<!-- Track 3: Bed — X3Dv4 AudioDestination graph -->
+<!-- startTime=-1 stopTime=-2 + enabled=false: belt-and-suspenders block against auto-fire at load. -->
+<!-- Loader SAI sets enabled=true + startTime on Play. (Day 47: Play is performance) -->
+<AudioDestination DEF="SoundNode_Bed" gain="0.05">
+  <AudioClip DEF="Clip_Bed" containerField="children" url='"X3DAssets/media/music/water.wav"'  loop="true" gain="1.0" startTime="-1" stopTime="-2" enabled="false"/>
+</AudioDestination>
+
+<Viewpoint DEF="VP_Overview" description="Overview" position="40 36 128" orientation="1 0 0 -0.38" jump="true"/>
+<!-- Free camera vessel: Loader writes to CAM_Free_Transform via SAI, never to the Viewpoint directly -->
+<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0">
+  <Viewpoint DEF="VP_Free" description="Free Camera" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>
+</Transform>
+
+
+
+  <Viewpoint DEF="VP_Closeup" description="New" position="48.3 2 17.0" orientation="0 1 0 0.0001" jump="true"/>
+
+
+<!-- Move shot vessels: Loader writes key/keyValue via SAI at cue-fire time, then starts CAM_Timer -->
+<!-- ROUTEs are static — set_fraction/value_changed are event fields, not SAI-writable -->
+<TimeSensor DEF="CAM_Timer" cycleInterval="4" loop="false" enabled="false"/>
+<PositionInterpolator DEF="CAM_PosInterp" key="0" keyValue="0 0 0"/>
+<OrientationInterpolator DEF="CAM_OriInterp" key="0" keyValue="0 1 0 0.0001"/>
+<TimeSensor DEF="CAM_FlyTimer" cycleInterval="4" loop="false" enabled="false"/>
+<ScalarInterpolator DEF="CAM_FlyEase" key="0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1" keyValue="0 0.024472 0.095492 0.206107 0.345492 0.5 0.654508 0.793893 0.904508 0.975528 1"/>
+<PositionInterpolator DEF="CAM_FlyPosInterp" key="0 1" keyValue="0 0 0 0 0 0"/>
+<OrientationInterpolator DEF="CAM_FlyOriInterp" key="0 1" keyValue="0 1 0 0.0001 0 1 0 0.0001"/>
+<ProximitySensor DEF="MCCF_PathRecorderProx" center="40 60 40" size="120 120 120" enabled="true"/>
+<Viewpoint DEF="VP_Garden01" description="The Garden of Innana" position="47.03986013986014 3 18.32027972027972" orientation="0 0 0 0" jump="true"/>
+<Viewpoint DEF="VP_Island_1" description="Island" position="35.67202797202796 3 0" orientation="0 0 0 0" jump="true"/>
+
+<Transform translation="40 -0.05 40"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="80 0.08 80"/></Shape></Transform>
+<Shape><Appearance><Material emissiveColor="0.22 0.28 0.40" transparency="0.6"/></Appearance><IndexedLineSet coordIndex="0 1 -1 2 3 -1 4 5 -1 6 7 -1 8 9 -1 10 11 -1 12 13 -1 14 15 -1 16 17 -1 18 19 -1 20 21 -1 22 23 -1 24 25 -1 26 27 -1 28 29 -1 30 31 -1 32 33 -1 34 35 -1"><Coordinate point="0 0.02 0 0 0.02 80 10 0.02 0 10 0.02 80 20 0.02 0 20 0.02 80 30 0.02 0 30 0.02 80 40 0.02 0 40 0.02 80 50 0.02 0 50 0.02 80 60 0.02 0 60 0.02 80 70 0.02 0 70 0.02 80 80 0.02 0 80 0.02 80 0 0.02 0 80 0.02 0 0 0.02 10 80 0.02 10 0 0.02 20 80 0.02 20 0 0.02 30 80 0.02 30 0 0.02 40 80 0.02 40 0 0.02 50 80 0.02 50 0 0.02 60 80 0.02 60 0 0.02 70 80 0.02 70 0 0.02 80 80 0.02 80"/></IndexedLineSet></Shape>
+
+<FreeCamera DEF="CAM_Free_FreeWide" description="FreeWide" position="46.52097902097902 1.8 30.3" yaw="0 1 0 -0.41887902047863906" pitch="1 0 0 -0.13962634015954636" roll="0 0 1 0" fieldOfView="1.2566370614359172" nearDistance="-1" farDistance="-1" jump="true"/>
+<FreeCamera DEF="CAM_Free_FreeMedium" description="FreeMedium" position="48.391608391608415 1.5 29.3" yaw="0 1 0 0" pitch="1 0 0 0.03490658503988659" roll="0 0 1 0" fieldOfView="1.117010721276371" nearDistance="-1" farDistance="-1" jump="true"/>
+<BasicPointLight DEF="LIGHT_Overhead1" translation="46 4 27" rotation="0.9999999999999999 0 0 0.7853981633974484" on="true" color="1.000 1.000 1.000" intensity="0.8" ambientIntensity="0.27" attenuation="1 0 0" radius="50"/>
+<BasicSpotLight DEF="LIGHT_Spot1" translation="46.9 1.8 29" rotation="1 0 0 1.3084" on="true" color="1.000 1.000 1.000" intensity="0.72" ambientIntensity="0.19" attenuation="1 0 0" radius="8" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483"/>
+<BasicAudioSource DEF="AUDIO_Birds" translation="52.3 10.8 20.1" url='"X3DAssets/media/music/chakor.wav"' loop="false" gain="0.2"/>
+<!-- Zone: The Garden of Innana -->
+<Transform DEF="Zone_Garden01" translation="47.03986013986014 0 26.32027972027972">
+<ProximitySensor DEF="Prox_Garden01" size="40 4 40" enabled="true"/>
+<AudioDestination DEF="SoundNode_Garden01_Ambient" gain="1.0">
+  <Gain DEF="GainNode_Garden01_Ambient" containerField="children" gain="0">
+    <AudioClip DEF="Clip_Garden01_Ambient" containerField="children" url="" loop="true" gain="1.0" startTime="-1" stopTime="-2"/>
+  </Gain>
+</AudioDestination>
+<Script DEF="SoundFader_Garden01" directOutput="true" mustEvaluate="true">
+  <field name="isActive"     type="SFBool"  accessType="inputOnly"/>
+  <field name="playing"      type="SFBool"  accessType="inputOnly"/>
+  <field name="masterVolume" type="SFFloat" accessType="inputOnly"/>
+  <![CDATA[ecmascript:
+  var _fadeTimer=null; var _targetGain=0; var _curGain=0;
+  var _playing=false; var _masterVol=1.0;
+  var FADE_MS=300; var STEPS=15;
+  function _setGainNode(v){
+    try{
+      var g=Browser.currentScene.getNamedNode("GainNode_Garden01_Ambient");
+      if(g) g.getField("gain").setValue(v);
+    }catch(e){}
+  }
+  function _ramp(from,to){
+    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}
+    var ceiling=Math.min(to, _masterVol);
+    _curGain=from; _targetGain=ceiling;
+    var step=(ceiling-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);
+    _fadeTimer=setInterval(function(){
+      _curGain+=step;
+      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);
+      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}
+      _setGainNode(_curGain);
+    },interval);
+  }
+  function masterVolume(val, time) {
+    _masterVol = val;
+    if (_curGain > 0) { _setGainNode(Math.min(_curGain, _masterVol)); }
+  }
+  function playing(val, time) {
+    _playing = val;
+    Browser.println("SoundFader_Garden01: playing=" + val);
+    if (!val) {
+      _ramp(_curGain, 0);
+      try { var clip = Browser.currentScene.getNamedNode("Clip_Garden01_Ambient"); if (clip) clip.getField("stopTime").setValue(Browser.currentTime + (FADE_MS/1000)); } catch(e) {}
+    }
+  }
+  function isActive(val, time) {
+    if (!_playing) { Browser.println("SoundFader_Garden01: GATED isActive="+val); return; }
+    var clip = Browser.currentScene.getNamedNode("Clip_Garden01_Ambient");
+    if (val) {
+      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {
+        try{clip.getField("stopTime").setValue(-2);clip.getField("startTime").setValue(Browser.currentTime);}catch(e){}
+        _ramp(0, 0.80);
+      }
+      Browser.println("SoundFader_Garden01: ENTER");
+    } else {
+      _ramp(_curGain, 0);
+      try{if(clip)clip.getField("stopTime").setValue(Browser.currentTime+(FADE_MS/1000));}catch(e){}
+      Browser.println("SoundFader_Garden01: EXIT");
+    }
+  }
+  ]]>
+</Script>
+<!-- Track 4: Dwell one-shot — fired by loader SAI on dwell expiry -->
+<AudioDestination DEF="SoundNode_Garden01_Dwell" gain="0.85">
+  <AudioClip DEF="Clip_Garden01_Dwell" containerField="children" url="" loop="false" gain="1.0" startTime="-1" stopTime="-2"/>
+</AudioDestination>
+</Transform>
+
+<!-- Zone: Island -->
+<Transform DEF="Zone_Island_1" translation="35.67202797202796 0 0">
+<ProximitySensor DEF="Prox_Island_1" size="56 4 56" enabled="true"/>
+<Transform DEF="ZoneAsset_Island_1" translation="-30 0.5 -30" rotation="0 1 0 0.0000" scale="0.3 0.3 0.3">
+  <Inline url='"X3DAssets/IslandTerrain.x3d"'/>
+</Transform>
+<AudioDestination DEF="SoundNode_Island_1_Ambient" gain="1.0">
+  <Gain DEF="GainNode_Island_1_Ambient" containerField="children" gain="0">
+    <AudioClip DEF="Clip_Island_1_Ambient" containerField="children" url="" loop="true" gain="1.0" startTime="-1" stopTime="-2"/>
+  </Gain>
+</AudioDestination>
+<Script DEF="SoundFader_Island_1" directOutput="true" mustEvaluate="true">
+  <field name="isActive"     type="SFBool"  accessType="inputOnly"/>
+  <field name="playing"      type="SFBool"  accessType="inputOnly"/>
+  <field name="masterVolume" type="SFFloat" accessType="inputOnly"/>
+  <![CDATA[ecmascript:
+  var _fadeTimer=null; var _targetGain=0; var _curGain=0;
+  var _playing=false; var _masterVol=1.0;
+  var FADE_MS=300; var STEPS=15;
+  function _setGainNode(v){
+    try{
+      var g=Browser.currentScene.getNamedNode("GainNode_Island_1_Ambient");
+      if(g) g.getField("gain").setValue(v);
+    }catch(e){}
+  }
+  function _ramp(from,to){
+    if(_fadeTimer){clearInterval(_fadeTimer);_fadeTimer=null;}
+    var ceiling=Math.min(to, _masterVol);
+    _curGain=from; _targetGain=ceiling;
+    var step=(ceiling-from)/STEPS; var interval=Math.round(FADE_MS/STEPS);
+    _fadeTimer=setInterval(function(){
+      _curGain+=step;
+      var done=(step>0?_curGain>=_targetGain:_curGain<=_targetGain);
+      if(done){_curGain=_targetGain;clearInterval(_fadeTimer);_fadeTimer=null;}
+      _setGainNode(_curGain);
+    },interval);
+  }
+  function masterVolume(val, time) {
+    _masterVol = val;
+    if (_curGain > 0) { _setGainNode(Math.min(_curGain, _masterVol)); }
+  }
+  function playing(val, time) {
+    _playing = val;
+    Browser.println("SoundFader_Island_1: playing=" + val);
+    if (!val) {
+      _ramp(_curGain, 0);
+      try { var clip = Browser.currentScene.getNamedNode("Clip_Island_1_Ambient"); if (clip) clip.getField("stopTime").setValue(Browser.currentTime + (FADE_MS/1000)); } catch(e) {}
+    }
+  }
+  function isActive(val, time) {
+    if (!_playing) { Browser.println("SoundFader_Island_1: GATED isActive="+val); return; }
+    var clip = Browser.currentScene.getNamedNode("Clip_Island_1_Ambient");
+    if (val) {
+      if (clip && clip.url && clip.url.length>0 && clip.url[0]) {
+        try{clip.getField("stopTime").setValue(-2);clip.getField("startTime").setValue(Browser.currentTime);}catch(e){}
+        _ramp(0, 0.80);
+      }
+      Browser.println("SoundFader_Island_1: ENTER");
+    } else {
+      _ramp(_curGain, 0);
+      try{if(clip)clip.getField("stopTime").setValue(Browser.currentTime+(FADE_MS/1000));}catch(e){}
+      Browser.println("SoundFader_Island_1: EXIT");
+    }
+  }
+  ]]>
+</Script>
+<!-- Track 4: Dwell one-shot — fired by loader SAI on dwell expiry -->
+<AudioDestination DEF="SoundNode_Island_1_Dwell" gain="0.85">
+  <AudioClip DEF="Clip_Island_1_Dwell" containerField="children" url="" loop="false" gain="1.0" startTime="-1" stopTime="-2"/>
+</AudioDestination>
+</Transform>
+
+
+<!-- Agent: Anna -->
+<Transform DEF="Avatar_Anna" translation="48.28 2.0 21.4">
+  <!-- MCCF entanglement sensor — size tunable per zone type via coupler layer -->
+  <ProximitySensor DEF="Prox_Anna" size="2 2.2 2" enabled="true"/>
+  <Inline DEF="HAnim_Anna" url='&quot;../avatars/Anna.x3d&quot;'/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="DefaultTimer" AS="DefaultTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="PitchTimer" AS="PitchTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="YawTimer" AS="YawTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="RollTimer" AS="RollTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="WalkTimer" AS="WalkTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="RunTimer" AS="RunTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="JumpTimer" AS="JumpTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="KickTimer" AS="KickTimer_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer1" AS="Timer1_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer2" AS="Timer2_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer3" AS="Timer3_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer4" AS="Timer4_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer5" AS="Timer5_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer6" AS="Timer6_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer7" AS="Timer7_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer9" AS="Timer9_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer10" AS="Timer10_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer11" AS="Timer11_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer12" AS="Timer12_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="Timer14" AS="Timer14_Anna"/>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="CAM_Eye" AS="VP_Anna_Eye"/>
+  <Script DEF="CamDescInit_Anna_agent_eye" directOutput="true">
+    <field name="cam" type="SFNode" accessType="initializeOnly"><Viewpoint USE="VP_Anna_Eye"/></field>
+    <field name="qname" type="SFString" accessType="initializeOnly" value="Anna Eye"/>
+    <![CDATA[ecmascript:
+    function initialize(){ if(cam) cam.description = qname; }
+    ]]>
+  </Script>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="CAM_Side" AS="VP_Anna_Side"/>
+  <Script DEF="CamDescInit_Anna_agent_side" directOutput="true">
+    <field name="cam" type="SFNode" accessType="initializeOnly"><Viewpoint USE="VP_Anna_Side"/></field>
+    <field name="qname" type="SFString" accessType="initializeOnly" value="Anna Side"/>
+    <![CDATA[ecmascript:
+    function initialize(){ if(cam) cam.description = qname; }
+    ]]>
+  </Script>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="CAM_Orbit" AS="CAM_OrbitProto_Anna"/>
+  <Script DEF="CamDescInit_Anna_agent_orbit" directOutput="true">
+    <field name="cam" type="SFNode" accessType="initializeOnly"><AgentOrbitCamera USE="CAM_OrbitProto_Anna"/></field>
+    <field name="qname" type="SFString" accessType="initializeOnly" value="Anna Orbit"/>
+    <![CDATA[ecmascript:
+    function initialize(){ if(cam) cam.description = qname; }
+    ]]>
+  </Script>
+  <IMPORT inlineDEF="HAnim_Anna" exportedDEF="CAM_Track" AS="CAM_TrackProto_Anna"/>
+  <Script DEF="CamDescInit_Anna_agent_track" directOutput="true">
+    <field name="cam" type="SFNode" accessType="initializeOnly"><AgentTrackCamera USE="CAM_TrackProto_Anna"/></field>
+    <field name="qname" type="SFString" accessType="initializeOnly" value="Anna Track"/>
+    <![CDATA[ecmascript:
+    function initialize(){ if(cam) cam.description = qname; }
+    ]]>
+  </Script>
+</Transform>
+
+<!-- Asset: MovieScreen -->
+<Transform DEF="PlacedAsset_MovieScreen" translation="50.5 2.5 24.42657342657342" rotation="0 1 0 0.0000" scale="1 1 1">
+  <Inline DEF="AssetInline_MovieScreen" url='"X3DAssets/movie_screen.x3d"'/>
+</Transform>
+<IMPORT inlineDEF="AssetInline_MovieScreen" exportedDEF="TheMovie" AS="TheSceneMovie"/>
+
+<!-- Asset: Temple -->
+<Transform DEF="PlacedAsset_Temple" translation="46.68041958041958 0.75 23.36013986013986" rotation="0 1 0 0.0000" scale="12 12 12">
+  <Inline DEF="AssetInline_Temple" url='"X3DAssets/TheGarden2.glb"'/>
+      <LocalFog DEF='temple'
+        color='0.3 0.3 0.7'
+        visibilityRange='30'/>
+</Transform>
+
+<Transform DEF="PlacedAsset_Temple3" translation="46.68041958041958 0.75 46.36013986013986" rotation="0 1 0 3.157" scale="12 12 12">
+  <Inline DEF="AssetInline_Temple3" url='"X3DAssets/TheGarden2.glb"'/>
+      <LocalFog DEF='temple'
+        color='0.3 0.3 0.7'
+        visibilityRange='30'/>
+</Transform>
+
+<!-- Asset: Moon -->
+<Transform DEF="PlacedAsset_Moon" translation="30.39860139860138 5 0" rotation="0 1 0 0.0000" scale="1 1 1">
+  <Inline DEF="AssetInline_Moon" url='"X3DAssets/Moon2.x3d"'/>
+</Transform>
+
+<!-- Asset: Background -->
+<Transform DEF="PlacedAsset_Background" translation="47 0 26.6" rotation="0 1 0 0.0000" scale="1 1 1">
+  <Inline DEF="AssetInline_Background" url='"X3DAssets/Background.x3d"'/>
+</Transform>
+
+<!-- Asset: LadiesSitInGarden -->
+<Transform DEF="PlacedAsset_LadiesSitInGarden" translation="46.8 1 28.5" rotation="0 1 0 2.7576" scale="1 1 1">
+  <Inline DEF="AssetInline_LadiesSitInGarden" url='"X3DAssets/LadiesInGarden.x3d"'/>
+</Transform>
+
+<!-- Asset: Vase -->
+<Transform DEF="PlacedAsset_Vase" translation="44.2 1 25.3" rotation="0 1 0 0.0000" scale="0.3 0.3 0.3">
+  <Inline DEF="AssetInline_Vase" url='"X3DAssets/marbleJar.x3d"'/>
+</Transform>
+
+<!-- Asset: Trees -->
+<Transform DEF="PlacedAsset_Trees" translation="62 3 28.8" rotation="0 1 0 0.0000" scale="1.2 1.2 1.2">
+  <Inline DEF="AssetInline_Trees" url='"X3DAssets/plantbillboard.x3d"'/>
+</Transform>
+
+<!-- Asset: ziggy -->
+<Transform DEF="PlacedAsset_ziggy" translation="48 1.3 1" rotation="0 1 0 0.0000" scale="32 32 32">
+  <Inline DEF="AssetInline_ziggy" url='"X3DAssets/Ziggurat.x3d"'/>
+</Transform>
+
+<!-- Recorded-path playback nodes: Anna path=pathToGarden2 -->
+<PositionInterpolator DEF="PathInterp_EC_cue_restored_4" key="0.00099,0.20400,0.38676,0.38963,0.41302,0.63809,0.63914,0.64552,0.64652,0.76606,0.78253,0.79893,0.87032,1.00000" keyValue="48.3128 1 17.2089,489859 1 18.8428,48.9392 1.4972 18.5905,48.9327 1.4972 18.7134,48.0412 1.4972 18.7158,48.0349 1.4972 18.8516,48.034 1.4972 18.9208,48.0395 1.4972 19.3318,48.0364 1.4972 19.3925,48.6776 1.4972 24.443,48.7633 1.4972 25.6135,48.8776 1.4972 26.7555,48.4096 1.4972 26.1694,48.2515 0.5 26.4004"/>
+<OrientationInterpolator DEF="PathOrient_EC_cue_restored_4" key="0.00099,0.20400,0.38676,0.38963,0.41302,0.63809,0.63914,0.64552,0.64652,0.76606,0.78253,0.79893,0.87032,1.00000" keyValue="0 1 0 -0.1975,0 1 0 -2.9586,0 1 0 -0.0528,0 1 0 1.5487,0 1 0 -0.0464,0 1 0 -0.013,0 1 0 0.0134,0 1 0 -0.051,0 1 0 -0.0709,0 1 0 0.0731,0 1 0 0.0998,0 1 0 2.4045,0 1 0 -0.6002,0 1 0 -0.6002"/>
+<TimeSensor DEF="PathTimer_EC_cue_restored_4" cycleInterval="6" loop="false"/>
+<TimeSensor DEF="PathEaseTimer_EC_cue_restored_4" cycleInterval="1.5" loop="false"/>
+<PositionInterpolator DEF="PathEaseInterp_EC_cue_restored_4" key="0,1" keyValue="0 0 0,0 0 0"/>
+<OrientationInterpolator DEF="PathEaseOrient_EC_cue_restored_4" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>
+<TimeSensor DEF="TurnTimer_EC_cue_restored_16" cycleInterval="5" loop="false"/>
+<OrientationInterpolator DEF="TurnInterp_EC_cue_restored_16" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>
+<TimeSensor DEF="TurnTimer_EC_cue_restored_26" cycleInterval="4" loop="false"/>
+<OrientationInterpolator DEF="TurnInterp_EC_cue_restored_26" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>
+<TimeSensor DEF="TurnTimer_EC_cue_restored_28" cycleInterval="2" loop="false"/>
+<OrientationInterpolator DEF="TurnInterp_EC_cue_restored_28" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>
+<IMPORT inlineDEF="AssetInline_MovieScreen" exportedDEF="MovieShape" AS="EC_cue_restored_1"/>
+<IMPORT inlineDEF="AssetInline_MovieScreen" exportedDEF="MovieShape" AS="EC_cue_restored_2"/>
+<IMPORT inlineDEF="AssetInline_MovieScreen" exportedDEF="MovieShape" AS="EC_cue_restored_3"/>
+<IMPORT inlineDEF="AssetInline_Moon" exportedDEF="Timer2" AS="EC_cue_restored_5"/>
+
+<Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">
+<field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>
+<field accessType="inputOnly" type="SFString" name="startAgent"/>
+<field accessType="inputOnly" type="SFString" name="releaseDwellAgent"/>
+<field accessType="inputOnly" type="SFString" name="startNextTimer"/>
+<field accessType="inputOnly" type="SFVec3f" name="pos_Anna"/>
+<field accessType="outputOnly" type="SFFloat" name="arousal_Anna"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_Garden01"/>
+<field accessType="inputOnly" type="SFBool" name="zoneActive_Island_1"/>
+<![CDATA[ecmascript:
+var _sceneNow=0;
+function _getSceneNow(agent,seg){var t=Browser.currentScene.getNamedNode("Timer_"+agent+"_"+seg);if(t&&t.time!==undefined&&t.time>0)return t.time;if(t&&t.startTime!==undefined&&t.cycleTime!==undefined&&(t.startTime+t.cycleTime)>0)return t.startTime+t.cycleTime;return _sceneNow;}
+function initialize(){Browser.println("MCCFMaster initialized.");}
+function startNextTimer(agentColonSeg,time){
+  try{
+  var parts=agentColonSeg.split(":");
+  var nextSeg=parseInt(parts[1])+1;
+  var t=Browser.currentScene.getNamedNode("Timer_"+parts[0]+"_"+nextSeg);
+  if(t){t.startTime=time;t.enabled=true;Browser.println("MCCFMaster: started Timer_"+parts[0]+"_"+nextSeg+" (next) at "+time);}
+  else{Browser.println("MCCFMaster: no Timer_"+parts[0]+"_"+nextSeg+" — arc complete");}
+}catch(e){Browser.println("MCCFMaster: startNextTimer end of arc — "+e.message);}
+}
+function startAgent(agentSafeName,time){
+  var t=Browser.currentScene.getNamedNode("Timer_"+agentSafeName+"_1");
+  if(t){t.startTime=time;t.enabled=true;_sceneNow=time;Browser.println("MCCFMaster: started Timer_"+agentSafeName+"_1 at "+time);}
+  else{Browser.println("MCCFMaster: Timer_"+agentSafeName+"_1 NOT FOUND");}
+}
+function releaseDwellAgent(agentColonSeg,time){
+  var parts=agentColonSeg.split(":");
+  var dw=Browser.currentScene.getNamedNode("Dwell_"+parts[0]+"_"+parts[1]);
+  if(dw){var tNow=_getSceneNow(parts[0],parseInt(parts[1]));dw.startTime=tNow;dw.enabled=true;Browser.println("MCCFMaster: started Dwell_"+parts[0]+"_"+parts[1]+" at "+tNow);}
+  else{Browser.println("MCCFMaster: Dwell_"+parts[0]+"_"+parts[1]+" NOT FOUND");}
+}
+]]>
+</Script>
+
+
+<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->
+<ROUTE fromNode="PathTimer_EC_cue_restored_4" fromField="fraction_changed" toNode="PathInterp_EC_cue_restored_4" toField="set_fraction"/>
+<ROUTE fromNode="PathInterp_EC_cue_restored_4" fromField="value_changed" toNode="Avatar_Anna" toField="set_translation"/>
+<ROUTE fromNode="PathTimer_EC_cue_restored_4" fromField="fraction_changed" toNode="PathOrient_EC_cue_restored_4" toField="set_fraction"/>
+<ROUTE fromNode="PathOrient_EC_cue_restored_4" fromField="value_changed" toNode="Avatar_Anna" toField="set_rotation"/>
+<ROUTE fromNode="PathEaseTimer_EC_cue_restored_4" fromField="fraction_changed" toNode="PathEaseInterp_EC_cue_restored_4" toField="set_fraction"/>
+<ROUTE fromNode="PathEaseInterp_EC_cue_restored_4" fromField="value_changed" toNode="Avatar_Anna" toField="set_translation"/>
+<ROUTE fromNode="PathEaseTimer_EC_cue_restored_4" fromField="cycleTime" toNode="PathTimer_EC_cue_restored_4" toField="set_startTime"/>
+<ROUTE fromNode="PathEaseTimer_EC_cue_restored_4" fromField="fraction_changed" toNode="PathEaseOrient_EC_cue_restored_4" toField="set_fraction"/>
+<ROUTE fromNode="PathEaseOrient_EC_cue_restored_4" fromField="value_changed" toNode="Avatar_Anna" toField="set_rotation"/>
+<ROUTE fromNode="TurnTimer_EC_cue_restored_16" fromField="fraction_changed" toNode="TurnInterp_EC_cue_restored_16" toField="set_fraction"/>
+<ROUTE fromNode="TurnInterp_EC_cue_restored_16" fromField="value_changed" toNode="Avatar_Anna" toField="set_rotation"/>
+<ROUTE fromNode="TurnTimer_EC_cue_restored_26" fromField="fraction_changed" toNode="TurnInterp_EC_cue_restored_26" toField="set_fraction"/>
+<ROUTE fromNode="TurnInterp_EC_cue_restored_26" fromField="value_changed" toNode="Avatar_Anna" toField="set_rotation"/>
+<ROUTE fromNode="TurnTimer_EC_cue_restored_28" fromField="fraction_changed" toNode="TurnInterp_EC_cue_restored_28" toField="set_fraction"/>
+<ROUTE fromNode="TurnInterp_EC_cue_restored_28" fromField="value_changed" toNode="Avatar_Anna" toField="set_rotation"/>
+<ROUTE fromNode="Prox_Garden01" fromField="isActive" toNode="SoundFader_Garden01" toField="isActive"/>
+<ROUTE fromNode="Prox_Island_1" fromField="isActive" toNode="SoundFader_Island_1" toField="isActive"/>
+
+<!-- ═══ Move shot ROUTEs — CAM_Timer → interpolators → CAM_Free_Transform ═══ -->
+<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_PosInterp" toField="set_fraction"/>
+<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_OriInterp" toField="set_fraction"/>
+<ROUTE fromNode="CAM_PosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>
+<ROUTE fromNode="CAM_OriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>
+<!-- ═══ Fly transition ROUTEs — CAM_FlyTimer → CAM_FlyEase → interpolators → CAM_Free_Transform ═══ -->
+<ROUTE fromNode="CAM_FlyTimer" fromField="fraction_changed" toNode="CAM_FlyEase" toField="set_fraction"/>
+<ROUTE fromNode="CAM_FlyEase" fromField="value_changed" toNode="CAM_FlyPosInterp" toField="set_fraction"/>
+<ROUTE fromNode="CAM_FlyEase" fromField="value_changed" toNode="CAM_FlyOriInterp" toField="set_fraction"/>
+<ROUTE fromNode="CAM_FlyPosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>
+<ROUTE fromNode="CAM_FlyOriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>
+</Scene>
+</X3D>

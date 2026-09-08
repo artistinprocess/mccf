@@ -1330,6 +1330,33 @@
   <!-- ── RIGHT: Live preview ── -->
   <div class="panel" id="right-panel">
 
+    <!-- Portrait — used as this character's node icon in the Composer's
+         Network/Affect graph. Falls back to a generic silhouette if none
+         registered. Media list mirrors the Composer's /media/list?subdir=
+         convention (subdir=icons) so both apps share the same folder. -->
+    <div class="section-head">Portrait</div>
+    <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
+      <div id="portrait-thumb"
+           style="width:56px;height:56px;border-radius:6px;background:var(--panel-2,#0d1520);
+                  border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
+                  font-size:26px;overflow:hidden;flex-shrink:0;">👤</div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+        <select id="f-portrait-select" onchange="onPortraitSelectChange()">
+          <option value="">— default —</option>
+        </select>
+        <div style="display:flex;gap:6px;">
+          <label class="btn" style="flex:1;text-align:center;cursor:pointer;margin:0;font-size:13px;">
+            📂 Upload…
+            <input type="file" id="f-portrait-file" accept="image/png,image/jpeg,image/webp"
+                   onchange="onPortraitFileSelected(event)" style="display:none;">
+          </label>
+          <button class="btn danger" onclick="clearPortrait()" title="Reset to default" style="padding:4px 8px;">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
     <div class="section-head">Field Preview</div>
 
     <div class="preview-field">
@@ -1600,6 +1627,52 @@
                   </div>
                 </div>
               </div>
+
+              <!-- EBPS trigger range — DECISION: flat clip.E_min/E_max/...
+                   properties, not clip.cv_conditions (that field already
+                   existed on every clip object but nothing anywhere reads
+                   it — mccf_x3d_loader.html's selectBehaviorClip/
+                   conditionMet checks clip[ch+'_min']/clip[ch+'_max']
+                   directly). Writing to cv_conditions would have saved and
+                   loaded perfectly while never actually firing at runtime —
+                   same shape of bug as the au_weights/weights mismatch
+                   found earlier, caught before building this time instead
+                   of after.
+                   Shape is deliberately ONE range per clip, not a list the
+                   way Face's expression triggers are: conditionMet checks
+                   a clip's own bounds directly, and priority (already a
+                   real clip field, used for oneshot/looper tie-breaking)
+                   already does the job a second trigger range would be
+                   for. "Different EBPS states firing the same body
+                   animation" is two clip entries sharing one timerDEF with
+                   different ranges, not two ranges on one clip — the
+                   architecture already supports that without anything new. -->
+              <div class="he-clip-panel" style="margin-top:8px">
+                <div class="he-sec-label" style="margin-bottom:6px">
+                  EBPS trigger range <span style="color:var(--muted);font-weight:400">— leave a channel's min/max as its default 0/1 to ignore that channel</span>
+                </div>
+                <div style="display:grid;grid-template-columns:90px 1fr 12px 1fr;gap:4px 6px;align-items:center;font-size:13px;">
+                  <span style="color:var(--E)">E · emotional</span>
+                  <input type="number" class="he-clip-input" id="he-clip-E_min" step="0.05" min="0" max="1" value="0.0" oninput="hePoseClipPropChanged()" title="min">
+                  <span style="text-align:center;color:var(--muted)">–</span>
+                  <input type="number" class="he-clip-input" id="he-clip-E_max" step="0.05" min="0" max="1" value="1.0" oninput="hePoseClipPropChanged()" title="max">
+
+                  <span style="color:var(--B)">B · behavioral</span>
+                  <input type="number" class="he-clip-input" id="he-clip-B_min" step="0.05" min="0" max="1" value="0.0" oninput="hePoseClipPropChanged()" title="min">
+                  <span style="text-align:center;color:var(--muted)">–</span>
+                  <input type="number" class="he-clip-input" id="he-clip-B_max" step="0.05" min="0" max="1" value="1.0" oninput="hePoseClipPropChanged()" title="max">
+
+                  <span style="color:var(--P)">P · predictive</span>
+                  <input type="number" class="he-clip-input" id="he-clip-P_min" step="0.05" min="0" max="1" value="0.0" oninput="hePoseClipPropChanged()" title="min">
+                  <span style="text-align:center;color:var(--muted)">–</span>
+                  <input type="number" class="he-clip-input" id="he-clip-P_max" step="0.05" min="0" max="1" value="1.0" oninput="hePoseClipPropChanged()" title="max">
+
+                  <span style="color:var(--S)">S · social</span>
+                  <input type="number" class="he-clip-input" id="he-clip-S_min" step="0.05" min="0" max="1" value="0.0" oninput="hePoseClipPropChanged()" title="min">
+                  <span style="text-align:center;color:var(--muted)">–</span>
+                  <input type="number" class="he-clip-input" id="he-clip-S_max" step="0.05" min="0" max="1" value="1.0" oninput="hePoseClipPropChanged()" title="max">
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1710,6 +1783,68 @@
             <button class="btn primary" onclick="heAssignToClip()">assign to clip</button>
           </div>
           <div id="he-expr-list" style="margin-top:8px;font-size:13px;color:var(--text-dim)"></div>
+
+          <!-- EBPS trigger range(s) for whichever expression is about to
+               be saved.
+               DECISION (reworked from an earlier center+radius design):
+               shape is per-channel min/max, matching behavior_clips exactly
+               — E_min/E_max/B_min/B_max/P_min/P_max/S_min/S_max/priority,
+               the same fields mccf_x3d_loader.html's selectBehaviorClip
+               already reads live, with proven hysteresis and priority
+               ordering (Task 3, Day 23). Not chosen for lack of a better
+               idea on the radius version — chosen because building a
+               second, differently-shaped matcher for faces when a working
+               one already exists for bodies would mean two systems doing
+               the same job, and this project already has one place it went
+               off a shared pattern for a real reason (the displacer/AU
+               capture system, built custom because standard H-Anim
+               displacers didn't resolve mesh coordinates precisely enough
+               as given) — that was necessity, not a template to repeat
+               where a working shared pattern already exists.
+               No existing authoring UI for E_min/E_max ever existed
+               anywhere in this tool before this — behavior_clips' own
+               ranges have apparently always been hand-authored outside it.
+               This is the first UI for the shape, meant to double as the
+               template for eventually giving _heClips the same treatment.
+               Multiple ranges per expression, still: different EBPS states
+               can call for the same expression, so this stays a list. -->
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--surface2)">
+            <div class="he-sec-label" style="margin-bottom:4px">
+              EBPS trigger range(s) <span style="color:var(--muted);font-weight:400">— which E/B/P/S window fires this expression</span>
+            </div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;">
+              <div style="display:grid;grid-template-columns:90px 1fr 12px 1fr;gap:4px 6px;align-items:center;font-size:13px;">
+                <span style="color:var(--E)">E · emotional</span>
+                <input type="number" id="he-trig-E_min" class="input" step="0.05" min="0" max="1" value="0.0" style="font-size:13px;padding:3px 4px" title="min">
+                <span style="text-align:center;color:var(--muted)">–</span>
+                <input type="number" id="he-trig-E_max" class="input" step="0.05" min="0" max="1" value="1.0" style="font-size:13px;padding:3px 4px" title="max">
+
+                <span style="color:var(--B)">B · behavioral</span>
+                <input type="number" id="he-trig-B_min" class="input" step="0.05" min="0" max="1" value="0.0" style="font-size:13px;padding:3px 4px" title="min">
+                <span style="text-align:center;color:var(--muted)">–</span>
+                <input type="number" id="he-trig-B_max" class="input" step="0.05" min="0" max="1" value="1.0" style="font-size:13px;padding:3px 4px" title="max">
+
+                <span style="color:var(--P)">P · predictive</span>
+                <input type="number" id="he-trig-P_min" class="input" step="0.05" min="0" max="1" value="0.0" style="font-size:13px;padding:3px 4px" title="min">
+                <span style="text-align:center;color:var(--muted)">–</span>
+                <input type="number" id="he-trig-P_max" class="input" step="0.05" min="0" max="1" value="1.0" style="font-size:13px;padding:3px 4px" title="max">
+
+                <span style="color:var(--S)">S · social</span>
+                <input type="number" id="he-trig-S_min" class="input" step="0.05" min="0" max="1" value="0.0" style="font-size:13px;padding:3px 4px" title="min">
+                <span style="text-align:center;color:var(--muted)">–</span>
+                <input type="number" id="he-trig-S_max" class="input" step="0.05" min="0" max="1" value="1.0" style="font-size:13px;padding:3px 4px" title="max">
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+                <label style="font-size:11px;color:var(--muted)">priority</label>
+                <input type="number" id="he-trig-priority" class="input" step="1" min="0" value="0" style="font-size:13px;padding:3px 4px;width:60px"
+                       title="Same tie-break as behavior_clips: higher priority wins when more than one range matches">
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:6px">
+              <button class="btn" onclick="heAddTriggerPoint()">+ add trigger range</button>
+            </div>
+            <div id="he-trig-list" style="margin-top:6px;font-size:13px;color:var(--text-dim)"></div>
+          </div>
         </div>
 
         <div class="he-section">
@@ -1880,6 +2015,92 @@ function heCameraRigDefaults(){
   };
 }
 let _heCameraRig = heCameraRigDefaults();
+
+// ── Portrait (character node image) ─────────────────────────────────────
+// Used as this character's icon in the Composer's Network/Affect graph.
+// Stored on the cultivar as <Portrait src="..."/>. Empty string = use the
+// generic 👤 placeholder — never a broken image.
+var _portraitSrc  = '';   // 'X3DAssets/media/icons/<file>' (registered) or a data URL (just-uploaded, unsaved server-side)
+var _portraitFiles = [];  // filenames returned by /media/list?subdir=icons
+
+function refreshPortraitList() {
+  apiGet('/media/list?subdir=icons')
+    .then(function(data) {
+      _portraitFiles = (data.files || []).filter(function(f) {
+        return /\.(png|jpe?g|webp|gif)$/i.test(f);
+      });
+      _populatePortraitSelect();
+    })
+    .catch(function(e) {
+      // Endpoint may not exist yet (see saveCharacter's own comment on the
+      // matching gap: no /media/upload for images either). Leave the select
+      // with just "— default —" rather than failing the whole editor.
+      console.warn('refreshPortraitList: /media/list?subdir=icons not available (' + e.message + ')');
+    });
+}
+
+function _populatePortraitSelect() {
+  var sel = document.getElementById('f-portrait-select');
+  if (!sel) return;
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">— default —</option>';
+  _portraitFiles.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = 'X3DAssets/media/' + f;   // same folder convention as music/soundeffects/convolver
+    opt.textContent = f.replace(/^icons\//, '');
+    sel.appendChild(opt);
+  });
+  if (prev) sel.value = prev;
+}
+
+function onPortraitSelectChange() {
+  _portraitSrc = document.getElementById('f-portrait-select').value;
+  var fi = document.getElementById('f-portrait-file');
+  if (fi) fi.value = '';
+  updatePortraitThumb();
+  setDirty();
+}
+
+function onPortraitFileSelected(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Choose a PNG, JPG, or WEBP image', true); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    /*
+     * No /media/upload endpoint for images exists yet (same gap as the
+     * H-Anim skin-drop flow above — see onHAnimFileSelected). Until one
+     * exists, an uploaded portrait previews and saves as a data URL on the
+     * cultivar, which works but bloats the cultivar XML for large images.
+     * Real fix: POST to /media/upload?subdir=icons like /avatar/upload
+     * does for H-Anim figures, then store the returned relative path
+     * instead of the data URL. Flagging so this isn't mistaken for done.
+     */
+    _portraitSrc = ev.target.result;
+    document.getElementById('f-portrait-select').value = '';
+    updatePortraitThumb();
+    setDirty();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPortrait() {
+  _portraitSrc = '';
+  document.getElementById('f-portrait-select').value = '';
+  var fi = document.getElementById('f-portrait-file');
+  if (fi) fi.value = '';
+  updatePortraitThumb();
+  setDirty();
+}
+
+function updatePortraitThumb() {
+  var el = document.getElementById('portrait-thumb');
+  if (!el) return;
+  if (!_portraitSrc) { el.innerHTML = '👤'; return; }
+  var url = _portraitSrc.indexOf('data:') === 0 ? _portraitSrc : '/static/x3d/' + _portraitSrc;
+  el.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;" ' +
+                 'onerror="this.parentElement.innerHTML=\'👤\'">';
+}
 
 // ── API helpers ────────────────────────────────────────────────────────
 async function apiGet(path) {
@@ -2231,6 +2452,12 @@ function buildXmlPreviewHtml(data) {
   if (_hanimPath) {
     h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">HAnimFigure</span> ${attr('src', _hanimPath)} ${attr('loa', String(_hanimLoa))}<span class="xml-tag">/&gt;</span>\n`;
   }
+  if (data.portrait) {
+    // Data-URL portraits print truncated here (XML preview only) so a large
+    // upload doesn't blow out the preview pane — the full value still saves.
+    const shown = data.portrait.indexOf('data:') === 0 ? data.portrait.slice(0, 40) + '…' : data.portrait;
+    h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Portrait</span> ${attr('src', shown)}<span class="xml-tag">/&gt;</span>\n`;
+  }
   if (data.phrases && data.phrases.length) {
     h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Phrases</span><span class="xml-tag">&gt;</span>\n`;
     data.phrases.forEach(p => {
@@ -2289,7 +2516,8 @@ function readForm() {
     regulation:  parseFloat(document.getElementById('w-reg').value).toFixed(2),
     phrases:     getPhrases(),
     hanimSrc:    _hanimPath || '',
-    hanimLoa:    _hanimLoa  || 4
+    hanimLoa:    _hanimLoa  || 4,
+    portrait:    _portraitSrc || ''
   };
 }
 
@@ -2301,6 +2529,14 @@ function loadForm(c) {
   document.getElementById('f-description').value = c.description || '';
   document.getElementById('f-color').value       = c.color       || '#aab0be';
   document.getElementById('f-failure').value     = c.failure_mode || '';
+
+  // Portrait — set the select if the path matches a listed file, otherwise
+  // (e.g. a data URL saved before an upload endpoint existed, or a file
+  // that's since been removed from media/icons/) still preview it directly.
+  _portraitSrc = c.portrait || '';
+  var pSel = document.getElementById('f-portrait-select');
+  if (pSel) pSel.value = [...pSel.options].some(function(o){ return o.value === _portraitSrc; }) ? _portraitSrc : '';
+  updatePortraitThumb();
 
   // Weights
   const w = c.weights || { E:0.25, B:0.25, P:0.25, S:0.25 };
@@ -2361,7 +2597,16 @@ function loadForm(c) {
         cl.name     || 'Default',
         cl.cycleInterval || 6.0,
         cl.loop !== false,
-        cl.priority || 0
+        cl.priority || 0,
+        cl.timerDEF,  // real DEF from the cultivar — see _heNewClipObj's own
+                      // comment for why this must never be re-fabricated here
+        cl           // bounds — cl.E_min/E_max/etc, stored flat on the
+                      // cultivar's own behavior_clips entries (server-side
+                      // confirmed: hanim_export writes them flat, not
+                      // nested, onto exactly this object). Passing cl itself
+                      // works because _heNewClipObj only reads the specific
+                      // bounds.E_min/E_max/etc keys it needs off whatever
+                      // object it's given.
       );
     });
     _heClipIdx = 0;
@@ -2502,6 +2747,11 @@ async function saveCharacter() {
     // H-Anim — stub, populated when H-Anim integration complete
     hanim_src:    data.hanimSrc,
     hanim_loa:    data.hanimLoa || 4,
+    // Node icon for the Composer's Network/Affect graph. Registered media
+    // path (X3DAssets/media/icons/...) once a file exists there, or a data
+    // URL if uploaded before /media/upload for images is built (see
+    // onPortraitFileSelected's own note on that gap).
+    portrait:     data.portrait || '',
     // Day 83: real bug fix, confirmed by direct test (H-Anim Editor exports
     // the cultivar with only Default even though real, working clips exist
     // and fire from this editor's own playback buttons). behavior_clips was
@@ -2593,6 +2843,7 @@ async function deleteCharacter() {
 
   await checkApi();
   await loadCultivars();
+  refreshPortraitList();
 
   // Re-check API periodically
   setInterval(checkApi, 10000);
@@ -3032,7 +3283,20 @@ function _heLoadExpressionsFromXml(hanimPath) {
           var val = parseFloat(w.getAttribute('value'));
           if (au && !isNaN(val)) weights[au] = val;
         });
-        _heExpressions.push({ name: name, weights: weights });
+        var triggers = [];
+        el.querySelectorAll('Trigger').forEach(function(t) {
+          var pt = {
+            E_min: parseFloat(t.getAttribute('E_min')), E_max: parseFloat(t.getAttribute('E_max')),
+            B_min: parseFloat(t.getAttribute('B_min')), B_max: parseFloat(t.getAttribute('B_max')),
+            P_min: parseFloat(t.getAttribute('P_min')), P_max: parseFloat(t.getAttribute('P_max')),
+            S_min: parseFloat(t.getAttribute('S_min')), S_max: parseFloat(t.getAttribute('S_max')),
+            priority: parseInt(t.getAttribute('priority'), 10) || 0,
+          };
+          var complete = ['E_min','E_max','B_min','B_max','P_min','P_max','S_min','S_max']
+            .every(function(k){ return !isNaN(pt[k]); });
+          if (complete) triggers.push(pt);
+        });
+        _heExpressions.push({ name: name, weights: weights, triggers: triggers });
       });
       _heRefreshExprDropdown();
       heSetStatus('expressions loaded · ' + _heExpressions.length + ' found · ' + stem);
@@ -3094,6 +3358,11 @@ function heLoadSelectedExpression() {
     .join(' · ');
   document.getElementById('he-expr-load-status').textContent =
     active || 'all 0';
+  // Bring this expression's triggers into the working list too — otherwise
+  // loading an expression to tweak it would silently drop whatever
+  // triggers it already had the next time it's saved.
+  _heCurrentTriggers = (expr.triggers || []).slice();
+  _heRenderTriggerList();
   heMarkDirty('loaded: ' + name);
   heSetStatus('expression loaded · ' + name);
 }
@@ -3124,12 +3393,93 @@ function heResetAllAus() {
   heSetStatus('face reset to neutral');
 }
 
+// EBPS trigger ranges being authored for whichever expression is about to
+// be saved (heSaveExpression). Shape matches behavior_clips exactly —
+// E_min/E_max/B_min/B_max/P_min/P_max/S_min/S_max/priority — the same
+// fields mccf_x3d_loader.html's selectBehaviorClip already reads live for
+// body gesture selection (Task 3, Day 23: proven hysteresis, priority
+// ordering, one-shot/loop distinction). Reworked from an earlier
+// center+radius design specifically so expressions and gestures can share
+// one matcher instead of needing two differently-shaped ones.
+// Still a list, not a single range: different EBPS states can call for
+// the same expression.
+var _heCurrentTriggers = [];  // [{E_min,E_max,B_min,B_max,P_min,P_max,S_min,S_max,priority}, ...]
+
+function heAddTriggerPoint() {
+  function ch(id) { var el = document.getElementById(id); return el ? parseFloat(el.value) : NaN; }
+  var trig = {
+    E_min: ch('he-trig-E_min'), E_max: ch('he-trig-E_max'),
+    B_min: ch('he-trig-B_min'), B_max: ch('he-trig-B_max'),
+    P_min: ch('he-trig-P_min'), P_max: ch('he-trig-P_max'),
+    S_min: ch('he-trig-S_min'), S_max: ch('he-trig-S_max'),
+    priority: parseInt(document.getElementById('he-trig-priority').value, 10) || 0,
+  };
+  var bad = Object.keys(trig).some(function(k){ return k !== 'priority' && isNaN(trig[k]); });
+  if (bad) { toast('Every E/B/P/S min and max needs a value', true); return; }
+  _heCurrentTriggers.push(trig);
+  _heRenderTriggerList();
+  heMarkDirty('trigger range added (priority ' + trig.priority + ')');
+}
+function heRemoveTriggerPoint(i) {
+  _heCurrentTriggers.splice(i, 1);
+  _heRenderTriggerList();
+  heMarkDirty('trigger range removed');
+}
+function _heRenderTriggerList() {
+  var el = document.getElementById('he-trig-list');
+  if (!el) return;
+  if (!_heCurrentTriggers.length) { el.textContent = 'no trigger ranges yet — this expression will save without one'; return; }
+  el.innerHTML = _heCurrentTriggers.map(function(t, i) {
+    return '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;flex-wrap:wrap">' +
+      '<span style="color:var(--E)">E[' + t.E_min.toFixed(2) + '\u2013' + t.E_max.toFixed(2) + ']</span>' +
+      '<span style="color:var(--B)">B[' + t.B_min.toFixed(2) + '\u2013' + t.B_max.toFixed(2) + ']</span>' +
+      '<span style="color:var(--P)">P[' + t.P_min.toFixed(2) + '\u2013' + t.P_max.toFixed(2) + ']</span>' +
+      '<span style="color:var(--S)">S[' + t.S_min.toFixed(2) + '\u2013' + t.S_max.toFixed(2) + ']</span>' +
+      '<span style="color:var(--muted)">pri ' + t.priority + '</span>' +
+      '<span onclick="heRemoveTriggerPoint(' + i + ')" style="cursor:pointer;color:var(--muted);margin-left:auto" title="Remove this trigger range">\u00d7</span>' +
+      '</div>';
+  }).join('');
+}
+
+// Wire-shape translation for clip export — NOT a duplicate of the
+// au_weights/weights fix, but the same underlying lesson applied a second
+// time: the /hanim/export payload's clip entries are expected to carry
+// their trigger bounds nested under cv_conditions (confirmed directly in
+// mccf_hanim_api.py's hanim_export handler: `cv = clip.get('cv_conditions')
+// or {}`, then flattened server-side into the E_min/E_max keys that
+// actually get persisted to the cultivar and are what
+// mccf_x3d_loader.html's selectBehaviorClip reads at runtime). So there
+// are genuinely two correct shapes for two different purposes: flat on
+// _heClips (matches the runtime contract, keeps this editor's own
+// authoring code simple) and nested in the export payload (matches what
+// the endpoint that receives it actually unpacks). This function is the
+// one place that bridges them, so neither shape has to pretend to be the
+// other everywhere else in this file.
+function _heClipForExport(clip) {
+  return {
+    name:          clip.name,
+    timerDEF:      clip.timerDEF,
+    cycleInterval: clip.cycleInterval,
+    loop:          clip.loop,
+    priority:      clip.priority,
+    keyframes:     clip.keyframes,
+    cv_conditions: {
+      E_min: clip.E_min, E_max: clip.E_max,
+      B_min: clip.B_min, B_max: clip.B_max,
+      P_min: clip.P_min, P_max: clip.P_max,
+      S_min: clip.S_min, S_max: clip.S_max,
+    },
+  };
+}
+
 function heSaveExpression() {
   var name = document.getElementById('he-expr-name').value.trim();
   if (!name) { toast('Enter an expression name', true); return; }
   var weights = Object.assign({}, _heAuWeights);
   _heExpressions = _heExpressions.filter(function(e){ return e.name !== name; });
-  _heExpressions.push({ name: name, weights: weights });
+  _heExpressions.push({ name: name, weights: weights, triggers: _heCurrentTriggers.slice() });
+  _heCurrentTriggers = [];  // fresh slate for the next expression
+  _heRenderTriggerList();
   _heRenderExprList();
   _heRefreshExprDropdown();
   // Select the just-saved expression in the dropdown
@@ -3198,14 +3548,23 @@ async function heExport() {
 
   try {
     // Build payload
+    // expressions maps _heExpressions' internal {name, weights, triggers}
+    // shape to the server's real contract, {name, au_weights, triggers} —
+    // _write_expressions_xml() reads expr.get('au_weights'), and sending
+    // 'weights' instead meant every expression's AU data was silently
+    // dropped (au_weights defaulted to {}, which fails the "not au_weights"
+    // check and skips the whole expression) — a real, pre-existing bug,
+    // not something introduced by adding triggers.
     var payload = {
       cultivar:    _selectedName,
       hanim_src:   _hanimPath,
       skin_url:    _heSkinPending || null,
       receptivity: _heReceptivity,
-      expressions: _heExpressions,
+      expressions: _heExpressions.map(function(e){
+        return { name: e.name, au_weights: e.weights, triggers: e.triggers || [] };
+      }),
       au_weights:  _heAuWeights,
-      clips:       _heClips,
+      clips:       _heClips.map(_heClipForExport),
       // Displacer export: send all non-zero AU weights as {def, weight} pairs
       // DEF convention: <MeshName>_MorphInterpolator_<AUName> — server resolves by AU suffix
       displacers:  Object.entries(_heAuWeights)
@@ -3581,10 +3940,33 @@ function heLoadJoints(src) {
 
 // ── Clip objects ─────────────────────────────────────────────────────────
 
-function _heNewClipObj(name, cycle, loop, priority) {
+function _heNewClipObj(name, cycle, loop, priority, timerDEF, bounds) {
+  // Real bug fix: this used to always fabricate timerDEF as `name + 'Timer'`
+  // unconditionally — including when called from the cultivar-load path
+  // (see that call site's own comment), where a REAL timerDEF already
+  // exists (Anna's Bow/Idle/Walk/... clips use Timer1/Timer3/Timer7/...,
+  // never a name-derived alias). Loading her cultivar therefore silently
+  // relabeled every real clip to a made-up name disconnected from the
+  // actual TimeSensor DEFs in the file, and any clip whose display name
+  // contains a space ("Fold Arms", "Look Around") produced a timerDEF like
+  // "Fold ArmsTimer" — not just wrong, but an invalid X3D name (X3D DEF/USE
+  // values may not contain whitespace, unlike a bare XML attribute string).
+  // Confirmed live: exporting with Anna's cultivar loaded would have added
+  // 12 new, empty, garbage TimeSensor nodes to her file, six with
+  // whitespace-containing DEFs, none connected to her real animation data.
+  //
+  // Fixed: an explicit timerDEF (the real one, when the caller has it) is
+  // used as-is. Only when none is supplied — genuinely new clips with no
+  // prior DEF, e.g. hePoseNewClip()'s "add clip" button — does this fall
+  // back to a name-derived one, and that fallback is now sanitised the same
+  // way DEF-adjacent names are sanitised everywhere else in this project
+  // (strip anything that isn't A-Za-z0-9_), so a space-containing display
+  // name can never again produce an invalid X3D DEF.
+  var td = timerDEF || (name.replace(/[^A-Za-z0-9_]/g, '_') + 'Timer');
+  bounds = bounds || {};
   return {
     name:          name,
-    timerDEF:      name + 'Timer',
+    timerDEF:      td,
     cycleInterval: cycle || 6.0,
     loop:          loop !== false,
     priority:      priority || 0,
@@ -3592,7 +3974,27 @@ function _heNewClipObj(name, cycle, loop, priority) {
       { t: 0.0, joints: {} },
       { t: 1.0, joints: {} }
     ],
-    cv_conditions: {}
+    // Flat, not nested — mccf_x3d_loader.html's selectBehaviorClip reads
+    // clip.E_min/clip.E_max directly (conditionMet: clip[ch+'_min']). This
+    // used to be cv_conditions:{}, a field nothing at runtime ever read —
+    // replaced, not kept alongside, so there's one home for this data, not
+    // two. 0/1 = full range = this channel doesn't gate anything, same as
+    // conditionMet's own treatment of an unset bound.
+    // bounds lets the cultivar-load path pass through real, previously-
+    // saved values instead of always resetting to 0/1 — without this
+    // param, loading a cultivar with existing trigger data and exporting
+    // again would silently erase it (the export payload's cv_conditions
+    // would come back empty, and the server replaces each clip's stored
+    // entry wholesale rather than merging, per its own existing_by_name
+    // overwrite in hanim_export).
+    E_min: (bounds.E_min !== undefined) ? bounds.E_min : 0.0,
+    E_max: (bounds.E_max !== undefined) ? bounds.E_max : 1.0,
+    B_min: (bounds.B_min !== undefined) ? bounds.B_min : 0.0,
+    B_max: (bounds.B_max !== undefined) ? bounds.B_max : 1.0,
+    P_min: (bounds.P_min !== undefined) ? bounds.P_min : 0.0,
+    P_max: (bounds.P_max !== undefined) ? bounds.P_max : 1.0,
+    S_min: (bounds.S_min !== undefined) ? bounds.S_min : 0.0,
+    S_max: (bounds.S_max !== undefined) ? bounds.S_max : 1.0,
   };
 }
 
@@ -4372,6 +4774,13 @@ function hePoseLoadClipProps() {
   document.getElementById('he-clip-cycle').value    = clip.cycleInterval;
   document.getElementById('he-clip-priority').value = clip.priority;
   document.getElementById('he-clip-loop').checked   = clip.loop;
+  // Trigger range — 0/1 default (full range, channel ignored) covers
+  // clips saved before this field existed, same reasoning conditionMet
+  // itself already uses (clip[minKey] === undefined skips that bound).
+  ['E','B','P','S'].forEach(function(ch) {
+    document.getElementById('he-clip-' + ch + '_min').value = (clip[ch + '_min'] !== undefined) ? clip[ch + '_min'] : 0.0;
+    document.getElementById('he-clip-' + ch + '_max').value = (clip[ch + '_max'] !== undefined) ? clip[ch + '_max'] : 1.0;
+  });
   hePoseRenderTimeline();
 }
 
@@ -4406,6 +4815,16 @@ function hePoseClipPropChanged() {
   clip.cycleInterval = parseFloat(document.getElementById('he-clip-cycle').value) || 6.0;
   clip.priority      = parseInt(document.getElementById('he-clip-priority').value) || 0;
   clip.loop          = document.getElementById('he-clip-loop').checked;
+  // Flat properties — matches mccf_x3d_loader.html's selectBehaviorClip/
+  // conditionMet exactly (clip[ch+'_min']/clip[ch+'_max']), not nested
+  // under clip.cv_conditions (see this panel's own HTML comment for why
+  // that field is a dead end — nothing at runtime ever reads it).
+  ['E','B','P','S'].forEach(function(ch) {
+    var minEl = document.getElementById('he-clip-' + ch + '_min');
+    var maxEl = document.getElementById('he-clip-' + ch + '_max');
+    clip[ch + '_min'] = minEl ? (parseFloat(minEl.value) || 0.0) : 0.0;
+    clip[ch + '_max'] = maxEl ? (parseFloat(maxEl.value) || 1.0) : 1.0;
+  });
   hePoseRenderClipList();
   heMarkDirty('clip props changed');
 }
@@ -4438,7 +4857,7 @@ heExport = async function() {
 
   try {
     var clips = (_heClips && _heClips.length)
-      ? _heClips
+      ? _heClips.map(_heClipForExport)
       : [];
 
     var payload = {
@@ -4446,7 +4865,14 @@ heExport = async function() {
       hanim_src:   _hanimPath,
       skin_url:    _heSkinPending || null,
       receptivity: _heReceptivity,
-      expressions: _heExpressions,
+      // Same fix as the shadowed heExport definition above: server reads
+      // expr.au_weights, not expr.weights — this is the definition that
+      // actually runs (this whole function reassigns heExport, so the
+      // earlier "function heExport()" declaration never executes), so
+      // this is the one that matters.
+      expressions: _heExpressions.map(function(e){
+        return { name: e.name, au_weights: e.weights, triggers: e.triggers || [] };
+      }),
       au_weights:  _heAuWeights,
       clips:       clips,
       cameraRig:   _heCameraRig,

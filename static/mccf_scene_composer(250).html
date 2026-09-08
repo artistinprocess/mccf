@@ -174,7 +174,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
 <body>
 <header>
   <div class="logo">MCCF <span>Scene Composer</span></div>
-  <div class="vbadge">V5</div>
+  <div class="vbadge">V4</div>
   <div class="mode-tabs">
     <button class="mtab active" onclick="setMode('scene')">Scene</button>
     <button class="mtab" onclick="setMode('place')">Place</button>
@@ -206,32 +206,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
       <label>Description</label>
       <textarea id="sc-desc" rows="2" placeholder="Garden of the Goddess"></textarea>
-      <!-- Day 88: real, new capability — multi-stop sky/ground gradient
-           authoring, per the author's own tested example (a 5-stop night
-           sky). Background MUST sit at true root level, never inlined,
-           right after NavigationInfo — already true of where the writer
-           places it (see exportX3D's own comment); this only replaces
-           the single hardcoded color with real, editable stops. -->
-      <div class="sh" style="margin-top:12px">Background / Sky</div>
-      <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:4px">
-        <label>DEF name (optional)</label>
-        <input id="bg-def" type="text" placeholder="MainBackground" onchange="sceneChanged()">
-        <label style="margin-top:6px">Sky (top of dome first)</label>
-        <div id="bg-sky-stops"></div>
-        <span class="timeline-track-add" style="color:var(--dim);font-size:13px;cursor:pointer" onclick="addBgStop('sky')">+ add sky stop</span>
-        <label style="margin-top:10px">Ground</label>
-        <div id="bg-ground-stops"></div>
-        <span class="timeline-track-add" style="color:var(--dim);font-size:13px;cursor:pointer" onclick="addBgStop('ground')">+ add ground stop</span>
-        <!-- Day 88: real, practical need — a scene that already has ITS
-             OWN saved Background data (even old, pre-gradient data) will
-             correctly keep restoring that on every reload rather than
-             silently jumping to whatever Composer's current code default
-             is (saved content should never be quietly overridden). This
-             is the explicit, one-click way to apply the current default
-             gradient to THIS scene, once, rather than re-entering 5
-             stops by hand or hand-editing XML. -->
-        <div style="margin-top:8px"><span class="timeline-track-add" style="color:var(--accent);font-size:13px;cursor:pointer" onclick="resetBgToDefault()">↺ reset to default gradient</span></div>
-      </div>
       <div class="sh" style="margin-top:12px">Scene Sound (Track 1 + Track 3)</div>
       <div style="background:var(--s3);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:4px">
         <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
@@ -292,7 +266,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="mtab" id="place-tab-cameras" onclick="setPlaceType('cameras')">Cameras</button>
       <button class="mtab" id="place-tab-lights" onclick="setPlaceType('lights')">Lights</button>
       <button class="mtab" id="place-tab-audio" onclick="setPlaceType('audio')">Audio</button>
-      <button class="mtab" id="place-tab-assets" onclick="setPlaceType('assets')">Assets</button>
     </div>
   </div>
   <div id="mode-zones" style="display:none">
@@ -490,13 +463,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
         <div><label>Dwell (s) — time at waypoint</label><input id="wp-dwell" type="number" value="2" min="0.5" step="0.5"></div>
         <div><label>Pace (m/s) — travel speed here</label><input id="wp-pace" type="number" value="1.4" min="0.1" max="10" step="0.1"></div>
       </div>
-      <!-- Day 86: real gap closed — waypoints had no Y at all, so an
-           avatar's walk interpolation between waypoints always returned
-           to Y=0 regardless of terrain, even once a starting elevation
-           could be set. Optional: 0 (ground) is by far the common case,
-           so this stays out of the way unless the terrain actually needs
-           it. -->
-      <label>Y (height, m) — for walking over non-flat terrain</label><input id="wp-y" type="number" value="0" step="0.1">
       <div class="sh" style="margin-top:10px">Dialogue Lines</div>
       <div style="display:flex;gap:4px;margin-bottom:3px;font-size:16px;color:var(--dim)">
         <div style="width:84px;min-width:84px">Type</div>
@@ -775,10 +741,8 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
            transition mechanism is NavigationInfo.transitionType ("LINEAR"/
            "ANIMATE") + transitionTime — a different node, not touched here.
            Composer's own exporter currently hardcodes NavigationInfo
-           transitionType="TELEPORT" scene-wide (see exportX3D's own
-           NavigationInfo line — the buildX3DString() this comment used
-           to point to was removed Day 86; exportX3D() is the only scene-
-           generation function now) — worth being aware
+           transitionType="TELEPORT" scene-wide (see buildX3DString/
+           _doExportSceneXML's own NavigationInfo line) — worth being aware
            of if the Events cue system's own cut/fly/flyDuration vocabulary
            is ever meant to route through transitionType rather than a
            hand-rolled TimeSensor/Interpolator animation; that's an open
@@ -839,25 +803,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
            (see FreeCamera's own comment in mccf_camera_protos.x3d). Covers
            the common "aim up/down" case; full arbitrary-axis aiming needs
            that wrapper built first. -->
-      <!-- Day 88: real gap closed — Tilt alone could only aim a light
-           up/down from a fixed horizontal default; there was no way to
-           choose WHICH horizontal direction it faced. Yaw (rotate around
-           vertical) + Tilt (rotate around the now-yawed local horizontal
-           axis) compose into the single combined axis-angle X3D's
-           rotation field actually needs — see composeYawTilt(), a real
-           quaternion multiply, not hand-derived trig (the exact kind of
-           custom rotation math this project's own house style warns
-           against, per FreeCamera's comment). Only two angles are needed
-           for aiming a light (no roll), so this stays a straightforward,
-           well-tested composition rather than needing a full nested-
-           Transform wrapper the way three-angle camera aiming would. -->
-      <div class="insp-field" id="light-yaw-row">
-        <label>Yaw (°, horizontal aim direction)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input id="light-yaw" type="range" min="-180" max="180" step="1" value="0" style="flex:1" oninput="document.getElementById('light-yaw-val').textContent=this.value">
-          <span id="light-yaw-val" style="width:34px;text-align:right;font-family:monospace">0</span>
-        </div>
-      </div>
       <div class="insp-field" id="light-tilt-row">
         <label>Tilt (°, downward from horizontal)</label>
         <div style="display:flex;gap:8px;align-items:center">
@@ -957,61 +902,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       </div>
     </div>
   </div>
-  <div id="mode-assets" style="display:none">
-    <div class="sh">Assets</div>
-    <!-- Day 86: independently-placed set pieces — temple, billboards, fog,
-         a movie-texture screen — anything that isn't naturally "one per
-         zone" the way a zone's own single z.asset is. Same X3DAssets/
-         picker as the zone-asset field (refreshX3DAssetsList populates
-         both selects), but each placement here is its own free-standing
-         object with its own X/Y/Z/rotation/scale, click-to-place +
-         draggable on the map exactly like Cameras/Lights/Audio already
-         are. Zone-anchored asset placement is untouched — this is a
-         second, parallel system, not a replacement. -->
-    <div id="asset-list"></div>
-    <button class="btn full" style="margin-top:6px" onclick="startPlace('asset')">+ Place Asset</button>
-    <div id="asset-form" style="display:none;margin-top:10px">
-      <div class="sh">New Asset</div>
-      <label>Name</label><input id="asset-name" type="text" placeholder="Temple">
-      <!-- Day 88: real gap closed — X/Z previously only ever came from a
-           map click, with no way to type an exact value the way Y/
-           rotation/scale already could. Populated by a map click (same
-           as before) AND directly editable afterward — the author can
-           "nudge into place" with exact numbers instead of only ever
-           re-clicking the map. -->
-      <div style="display:flex;gap:6px">
-        <div style="flex:1"><label>X</label><input id="asset-x" type="number" step="0.1"></div>
-        <div style="flex:1"><label>Z</label><input id="asset-z" type="number" step="0.1"></div>
-      </div>
-      <label>X3D / glTF file</label>
-      <select id="asset-place-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:17px;font-family:monospace;width:100%"></select>
-      <label>Height (m)</label><input id="asset-height" type="number" value="0" step="0.1">
-      <div class="insp-field">
-        <label style="margin:0;flex:1">Rotation (Y-axis, degrees) <span id="asset-rot-val" style="color:var(--warm)">0</span></label>
-        <input type="range" id="asset-rot" min="0" max="360" step="1" value="0"
-          oninput="document.getElementById('asset-rot-val').textContent=this.value">
-      </div>
-      <label>Scale</label><input id="asset-scale" type="number" value="1" step="0.1" min="0.01">
-      <!-- Day 87: real, new capability — a placed asset that's actually
-           the movie screen needs its MovieTexture DEF exposed up to the
-           main scene so the Loader can start it on Play, the same way
-           Clip_Music already works. This checkbox is what tells
-           buildAssetX3D() to write that <IMPORT>. Only meaningful for an
-           asset file built around the movie_screen.x3d pattern (a
-           DEF="TheMovie" MovieTexture) — checking it on an unrelated
-           prop (a vase, foliage) would just write an IMPORT for a DEF
-           that doesn't exist there, which the browser will simply warn
-           about and ignore, not a scene-breaking error. -->
-      <label style="display:flex;align-items:center;gap:6px;margin-top:6px">
-        <input type="checkbox" id="asset-is-movie" style="width:auto">
-        This asset drives movie playback (starts on Play, like the audio tracks)
-      </label>
-      <div class="btn-row" style="margin-top:8px">
-        <button class="btn pri" onclick="confirmAsset()">Place on Map</button>
-        <button class="btn" onclick="cancelPlace()">Cancel</button>
-      </div>
-    </div>
-  </div>
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
     <div class="expopt">
@@ -1036,14 +926,10 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
          make the actual state visible before the action that depends on
          it, not just after. -->
     <div id="dialogue-export-status" style="font-size:16px;color:var(--dim);margin:-4px 0 8px 2px"></div>
-    <!-- Day 86: "Send to Launcher" button removed — now provably redundant
-         with "Export X3D" above (both hit the same /scene/x3d/upload
-         endpoint; exportX3D() additionally has a browser-download
-         fallback this never had). Removing the visible button, not the
-         sendToLauncher() function itself — that function is still the
-         real upload mechanism the Events Editor's "Export cues" flow and
-         Record Scene Arc both depend on; it now just delegates straight
-         to exportX3D() instead of duplicating it. -->
+    <div class="expopt" style="border-color:var(--accent)">
+      <div class="explbl"><div style="color:var(--accent)">Send to Launcher</div><div class="expdsc">Uploads to static/x3d/ — same path as "Export X3D" above, NOT the same as "Export Scene XML" (which saves to scenes/[name]/) — reload launcher</div></div>
+      <button class="btn" id="send-btn" onclick="sendToLauncher()" style="border-color:var(--accent);color:var(--accent)">&#9654; Send</button>
+    </div>
     <div class="expopt" style="border-color:var(--purple);margin-top:6px">
       <div class="explbl"><div style="color:var(--purple)">Open X3D Loader</div><div class="expdsc">Open loader in a new tab — ready to Play All</div></div>
       <button class="btn" onclick="openLoader()" style="border-color:var(--purple);color:var(--purple)">&#9654; Open Loader</button>
@@ -1067,25 +953,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     <label style="margin-top:6px"><input type="checkbox" id="exp-protos" checked style="width:auto;margin-right:6px">Inline PROTOs</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-interps" checked style="width:auto;margin-right:6px">PositionInterpolators</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-script" checked style="width:auto;margin-right:6px">MCCFMaster Script stub</label>
-    <!-- Day 86: authoring-aid visuals (avatar name labels, zone boundary
-         cylinders + zone-name text) were always emitted unconditionally —
-         fine while building the scene, wrong for an actual movie/preview
-         export. Zone functionality (ProximitySensor, ZoneAsset Inline)
-         is untouched by this — only the debug-visual geometry is
-         skipped. Defaults to checked so nothing changes unless the
-         author explicitly turns it off. -->
-    <label style="margin-top:6px"><input type="checkbox" id="exp-labels" checked onchange="sceneConfig.labelsEnabled=this.checked" style="width:auto;margin-right:6px">Name labels &amp; zone markers (uncheck for a clean movie export)</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-dispatcher" checked style="width:auto;margin-right:6px">Dispatcher runtime (dialogue steps — dormant until the dialogue module exists)</label>
-    <!-- Day 86: real, separate control — NOT the same thing as
-         "Dispatcher runtime" above despite both mentioning dialogue. That
-         one is dormant leftover infrastructure for an old cue-generation
-         approach. This one is real and live: an author using a single
-         pre-mixed audio track (e.g. a Reaper mix) for the whole scene has
-         no use for per-line TTY narration firing underneath it — this
-         lets them turn it off at export time rather than hearing both.
-         Checked by default so nothing changes for anyone not using this
-         workflow. -->
-    <label style="margin-top:6px"><input type="checkbox" id="exp-dialogue-tty" checked onchange="sceneConfig.dialogueTTYEnabled=this.checked" style="width:auto;margin-right:6px">Per-line dialogue / TTY (uncheck if using a single pre-mixed audio track instead)</label>
     <div class="sh" style="margin-top:14px">Last Export</div>
     <div id="exp-log" style="font-size:21px;color:var(--dim)">Nothing exported yet.</div>
   </div>
@@ -1170,21 +1038,7 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
     </div>
     <div id="ad-disp" style="font-size:21px;color:var(--dim);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div>
-      <div style="display:flex;gap:6px;margin-bottom:4px">
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input type="number" step="0.1" id="ad-pos-x" style="width:100%"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input type="number" step="0.1" id="ad-pos-y" style="width:100%"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input type="number" step="0.1" id="ad-pos-z" style="width:100%"></div>
-      </div>
-      <!-- Day 86: real gap closed — placeAgentAt (click-to-place) was the
-           ONLY way to set an agent's position, and it hardcoded Y=0
-           unconditionally. No numeric editing existed at all. These three
-           fields write straight to placedAgents[name].position on Apply,
-           independent of the map — including Y, which nothing else in
-           this UI could ever set to a non-zero value (useful for e.g. an
-           avatar standing on the temple steps, not just ground level). -->
-      <button class="btn pri" style="font-size:16px" onclick="saveAgentPosition()">Apply Position</button>
-    </div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Start Position</div><div id="ad-pos" style="font-size:21px;color:var(--accent)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar</div>
       <div id="ad-hanim" style="font-size:17px;color:var(--dim);word-break:break-all;margin-bottom:4px">(placeholder — assign in Character Creator)</div>
       <select id="ad-hanim-select" style="display:none;margin-bottom:4px">
@@ -1261,17 +1115,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <button class="btn danger" onclick="deleteSelected('audio')">Delete</button>
     </div>
   </div>
-  <div id="detail-asset" style="display:none">
-    <div class="sh" style="margin-top:0">Asset</div>
-    <div id="asd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:#78d8a0;margin-bottom:8px;"></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">File</div><div id="asd-url" style="font-size:19px;color:var(--dim);word-break:break-all"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div id="asd-pos" style="font-size:21px;color:var(--accent)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Rotation / Scale</div><div id="asd-xform" style="font-size:21px;color:var(--dim)"></div></div>
-    <div class="btn-row">
-      <button class="btn cool" onclick="editAsset(selectedId)">Edit</button>
-      <button class="btn danger" onclick="deleteSelected('asset')">Delete</button>
-    </div>
-  </div>
   <div id="detail-path" style="display:none">
     <div class="sh" style="margin-top:0">Path</div>
     <div id="pd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:#e0c860;margin-bottom:8px;"></div>
@@ -1309,26 +1152,6 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
       <div>Links: <span id="stat-n" style="color:var(--accent)">0</span></div>
       <div style="cursor:pointer" onclick="_toggleRecordedPathsList()">Recorded Paths: <span id="stat-rp" style="color:var(--accent)">0</span> <span style="color:var(--dim);font-size:16px">(click to view)</span></div>
       <div id="recorded-paths-list" style="display:none;margin-top:4px;padding:6px;border:1px solid var(--border);border-radius:4px"></div>
-      <!-- Day 88: real, requested capability — collision detection makes
-           recording a path near solid geometry (e.g. through a doorway)
-           genuinely awkward, since the camera used to record can't pass
-           through objects it's trying to path around. Direct line-editing
-           of the recorded key data is the actual fix — same result as
-           hand-editing the exported _scene.xml, done here instead. One key
-           per line: "t x y z" (seconds, then position). Orientation data
-           (captured for the original camera-path use case) is preserved
-           untouched underneath — this editor only ever rewrites position,
-           by index, so editing here never destroys orientation for a path
-           still used to drive a camera. -->
-      <div id="recorded-path-editor" style="display:none;margin-top:6px;padding:8px;border:1px solid var(--accent);border-radius:4px;background:var(--s3)">
-        <div class="sh" style="margin:0 0 4px">Edit path: <span id="rpe-name" style="color:var(--accent)"></span></div>
-        <div style="color:var(--dim);font-size:15px;margin-bottom:4px">One key per line: t x y z facingDeg (facing = horizontal turn direction, 0-360)</div>
-        <textarea id="rpe-text" rows="10" style="width:100%;font-family:monospace;font-size:15px"></textarea>
-        <div class="btn-row" style="margin-top:6px">
-          <button class="btn pri" onclick="_applyRecordedPathText()">Apply</button>
-          <button class="btn" onclick="_cancelRecordedPathText()">Cancel</button>
-        </div>
-      </div>
     </div>
   </div>
   <div id="detail-query" style="display:none">
@@ -1354,113 +1177,14 @@ input[type=range] { width: 100%; accent-color: var(--warm); }
      shared with the events editor's path recorder — same module, both consumers. -->
 <script src="/static/js/path-recorder.js"></script>
 <script>
-// MCCF Scene Composer V5 - waypointOrder required sequencing
+// MCCF Scene Composer V4 - waypointOrder required sequencing
 var API = 'http://localhost:5000';
 var mode = 'scene';
 var tool = 'select';
 var placing = null;
 var pendingPos = null;
 var placingAgent = null;
-var sceneConfig = { name: '', width: 40, depth: 40, description: '', labelsEnabled: true, dialogueTTYEnabled: true };
-// Day 88: real, new capability — multi-stop Background gradient, per the
-// author's own tested example (a 5-stop night sky). Each stop is
-// {color:[r,g,b] (0-1 floats), angle} — angle is the boundary where this
-// stop's band ENDS (radians from zenith for sky, from nadir for ground);
-// the LAST stop in each array has no angle at all (implicitly extends to
-// the far edge), matching X3D's own "N colors, N-1 angles" Background
-// field convention exactly. Default is the author's own tested
-// MainBackground gradient — confirmed to look good, promoted from a
-// hand-authored example to the actual scene default. Kept as a separate
-// constant (not just bgConfig's own initial value) so resetBgToDefault()
-// can restore it later without needing to hardcode these numbers twice.
-var BG_DEFAULT = {
-  def: 'MainBackground',
-  sky: [
-    { color: [0.0392, 0.0392, 0.9471], angle: 0.8 },
-    { color: [0.0588, 0.0745, 0.9098], angle: 1.3 },
-    { color: [0.051,  0.0667, 0.9588], angle: 1.4 },
-    { color: [0.0471, 0.0627, 0.9275], angle: 1.5708 },
-    { color: [0.12,   0.0902, 0.09098] },
-  ],
-  ground: [
-    { color: [0,0,0], angle: 0.6 },
-    { color: [0,0,0], angle: 1.2 },
-    { color: [0,0,0], angle: 1.3 },
-    { color: [0,0,0], angle: 1.5708 },
-    { color: [0,0,0] },
-  ],
-};
-function _cloneBgConfig(src) {
-  return {
-    def: src.def,
-    sky: src.sky.map(function(s){ var c={color:s.color.slice()}; if(s.angle!==undefined)c.angle=s.angle; return c; }),
-    ground: src.ground.map(function(s){ var c={color:s.color.slice()}; if(s.angle!==undefined)c.angle=s.angle; return c; }),
-  };
-}
-var bgConfig = _cloneBgConfig(BG_DEFAULT);
-// Day 88: the explicit, one-click "apply the current default gradient to
-// THIS scene" action — see the reset link's own comment in the HTML for
-// why this needs to exist at all (a scene with its own saved Background
-// data correctly keeps that on reload, rather than silently picking up
-// code-level default changes).
-function resetBgToDefault() {
-  bgConfig = _cloneBgConfig(BG_DEFAULT);
-  var defEl = document.getElementById('bg-def'); if (defEl) defEl.value = bgConfig.def;
-  renderBgStops();
-  toast('Background reset to default gradient — export to save it to this scene');
-}
-function _hexToRgbFloat(hex) {
-  hex = (hex || '#000000').replace('#','');
-  return [parseInt(hex.substr(0,2),16)/255, parseInt(hex.substr(2,2),16)/255, parseInt(hex.substr(4,2),16)/255];
-}
-function _rgbFloatToHex(rgb) {
-  function h(v) { return Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,'0'); }
-  return '#'+h(rgb[0])+h(rgb[1])+h(rgb[2]);
-}
-function addBgStop(kind) {
-  var arr = kind === 'sky' ? bgConfig.sky : bgConfig.ground;
-  var last = arr[arr.length-1];
-  if (last && last.angle === undefined) last.angle = 1.2; // give the previous "last" stop a real angle now that it's no longer last
-  arr.push({ color: (last ? last.color.slice() : [0.5,0.5,0.5]) });
-  renderBgStops();
-}
-function removeBgStop(kind, idx) {
-  var arr = kind === 'sky' ? bgConfig.sky : bgConfig.ground;
-  if (arr.length <= 1) { toast('Need at least one stop', true); return; }
-  arr.splice(idx, 1);
-  delete arr[arr.length-1].angle; // new last stop has no angle, matching convention
-  renderBgStops();
-}
-function setBgStopColor(kind, idx, hex) {
-  (kind === 'sky' ? bgConfig.sky : bgConfig.ground)[idx].color = _hexToRgbFloat(hex);
-}
-function setBgStopAngle(kind, idx, val) {
-  (kind === 'sky' ? bgConfig.sky : bgConfig.ground)[idx].angle = parseFloat(val) || 0;
-}
-function renderBgStops() {
-  ['sky','ground'].forEach(function(kind) {
-    var arr = kind === 'sky' ? bgConfig.sky : bgConfig.ground;
-    var el = document.getElementById('bg-'+kind+'-stops');
-    if (!el) return;
-    el.innerHTML = arr.map(function(stop, i) {
-      var isLast = i === arr.length - 1;
-      return '<div style="display:flex;gap:6px;align-items:center;margin:3px 0">' +
-        '<input type="color" value="'+_rgbFloatToHex(stop.color)+'" oninput="setBgStopColor(\''+kind+'\','+i+',this.value)" style="width:32px;height:24px;padding:0;border:1px solid var(--border)">' +
-        (isLast
-          ? '<span style="font-size:13px;color:var(--dim);flex:1">extends to '+(kind==='sky'?'horizon':'nadir')+'</span>'
-          : '<input type="number" step="0.05" min="0" max="1.5708" value="'+(stop.angle!==undefined?stop.angle:1.2)+'" oninput="setBgStopAngle(\''+kind+'\','+i+',this.value)" title="angle (radians) where this band ends" style="width:64px">')+
-        '<span class="timeline-track-add" style="color:var(--danger,#e66);font-size:13px;cursor:pointer" onclick="removeBgStop(\''+kind+'\','+i+')">&times;</span>' +
-        '</div>';
-    }).join('');
-  });
-}
-// Day 86: export options were pure DOM checkbox state, silently reset to
-// their HTML defaults on every page reload — real, repeated source of
-// confusion during today's testing (a genuinely unchecked box would
-// export as if it were still checked, because the box itself reverted
-// before Export was clicked). Persisting into sceneConfig, round-tripped
-// through the scene XML like every other scene property, means the
-// author's choice survives a reload the same way width/depth already do.
+var sceneConfig = { name: '', width: 40, depth: 40, description: '' };
 var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, networks = [];
 // Day 78, V5 Tasklist Phase 2 task 4: independent recorded paths (fly-mode
 // captures from the events editor's path recorder). Deliberately a SEPARATE
@@ -1470,7 +1194,7 @@ var zones = {}, agents = {}, placedAgents = {}, waypoints = {}, paths = {}, netw
 // still open, see savePathRecording's receiver below). Keyed by path id.
 var recordedPaths = {};
 var _sceneLoadInFlight = false;  // Day 77: see loadSceneFromDropdown/_restoreChorusFromXml/_sendSceneDataToEventsEditor
-var _lastRestoredTracks = null;  // Day 77: see _restoreChorusFromXml/setMode — cues need the same re-send-on-tab-open treatment as scene data, not just a single unconditional send at restore time. Day 85: despite the name, this now holds a FLAT cue array (see _restoreChorusFromXml), matching the current Events Editor's schema — kept the old var name to avoid touching every call site for a rename that carries no functional change.
+var _lastRestoredTracks = null;  // Day 77: see _restoreChorusFromXml/setMode — cues need the same re-send-on-tab-open treatment as scene data, not just a single unconditional send at restore time
 var _showLinks = false;  // off by default — crowded scenes get noisy fast; opt-in via Network tab
 // Day 77: Avatar Camera Rig Manifest support. Composer's buildAX3D() used to
 // unconditionally emit VP_Eye/VP_Side/CAM_OrbitProto/CAM_TrackProto for every placed
@@ -1507,39 +1231,7 @@ function camRigFetchManifest(hanimSrc){
   }).catch(function(){ _camRigManifestCache[stem]=null; });
 }
 
-// Real fix for the race the comment above documents: camRigFetchManifest's
-// cache guard (`hasOwnProperty(stem)`) means once a stem has been looked up
-// ONCE in this page's lifetime -- even to a null/empty result, even from
-// before the H-Anim Editor wrote a real manifest -- every later call is a
-// silent no-op for the rest of the page's life. "Self-heals on next
-// export/refresh" assumed a refresh would also re-trigger the fetch, but a
-// plain page reload only clears the JS-level cache object; it does NOT
-// re-load whatever scene was open, so camRigFetchManifest never gets called
-// again unless the scene is explicitly reloaded too -- confirmed live:
-// same four "Invalid USE name" warnings survived a page refresh + immediate
-// re-export. Fixed properly: exportX3D() now awaits a genuinely FRESH fetch
-// (bypassing the cache entirely, always re-requesting) for every placed
-// agent's manifest right before building, so export is correct regardless
-// of whatever this page happened to cache earlier -- no refresh, no reload,
-// no timing luck required.
-function camRigFetchManifestFresh(hanimSrc){
-  var stem = camRigManifestStem(hanimSrc);
-  if(!stem) return Promise.resolve();
-  return fetch('/static/avatars/'+stem+'.manifest.xml').then(function(r){
-    console.log('[camRig] fetch /static/avatars/'+stem+'.manifest.xml ->', r.status, r.ok);
-    if(!r.ok){ _camRigManifestCache[stem]=null; return; }
-    return r.text();
-  }).then(function(text){
-    if(!text){ _camRigManifestCache[stem]=null; console.log('[camRig]', stem, '-> no body, cached null'); return; }
-    var doc = new DOMParser().parseFromString(text,'application/xml');
-    var entries = Array.prototype.slice.call(doc.getElementsByTagName('MetadataString'));
-    _camRigManifestCache[stem] = entries.map(function(el){return el.getAttribute('name');}).filter(Boolean);
-    console.log('[camRig]', stem, '-> cached rig types:', _camRigManifestCache[stem], '(raw entries found:', entries.length, ', body length:', text.length, ')');
-  }).catch(function(e){ _camRigManifestCache[stem]=null; console.log('[camRig]', stem, '-> fetch threw:', e); });
-}
-
 var placedCameras = {}; // Day 64: free/world-space cameras placed on the grid, class 3 of the three-class camera model
-var placedAssets = {}; // Day 86: independently-placed X3D/glTF assets — {name, url, position:[x,y,z], rotationY, scale}. Deliberately separate from a zone's own single z.asset (kept as-is for zone-anchored set pieces like a fountain that belongs to one specific zone) — this is for anything that should exist in the scene on its own terms: the temple, billboards, fog volumes, a movie-texture screen, none of which are naturally "one per zone."
 var placedLights = {}; // Day 82: {name, type:'point'|'spot'|'directional', translation:[x,y,z], rotation:[ax,ay,az,angle]}
 var placedAudio = {}; // Day 82: {name, url, loop, gain, translation:[x,y,z]} — discrete, placeable, routable audio sources; genuinely separate from zone SoundDesign (ambient/dwell, left as-is)
 
@@ -1835,8 +1527,6 @@ window.addEventListener('load',function(){
   canvas.addEventListener('mouseup',onMouseUp);
   canvas.addEventListener('click',onCanvasClick);
   setApi(document.getElementById('api-url').value);
-  var bgDefInit = document.getElementById('bg-def'); if (bgDefInit) bgDefInit.value = bgConfig.def;
-  renderBgStops();
   applyScene();setInterval(pollField,3000);
 });
 
@@ -1933,15 +1623,6 @@ function loadAgents(){
       agents[c.agentname].hanim_src=c.hanim_src||'';
       agents[c.agentname].hanim_loa=c.hanim_loa||4;
       agents[c.agentname].behavior_clips=c.behavior_clips||[];
-      // Day 85: diagnostic logging added while chasing a real "Gesture
-      // dropdown only shows Default" bug — the previous toast only ever
-      // reported an agent COUNT, nothing about behavior_clips actually
-      // surviving the trip from /cultivars/xml. This makes the raw shape
-      // visible per-cultivar so a shape mismatch (objects vs plain
-      // strings) or a genuinely-empty API response is visible directly in
-      // console, instead of only showing up three hops later as an
-      // unexplained ['Default'] fallback in the Events Editor.
-      console.log('[cultivars] ' + c.agentname + ': behavior_clips =', JSON.stringify(c.behavior_clips || []));
       // Day 83: real bug fix, confirmed by sanity check — this function runs
       // every time the author visits the Actors tab (see mode-switch handler)
       // or clicks "Refresh from API", far more often than loadAll() (startup
@@ -1956,13 +1637,6 @@ function loadAgents(){
     });
     renderAgentRoster();renderPlaced();drawScene();
     toast('Agents loaded: '+Object.keys(agents).length);
-    // Day 85: re-push scene data now that behavior_clips has (hopefully)
-    // actually arrived — this fetch is async, so the setMode('events')
-    // call that triggered it already sent one round of (likely stale)
-    // scene data before this resolves. Harmless no-op if Events isn't
-    // the active tool right now; _sendSceneDataToEventsEditor's own guard
-    // comment confirms there's no readiness condition left to check.
-    _sendSceneDataToEventsEditor();
   }).catch(function(){toast('Could not load agents',true);});
 }
 function pollField(){
@@ -2018,26 +1692,8 @@ function setMode(m){
   // panels live outside mode-place in the DOM still, so visibility is driven here rather
   // than by the generic ms loop above, which only knows about 'place' as a whole.
   if(m==='place'){ setPlaceType(_placeType); }
-  else {
-    // Day 86: this list was missing 'lights' and 'audio' even before
-    // today — a pre-existing gap that just never got noticed, presumably
-    // because those panels are rarely left visible when switching away.
-    // Adding a new Assets sub-tab made it obvious: leaving Place while on
-    // Assets left mode-assets visibly stuck open underneath whatever tab
-    // was clicked next (confirmed live — "on both the Place tab and the
-    // Export tab"). Now covers every Place sub-panel, not just the four
-    // that happened to get noticed.
-    ['zones','waypoints','paths','cameras','lights','audio','assets'].forEach(function(n){document.getElementById('mode-'+n).style.display='none';});
-  }
+  else { ['zones','waypoints','paths','cameras'].forEach(function(n){document.getElementById('mode-'+n).style.display='none';}); }
   if(m==='agents'){loadAgents();}
-  // Day 85: real bug, confirmed by live console log — Events only ever
-  // got fresh cultivar data (behavior_clips, for the Gesture cue's clip
-  // dropdown) if the author happened to have already visited Actors/
-  // Characters first, since that was the only place loadAgents() ran.
-  // Going straight from Place to Events left placedAgents[x].behavior_clips
-  // empty for the whole session, and the Gesture dropdown silently fell
-  // back to ['Default'] with no indication anything was missing.
-  if(m==='events'){loadAgents();}
   if(m==='run'){populateRunUI();_renderDialogueExportStatus();}
   if(m==='network')populateNetworkUI();
   if(m==='scene'||m==='export')refreshSceneList();
@@ -2134,7 +1790,7 @@ function setPlaceType(t){
   // the zone's detail panel stranded in the right pane. Same fix as setMode's clearSel.
   if(_placeType!==t) clearSel();
   _placeType=t;
-  ['zones','waypoints','paths','cameras','lights','audio','assets'].forEach(function(n){
+  ['zones','waypoints','paths','cameras','lights','audio'].forEach(function(n){
     document.getElementById('mode-'+n).style.display=(n===t?'block':'none');
   });
   document.querySelectorAll('#mode-place .mtab').forEach(function(b){
@@ -2146,7 +1802,6 @@ function setPlaceType(t){
   if(t==='cameras')renderCameraList();
   if(t==='lights')renderLightList();
   if(t==='audio')renderAudioList();
-  if(t==='assets')renderAssetList();
   drawScene();
 }
 // ── Events Editor postMessage bridge ──────────────────────────────────────────
@@ -2186,7 +1841,7 @@ function _buildSceneData() {
     });
   }
   function safeId(n) { return n.replace(/[^a-zA-Z0-9_]/g,'_'); }
-  var views = ['VP_Overview'];
+  var views = ['VP_Overview','VP_Origin'];
   Object.keys(placedAgents).forEach(function(n) {
     views.push('VP_'+safeId(n)+'_Eye');
     views.push('VP_'+safeId(n)+'_Side');
@@ -2239,18 +1894,9 @@ function _buildSceneData() {
     agentClips: (function(){
       var out = {};
       Object.keys(placedAgents).forEach(function(n){
-        var raw = placedAgents[n].behavior_clips || [];
-        // Day 85: diagnostic — logs the RAW placedAgents value before the
-        // .map(c=>c.name) below does anything to it, so a shape mismatch
-        // (array of objects vs array of plain strings) is visible
-        // directly, rather than silently producing an array of
-        // `undefined` or an unexplained empty fallback three hops away in
-        // the Events Editor's dropdown.
-        console.log('[agentClips] ' + n + ': placedAgents behavior_clips (raw) =', JSON.stringify(raw));
-        var clips = raw.map(function(c){ return (c && typeof c === 'object') ? c.name : c; });
+        var clips = (placedAgents[n].behavior_clips || []).map(function(c){ return c.name; });
         out[n] = clips.length ? clips : ['Default'];
       });
-      console.log('[agentClips] final payload sent to Events Editor:', JSON.stringify(out));
       return out;
     })(),
     // Day 79: was Object.keys(placedCameras) (names only, for the old cue
@@ -2299,14 +1945,6 @@ function _buildSceneData() {
         createdAt: rp.createdAt || null,
       };
     }),
-    // Day 88: real, new capability — Movie/Animation cue tracks need to
-    // target a placed Asset by name (to reach a Shape/TimeSensor DEF'd
-    // and EXPORTed inside that asset's own file, same IMPORT mechanism
-    // proven working for the movie's audio start). Sends url alongside
-    // name now too, so the Events Editor can fetch and display the
-    // asset's own raw file content (the "find the DEF name" viewer) —
-    // originally names-only until that need came up.
-    assets: Object.values(placedAssets).map(function(pa){ return { name: pa.name, url: pa.url }; }),
     // Day 81: name-only list, for Route Graph's ProximitySensor instance
     // dropdown. Nothing needs zone geometry here (unlike the retired
     // _buildTimelineSceneData's zonesArr, which carried location/radius
@@ -2371,27 +2009,13 @@ function _sendSceneDataToEventsEditor() {
   // later. Scene data already gets re-sent on every tab-open via this same
   // function; folding cues in here too means every existing caller benefits
   // without needing five separate call sites kept in sync by hand.
-  //
-  // Day 85: real bug, confirmed live — this always sent _lastRestoredTracks,
-  // which is ONLY updated when the scene FILE is loaded from disk
-  // (_restoreChorusFromXml). "Save to Composer" updates a completely
-  // separate variable, _lastTimelineCues, which this never read. Net
-  // effect: Export correctly wrote the freshly-edited cues to the file
-  // (confirmed — the Loader read them back correctly), but reopening the
-  // Events tab re-sent the OLD pre-edit snapshot, making a real, already-
-  // exported edit look like it had silently reverted. Prefer the fresher
-  // in-memory edit when one exists; fall back to the file-parsed snapshot
-  // only when nothing has been edited yet this session.
-  var _cuesToResend = (_lastTimelineCues && _lastTimelineCues.cues && _lastTimelineCues.cues.length)
-    ? _lastTimelineCues.cues
-    : _lastRestoredTracks;
-  if (_cuesToResend && _cuesToResend.length) _sendCuesToEventsEditor(_cuesToResend);
+  if (_lastRestoredTracks && _lastRestoredTracks.length) _sendCuesToEventsEditor(_lastRestoredTracks);
 }
 
-function _sendCuesToEventsEditor(cuesJson) {
+function _sendCuesToEventsEditor(tracksJson) {
   var frame = _eventsFrame();
   if (!frame || !frame.contentWindow) return;
-  try { frame.contentWindow.postMessage({ type: 'mccf_load_cues', cues: cuesJson }, '*'); }
+  try { frame.contentWindow.postMessage({ type: 'mccf_load_cues', tracks: tracksJson }, '*'); }
   catch(e) { console.warn('[events bridge] load cues failed:', e); }
 }
 
@@ -2657,23 +2281,6 @@ window.addEventListener('message', function(evt) {
     toast('Recorded path saved: "' + rp.id + '" (' + rp.keys.length + ' keys). Not yet bound to any object — that\'s still separate, pending work.');
     return;
   }
-  // Path-fix tooling (auto-face travel direction / Y offset) needs the
-  // real key geometry to work on, which RECORDED_PATHS in the Events
-  // Editor deliberately does NOT carry (see that var's own comment —
-  // Composer stays the source of truth, Events Editor gets summary-only
-  // visibility). This is the on-demand escape hatch: reply with the one
-  // path's full keys, on request, rather than changing what gets
-  // broadcast to every consumer on every scene-data push.
-  if (evt.data.type === 'mccf_request_path_keys') {
-    var reqId = evt.data.id;
-    var rpFull = recordedPaths[reqId] || null;
-    var frameReq = _eventsFrame();
-    if (frameReq && frameReq.contentWindow) {
-      try { frameReq.contentWindow.postMessage({ type: 'mccf_path_keys', id: reqId, path: rpFull }, '*'); }
-      catch(eReq) { console.warn('[events bridge] path-keys reply failed:', eReq); }
-    }
-    return;
-  }
   // Day 79: the Events Editor's cue system is retired — its live X_ITE preview
   // is repurposed for placement tuning instead (select a placed camera, jump the
   // viewport to its real position/orientation, adjust, save). Composer is the
@@ -2740,12 +2347,7 @@ window.addEventListener('message', function(evt) {
     _lastTimelineCues = evt.data.data || null;
     var cueCount = _lastTimelineCues && _lastTimelineCues.cues ? _lastTimelineCues.cues.length : 0;
     console.log('[Composer] mccf_production_cues received —', cueCount, 'cues.');
-    // Day 85: this toast used to say "Not yet wired into X3D export" —
-    // stale as of the Day-85 EventCues rewrite; cues genuinely do flow
-    // into the exported scene XML now (via _doExportSceneXML, sourced
-    // from _lastTimelineCues.cues below). Left the toast saying otherwise
-    // was actively misleading mid-session testing.
-    toast('Timeline cues saved (' + cueCount + '). Click "Export scene" to write them into the scene XML.');
+    toast('Timeline cues saved (' + cueCount + '). Not yet wired into X3D export.');
     return;
   }
   // Day 83: Dialogue Editor's explicit "Save to Composer" — same discipline
@@ -2835,7 +2437,6 @@ function sceneChanged(){
   sceneConfig.name=document.getElementById('sc-name').value.trim()||'scene';
   sceneConfig.width=parseInt(document.getElementById('sc-width').value)||40;
   sceneConfig.depth=parseInt(document.getElementById('sc-depth').value)||40;
-  var bgDefEl=document.getElementById('bg-def'); if(bgDefEl) bgConfig.def=bgDefEl.value.trim();
 }
 function applyScene(){
   sceneChanged();sceneConfig.description=document.getElementById('sc-desc').value;
@@ -2868,7 +2469,7 @@ function updateSummary(){
   }).join('');
 }
 function renderAll(){
-  renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();renderCameraList();renderLightList();renderAudioList();renderAssetList();
+  renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();renderCameraList();renderLightList();renderAudioList();
   updateStats();updateSummary();drawScene();
 }
 function renderCameraList(){
@@ -2966,7 +2567,7 @@ function renderPlaced(){
     return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'agent\',\''+a.name+'\')">'+
       '<div class="obj-dot" style="background:'+a.color+'"></div>'+
       '<span class="obj-name">'+a.name+'</span>'+
-      '<span style="font-size:18px;color:var(--dim)">'+a.position[0].toFixed(1)+', '+(a.position[1]!==undefined?a.position[1].toFixed(1):'0')+', '+a.position[2].toFixed(1)+'</span></div>';
+      '<span style="font-size:18px;color:var(--dim)">'+a.position[0].toFixed(1)+', 0, '+a.position[2].toFixed(1)+'</span></div>';
   }).join('');
 }
 function updateStats(){
@@ -3014,85 +2615,11 @@ function _renderRecordedPathsList(){
     return '<div style="padding:7px 0;border-bottom:1px solid var(--border)">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
       + '<span style="color:var(--accent);font-family:var(--display);font-size:20px;font-weight:600;overflow-wrap:anywhere">'+xe(id)+'</span>'
-      + '<span style="display:flex;gap:6px;flex-shrink:0">'
-      + '<button class="btn" style="font-size:16px;padding:3px 10px" onclick="_openRecordedPathText(\''+jsAttrEscape(id)+'\')">Edit</button>'
-      + '<button class="btn" style="font-size:16px;padding:3px 10px" onclick="_deleteRecordedPath(\''+jsAttrEscape(id)+'\')">Delete</button>'
-      + '</span>'
+      + '<button class="btn" style="font-size:16px;padding:3px 10px;flex-shrink:0" onclick="_deleteRecordedPath(\''+jsAttrEscape(id)+'\')">Delete</button>'
       + '</div>'
       + '<div style="color:var(--dim);font-size:17px;margin-top:2px">'+reduction+' &middot; tol '+tol+' &middot; '+xe(created)+'</div>'
       + '</div>';
   }).join('');
-}
-var _editingPathTextId = null;
-// Day 88: real, serious bug avoided here, confirmed against path-recorder.js
-// directly — validateRecordedPath() REQUIRES a valid 4-value orientation on
-// EVERY key, and serializeRecordedPath() throws (refusing to export at
-// all) if any key is missing one. The line editor used to sometimes drop
-// orientation when the row count changed — this format change eliminates
-// that risk entirely rather than just reducing it: every key this editor
-// produces always gets a complete, valid orientation, no conditional case
-// left that could ever omit one.
-//
-// Format is "t x y z facingDeg" — a plain horizontal facing angle in
-// degrees, not raw axis-angle. Per the author's own description, an
-// avatar only ever needs to turn to FACE a direction while walking, never
-// arbitrary pitch/roll — so a pure Y-axis rotation is the right model
-// here, not a compromise. Internally this always becomes a full, valid
-// [0, 1, 0, radians] axis-angle, satisfying the validator unconditionally.
-function _yAxisFacingDeg(orientation) {
-  if (!orientation || orientation.length !== 4) return 0;
-  var ax = orientation[0], ay = orientation[1], az = orientation[2], angle = orientation[3];
-  // Only a genuinely Y-axis rotation can be shown as a plain facing angle
-  // without losing information. Anything else (captured from free-camera
-  // pitch/roll during recording) can't be represented this way — shown as
-  // 0 with a clear console note, rather than silently guessing wrong.
-  if (Math.abs(ax) < 0.01 && Math.abs(az) < 0.01 && Math.abs(ay) > 0.99) {
-    return (ay < 0 ? -angle : angle) * 180 / Math.PI;
-  }
-  console.warn('[recorded path] a key has non-Y-axis orientation (captured pitch/roll) — showing facing=0 as a placeholder; editing and applying this path will replace it with a pure horizontal facing angle.');
-  return 0;
-}
-function _openRecordedPathText(id) {
-  var rp = recordedPaths[id];
-  if (!rp) return;
-  _editingPathTextId = id;
-  document.getElementById('rpe-name').textContent = id;
-  document.getElementById('rpe-text').value = (rp.keys || []).map(function(k) {
-    var p = k.position || [0,0,0];
-    var facing = _yAxisFacingDeg(k.orientation);
-    return k.t + ' ' + p[0] + ' ' + p[1] + ' ' + p[2] + ' ' + facing.toFixed(1);
-  }).join('\n');
-  document.getElementById('recorded-path-editor').style.display = 'block';
-}
-function _cancelRecordedPathText() {
-  _editingPathTextId = null;
-  document.getElementById('recorded-path-editor').style.display = 'none';
-}
-function _applyRecordedPathText() {
-  if (!_editingPathTextId) return;
-  var rp = recordedPaths[_editingPathTextId];
-  if (!rp) return;
-  var lines = document.getElementById('rpe-text').value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length;});
-  var newKeys = [];
-  var parseError = null;
-  lines.forEach(function(line, i) {
-    var parts = line.split(/\s+/).map(Number);
-    if (parts.length !== 5 || parts.some(isNaN)) { parseError = 'Line ' + (i+1) + ': expected "t x y z facingDeg", got "' + line + '"'; return; }
-    var facingRad = parts[4] * Math.PI / 180;
-    newKeys.push({
-      t: parts[0],
-      position: [parts[1], parts[2], parts[3]],
-      // Always a complete, valid 4-array — see this function's own
-      // comment on why that's a hard requirement, not a nicety.
-      orientation: [0, 1, 0, facingRad],
-    });
-  });
-  if (parseError) { toast(parseError, true); return; }
-  if (newKeys.length < 2) { toast('Need at least 2 keys', true); return; }
-  rp.keys = newKeys;
-  _cancelRecordedPathText();
-  _renderRecordedPathsList();
-  toast('Path "'+_editingPathTextId+'" updated — export to save it');
 }
 function _deleteRecordedPath(id){
   if (!recordedPaths[id]) return;
@@ -3186,26 +2713,6 @@ function drawScene(){
   Object.values(placedCameras).forEach(drawCamera);
   Object.values(placedLights).forEach(drawLight);
   Object.values(placedAudio).forEach(drawAudio);
-  Object.values(placedAssets).forEach(drawAsset);
-}
-function drawAsset(a){
-  var pos=a.position||[sceneConfig.width/2,0,sceneConfig.depth/2];
-  var p=w2c(pos[0],pos[2]),sel=selectedType==='asset'&&selectedId===a.name,col='#78d8a0';
-  // Small house/pin shape (triangle roof over a square base) — reads as
-  // "a built thing," distinct from every other marker on this map
-  // (camera square, light circle, audio diamond, agent dot, waypoint
-  // diamond, zone ring). Rotates with rotationY so orientation is visible
-  // at a glance, same reasoning as camera's direction wedge.
-  var rad=(a.rotationY||0)*Math.PI/180,s=9;
-  ctx.save();ctx.translate(p.cx,p.cy);ctx.rotate(rad);
-  ctx.fillStyle=col;ctx.fillRect(-s/2,-s/2,s,s*0.8);
-  ctx.beginPath();ctx.moveTo(-s*0.7,-s/2);ctx.lineTo(0,-s*1.3);ctx.lineTo(s*0.7,-s/2);ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle=sel?'#ffffff':col;ctx.lineWidth=sel?2:1;
-  ctx.strokeRect(-s/2,-s/2,s,s*0.8);
-  ctx.restore();
-  ctx.fillStyle=col;ctx.font='13px IBM Plex Mono';ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText(a.name,p.cx+9,p.cy-6);
 }
 function drawAudio(a){
   var pos=a.translation||[sceneConfig.width/2,0,sceneConfig.depth/2];
@@ -3322,12 +2829,11 @@ function onMouseMove(e){
   if(isDrag&&dragTgt&&tool==='move'){
     var dx=(cx-lastMX)/SCALE,dz=(cy-lastMY)/SCALE;
     if(dragTyp==='zone'&&zones[dragTgt]){var pos=zones[dragTgt].location||zones[dragTgt].position,np=clamp(pos[0]+dx,pos[2]+dz);if(zones[dragTgt].location)zones[dragTgt].location=[np.wx,0,np.wz];else zones[dragTgt].position=[np.wx,0,np.wz];}
-    else if(dragTyp==='agent'&&placedAgents[dragTgt]){var ap=placedAgents[dragTgt].position,anp=clamp(ap[0]+dx,ap[2]+dz);placedAgents[dragTgt].position=[anp.wx,(ap[1]||0),anp.wz];}
-    else if(dragTyp==='waypoint'&&waypoints[dragTgt]){var wpos=waypoints[dragTgt].position,wnp=clamp(wpos[0]+dx,wpos[2]+dz);waypoints[dragTgt].position=[wnp.wx,(wpos[1]||0),wnp.wz];}
+    else if(dragTyp==='agent'&&placedAgents[dragTgt]){var ap=placedAgents[dragTgt].position,anp=clamp(ap[0]+dx,ap[2]+dz);placedAgents[dragTgt].position=[anp.wx,0,anp.wz];}
+    else if(dragTyp==='waypoint'&&waypoints[dragTgt]){var wpos=waypoints[dragTgt].position,wnp=clamp(wpos[0]+dx,wpos[2]+dz);waypoints[dragTgt].position=[wnp.wx,0,wnp.wz];}
     else if(dragTyp==='camera'&&placedCameras[dragTgt]){var cpos=placedCameras[dragTgt].position,cnp=clamp(cpos[0]+dx,cpos[2]+dz);placedCameras[dragTgt].position=[cnp.wx,cpos[1],cnp.wz];}
     else if(dragTyp==='light'&&placedLights[dragTgt]){var lpos=placedLights[dragTgt].translation,lnp=clamp(lpos[0]+dx,lpos[2]+dz);placedLights[dragTgt].translation=[lnp.wx,lpos[1],lnp.wz];}
     else if(dragTyp==='audio'&&placedAudio[dragTgt]){var apos=placedAudio[dragTgt].translation,anp=clamp(apos[0]+dx,apos[2]+dz);placedAudio[dragTgt].translation=[anp.wx,apos[1],anp.wz];}
-    else if(dragTyp==='asset'&&placedAssets[dragTgt]){var ast=placedAssets[dragTgt].position,astnp=clamp(ast[0]+dx,ast[2]+dz);placedAssets[dragTgt].position=[astnp.wx,ast[1],astnp.wz];}
     drawScene();lastMX=cx;lastMY=cy;
   }
 }
@@ -3343,15 +2849,6 @@ function onCanvasClick(e){
   if(placing){var cl=clamp(wp.wx,wp.wz);pendingPos=[cl.wx,0,cl.wz];
     if(placing==='zone')confirmZone();else if(placing==='waypoint')confirmWP();
     else if(placing==='camera')confirmCamera();else if(placing==='light')confirmLight();else if(placing==='audio')confirmAudio();
-    else if(placing==='asset'){
-      // Day 88: confirmAsset() now reads X/Z from the form fields (so
-      // they're directly editable afterward, see that function's own
-      // comment) — a click still places instantly same as every other
-      // type, it just does so by filling the fields first.
-      document.getElementById('asset-x').value=cl.wx;
-      document.getElementById('asset-z').value=cl.wz;
-      confirmAsset();
-    }
     else if(placing==='agent'&&placingAgent)placeAgentAt(placingAgent,cl.wx,cl.wz);return;}
   if(tool==='query'){showQuery(wp.wx,wp.wz);return;}
   var hit=hitTest(cx,cy);
@@ -3366,23 +2863,22 @@ function hitTest(cx,cy){
   Object.keys(placedCameras).forEach(function(n){var pos=placedCameras[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'camera',id:n};});if(r)return r;
   Object.keys(placedLights).forEach(function(n){var pos=placedLights[n].translation||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'light',id:n};});if(r)return r;
   Object.keys(placedAudio).forEach(function(n){var pos=placedAudio[n].translation||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<12)r={type:'audio',id:n};});if(r)return r;
-  Object.keys(placedAssets).forEach(function(n){var pos=placedAssets[n].position||[0,0,0],p=w2c(pos[0],pos[2]);if(Math.hypot(cx-p.cx,cy-p.cy)<13)r={type:'asset',id:n};});if(r)return r;
   return hitTestLink(cx,cy);
 }
 function selectObj(type,id){
   selectedType=type;selectedId=id;
-  ['zone','agent','wp','camera','light','audio','asset','arc','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
-  if(type==='zone')showZD(id);else if(type==='agent')showAD(id);else if(type==='waypoint')showWD(id);else if(type==='camera')showCD(id);else if(type==='light')showLD(id);else if(type==='audio')showAudioD(id);else if(type==='asset')showAssetD(id);else if(type==='path')showPD(id);
+  ['zone','agent','wp','camera','light','audio','arc','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  if(type==='zone')showZD(id);else if(type==='agent')showAD(id);else if(type==='waypoint')showWD(id);else if(type==='camera')showCD(id);else if(type==='light')showLD(id);else if(type==='audio')showAudioD(id);else if(type==='path')showPD(id);
   renderAll();
 }
 function clearSel(){
   selectedType=null;selectedId=null;
-  ['zone','agent','wp','camera','light','audio','asset','query','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
+  ['zone','agent','wp','camera','light','audio','query','path'].forEach(function(n){var el=document.getElementById('detail-'+n);if(el)el.style.display='none';});
   document.getElementById('detail-arc').style.display='block';drawScene();
 }
 function deleteSelected(t){
   if(!selectedId)return;
-  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];else if(t==='camera')delete placedCameras[selectedId];else if(t==='light')delete placedLights[selectedId];else if(t==='audio')delete placedAudio[selectedId];else if(t==='asset')delete placedAssets[selectedId];else if(t==='path')delete paths[selectedId];
+  if(t==='zone')delete zones[selectedId];else if(t==='agent')delete placedAgents[selectedId];else if(t==='waypoint')delete waypoints[selectedId];else if(t==='camera')delete placedCameras[selectedId];else if(t==='light')delete placedLights[selectedId];else if(t==='audio')delete placedAudio[selectedId];else if(t==='path')delete paths[selectedId];
   clearSel();renderAll();toast('Deleted.');
   _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
 }
@@ -3464,18 +2960,6 @@ function showZD(id){
   // Pre-load commands into form buffer so editing an existing zone preserves them
   _loadZoneCommandsIntoForm(z.commands || []);
 }
-function saveAgentPosition(){
-  var name=selectedType==='agent'?selectedId:null;
-  if(!name||!placedAgents[name]){toast('No agent selected',true);return;}
-  var x=parseFloat(document.getElementById('ad-pos-x').value);
-  var y=parseFloat(document.getElementById('ad-pos-y').value);
-  var z=parseFloat(document.getElementById('ad-pos-z').value);
-  if(isNaN(x)||isNaN(y)||isNaN(z)){toast('X/Y/Z must be numbers',true);return;}
-  placedAgents[name].position=[x,y,z];
-  renderAll();
-  toast(name+' moved to ('+x.toFixed(2)+', '+y.toFixed(2)+', '+z.toFixed(2)+')');
-  _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
-}
 function showAD(name){
   var a=placedAgents[name];if(!a)return;
   document.getElementById('detail-agent').style.display='block';
@@ -3485,9 +2969,7 @@ function showAD(name){
   document.getElementById('ad-color').dataset.agent=name;
   document.getElementById('ad-disp').textContent=(a.disposition||'')+(a.voice?' · voice: '+a.voice:'');
   var pos=a.position||[0,0,0];
-  document.getElementById('ad-pos-x').value=pos[0].toFixed(2);
-  document.getElementById('ad-pos-y').value=(pos[1]!==undefined?pos[1]:0).toFixed(2);
-  document.getElementById('ad-pos-z').value=pos[2].toFixed(2);
+  document.getElementById('ad-pos').textContent='X='+pos[0].toFixed(1)+' Y=0 Z='+pos[2].toFixed(1);
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
   // Avatar — shows hanim_src path as set by Character Creator; placeholder if none
   var hEl=document.getElementById('ad-hanim');
@@ -3693,15 +3175,6 @@ function showAudioD(name){
   document.getElementById('ad2-pos').textContent='X='+pos[0].toFixed(1)+' Y='+pos[1].toFixed(1)+' Z='+pos[2].toFixed(1);
   document.getElementById('ad2-gain').textContent='gain='+(a.gain!==undefined?a.gain.toFixed(2):'0.80')+'  loop='+(a.loop?'yes':'no');
 }
-function showAssetD(name){
-  var a=placedAssets[name];if(!a)return;
-  document.getElementById('detail-asset').style.display='block';
-  document.getElementById('asd-name').textContent=name;
-  document.getElementById('asd-url').textContent=a.url||'(none selected)';
-  var pos=a.position||[0,0,0];
-  document.getElementById('asd-pos').textContent='X='+pos[0].toFixed(1)+' Y='+pos[1].toFixed(1)+' Z='+pos[2].toFixed(1);
-  document.getElementById('asd-xform').textContent='rotY='+(a.rotationY||0)+'°  scale='+(a.scale!==undefined?a.scale:1);
-}
 function editCamera(name){
   var c=placedCameras[name];if(!c)return;
   document.getElementById('cam-seed-type').value='';
@@ -3735,7 +3208,6 @@ function editCamera(name){
   setMode('place');
   setPlaceType('cameras');
 }
-var _editingWaypointName=null;  // Day 86: real bug fix — editWaypoint() pre-fills the form and re-shows it for an existing waypoint, but confirmWP() had no way to know that, always passed null as the "currentEditId" to registerId(), and so always treated the waypoint's own unchanged name as a fresh-create collision with itself. Same tracking pattern already used for cameras/lights/audio/assets.
 function editWaypoint(name) {
   var wp = waypoints[name]; if (!wp) return;
   // Pre-fill form fields
@@ -3743,7 +3215,6 @@ function editWaypoint(name) {
   document.getElementById('wp-label').value = wp.label || '';
   document.getElementById('wp-dwell').value = wp.dwell || 2;
   document.getElementById('wp-pace').value  = wp.pace  || 1.4;
-  document.getElementById('wp-y').value = (wp.position && wp.position[1] !== undefined) ? wp.position[1] : 0;
   populateWPZones();
   var zSel = document.getElementById('wp-zone');
   if (wp.zone) zSel.value = wp.zone;
@@ -3754,7 +3225,6 @@ function editWaypoint(name) {
   renderWPQALines();
   // Set pendingPos so confirmWP can save without requiring a map click
   pendingPos = (wp.position || [0,0,0]).slice();
-  _editingWaypointName = name;
   // Switch confirm button label to indicate update
   var btn = document.querySelector('#wp-form .btn.pri');
   if (btn) btn.textContent = 'Save Changes';
@@ -3791,12 +3261,12 @@ function startPlace(t){
   // the first one" — confirmed structurally (startPlace never reset these
   // before this fix), not just theorized. Clearing all four here, not just
   // the type being entered, closes the whole class rather than one symptom.
-  _editingCameraName=null; _editingLightName=null; _editingAudioName=null; _editingAssetName=null; _editingWaypointName=null;
-  ['camera-form','light-form','audio-form','asset-form','wp-form'].forEach(function(fid){
+  _editingCameraName=null; _editingLightName=null; _editingAudioName=null;
+  ['camera-form','light-form','audio-form'].forEach(function(fid){
     var btn=document.querySelector('#'+fid+' .btn.pri'); if(btn) btn.textContent='Place on Map';
   });
   if(t==='zone'){clearZoneForm();document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
-  else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';document.getElementById('wp-y').value=0;}
+  else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';}
   else if(t==='camera'){
     document.getElementById('camera-form').style.display='block';placing='camera';
     renderCamSeedForm();
@@ -3806,8 +3276,6 @@ function startPlace(t){
     document.getElementById('light-name').value='';
     document.getElementById('light-type').value='point';
     document.getElementById('light-height').value=4;
-    document.getElementById('light-yaw').value=0;
-    document.getElementById('light-yaw-val').textContent='0';
     document.getElementById('light-tilt').value=45;
     document.getElementById('light-tilt-val').textContent='45';
     // Day 83: reset the optical-property fields to each proto's own
@@ -3839,18 +3307,6 @@ function startPlace(t){
     document.getElementById('audio-gain').value=0.8;
     document.getElementById('audio-gain-val').textContent='0.80';
   }
-  else if(t==='asset'){
-    document.getElementById('asset-form').style.display='block';placing='asset';
-    document.getElementById('asset-name').value='';
-    document.getElementById('asset-x').value='';
-    document.getElementById('asset-z').value='';
-    _populateAssetSelect(document.getElementById('asset-place-url'), '');
-    document.getElementById('asset-height').value=0;
-    document.getElementById('asset-rot').value=0;
-    document.getElementById('asset-rot-val').textContent='0';
-    document.getElementById('asset-scale').value=1;
-    document.getElementById('asset-is-movie').checked=false;
-  }
   showHint('Click map to place');
 }
 // Point lights are omnidirectional — no tilt control needed. Matches the
@@ -3862,8 +3318,6 @@ function startPlace(t){
 // type doesn't have and silently dropping them on export.
 function updateLightFormForType(){
   var t=document.getElementById('light-type').value;
-  var yawRow=document.getElementById('light-yaw-row');
-  if(yawRow) yawRow.style.display=(t==='point')?'none':'block';
   var row=document.getElementById('light-tilt-row');
   if(row) row.style.display=(t==='point')?'none':'block';
   var atten=document.getElementById('light-atten-row');
@@ -3980,7 +3434,6 @@ function refreshX3DAssetsList(callback, manual) {
     .then(function(data) {
       _x3dAssetFiles = data.files || [];
       _populateAssetSelect(document.getElementById('z-asset-url'));
-      _populateAssetSelect(document.getElementById('asset-place-url'));
       if (manual) toast('X3D assets: ' + _x3dAssetFiles.length + ' found');
       if (callback) callback();
     })
@@ -4539,37 +3992,25 @@ function confirmWP(){
   var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
   var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
   var pace=parseFloat(document.getElementById('wp-pace').value)||1.4;
-  var wpY=parseFloat(document.getElementById('wp-y').value);
-  if(isNaN(wpY))wpY=0;
   if(!name){toast('Name required',true);return;}
   syncWPQALines();
   // Build legacy single-question field from first Question line (for LLM arc runner compat)
   var firstQ='';
   _wpQALines.forEach(function(l){if(!firstQ&&l.type==='Question'&&l.text)firstQ=l.text;});
   var qaLines=_wpQALines.filter(function(l){return l.text.trim();}).map(function(l){return{type:l.type,speaker:l.speaker,text:l.text};});
-  // Day 86: real bug fix, confirmed live — this comment used to say there
-  // was "no editWP()/resave flow for waypoints," which is exactly why
-  // this always passed null: that claim was already stale (editWaypoint()
-  // exists and pre-fills this same form), and the null was never updated
-  // to match, so saving an edited waypoint always collided with its own
-  // unchanged name. Now uses _editingWaypointName, same pattern already
-  // proven for cameras/lights/audio/assets.
-  if(!registerId(waypoints, name, _editingWaypointName, 'Waypoint')) return;
-  if(_editingWaypointName && _editingWaypointName!==name) delete waypoints[_editingWaypointName];  // rename
-  // Day 86: wp-y is the one field pendingPos can't carry — pendingPos
-  // always has Y=0 (every map click sets it that way, same shared
-  // onCanvasClick path every placement type uses). Combine X/Z from the
-  // click with the real Y typed into the form.
-  var wpPos=[pendingPos[0],wpY,pendingPos[2]];
-  var wasEditingWP=!!_editingWaypointName;
-  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,pace:pace,position:wpPos,question:firstQ,qaLines:qaLines};
-  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:wpPos,question:firstQ}).catch(function(){});
-  placing=null;pendingPos=null;_editingWaypointName=null;
+  // Day 72: identity guard. There is currently no editWP()/resave flow for
+  // waypoints (unlike zones/paths/cameras) — every confirmWP() call is a
+  // fresh create, so currentEditId is always null here: any existing name
+  // is always a true collision, never a legitimate same-object resave.
+  if(!registerId(waypoints, name, null, 'Waypoint')) return;
+  waypoints[name]={name:name,label:label,zone:zone,dwell:dwell,pace:pace,position:pendingPos.slice(),question:firstQ,qaLines:qaLines};
+  apiPost('/waypoint',{name:name,label:label,zone_name:zone,dwell:dwell,position:pendingPos.slice(),question:firstQ}).catch(function(){});
+  placing=null;pendingPos=null;
   document.getElementById('wp-form').style.display='none';
   var btn=document.querySelector('#wp-form .btn.pri');
   if(btn) btn.textContent='Place on Map';
   _wpQALines=[];renderWPQALines();
-  hideHint();renderAll();toast((wasEditingWP?'Updated: ':'Waypoint: ')+name);
+  hideHint();renderAll();toast('Waypoint: '+name);
 }
 var _editingCameraName=null;  // set by editCamera(); distinguishes "save changes" from "place new"
 function confirmCamera(){
@@ -4611,53 +4052,21 @@ function confirmCamera(){
   hideHint();renderAll();toast((wasEditing?'Updated: ':'Camera: ')+name);
   if(wasEditing)selectObj('camera',name);
 }
-// Day 88: real, tested quaternion composition — Yaw (around world/local Y)
-// applied as the outer rotation, Tilt (around local X, within the
-// already-yawed frame) as the inner rotation, matching the natural
-// "pick a horizontal direction, then tilt up/down from there" authoring
-// order. Returns a single X3D SFRotation [ax,ay,az,angle], exactly the
-// shape the Light proto's rotation field expects — no change needed
-// anywhere else in the write/read path, this just replaces how that one
-// array gets computed.
-function composeYawTilt(yawDeg, tiltDeg){
-  var yawRad = yawDeg*Math.PI/180, tiltRad = tiltDeg*Math.PI/180;
-  // Quaternion from axis-angle: (cos(θ/2), axis*sin(θ/2))
-  var qYaw  = [Math.cos(yawRad/2),  0, Math.sin(yawRad/2), 0];              // axis (0,1,0)
-  var qTilt = [Math.cos(tiltRad/2), Math.sin(tiltRad/2), 0, 0];             // axis (1,0,0)
-  // Hamilton product: q = qYaw * qTilt (yaw is the outer/parent rotation)
-  var w1=qYaw[0],x1=qYaw[1],y1=qYaw[2],z1=qYaw[3];
-  var w2=qTilt[0],x2=qTilt[1],y2=qTilt[2],z2=qTilt[3];
-  var w=w1*w2-x1*x2-y1*y2-z1*z2;
-  var x=w1*x2+x1*w2+y1*z2-z1*y2;
-  var y=w1*y2-x1*z2+y1*w2+z1*x2;
-  var z=w1*z2+x1*y2-y1*x2+z1*w2;
-  // Quaternion back to axis-angle
-  var angle=2*Math.acos(Math.max(-1,Math.min(1,w)));
-  var s=Math.sqrt(1-w*w);
-  if(s<0.0001) return [1,0,0,0]; // no rotation — avoid divide-by-near-zero
-  return [x/s, y/s, z/s, angle];
-}
 function confirmLight(){
   if(!pendingPos){toast('Click map first',true);return;}
   var name=document.getElementById('light-name').value.trim();
   var type=document.getElementById('light-type').value;
   var height=parseFloat(document.getElementById('light-height').value)||4;
   var tiltDeg=parseFloat(document.getElementById('light-tilt').value)||0;
-  var yawDeg=parseFloat(document.getElementById('light-yaw').value)||0;
   if(!name){toast('Name required',true);return;}
   if(!registerId(placedLights, name, _editingLightName, 'Light')) return;
   if(_editingLightName&&_editingLightName!==name)delete placedLights[_editingLightName];  // rename
-  // Day 88: composeYawTilt() replaces the old single-axis "1 0 0 tiltRad"
-  // shortcut — see that function's own comment. yawDeg/tiltDeg are also
-  // stored directly (not just the final rotation) so editLight() can
-  // repopulate the two sliders exactly, without needing to decompose a
-  // general quaternion back into "the yaw/tilt that produced it" (which
-  // isn't reliably possible for an arbitrary rotation — storing the
-  // authoring inputs alongside the computed output sidesteps that
-  // entirely). Point lights still carry a rotation value for shape
-  // consistency (see original comment below) — harmless, PointLight has
-  // no direction field to aim.
-  var rotation=composeYawTilt(yawDeg,tiltDeg);
+  // Single-axis tilt (rotate about local X) -> axis-angle, matching the
+  // proto's own default rotation axis. Point lights carry a rotation value
+  // too (harmless — PointLight has no direction field to aim) purely for
+  // shape consistency with the other two types; the form just doesn't
+  // expose a control for it since it would do nothing visible.
+  var tiltRad=tiltDeg*Math.PI/180;
   // Day 83: read the full optical property set. Stored on every light
   // regardless of type (even fields a given type's proto doesn't declare,
   // e.g. a Directional's unused attenuation/radius) — same "store the
@@ -4679,7 +4088,7 @@ function confirmLight(){
   placedLights[name]={
     name:name, type:type,
     translation:[pendingPos[0],height,pendingPos[2]],
-    rotation:rotation, yawDeg:yawDeg, tiltDeg:tiltDeg,
+    rotation:[1,0,0,tiltRad],
     on:on, color:color, intensity:intensity, ambientIntensity:ambientIntensity,
     attenuation:attenuation, radius:radius,
     cutOffAngle:cutOffAngle, beamWidth:beamWidth,
@@ -4699,17 +4108,13 @@ function editLight(name){
   document.getElementById('light-name').value=l.name;
   document.getElementById('light-type').value=l.type;
   document.getElementById('light-height').value=(l.translation&&l.translation[1]!==undefined)?l.translation[1]:4;
-  // Day 88: yawDeg/tiltDeg are now stored directly (see confirmLight's own
-  // comment on composeYawTilt) — read those first. Falls back to
-  // decoding the OLD single-axis "1 0 0 tiltRad" shape for any light
-  // placed before this change (yaw defaults to 0, matching its only-ever-
-  // had-tilt history), rather than showing a misleading value for a
-  // rotation this form never actually produced.
-  var yawDeg = (l.yawDeg!==undefined) ? l.yawDeg : 0;
-  var tiltDeg = (l.tiltDeg!==undefined) ? l.tiltDeg
-    : ((l.rotation&&l.rotation[3]!==undefined) ? Math.round(l.rotation[3]*180/Math.PI) : 45);
-  document.getElementById('light-yaw').value=yawDeg;
-  document.getElementById('light-yaw-val').textContent=yawDeg;
+  // Tilt display: recover degrees from the stored axis-angle, assuming it's
+  // still the single-axis "1 0 0 <radians>" shape this form always writes.
+  // If a light's rotation was ever hand-edited elsewhere into a genuinely
+  // arbitrary axis, this will show a wrong-looking tilt value rather than
+  // silently misinterpreting it as something else — worth knowing, not
+  // hidden, since this form can't represent arbitrary-axis rotation at all.
+  var tiltDeg=(l.rotation&&l.rotation[3]!==undefined)?Math.round(l.rotation[3]*180/Math.PI):45;
   document.getElementById('light-tilt').value=tiltDeg;
   document.getElementById('light-tilt-val').textContent=tiltDeg;
   // Day 83: populate the optical-property fields. Falls back to each
@@ -4770,68 +4175,6 @@ function confirmAudio(){
   if(wasEditing)selectObj('audio',name);
 }
 var _editingAudioName=null;
-function confirmAsset(){
-  var name=document.getElementById('asset-name').value.trim();
-  var url=document.getElementById('asset-place-url').value;
-  var x=parseFloat(document.getElementById('asset-x').value);
-  var z=parseFloat(document.getElementById('asset-z').value);
-  var height=parseFloat(document.getElementById('asset-height').value)||0;
-  var rotationY=parseFloat(document.getElementById('asset-rot').value)||0;
-  var scale=parseFloat(document.getElementById('asset-scale').value);
-  var isMovie=document.getElementById('asset-is-movie').checked;
-  if(!name){toast('Name required',true);return;}
-  if(!url){toast('Select a file',true);return;}
-  if(isNaN(x)||isNaN(z)){toast('Click map first, or type X/Z directly',true);return;}
-  if(isNaN(scale)||scale<=0)scale=1;
-  if(!registerId(placedAssets, name, _editingAssetName, 'Asset')) return;
-  if(_editingAssetName&&_editingAssetName!==name)delete placedAssets[_editingAssetName];  // rename
-  placedAssets[name]={
-    name:name, url:url, position:[x,height,z],
-    rotationY:rotationY, scale:scale, isMovie:isMovie,
-  };
-  var wasEditing=!!_editingAssetName;
-  placing=null;pendingPos=null;_editingAssetName=null;
-  var btn=document.querySelector('#asset-form .btn.pri');
-  if(btn)btn.textContent='Place on Map';
-  document.getElementById('asset-form').style.display='none';
-  hideHint();renderAll();toast((wasEditing?'Updated: ':'Asset placed: ')+name);
-  _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
-  if(wasEditing)selectObj('asset',name);
-}
-var _editingAssetName=null;
-function editAsset(name){
-  var a=placedAssets[name];if(!a)return;
-  document.getElementById('asset-name').value=a.name;
-  document.getElementById('asset-place-url').value=a.url;
-  document.getElementById('asset-x').value=(a.position&&a.position[0]!==undefined)?a.position[0]:0;
-  document.getElementById('asset-z').value=(a.position&&a.position[2]!==undefined)?a.position[2]:0;
-  document.getElementById('asset-height').value=(a.position&&a.position[1]!==undefined)?a.position[1]:0;
-  document.getElementById('asset-rot').value=a.rotationY||0;
-  document.getElementById('asset-rot-val').textContent=a.rotationY||0;
-  document.getElementById('asset-scale').value=(a.scale!==undefined)?a.scale:1;
-  document.getElementById('asset-is-movie').checked=!!a.isMovie;
-  pendingPos=(a.position||[0,0,0]).slice();
-  _editingAssetName=name;
-  var btn=document.querySelector('#asset-form .btn.pri');
-  if(btn)btn.textContent='Save Changes';
-  document.getElementById('asset-form').style.display='block';
-  placing='asset';
-  setMode('place');
-  setPlaceType('assets');
-}
-function renderAssetList(){
-  var el=document.getElementById('asset-list');if(!el)return;
-  var list=Object.values(placedAssets);
-  if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:16px">No assets placed.</div>';return;}
-  el.innerHTML=list.map(function(a){
-    var sel=selectedType==='asset'&&selectedId===a.name;
-    var fname=(a.url||'').split('/').pop();
-    return '<div class="obj-item '+(sel?'sel':'')+'" onclick="selectObj(\'asset\',\''+a.name+'\')">'+
-      '<div class="obj-dot" style="background:#78d8a0"></div>'+
-      '<span class="obj-name">'+a.name+'</span>'+
-      '<span style="font-size:16px;color:var(--dim)">'+fname+'</span></div>';
-  }).join('');
-}
 function editAudio(name){
   var a=placedAudio[name];if(!a)return;
   document.getElementById('audio-name').value=a.name;
@@ -5038,32 +4381,11 @@ function _buildDispatcherRuntimeX3D(){
     return '';
   }
 }
-// Day 88: real, new capability — builds the actual multi-stop skyColor=/
-// skyAngle=/groundColor=/groundAngle= attributes from bgConfig, matching
-// the author's own tested CityNight example's exact format: comma-
-// separated between stops, space-separated R G B within each stop, and
-// N colors to N-1 angles (the last stop carries no angle at all).
-function buildBackgroundX3D() {
-  function fmtStops(arr) {
-    var colors = arr.map(function(s){ return s.color[0]+' '+s.color[1]+' '+s.color[2]; }).join(', ');
-    var angles = arr.slice(0, -1).map(function(s){ return (s.angle!==undefined?s.angle:1.2); }).join(', ');
-    return { colors: colors, angles: angles };
-  }
-  var sky = fmtStops(bgConfig.sky), ground = fmtStops(bgConfig.ground);
-  var defAttr = bgConfig.def ? ' DEF="'+xe(bgConfig.def)+'"' : '';
-  var s = '<Background'+defAttr+' skyColor="'+sky.colors+'"';
-  if (sky.angles) s += ' skyAngle="'+sky.angles+'"';
-  s += ' groundColor="'+ground.colors+'"';
-  if (ground.angles) s += ' groundAngle="'+ground.angles+'"';
-  s += '/>\n\n';
-  return s;
-}
-async function exportX3D(silent){
+function exportX3D(){
   var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
   var ts=new Date().toISOString().slice(0,19),cx=w/2,cz=d/2;
   var iS=document.getElementById('exp-sounds').checked,iP=document.getElementById('exp-protos').checked;
   var iI=document.getElementById('exp-interps').checked,iSc=document.getElementById('exp-script').checked;
-  var showLabels=document.getElementById('exp-labels').checked;
   var x=xmlDecl();
   x+='<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">\n';
   x+='<X3D profile="Immersive" version="4.0">\n';
@@ -5076,15 +4398,8 @@ async function exportX3D(silent){
   x+=buildLightProtoDecls();
   x+=buildAudioProtoDecls();
   if(iP){x+=buildAP();x+=buildZP();}
-  // Day 88: real, requested fix — headlight was on and EXAMINE was the
-  // default navigation type. Turning the headlight off gives the author
-  // full control over scene lighting instead of a browser-supplied
-  // fill light following the camera (very likely the actual source of
-  // the "extra glow" mystery a few turns back, not the zone Cylinder
-  // toggle at all). WALK is now first in the type list so it's the
-  // default the browser picks, with FLY/EXAMINE/ANY as fallbacks.
-  x+='<NavigationInfo DEF="MainNavInfo" headlight="FALSE" type=\'"WALK" "FLY" "EXAMINE" "ANY"\' transitionType=\'"TELEPORT"\' visibilityLimit="300"/>\n';
-  x += buildBackgroundX3D();
+  x+='<NavigationInfo headlight="true" type=\'"EXAMINE" "WALK" "FLY" "ANY"\' transitionType=\'"TELEPORT"\' visibilityLimit="300"/>\n';
+  x+='<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16" skyAngle="1.309 1.571" groundAngle="1.309"/>\n\n';
   // Track 1: Music — scene root, global, spatialize=false
   // Track 3: Bed  — scene root, global, spatialize=false
   var _exSnd = {
@@ -5115,15 +4430,10 @@ async function exportX3D(silent){
     x+=' startTime="-1" stopTime="-2" enabled="false"/>\n';
     x+='</AudioDestination>\n\n';
   }
-  // Day 88: two default/automatic PointLights removed per author
-  // request — Composer was always adding scene-wide fill lighting here,
-  // completely independent of (and in addition to) whatever the author
-  // actually placed via the real Lights system (buildLightsX3D, the
-  // BasicPointLight/BasicSpotLight/BasicDirectionalLight protos below).
-  // Author now has full, uncontested control over scene lighting —
-  // nothing lights the scene unless it was actually placed.
+  x+='<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>\n';
+  x+='<Transform translation="'+(cx*0.3)+' 10 '+(cz*0.3)+'"><PointLight intensity="0.55" color="0.7 0.8 1.0" radius="'+Math.max(w,d)+'"/></Transform>\n\n';
   x+='<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.45)+' '+(cz+Math.max(w,d)*1.1)+'" orientation="1 0 0 -0.38" jump="true"/>\n';
-  // Day 88: VP_Origin removed per author request — unused, not needed.
+  x+='<Viewpoint DEF="VP_Origin" description="Origin" position="0 2.5 0" orientation="0 0 0 0" jump="true"/>\n';
   x+='<!-- Free camera vessel: Loader writes to CAM_Free_Transform via SAI, never to the Viewpoint directly -->\n';
   x+='<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0">\n';
   x+='  <Viewpoint DEF="VP_Free" description="Free Camera" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>\n';
@@ -5180,41 +4490,9 @@ async function exportX3D(silent){
   x+=buildFreeCamerasX3D();
   x+=buildLightsX3D();
   x+=buildAudioSourcesX3D();
-  Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS,showLabels);});
+  Object.values(zones).forEach(function(z){x+=buildZX3D(z,iS);});
   x+='\n';
-  // Await a genuinely fresh manifest fetch for every placed agent with a
-  // hanim_src before building any agent XML -- see camRigFetchManifestFresh's
-  // own comment for the race this closes. Agents without a manifest (or
-  // without hanim_src at all) resolve immediately via that function's own
-  // early-return, so this costs nothing for avatars with no camera rig.
-  await Promise.all(Object.values(placedAgents)
-    .filter(function(a){ return a.hanim_src; })
-    .map(function(a){ console.log('[camRig] priming fresh manifest for agent', a.name||a, 'hanim_src=', a.hanim_src); return camRigFetchManifestFresh(a.hanim_src); }));
-  Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a,showLabels);});
-  Object.values(placedAssets).forEach(function(pa){x+=buildAssetX3D(pa);});
-  // Day 88: real, new capability — Movie/Animation EventCues need an
-  // <IMPORT> exposing whatever internal Shape/TimeSensor DEF the author
-  // named, the same mechanism the movie's own TheMovie already proved
-  // out. AS name is computed purely from cue.id — see this block's
-  // counterpart in _doExportSceneXML's EventCues writer, which computes
-  // the identical name independently; neither export depends on the
-  // other having already run. Skips silently (not an error) if the
-  // referenced asset doesn't actually exist or internalDef was left
-  // blank — an incomplete cue shouldn't break the whole scene's XML.
-  if (_lastTimelineCues && _lastTimelineCues.cues) {
-    _lastTimelineCues.cues.forEach(function(cue) {
-      if (cue.track === 'path' && cue.params && cue.params.pathId) {
-        x += buildRecordedPathInterpNodes(cue);
-      }
-    });
-    _lastTimelineCues.cues.forEach(function(cue) {
-      if ((cue.track !== 'movie' && cue.track !== 'animation') || !cue.internalDef || !cue.target) return;
-      var pa = placedAssets[cue.target];
-      if (!pa) return;
-      var assetSid = safeId(cue.target);
-      x += '<IMPORT inlineDEF="AssetInline_'+assetSid+'" exportedDEF="'+xe(cue.internalDef)+'" AS="EC_'+safeId(String(cue.id))+'"/>\n';
-    });
-  }
+  Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a);});
   x+='\n';
   var an=Object.keys(placedAgents);
   if(an.length>1){for(var i=0;i<an.length;i++){for(var j=i+1;j<an.length;j++){
@@ -5226,21 +4504,11 @@ async function exportX3D(silent){
   }
   if(iSc)x+=buildMS();
   // ROUTEs must follow all DEF nodes — emit unconditionally if sound or paths present
-  // Day 88: also true if any recorded-path EventCue exists — its ROUTEs
-  // live in this same section, and without this the whole section (and
-  // therefore this cue's ROUTEs) would be skipped entirely when nothing
-  // else happened to need it.
-  var _hasPathCues = !!(_lastTimelineCues && _lastTimelineCues.cues && _lastTimelineCues.cues.some(function(c){ return c.track==='path' && c.params && c.params.pathId; }));
-  var _hasRoutes=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0)||_hasPathCues;
+  var _hasRoutes=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0);
   if(_hasRoutes){
     x+='\n<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->\n';
     if(iI&&Object.keys(paths).length>0){
       Object.values(paths).forEach(function(p){x+=buildInterpRoutes(p);});
-    }
-    if(_hasPathCues){
-      _lastTimelineCues.cues.forEach(function(cue) {
-        if (cue.track === 'path' && cue.params && cue.params.pathId) x += buildRecordedPathRoutes(cue);
-      });
     }
     // SoundFader ROUTEs — Prox_<id> isActive → SoundFader_<id> isActive
     // Day 53: emitted even when scene has no paths (was incorrectly gated on paths.length>0)
@@ -5274,7 +4542,7 @@ async function exportX3D(silent){
   // Falls back to browser download if the server POST fails.
   var _expLog = document.getElementById('exp-log');
   var _zoneCt = Object.keys(zones).length, _agCt = Object.keys(placedAgents).length;
-  return fetch(API+'/scene/x3d/upload', {
+  fetch(API+'/scene/x3d/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/xml', 'X-Scene-Name': sn },
     body: x
@@ -5283,11 +4551,9 @@ async function exportX3D(silent){
   .then(function(res){
     if (res.status === 'ok') {
       if (res.output) _lastX3dUrl = '/static/' + res.output.replace(/^.*static[\/]/,'');
-      if (!silent) {
-        _expLog.innerHTML = '<div style="color:var(--accent)">Saved to server: '+(res.output||sn+'.x3d')+'</div>'
-          + '<div>Zones: '+_zoneCt+'  Agents: '+_agCt+'</div>';
-        toast('X3D saved to server — reload Loader to pick up changes');
-      }
+      _expLog.innerHTML = '<div style="color:var(--accent)">Saved to server: '+(res.output||sn+'.x3d')+'</div>'
+        + '<div>Zones: '+_zoneCt+'  Agents: '+_agCt+'</div>';
+      toast('X3D saved to server — reload Loader to pick up changes');
       // Notify Events Editor iframe if open
       var evFrame = document.getElementById('events-editor-frame');
       if (evFrame && evFrame.contentWindow && _lastX3dUrl) {
@@ -5298,17 +4564,12 @@ async function exportX3D(silent){
     }
   })
   .catch(function(e){
-    // Server save failed — fall back to browser download so work is never lost.
-    // Day 86: silent callers (Record Scene Arc, the Events Editor's "Export
-    // cues" flow) still get this — losing work silently on a failed upload
-    // would be worse than an unexpected download appearing.
+    // Server save failed — fall back to browser download so work is never lost
     console.warn('[exportX3D] server upload failed ('+e.message+') — falling back to browser download');
     dlFile(sn+'.x3d', x, 'model/x3d+xml');
-    if (!silent) {
-      _expLog.innerHTML = '<div style="color:var(--accent2)">Server save failed — downloaded to browser</div>'
-        + '<div>Move '+sn+'.x3d to static/x3d/ manually</div>';
-      toast('Server save failed — file downloaded to browser instead', true);
-    }
+    _expLog.innerHTML = '<div style="color:var(--accent2)">Server save failed — downloaded to browser</div>'
+      + '<div>Move '+sn+'.x3d to static/x3d/ manually</div>';
+    toast('Server save failed — file downloaded to browser instead', true);
   });
 }
 // Camera proto library declarations (Day 64). One ExternProtoDeclare per shot type
@@ -5470,24 +4731,15 @@ function buildZP(){
      '</Text></Shape></Billboard></Transform>\n';
   s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
 }
-function buildZX3D(z,iS,showLabels){
-  showLabels = showLabels !== false; // default true — matches the checkbox's own default-checked state
+function buildZX3D(z,iS){
   var pos=z.location||z.position||[0,0,0],col=hexToX3D(ZONE_COLORS[z.zone_type]||'#888888');
   var r=z.radius||4,bs=Math.max(0.8,r*0.4),sid=safeId(z.id),nm=xe(z.name||z.id);
   var s='<!-- Zone: '+nm+' -->\n';
   s+='<Transform DEF="Zone_'+sid+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
-  // Day 86: zone boundary cylinder + floating name text are authoring aids
-  // — helpful while placing waypoints/assets, wrong to bake into an
-  // actual movie export. Gated behind showLabels; the ProximitySensor
-  // below (real zone-trigger functionality) and any ZoneAsset (real set
-  // dressing, e.g. the temple) are deliberately NOT gated — those aren't
-  // debug visuals, they're content/logic and must always be present.
-  if (showLabels) {
-    s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Cylinder height="0.5" radius="'+r+'"/></Shape>\n';
-    s+='<Transform translation="0 '+(r*0.5+1.2)+' 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
-    s+='<Text string=\'"'+nm+'"\' ><FontStyle size="0.28" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
-       '</Text></Shape></Billboard></Transform>\n';
-  }
+  s+='<Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55" emissiveColor="'+col+'"/></Appearance><Cylinder height="0.5" radius="'+r+'"/></Shape>\n';
+  s+='<Transform translation="0 '+(r*0.5+1.2)+' 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="'+col+'"/></Appearance>\n';
+  s+='<Text string=\'"'+nm+'"\' ><FontStyle size="0.28" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   s+='<ProximitySensor DEF="Prox_'+sid+'" size="'+(r*2)+' 4 '+(r*2)+'" enabled="true"/>\n';
   if(z.asset && z.asset.url){
     // Zone Asset (X3D Inline) — a pre-built X3D model (e.g. fountain, statue) from
@@ -5682,11 +4934,10 @@ function buildZX3D(z,iS,showLabels){
   }
   s+='</Transform>\n\n';return s;
 }
-function buildAX3D(a,showLabels){
-  showLabels = showLabels !== false; // default true — matches the checkbox's own default-checked state
+function buildAX3D(a){
   var pos=a.position||[0,0,0],col=hexToX3D(a.color||'#aab0be'),sn=safeId(a.name),qn=xe(a.name);
   var s='<!-- Agent: '+qn+' -->\n';
-  s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' '+(pos[1]||0)+' '+pos[2]+'">\n';
+  s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' 0 '+pos[2]+'">\n';
 
   if(a.hanim_src){
     // H-Anim figure via Inline + IMPORT.
@@ -5742,7 +4993,6 @@ function buildAX3D(a,showLabels){
     // mechanism needs to change, not any caller-side string construction.
     var stem = camRigManifestStem(a.hanim_src);
     var rigTypes = _camRigManifestCache[stem] || [];  // [] if uncached or no manifest — no IMPORTs, same as any other missing-manifest case
-    console.log('[camRig] buildAX3D for', sn, 'stem=', stem, 'rigTypes read at build time:', rigTypes);
     var _camRigDefs = {agent_eye:'CAM_Eye', agent_side:'CAM_Side', agent_orbit:'CAM_Orbit', agent_track:'CAM_Track'};
     var _camRigAs   = {agent_eye:'VP_'+sn+'_Eye', agent_side:'VP_'+sn+'_Side',
                        agent_orbit:'CAM_OrbitProto_'+sn, agent_track:'CAM_TrackProto_'+sn};
@@ -5786,166 +5036,16 @@ function buildAX3D(a,showLabels){
     // offers nothing to trigger on," not a special-cased guard.
   }
 
-  // Name label — Day 86: gated behind showLabels (see buildZX3D's own
-  // comment for the reasoning — authoring aid, not scene content). The
-  // avatar's own body/geometry above this line is untouched regardless.
-  if (showLabels) {
-    s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
-    s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
-       '</Text></Shape></Billboard></Transform>\n';
-  }
+  // Name label — always present regardless of figure type
+  s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
+  s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
+     '</Text></Shape></Billboard></Transform>\n';
   s+='</Transform>\n\n';return s;
-}
-// Day 86: independently-placed assets — same <Inline> mechanism a zone's
-// own z.asset already uses, but as a top-level scene Transform rather
-// than nested inside any Zone_<id>. This is the actual fix for "place
-// assets independently of zones": a zone's own asset field stays exactly
-// as it was (one set piece anchored to that zone's center), and this is
-// a second, parallel path for anything that isn't naturally zone-shaped —
-// the temple, a billboard, a fog volume, a movie-texture screen.
-function buildAssetX3D(pa){
-  var pos=pa.position||[0,0,0],sn=safeId(pa.name),scale=(pa.scale!==undefined?pa.scale:1);
-  var s='<!-- Asset: '+xe(pa.name)+' -->\n';
-  s+='<Transform DEF="PlacedAsset_'+sn+'" translation="'+pos[0]+' '+(pos[1]||0)+' '+pos[2]+
-     '" rotation="0 1 0 '+((pa.rotationY||0)*Math.PI/180).toFixed(4)+'" scale="'+scale+' '+scale+' '+scale+'">\n';
-  // Day 88: every placed asset's Inline now gets a DEF unconditionally —
-  // previously only true when isMovie was set, which meant any OTHER
-  // asset (the moon, anything else) had no way to be targeted by the new
-  // general Movie/Animation EventCues system at all. A DEF costs nothing
-  // if unused; the "TheMovie" IMPORT below still only fires for the
-  // asset actually marked as the movie, unchanged.
-  s+='  <Inline DEF="AssetInline_'+sn+'" url=\'"'+xe(pa.url)+'"\'/>\n';
-  s+='</Transform>\n';
-  if (pa.isMovie) {
-    // Fixed, predictable AS name — the Loader just looks up
-    // 'TheSceneMovie' directly, exactly as simply as it already looks up
-    // 'Clip_Music'. If more than one asset is ever marked as the movie,
-    // only the last one exported wins this name (a real, known limit —
-    // this project has one movie insert per scene for now, not several).
-    // Day 87: real bug, confirmed by direct comparison against the
-    // already-working HAnim timer IMPORTs elsewhere in this same file
-    // (DefaultTimer_Anna, WalkTimer_Anna, etc.) — those use
-    // exportedDEF=, not importedDEF=. The X3D4 spec (per web search) says
-    // importedDEF is correct, but X_ITE in this actual codebase clearly
-    // expects exportedDEF — confirmed by the proven-working avatar-timer
-    // imports sitting right next to this one. Matching that, not the
-    // spec text, since working code in this exact engine is stronger
-    // evidence than documentation.
-    s+='<IMPORT inlineDEF="AssetInline_'+sn+'" exportedDEF="TheMovie" AS="TheSceneMovie"/>\n';
-  }
-  s+='\n';
-  return s;
-}
-// Day 88: real, new capability — recorded-path playback never existed
-// anywhere in the Loader before this (confirmed by direct search — zero
-// references to recordedPaths in mccf_x3d_loader.html). This builds the
-// actual PositionInterpolator/TimeSensor pair from a recorded path's real
-// key data, pre-built directly into the exported geometry (not behind an
-// IMPORT — Avatar_<name> and PlacedAsset_<name> are both top-level
-// Transforms already, unlike the movie's Inline'd content, so a plain DEF
-// is enough; getNamedNode() reaches it directly). The Loader triggers it
-// at fire-time via the same triggerRef convention as Movie/Animation.
-// Works identically whether the target is an agent or a placed asset —
-// both have a real Transform with a translation field, no special-casing
-// needed between the two.
-function buildRecordedPathInterpNodes(cue) {
-  var rp = recordedPaths[cue.params && cue.params.pathId];
-  if (!rp || !rp.keys || rp.keys.length < 2) return '';
-  var targetPrefix = placedAgents[cue.target] ? 'Avatar_' : placedAssets[cue.target] ? 'PlacedAsset_' : null;
-  if (!targetPrefix) return '';
-  var cueSafe = safeId(String(cue.id));
-  var totalT = rp.keys[rp.keys.length - 1].t || 1;
-  if (totalT <= 0) totalT = 1;
-  var keyFracs = rp.keys.map(function(k) { return (k.t / totalT).toFixed(5); }).join(',');
-  var keyVals  = rp.keys.map(function(k) { var p = k.position || [0,0,0]; return p[0]+' '+p[1]+' '+p[2]; }).join(',');
-  var s = '<!-- Recorded-path playback nodes: '+xe(cue.target)+' path='+xe(rp.id)+' -->\n';
-  s += '<PositionInterpolator DEF="PathInterp_EC_'+cueSafe+'" key="'+keyFracs+'" keyValue="'+keyVals+'"/>\n';
-  // Day 88: real, new capability — orientation, so the target actually
-  // turns to face where it's walking rather than sliding while frozen
-  // facing one direction. path-recorder.js's own validateRecordedPath()
-  // requires every key to carry a real 4-value orientation already
-  // (confirmed directly from that file), so this data is always present —
-  // no fallback/default branch needed here, same key fractions as
-  // position (same recording, same timeline), just a second interpolator
-  // reading a different field of the same key data.
-  var hasOrient = rp.keys.every(function(k){ return k.orientation && k.orientation.length === 4; });
-  if (hasOrient) {
-    var rotVals = rp.keys.map(function(k) { var o = k.orientation; return o[0]+' '+o[1]+' '+o[2]+' '+o[3]; }).join(',');
-    s += '<OrientationInterpolator DEF="PathOrient_EC_'+cueSafe+'" key="'+keyFracs+'" keyValue="'+rotVals+'"/>\n';
-  }
-  // startTime intentionally unset — waits to be started via triggerRef,
-  // same pattern as the moon's Timer2 and the movie's TheMovie.
-  // Day 88: real bug fix — cycleInterval was always the raw recording's
-  // own real-world length (however long the capture session happened to
-  // take), completely ignoring the cue's own authored Duration field.
-  // key= values above are already normalized 0-1 fractions of the
-  // recording, not raw timestamps, so cycleInterval can freely be
-  // anything without changing the shape of the motion at all — only how
-  // fast it plays. cue.duration now drives playback speed, same as every
-  // other cue type's duration already does; the raw recording length is
-  // only the fallback if no meaningful duration was set.
-  var playDur = (cue.duration && cue.duration > 0) ? cue.duration : totalT;
-  s += '<TimeSensor DEF="PathTimer_EC_'+cueSafe+'" cycleInterval="'+playDur+'" loop="false"/>\n';
-  // Ease-in helper nodes — reusable, baked once per path cue, same
-  // established pattern as CAM_FlyTimer/CAM_FlyPosInterp/CAM_FlyOriInterp
-  // (_flyCameraTo, mccf_x3d_loader.html) rather than the Loader creating
-  // anything dynamically at runtime. That dynamic-creation approach was
-  // tried and failed on two separate counts, confirmed live: (1)
-  // scene.createX3DFromString isn't a valid method — createX3DFromString
-  // belongs to Browser, not X3DScene, and in current X_ITE versions returns
-  // a Promise besides, not a synchronous node array; (2) MFVec3f/MFRotation
-  // fields don't accept bulk array assignment in X_ITE's SAI at all — only
-  // indexed assignment (interp.keyValue[0] = new X3D.SFVec3f(...)), per
-  // this project's own confirmed research documented at _flyCameraTo's own
-  // ease nodes. Placeholder key/keyValue below always get overwritten via
-  // that indexed pattern before each use — real values depend on the
-  // target's live position at fire time, which isn't known at export time.
-  s += '<TimeSensor DEF="PathEaseTimer_EC_'+cueSafe+'" cycleInterval="1.5" loop="false"/>\n';
-  s += '<PositionInterpolator DEF="PathEaseInterp_EC_'+cueSafe+'" key="0,1" keyValue="0 0 0,0 0 0"/>\n';
-  if (hasOrient) {
-    s += '<OrientationInterpolator DEF="PathEaseOrient_EC_'+cueSafe+'" key="0,1" keyValue="0 1 0 0,0 1 0 0"/>\n';
-  }
-  return s;
-}
-// Day 88: ROUTEs split out into their own function, called from the
-// dedicated "ROUTEs must follow all DEF nodes" section elsewhere in
-// exportX3D() — mirrors buildInterpNodes/buildInterpRoutes' own split
-// exactly, for the same hard VRML/X3D-inherited ordering requirement.
-function buildRecordedPathRoutes(cue) {
-  var rp = recordedPaths[cue.params && cue.params.pathId];
-  if (!rp || !rp.keys || rp.keys.length < 2) return '';
-  var targetPrefix = placedAgents[cue.target] ? 'Avatar_' : placedAssets[cue.target] ? 'PlacedAsset_' : null;
-  if (!targetPrefix) return '';
-  var targetDef = targetPrefix + safeId(cue.target);
-  var cueSafe = safeId(String(cue.id));
-  var s = '<ROUTE fromNode="PathTimer_EC_'+cueSafe+'" fromField="fraction_changed" toNode="PathInterp_EC_'+cueSafe+'" toField="set_fraction"/>\n';
-  s += '<ROUTE fromNode="PathInterp_EC_'+cueSafe+'" fromField="value_changed" toNode="'+targetDef+'" toField="set_translation"/>\n';
-  // Day 88: real, new capability — same shared TimeSensor drives both
-  // interpolators (one clock, two outputs), matching exactly what the
-  // author described: "a paired set of orientation and position
-  // interpolators with a timer... routed to the transform."
-  var hasOrient = rp.keys.every(function(k){ return k.orientation && k.orientation.length === 4; });
-  if (hasOrient) {
-    s += '<ROUTE fromNode="PathTimer_EC_'+cueSafe+'" fromField="fraction_changed" toNode="PathOrient_EC_'+cueSafe+'" toField="set_fraction"/>\n';
-    s += '<ROUTE fromNode="PathOrient_EC_'+cueSafe+'" fromField="value_changed" toNode="'+targetDef+'" toField="set_rotation"/>\n';
-  }
-  // Ease-in routing — static wiring only (which nodes talk to which never
-  // changes), field VALUES (keyValue, startTime) are set at runtime by
-  // _firePathEventCue right before each fire, same division of labour as
-  // CAM_FlyTimer's own routes vs. its runtime-set fields.
-  s += '<ROUTE fromNode="PathEaseTimer_EC_'+cueSafe+'" fromField="fraction_changed" toNode="PathEaseInterp_EC_'+cueSafe+'" toField="set_fraction"/>\n';
-  s += '<ROUTE fromNode="PathEaseInterp_EC_'+cueSafe+'" fromField="value_changed" toNode="'+targetDef+'" toField="set_translation"/>\n';
-  s += '<ROUTE fromNode="PathEaseTimer_EC_'+cueSafe+'" fromField="cycleTime" toNode="PathTimer_EC_'+cueSafe+'" toField="set_startTime"/>\n';
-  if (hasOrient) {
-    s += '<ROUTE fromNode="PathEaseTimer_EC_'+cueSafe+'" fromField="fraction_changed" toNode="PathEaseOrient_EC_'+cueSafe+'" toField="set_fraction"/>\n';
-    s += '<ROUTE fromNode="PathEaseOrient_EC_'+cueSafe+'" fromField="value_changed" toNode="'+targetDef+'" toField="set_rotation"/>\n';
-  }
-  return s;
 }
 function buildInterpNodes(path){
   // Emits all DEF nodes: Interpolators, TimeSensors, Arrival_ Script, Kill_ Script.
   // ROUTEs emitted separately by buildInterpRoutes — always the last items in the X3D scene.
-  // V5: waypointOrder (SFInt32, initializeOnly) added to Arrival_ script.
+  // V4: waypointOrder (SFInt32, initializeOnly) added to Arrival_ script.
   //     Loader reads waypointOrder from _scene.xml <Path> element (not from X3D Script
   //     node directly, since X_ITE SAI does not expose initializeOnly fields via getNamedNode).
   //     Both files carry the value; scene XML is the loader's authoritative source.
@@ -5973,7 +5073,7 @@ function buildInterpNodes(path){
   // path. Qualifying order===1 too would silently break that lookup. Order values
   // besides 1 get '_'+order folded in, which is sufficient to guarantee uniqueness
   // since waypointOrder is already tracked as distinguishing multiple paths for the
-  // same agent (see the Arrival_ script's own waypointOrder field, added V5).
+  // same agent (see the Arrival_ script's own waypointOrder field, added V4).
   var suf=(order===1)?'':('_'+order);
   var out='<!-- Animation nodes: '+xe(path.name)+' agent='+xe(path.agent)+' segments='+numSegs+' waypointOrder='+order+' -->\n';
 
@@ -6251,24 +5351,166 @@ function _sendToLauncherWithTracks(eventTracks, silent) {
   setTimeout(function() { sendToLauncher(silent); }, 200);
 }
 
-// Day 86: this used to build its own separate copy of the entire scene
-// XML (buildX3DString()) — a hand-maintained duplicate of exportX3D()'s
-// logic that silently drifted out of sync (confirmed live: labels and
-// placed assets worked via "Export X3D" but vanished via "Send to
-// Launcher," because fixes to one were never mirrored to the other — the
-// exact same class of bug a Day-78 comment already documented happening
-// once before). Now a thin delegate to the one real implementation,
-// so there is only one place scene-generation logic can ever live.
 function sendToLauncher(silent){
-  return exportX3D(silent);
+  var btn=document.getElementById('send-btn');
+  if(!silent){btn.textContent='Sending...';btn.disabled=true;}
+  var x=buildX3DString();
+  var sceneName=sceneConfig.name||'mccf_scene';
+  return fetch(API+'/scene/x3d/upload',{method:'POST',headers:{'Content-Type':'application/xml','X-Scene-Name':sceneName},body:x})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.status==='ok'){
+        // Store the actual server path for Events Editor viewport
+        if(res.output) _lastX3dUrl = '/static/' + res.output.replace(/^.*static[\/]/,'');
+        if(!silent){
+          document.getElementById('exp-log').innerHTML='<div style="color:var(--accent)">Sent: '+res.output+'</div><div>Select <b>'+res.filename+'</b> in loader, then reload.</div>';
+          toast('Sent: '+res.filename+'. Select in loader.');
+        }
+        // If Events Editor is open, notify it of the new URL
+        if(_lastX3dUrl) {
+          var evFrame = document.getElementById('events-editor-frame');
+          if(evFrame && evFrame.contentWindow) {
+            try { evFrame.contentWindow.postMessage({ type: 'mccf_x3d_ready', url: _lastX3dUrl }, '*'); }
+            catch(e){}
+          }
+        }
+      } else { toast('Error: '+(res.error||'unknown'),true); }
+    })
+    .catch(function(e){toast('Send failed: '+e.message,true);})
+    .finally(function(){if(!silent){btn.textContent='&#9654; Send';btn.disabled=false;}});
 }
-// Day 86: buildX3DString() removed — it was a hand-maintained duplicate
-// of exportX3D()'s scene-generation logic (used only by sendToLauncher,
-// which now delegates straight to exportX3D() instead). See
-// sendToLauncher()'s own comment for why keeping two copies of this in
-// sync was the actual root cause of a real, confirmed bug (Send to
-// Launcher silently regenerating scenes without labels/asset fixes that
-// Export X3D already had).
+function buildX3DString(){
+  var sn=sceneConfig.name,w=sceneConfig.width,d=sceneConfig.depth;
+  var ts=new Date().toISOString().slice(0,19),cx=w/2,cz=d/2;
+  var iS=document.getElementById('exp-sounds').checked,iP=document.getElementById('exp-protos').checked;
+  var iI=document.getElementById('exp-interps').checked,iSc=document.getElementById('exp-script').checked;
+  var lines=[];
+  lines.push(xmlDecl().trim());
+  lines.push('<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">');
+  lines.push('<X3D profile="Immersive" version="4.0">');
+  lines.push('<head><meta name="title" content="'+xe(sn)+'"/></head>');
+  lines.push('<Scene>');
+  lines.push(buildCameraProtoDecls().trim());
+  lines.push(buildLightProtoDecls().trim());
+  lines.push(buildAudioProtoDecls().trim());
+  if(iP){lines.push(buildAP().trim());lines.push(buildZP().trim());}
+  lines.push('<NavigationInfo headlight="true" type=\'"EXAMINE" "ANY"\' transitionType=\'"TELEPORT"\' visibilityLimit="300"/>');
+  lines.push('<Background skyColor="0.06 0.08 0.14" groundColor="0.08 0.10 0.16"/>');
+  // Track 1: Music — scene root, global, spatialize=false
+  // Track 3: Bed  — scene root, global, spatialize=false
+  // Read from DOM directly so Apply Grid is not required
+  var _scSnd = {
+    musicUrl:  document.getElementById('sc-music-url').value || '',
+    musicGain: parseFloat(document.getElementById('sc-music-gain').value) || 0.70,
+    musicLoop: document.getElementById('sc-music-loop').checked,
+    bedUrl:    document.getElementById('sc-bed-url').value || '',
+    bedGain:   parseFloat(document.getElementById('sc-bed-gain').value) || 0.50,
+    bedLoop:   document.getElementById('sc-bed-loop').checked
+  };
+  if(iS && _scSnd.musicUrl){
+    lines.push('<!-- Track 1: Music — X3Dv4 AudioDestination graph -->');
+    lines.push('<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->');
+    lines.push('<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->');
+    lines.push('<AudioDestination DEF="SoundNode_Music" gain="'+_scSnd.musicGain.toFixed(2)+'">');
+    lines.push('  <AudioClip DEF="Clip_Music" containerField="children"');
+    lines.push('             url=\'"'+xe(_scSnd.musicUrl)+'"\'  loop="'+(_scSnd.musicLoop?'true':'false')+'" gain="1.0"');
+    lines.push('             startTime="-1" stopTime="-2"/>');
+    lines.push('</AudioDestination>');
+  }
+  if(iS && _scSnd.bedUrl){
+    lines.push('<!-- Track 3: Bed — X3Dv4 AudioDestination graph -->');
+    lines.push('<!-- startTime=-1 stopTime=-2 guards against AudioDestination auto-fire at scene load. -->');
+    lines.push('<!-- Loader SAI starts this clip on Play button only. (Day 47: Play is performance) -->');
+    lines.push('<AudioDestination DEF="SoundNode_Bed" gain="'+_scSnd.bedGain.toFixed(2)+'">');
+    lines.push('  <AudioClip DEF="Clip_Bed" containerField="children"');
+    lines.push('             url=\'"'+xe(_scSnd.bedUrl)+'"\'  loop="'+(_scSnd.bedLoop?'true':'false')+'" gain="1.0"');
+    lines.push('             startTime="-1" stopTime="-2" enabled="false"/>');
+    lines.push('</AudioDestination>');
+  }
+  lines.push('<Transform translation="'+cx+' 15 '+cz+'"><PointLight intensity="0.80" color="1.0 0.97 0.92" radius="'+(Math.max(w,d)*1.2)+'"/></Transform>');
+  lines.push('<Viewpoint DEF="VP_Overview" description="Overview" position="'+cx+' '+(Math.max(w,d)*0.45)+' '+(cz+Math.max(w,d)*1.1)+'" orientation="1 0 0 -0.38" jump="true"/>');
+  lines.push('<!-- Free camera vessel: Loader writes to CAM_Free_Transform via SAI, never to the Viewpoint directly -->');
+  lines.push('<Transform DEF="CAM_Free_Transform" translation="0 0 0" rotation="0 1 0 0">');
+  lines.push('  <Viewpoint DEF="VP_Free" description="Free Camera" position="0 0 0" orientation="0 1 0 0.0001" jump="true"/>');
+  lines.push('</Transform>');
+  lines.push('<!-- Move shot vessels: Loader writes key/keyValue via SAI at cue-fire time, then starts CAM_Timer -->');
+  lines.push('<!-- ROUTEs are static — set_fraction/value_changed are event fields, not SAI-writable -->');
+  lines.push('<TimeSensor DEF="CAM_Timer" cycleInterval="4" loop="false" enabled="false"/>');
+  lines.push('<PositionInterpolator DEF="CAM_PosInterp" key="0" keyValue="0 0 0"/>');
+  lines.push('<OrientationInterpolator DEF="CAM_OriInterp" key="0" keyValue="0 1 0 0.0001"/>');
+  // Day 83: dedicated fly-transition vessel, kept in sync with exportX3D()'s
+  // copy above — see that copy's own comment for the full reasoning (separate
+  // TimeSensor to avoid dual-source fan-in races, fixed static ease curve
+  // never touched by the Loader, native SLERP via the real 2-keyframe
+  // interpolators).
+  lines.push('<TimeSensor DEF="CAM_FlyTimer" cycleInterval="4" loop="false" enabled="false"/>');
+  lines.push('<ScalarInterpolator DEF="CAM_FlyEase" key="0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1" keyValue="0 0.024472 0.095492 0.206107 0.345492 0.5 0.654508 0.793893 0.904508 0.975528 1"/>');
+  lines.push('<PositionInterpolator DEF="CAM_FlyPosInterp" key="0 1" keyValue="0 0 0 0 0 0"/>');
+  lines.push('<OrientationInterpolator DEF="CAM_FlyOriInterp" key="0 1" keyValue="0 1 0 0.0001 0 1 0 0.0001"/>');
+  // Day 78, V5 Tasklist Phase 2 (bug fix): this sensor was added to exportX3D()
+  // first and tested as if that were the live preview path — it wasn't.
+  // sendToLauncher() (which is what the Events Editor's Refresh button and
+  // "Send to Launcher" both actually call) builds its scene string here, in
+  // buildX3DString(), a separate, parallel implementation of the same scene
+  // that exportX3D() never shares code with. Confirmed the hard way: two
+  // successive "fresh" exports both came back missing this sensor AND
+  // missing exportX3D()'s own long-standing "Generated:" comment / generator
+  // meta tag — neither of which buildX3DString() has ever written, in any
+  // version of this file. Same fix, same reasoning as exportX3D()'s own
+  // comment above (see that one for the full ProximitySensor-vs-Viewpoint
+  // background) — added here too since this is the function actually in the
+  // recorder's real path. Sized identically (1.5x grid footprint/height,
+  // author's own call, Day 78).
+  (function(){
+    var sensorW = w*1.5, sensorD = d*1.5, sensorH = Math.max(w,d)*1.5;
+    lines.push('<ProximitySensor DEF="MCCF_PathRecorderProx" center="'+cx+' '+(sensorH/2)+' '+cz+'" size="'+sensorW+' '+sensorH+' '+sensorD+'" enabled="true"/>');
+  })();
+  Object.values(zones).forEach(function(z){var pos=z.location||z.position||[cx,0,cz];
+    lines.push('<Viewpoint DEF="VP_'+safeId(z.id)+'" description="'+xe(z.name||z.id)+'" position="'+pos[0]+' 3 '+Math.max(0,pos[2]-8)+'" orientation="0 0 0 0" jump="true"/>');});
+  lines.push('<Transform translation="'+cx+' -0.05 '+cz+'"><Shape><Appearance><Material diffuseColor="0.18 0.22 0.30"/></Appearance><Box size="'+w+' 0.08 '+d+'"/></Shape></Transform>');
+  lines.push(buildGrid(w,d).trim());
+  lines.push(buildFreeCamerasX3D().trim());
+  lines.push(buildLightsX3D().trim());
+  lines.push(buildAudioSourcesX3D().trim());
+  Object.values(zones).forEach(function(z){lines.push(buildZX3D(z,iS).trim());});
+  Object.values(placedAgents).forEach(function(a){lines.push(buildAX3D(a).trim());});
+  if(iI&&Object.keys(paths).length>0){Object.values(paths).forEach(function(p){lines.push(buildInterpNodes(p).trim());});}
+  if(iSc)lines.push(buildMS().trim());
+  // ROUTEs absolutely last — VRML/X3D requirement since VRML2.0
+  // Day 53: SoundFader ROUTEs emitted unconditionally (not gated on paths.length>0)
+  var _hasRoutes2=(iS&&Object.keys(zones).length>0)||(iI&&Object.keys(paths).length>0);
+  if(_hasRoutes2){
+    lines.push('<!-- ═══ ROUTEs — must follow all DEF nodes ═══ -->');
+    if(iI&&Object.keys(paths).length>0){
+      Object.values(paths).forEach(function(p){lines.push(buildInterpRoutes(p).trim());});
+    }
+    // SoundFader ROUTEs — all zones have SoundFader (url check is inside Script)
+    if(iS){
+      Object.values(zones).forEach(function(z){
+        var sid=safeId(z.id);
+        lines.push('<ROUTE fromNode="Prox_'+sid+'" fromField="isActive"'
+          +' toNode="SoundFader_'+sid+'" toField="isActive"/>');
+      });
+    }
+  }
+  // Move shot ROUTEs — always emitted (vessels always present)
+  lines.push('<!-- ═══ Move shot ROUTEs — CAM_Timer → interpolators → CAM_Free_Transform ═══ -->');
+  lines.push('<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_PosInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_Timer" fromField="fraction_changed" toNode="CAM_OriInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_PosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>');
+  lines.push('<ROUTE fromNode="CAM_OriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>');
+  // Day 83: fly-transition ROUTEs, kept in sync with exportX3D()'s copy above.
+  lines.push('<!-- ═══ Fly transition ROUTEs — CAM_FlyTimer → CAM_FlyEase → interpolators → CAM_Free_Transform ═══ -->');
+  lines.push('<ROUTE fromNode="CAM_FlyTimer" fromField="fraction_changed" toNode="CAM_FlyEase" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_FlyEase" fromField="value_changed" toNode="CAM_FlyPosInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_FlyEase" fromField="value_changed" toNode="CAM_FlyOriInterp" toField="set_fraction"/>');
+  lines.push('<ROUTE fromNode="CAM_FlyPosInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_translation"/>');
+  lines.push('<ROUTE fromNode="CAM_FlyOriInterp" fromField="value_changed" toNode="CAM_Free_Transform" toField="set_rotation"/>');
+  lines.push(_buildDispatcherRuntimeX3D());
+  lines.push('</Scene>');
+  lines.push('</X3D>');
+  return lines.join('\n');
+}
 function exportZoneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Zone Definitions - '+sn+' - '+ts+' -->\n<ZoneSet id="'+xe(sn)+'" timestamp="'+ts+'">\n';
@@ -6617,7 +5859,7 @@ function exportSceneXML(){
 function _doExportSceneXML(_eventTracks){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
   var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
-  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'" labelsEnabled="'+(sceneConfig.labelsEnabled!==false?'true':'false')+'" dialogueTTYEnabled="'+(sceneConfig.dialogueTTYEnabled!==false?'true':'false')+'">\n';
+  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'">\n';
   // Scene-level sound (Music + Bed) — read from DOM directly, no Apply Grid required
   var snd = {
     musicUrl:  document.getElementById('sc-music-url').value || '',
@@ -6675,14 +5917,14 @@ function _doExportSceneXML(_eventTracks){
   }
   Object.values(placedAgents).forEach(function(a){
     var hSrc = a.hanim_src ? ' hanim_src="'+xe(a.hanim_src)+'"' : '';
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"'+hSrc+'><StartPosition x="'+a.position[0]+'" y="'+(a.position[1]||0)+'" z="'+a.position[2]+'"/></EmotionalArc>\n';
+    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"'+hSrc+'><StartPosition x="'+a.position[0]+'" y="0" z="'+a.position[2]+'"/></EmotionalArc>\n';
   });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
     Object.values(waypoints).forEach(function(wp){
       var pos=wp.position||[0,0,0];
       x+='  <Waypoint name="'+xe(wp.name)+'" label="'+xe(wp.label||'')+'" zone="'+xe(wp.zone||'')+
-        '" pos_x="'+pos[0].toFixed(2)+'" pos_y="'+(pos[1]||0).toFixed(2)+'" pos_z="'+pos[2].toFixed(2)+
+        '" pos_x="'+pos[0].toFixed(2)+'" pos_y="0.00" pos_z="'+pos[2].toFixed(2)+
         '" dwell="'+(wp.dwell||2)+'" pace="'+(wp.pace||1.4)+'"';
       var lines=wp.qaLines||(wp.question?[{type:'Question',speaker:'',text:wp.question}]:[]);
       if(lines.length){
@@ -6755,33 +5997,6 @@ function _doExportSceneXML(_eventTracks){
     });
     x+='</Cameras>\n';
   }
-  // Day 86: real gap, confirmed live — this was never added when Assets
-  // itself was built, so placedAssets had a writer into the geometry
-  // export (buildAssetX3D) but nothing here, in the composer save/load
-  // format. Same "survives Export, vanishes on reload" bug Cameras/Lights
-  // already had and were fixed for above — placement worked, the icon
-  // and toast were real, but the moment the scene reloaded there was
-  // nothing to read placedAssets back from, so it silently emptied.
-  if(Object.keys(placedAssets).length>0){
-    x+='<Assets>\n';
-    Object.values(placedAssets).forEach(function(pa){
-      var apos=pa.position||[0,0,0];
-      x+='  <Asset name="'+xe(pa.name)+'" url="'+xe(pa.url)+'" x="'+apos[0]+'" y="'+(apos[1]||0)+'" z="'+apos[2]+
-        '" rotationY="'+(pa.rotationY||0)+'" scale="'+(pa.scale!==undefined?pa.scale:1)+'" isMovie="'+(pa.isMovie?'true':'false')+'"/>\n';
-    });
-    x+='</Assets>\n';
-  }
-  // Day 88: real, new capability — Background gradient persistence,
-  // same "survives Export, vanishes on reload" concern as everything
-  // else with real data structure (arrays, not just a few scalars).
-  x+='<Background def="'+xe(bgConfig.def||'')+'">\n';
-  bgConfig.sky.forEach(function(s){
-    x+='  <SkyStop r="'+s.color[0]+'" g="'+s.color[1]+'" b="'+s.color[2]+'"'+(s.angle!==undefined?' angle="'+s.angle+'"':'')+'/>\n';
-  });
-  bgConfig.ground.forEach(function(s){
-    x+='  <GroundStop r="'+s.color[0]+'" g="'+s.color[1]+'" b="'+s.color[2]+'"'+(s.angle!==undefined?' angle="'+s.angle+'"':'')+'/>\n';
-  });
-  x+='</Background>\n';
   // Day 82: same counterpart-block pattern as Cameras above — without this,
   // a placed light survives an Export but vanishes on the next Scene
   // reload, same gap Cameras had before Day 79's fix.
@@ -6836,110 +6051,56 @@ function _doExportSceneXML(_eventTracks){
     x += '</Network>\n';
   }
   // ── EventCues block from Events Editor ──────────────────────────────────
-  // Day 85: real bug fix, confirmed by reading both sides directly. This
-  // block used to assume _eventTracks was an array of TRACK objects, each
-  // carrying a nested .cues[] — the OLD Events Editor's shape. The Day-81
-  // Events Editor rewrite (mccf_timeline_prototype.html) produces a FLAT
-  // array of individual cue objects instead — {id,track,target,label,t0,
-  // duration,params} — which is what actually flows through as
-  // _lastTimelineCues.cues and gets passed in here. Since each array
-  // element was really a cue, not a track, `track.cues` was always
-  // undefined and the inner loop silently wrote zero <Cue> elements —
-  // no error, just an empty <EventCues></EventCues> on every export.
-  // Confirmed by the "never tested a file with a real timeline event in
-  // it" gap this was written to close.
-  //
-  // Fixed by writing directly from the flat array using the real field
-  // names the current tool actually produces (t0/duration/target), not
-  // the old, richer t/dur/trigger/agent/shot/subject/... schema that
-  // belonged to a cue system this project no longer authors from.
-  //
-  // Camera cues get their full field set written back in (Day 85, second
-  // pass) — the Loader's real camera-shot system (static/move/orbit/
-  // agent_orbit/agent_track/agent_eye/agent_side/free_camera/named
-  // viewpoint) was never actually removed, just orphaned when the Day-81
-  // rewrite dropped its authoring surface. Field names here match
-  // mccf_timeline_prototype.html's renderCameraCueFields exactly, which
-  // in turn match what mccf_x3d_loader.html's _fireCameraEventCue and its
-  // executors actually read — confirmed against that file directly.
   if (_eventTracks && _eventTracks.length) {
     x += '<EventCues>\n';
-    _eventTracks.forEach(function(cue) {
-      x += '  <Cue track="'+xe(cue.track||'camera')+'" target="'+xe(cue.target||'')+
-           '" label="'+xe(cue.label||'')+'" t0="'+(cue.t0||0)+'" dur="'+(cue.duration||0)+'"';
-      // Day 85 (second pass): the real live Events Editor
-      // (mccf_events_editor_prototype_2.html) stores a gesture cue's
-      // clip name in .label, not a separate .clip field — its "Gesture
-      // (clip)" dropdown writes via setCueProp('label', ...). Falling
-      // back to .label here means clip data from the actual tool in use
-      // now survives export; cue.clip stays checked first for anything
-      // (e.g. a restored cue) that already carries it explicitly.
-      if (cue.track === 'gesture' && (cue.clip || cue.label)) x += ' clip="'+xe(cue.clip || cue.label)+'"';
-      if (cue.track === 'path' && cue.params && cue.params.pathId) {
-        x += ' pathId="'+xe(cue.params.pathId)+'"';
-        // Day 88: real bug fix — this was writing the bare "EC_<id>" name,
-        // matching Movie/Animation's own convention, but the actual DEF
-        // buildRecordedPathInterpNodes() writes for the pre-built timer
-        // is "PathTimer_EC_<id>" (with a real, deliberate prefix — see
-        // that function). Confirmed live: the nodes existed correctly in
-        // the export, this attribute just pointed at the wrong name.
-        x += ' triggerRef="PathTimer_EC_'+safeId(String(cue.id))+'"';
-        if (cue.walkGesture) x += ' walkGesture="'+xe(cue.walkGesture)+'"';
-        // Day 88: the path's own first recorded key, written as plain
-        // numeric attributes — lets the Loader compute "how far is the
-        // target from the path's start" using a simple attribute read,
-        // the same pattern every other numeric cue field already uses,
-        // rather than needing to introspect the pre-built interpolator's
-        // own keyValue array via SAI at runtime (untested API surface in
-        // this codebase — safer to avoid needing it at all).
-        var _rp = recordedPaths[cue.params.pathId];
-        if (_rp && _rp.keys && _rp.keys.length) {
-          var _p0 = _rp.keys[0].position || [0,0,0];
-          x += ' pathStartX="'+_p0[0]+'" pathStartY="'+_p0[1]+'" pathStartZ="'+_p0[2]+'"';
-          // Day 88: real, new capability — same reasoning as pathStartX/Y/Z
-          // above, now for orientation too, so the Loader's ease-in can
-          // turn the target smoothly to face the path's own starting
-          // direction, not just glide there facing the wrong way.
-          if (_rp.keys[0].orientation && _rp.keys[0].orientation.length === 4) {
-            var _o0 = _rp.keys[0].orientation;
-            x += ' pathStartAX="'+_o0[0]+'" pathStartAY="'+_o0[1]+'" pathStartAZ="'+_o0[2]+'" pathStartAngle="'+_o0[3]+'"';
-          }
+    _eventTracks.forEach(function(track) {
+      (track.cues || []).forEach(function(cue) {
+        x += '  <Cue track="'+xe(track.type)+'" trackLabel="'+xe(track.label)+'" label="'+xe(cue.label)+
+             '" t="'+cue.t+'" dur="'+cue.dur+'" trigger="'+xe(cue.trigger||'manual')+'"';
+        if (track.type === 'camera') {
+          // Full camera schema v1.0 (Day 58+)
+          if (cue.shot)       x += ' shot="'+xe(cue.shot)+'"';
+          if (cue.subject)    x += ' subject="'+xe(cue.subject)+'"';
+          if (cue.subject2)   x += ' subject2="'+xe(cue.subject2)+'"';
+          x += ' transition="'+xe(cue.transition||'cut')+'"';
+          if (cue.transition === 'fly' || cue.flyDuration)
+                              x += ' flyDuration="'+(cue.flyDuration||1.5)+'"';
+          if (cue.distance  !== undefined) x += ' distance="'+cue.distance+'"';
+          if (cue.height    !== undefined) x += ' height="'+cue.height+'"';
+          if (cue.hAngle    !== undefined) x += ' hAngle="'+cue.hAngle+'"';
+          if (cue.vAngle    !== undefined) x += ' vAngle="'+cue.vAngle+'"';
+          if (cue.roll)                    x += ' roll="'+cue.roll+'"';
+          if (cue.distanceEnd !== undefined) x += ' distanceEnd="'+cue.distanceEnd+'"';
+          if (cue.heightEnd   !== undefined) x += ' heightEnd="'+cue.heightEnd+'"';
+          if (cue.hAngleEnd   !== undefined) x += ' hAngleEnd="'+cue.hAngleEnd+'"';
+          if (cue.vAngleEnd   !== undefined) x += ' vAngleEnd="'+cue.vAngleEnd+'"';
+          if (cue.arcDepth    !== undefined) x += ' arcDepth="'+cue.arcDepth+'"';   // crane_up only
+          if (cue.trackOffset    !== undefined) x += ' trackOffset="'+cue.trackOffset+'"';       // agent_track only
+          if (cue.trackOffsetEnd !== undefined) x += ' trackOffsetEnd="'+cue.trackOffsetEnd+'"'; // agent_track only
+          if (cue.trackDepth     !== undefined) x += ' trackDepth="'+cue.trackDepth+'"';         // agent_track only
+          // Day 63 fix: this was missing entirely — the Events Editor's standalone debug
+          // XML preview wrote loop=, but this function (the one that produces the scene
+          // XML the Loader actually reads on load) did not, so cue.loop never survived a
+          // save/reload round-trip. Only meaningful for orbit/agent_orbit per spec §3 —
+          // other move shots ignore loop regardless of what's written here.
+          if (cue.loop)                      x += ' loop="true"';
+          x += ' delay="'+(cue.delay||0)+'"';
+          // Legacy viewpoint name — only written when no shot= is present.
+          // Hand-authored cues that have only viewpoint= (pre-Day 58) need this
+          // for the Loader's backward-compat path. When shot= is present the Loader
+          // computes position dynamically from the shot schema; writing viewpoint=
+          // alongside shot= caused the Loader to route to _bindNamedViewpoint instead
+          // of _executeStaticCameraShot. (Day 60 fix — Option B)
+          if (cue.viewpoint && !cue.shot)  x += ' viewpoint="'+xe(cue.viewpoint)+'"';
+          x += ' jump="'+(cue.jump === false ? 'false' : 'true')+'"';
+          if (cue.blend)      x += ' blend="'+xe(cue.blend)+'"';
+        } else if (cue.node) {
+          x += ' node="'+xe(cue.node)+'" intensity="'+(cue.intensity||0.8).toFixed(2)+'"';
+        } else if (cue.agent) {
+          x += ' agent="'+xe(cue.agent)+'" clip="'+xe(cue.clip||'')+'"';
         }
-      }
-      // Day 88: real, new track types. triggerRef is computed purely from
-      // cue.id — the SAME formula exportX3D() uses independently when it
-      // writes the matching <IMPORT> in the geometry file (see that
-      // function's own comment). Neither file depends on the other's
-      // export having already run, or on any particular call order —
-      // same cue.id always produces the same name in both places.
-      if (cue.track === 'movie' || cue.track === 'animation') {
-        if (cue.internalDef) x += ' internalDef="'+xe(cue.internalDef)+'"';
-        x += ' triggerRef="EC_'+safeId(String(cue.id))+'"';
-        if (cue.track === 'movie') x += ' visible="'+(cue.visible!==false?'true':'false')+'"';
-      }
-      if (cue.track === 'camera') {
-        if (cue.shot)        x += ' shot="'+xe(cue.shot)+'"';
-        if (cue.subject)     x += ' subject="'+xe(cue.subject)+'"';
-        if (cue.camera)      x += ' camera="'+xe(cue.camera)+'"';
-        if (cue.viewpoint)   x += ' viewpoint="'+xe(cue.viewpoint)+'"';
-        if (cue.jump === false) x += ' jump="false"';
-        if (cue.transition)  x += ' transition="'+xe(cue.transition)+'"';
-        if (cue.transition === 'fly' && cue.flyDuration !== undefined) x += ' flyDuration="'+cue.flyDuration+'"';
-        if (cue.distance    !== undefined) x += ' distance="'+cue.distance+'"';
-        if (cue.height      !== undefined) x += ' height="'+cue.height+'"';
-        if (cue.hAngle      !== undefined) x += ' hAngle="'+cue.hAngle+'"';
-        if (cue.vAngle      !== undefined) x += ' vAngle="'+cue.vAngle+'"';
-        if (cue.distanceEnd !== undefined) x += ' distanceEnd="'+cue.distanceEnd+'"';
-        if (cue.heightEnd   !== undefined) x += ' heightEnd="'+cue.heightEnd+'"';
-        if (cue.hAngleEnd   !== undefined) x += ' hAngleEnd="'+cue.hAngleEnd+'"';
-        if (cue.vAngleEnd   !== undefined) x += ' vAngleEnd="'+cue.vAngleEnd+'"';
-        if (cue.arcDepth    !== undefined) x += ' arcDepth="'+cue.arcDepth+'"';        // crane_up only
-        if (cue.trackOffset    !== undefined) x += ' trackOffset="'+cue.trackOffset+'"';       // agent_track only
-        if (cue.trackOffsetEnd !== undefined) x += ' trackOffsetEnd="'+cue.trackOffsetEnd+'"'; // agent_track only
-        if (cue.trackDepth     !== undefined) x += ' trackDepth="'+cue.trackDepth+'"';         // agent_track only
-        if (cue.loop) x += ' loop="true"';   // orbit / agent_orbit only, per spec §3
-      }
-      x += '/>' + '\n';
+        x += '/>' + '\n';
+      });
     });
     x += '</EventCues>\n';
   }
@@ -6970,15 +6131,7 @@ function _doExportSceneXML(_eventTracks){
         default:                return 'scene-start'; // never throw during export — degrade, don't block the whole scene save
       }
     }
-    // Day 86: real, separate control from the "Dispatcher runtime" toggle
-    // (see that checkbox's own comment) — this actually gates whether the
-    // Loader fires per-line TTY/dialogue at all, for an author using a
-    // single pre-mixed audio track instead. Defaults to enabled if the
-    // checkbox isn't found (e.g. this function called from a context
-    // without the Export panel in the DOM) so nothing silently breaks.
-    var dlgTtyEl = document.getElementById('exp-dialogue-tty');
-    var dlgTtyEnabled = dlgTtyEl ? dlgTtyEl.checked : true;
-    x += '<Dialogue enabled="'+(dlgTtyEnabled?'true':'false')+'">\n';
+    x += '<Dialogue>\n';
     _lastDialogueLines.forEach(function(l) {
       var attrs = 'id="'+_dlgXe(l.id)+'" actor="'+_dlgXe(l.actor)+'" type="'+_dlgXe(l.type)+
         '" mode="'+_dlgXe(l.mode)+'" blocking="'+(l.blocking?'true':'false')+
@@ -7088,31 +6241,6 @@ function _restoreChorusFromXml(xml) {
   try {
     var doc = new DOMParser().parseFromString(xml, 'text/xml');
 
-    // Day 85: real cross-scene leak, caught while fixing the stale-cache
-    // bug above — _lastTimelineCues (the "Save to Composer" cache) was
-    // never cleared on a genuinely new scene load, so loading a
-    // DIFFERENT scene file after editing cues in a previous one could
-    // have leaked that previous scene's cues into this one via the
-    // "prefer the freshest cache" fix in _sendSceneDataToEventsEditor.
-    //
-    // Day 88: real regression in that fix, confirmed live — this reset
-    // unconditionally on EVERY scene load, including reloading the SAME
-    // scene you're already working on (e.g. to pick up an unrelated
-    // change like a removed waypoint), silently discarding same-session
-    // cue edits that had only ever been "Save to Composer"'d, not yet
-    // written to disk. Confirmed by comparing two files from the same
-    // "reexport all three" round: the geometry export had real cue data
-    // (a working TheMovie IMPORT), the metadata export moments later had
-    // no <EventCues> block at all — proof _lastTimelineCues got wiped
-    // between the two. Now only resets when the loaded scene's own id
-    // genuinely differs from whatever was last tracked — a true "this is
-    // a different scene" signal, not just "a scene got (re)loaded."
-    var _peekSceneEl = doc.querySelector('Scene');
-    var _peekLoadedId = _peekSceneEl ? _peekSceneEl.getAttribute('id') : null;
-    if (_peekLoadedId && sceneConfig.name && _peekLoadedId !== sceneConfig.name) {
-      _lastTimelineCues = null;
-    }
-
     // ── 1. Restore scene name ──────────────────────────────────────────────
     var sceneEl = doc.querySelector('Scene');
     if (sceneEl) {
@@ -7126,22 +6254,6 @@ function _restoreChorusFromXml(xml) {
       var loadedD = parseFloat(sceneEl.getAttribute('depth'));
       if (loadedW > 0) { sceneConfig.width  = loadedW; var wEl = document.getElementById('sc-width');  if(wEl) wEl.value = loadedW; }
       if (loadedD > 0) { sceneConfig.depth  = loadedD; var dEl = document.getElementById('sc-depth');  if(dEl) dEl.value = loadedD; }
-      // Day 86: real fix for a repeated source of confusion during
-      // testing — these were pure DOM checkbox state with nothing to
-      // restore them, so a genuinely-unchecked box would silently revert
-      // to checked on the next page load, and an author had no way to
-      // tell without re-checking every time. hasAttribute()-gated so an
-      // older scene exported before this existed correctly falls through
-      // to each checkbox's own default (both true) rather than reading a
-      // false-y missing attribute as "off".
-      if (sceneEl.hasAttribute('labelsEnabled')) {
-        sceneConfig.labelsEnabled = sceneEl.getAttribute('labelsEnabled') !== 'false';
-        var lblEl = document.getElementById('exp-labels'); if (lblEl) lblEl.checked = sceneConfig.labelsEnabled;
-      }
-      if (sceneEl.hasAttribute('dialogueTTYEnabled')) {
-        sceneConfig.dialogueTTYEnabled = sceneEl.getAttribute('dialogueTTYEnabled') !== 'false';
-        var ttyEl = document.getElementById('exp-dialogue-tty'); if (ttyEl) ttyEl.checked = sceneConfig.dialogueTTYEnabled;
-      }
     }
 
     // ── 2. Restore zones from <Zones><Zone> ────────────────────────────────
@@ -7264,7 +6376,6 @@ function _restoreChorusFromXml(xml) {
       var wpName = wpEl.getAttribute('name');
       if (!wpName) return;
       var px2 = parseFloat(wpEl.getAttribute('pos_x') || '0');
-      var py2 = parseFloat(wpEl.getAttribute('pos_y') || '0');
       var pz2 = parseFloat(wpEl.getAttribute('pos_z') || '0');
       var label   = wpEl.getAttribute('label') || '';
       var zone    = wpEl.getAttribute('zone')  || '';
@@ -7283,7 +6394,7 @@ function _restoreChorusFromXml(xml) {
       waypoints[wpName] = {
         name: wpName, label: label, zone: zone,
         dwell: dwell, pace: pace,
-        position: [px2, py2, pz2],
+        position: [px2, 0, pz2],
         question: firstQ,
         qaLines: qaLines
       };
@@ -7361,53 +6472,6 @@ function _restoreChorusFromXml(xml) {
         jump: cEl.hasAttribute('jump') ? (cEl.getAttribute('jump')!=='false') : true
       };
     });
-
-    // ── 5b-2. Restore independently-placed assets from <Assets><Asset> ─────
-    // Day 86: counterpart to the Assets block added to exportSceneXML above —
-    // without this, a placed asset survived an Export but vanished on the
-    // next Scene reload, same gap Cameras/Lights had before their own fixes.
-    doc.querySelectorAll('Assets > Asset').forEach(function(asEl) {
-      var asName = asEl.getAttribute('name');
-      if (!asName) return;
-      placedAssets[asName] = {
-        name: asName,
-        url: asEl.getAttribute('url') || '',
-        position: [
-          parseFloat(asEl.getAttribute('x') || '0'),
-          parseFloat(asEl.getAttribute('y') || '0'),
-          parseFloat(asEl.getAttribute('z') || '0')
-        ],
-        rotationY: parseFloat(asEl.getAttribute('rotationY') || '0'),
-        scale: asEl.hasAttribute('scale') ? parseFloat(asEl.getAttribute('scale')) : 1,
-        isMovie: asEl.getAttribute('isMovie') === 'true'
-      };
-    });
-
-    // ── 5b-3. Restore Background gradient from <Background><SkyStop>/<GroundStop> ──
-    // Day 88: real, new counterpart-block — same "survives Export,
-    // vanishes on reload" concern as everything else with real structure.
-    var bgEl = doc.querySelector('Background');
-    if (bgEl) {
-      function _readStops(sel) {
-        var stops = [];
-        bgEl.querySelectorAll(sel).forEach(function(sEl) {
-          var stop = { color: [
-            parseFloat(sEl.getAttribute('r') || '0'),
-            parseFloat(sEl.getAttribute('g') || '0'),
-            parseFloat(sEl.getAttribute('b') || '0'),
-          ] };
-          if (sEl.hasAttribute('angle')) stop.angle = parseFloat(sEl.getAttribute('angle'));
-          stops.push(stop);
-        });
-        return stops;
-      }
-      var skyStops = _readStops('SkyStop'), groundStops = _readStops('GroundStop');
-      bgConfig.def = bgEl.getAttribute('def') || '';
-      if (skyStops.length)    bgConfig.sky    = skyStops;
-      if (groundStops.length) bgConfig.ground = groundStops;
-      var defEl = document.getElementById('bg-def'); if (defEl) defEl.value = bgConfig.def;
-      renderBgStops();
-    }
 
     // ── 5c. Restore lights from <Lights><Light> ─────────────────────────────
     // Day 82, same counterpart-block reasoning as 5b.
@@ -7513,7 +6577,6 @@ function _restoreChorusFromXml(xml) {
       var voice = ea.getAttribute('voice') || '';
       var spEl  = ea.querySelector('StartPosition');
       var px3   = spEl ? parseFloat(spEl.getAttribute('x') || '0') : 0;
-      var py3   = spEl ? parseFloat(spEl.getAttribute('y') || '0') : 0;
       var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
       if (!name) return;
       var ag       = agents[name] || {};
@@ -7525,7 +6588,7 @@ function _restoreChorusFromXml(xml) {
         // from /cultivars/xml right here, same as hanim_src/hanim_loa below —
         // it just wasn't being copied across.
         placedAgents[name] = {
-          name: name, position: [px3, py3, pz3],
+          name: name, position: [px3, 0, pz3],
           color:       ag.color       || agentColor(name),
           weights:     ag.weights     || {E:0.25,B:0.25,P:0.25,S:0.25},
           regulation:  ag.regulation  || 0.7,
@@ -7542,7 +6605,7 @@ function _restoreChorusFromXml(xml) {
         if (xmlHanim) { placedAgents[name].hanim_src = xmlHanim; camRigFetchManifest(xmlHanim); }
         if (voice)    placedAgents[name].voice      = voice;
         // Also patch position from XML — server may return a stale start position
-        if (px3 || py3 || pz3) placedAgents[name].position = [px3, py3, pz3];
+        if (px3 || pz3) placedAgents[name].position = [px3, 0, pz3];
         // Day 83: same behavior_clips bug/fix as path (a) above — the server
         // path that pre-populates this placedAgents entry doesn't necessarily
         // carry behavior_clips either. Guarded (only fills in if genuinely
@@ -7555,94 +6618,65 @@ function _restoreChorusFromXml(xml) {
     });
 
     // ── 8. Restore EventCues → send to Events Editor iframe ─────────────
-    // Day 85: rewritten alongside the export-side fix. Previously rebuilt
-    // a track-grouped {type,label,cues:[]} structure from XML, matching
-    // the OLD Events Editor's shape. The current Events Editor (Day 81+)
-    // works on one FLAT array of cue objects — {id,track,target,label,
-    // t0,duration,params} — so restoring into the grouped shape would
-    // have handed it something it can't read even once the export side
-    // produces real <Cue> elements. Parses the same new attribute names
-    // the writer above now emits (t0/dur/target/clip/pathId).
     var evCuesEl = doc.querySelector('EventCues');
     if (evCuesEl) {
-      var _cueSeq = 0;
-      var restoredCues = [];
+      // Rebuild _tracks structure from XML preserving named tracks via trackLabel attr.
+      // Each <Cue trackLabel="Camera"> groups into a named track; cues without trackLabel
+      // fall back to a single track per type (legacy XML compat).
+      var trackOrder = [];   // insertion-ordered track keys
+      var trackMap   = {};   // key → {type, label, cues[]}
       evCuesEl.querySelectorAll('Cue').forEach(function(cEl) {
+        var trackType  = cEl.getAttribute('track')      || 'camera';
+        var trackLabel = cEl.getAttribute('trackLabel') || (trackType.charAt(0).toUpperCase()+trackType.slice(1));
+        var key        = trackType + '::' + trackLabel;  // unique per named track
+        if (!trackMap[key]) {
+          trackMap[key] = { type: trackType, label: trackLabel, cues: [] };
+          trackOrder.push(key);
+        }
         function ga(a) { return cEl.getAttribute(a); }
-        function gf(a, def) { var v = parseFloat(ga(a)); return isNaN(v) ? (def !== undefined ? def : 0) : v; }
-        _cueSeq++;
+        function gf(a)  { var v=parseFloat(ga(a)); return isNaN(v)?undefined:v; }
+        var trackType2 = ga('track') || 'camera';
         var cue = {
-          id:       'cue_restored_' + _cueSeq,
-          track:    ga('track') || 'camera',
-          target:   ga('target') || '',
-          label:    ga('label') || '',
-          t0:       gf('t0', 0),
-          duration: gf('dur', 2),
-          params:   {},
+          label:     ga('label')   || 'cue',
+          t:         gf('t')       !== undefined ? gf('t')   : 0,
+          dur:       gf('dur')     !== undefined ? gf('dur') : 4,
+          trigger:   ga('trigger') || 'manual',
+          // Camera schema v1.0 (Day 58+)
+          shot:        ga('shot')       || undefined,
+          subject:     ga('subject')    || undefined,
+          subject2:    ga('subject2')   || undefined,
+          transition:  ga('transition') || undefined,
+          flyDuration: gf('flyDuration'),
+          distance:    gf('distance'),
+          height:      gf('height'),
+          hAngle:      gf('hAngle'),
+          vAngle:      gf('vAngle'),
+          roll:        gf('roll'),
+          distanceEnd: gf('distanceEnd'),
+          heightEnd:   gf('heightEnd'),
+          hAngleEnd:   gf('hAngleEnd'),
+          vAngleEnd:   gf('vAngleEnd'),
+          arcDepth:    gf('arcDepth'),   // crane_up only
+          trackOffset:    gf('trackOffset'),     // agent_track only
+          trackOffsetEnd: gf('trackOffsetEnd'),  // agent_track only
+          trackDepth:     gf('trackDepth'),      // agent_track only
+          loop:        ga('loop') === 'true' ? true : undefined,   // Day 63 fix — same gap as the export side above
+          delay:       gf('delay'),
+          // Legacy / other track fields
+          viewpoint: ga('viewpoint') || undefined,
+          jump:      ga('jump') === 'false' ? false : (ga('jump') ? true : undefined),
+          blend:     ga('blend')     || undefined,
+          node:      ga('node')      || undefined,
+          intensity: gf('intensity'),
+          agent:     ga('agent')     || undefined,
+          clip:      ga('clip')      || undefined
         };
-        if (cue.track === 'gesture' && ga('clip')) cue.clip = ga('clip');
-        if (cue.track === 'path' && ga('pathId')) {
-          cue.params.pathId = ga('pathId');
-          if (ga('walkGesture')) cue.walkGesture = ga('walkGesture');
-        }
-        if (cue.track === 'movie' || cue.track === 'animation') {
-          // Day 88: triggerRef intentionally NOT restored here — it's
-          // recomputed fresh from cue.id by both export writers every
-          // time (see their own comments), never read back in. Only the
-          // author-facing fields need to survive a reload.
-          if (ga('internalDef')) cue.internalDef = ga('internalDef');
-          if (cue.track === 'movie') cue.visible = ga('visible') !== 'false';
-        }
-        if (cue.track === 'camera') {
-          // Day 85: full camera field round-trip, matching exactly what
-          // the writer above now emits and what
-          // mccf_timeline_prototype.html's renderCameraCueFields expects
-          // back on its own _selCue objects.
-          if (ga('shot'))       cue.shot       = ga('shot');
-          if (ga('subject'))    cue.subject    = ga('subject');
-          if (ga('camera'))     cue.camera     = ga('camera');
-          if (ga('viewpoint'))  cue.viewpoint  = ga('viewpoint');
-          if (ga('jump') === 'false') cue.jump = false;
-          if (ga('transition')) cue.transition = ga('transition');
-          if (ga('flyDuration') !== null) cue.flyDuration = gf('flyDuration');
-          if (ga('distance')    !== null) cue.distance    = gf('distance');
-          if (ga('height')      !== null) cue.height      = gf('height');
-          if (ga('hAngle')      !== null) cue.hAngle      = gf('hAngle');
-          if (ga('vAngle')      !== null) cue.vAngle      = gf('vAngle');
-          if (ga('distanceEnd') !== null) cue.distanceEnd = gf('distanceEnd');
-          if (ga('heightEnd')   !== null) cue.heightEnd   = gf('heightEnd');
-          if (ga('hAngleEnd')   !== null) cue.hAngleEnd   = gf('hAngleEnd');
-          if (ga('vAngleEnd')   !== null) cue.vAngleEnd   = gf('vAngleEnd');
-          if (ga('arcDepth')        !== null) cue.arcDepth        = gf('arcDepth');
-          if (ga('trackOffset')     !== null) cue.trackOffset     = gf('trackOffset');
-          if (ga('trackOffsetEnd')  !== null) cue.trackOffsetEnd  = gf('trackOffsetEnd');
-          if (ga('trackDepth')      !== null) cue.trackDepth      = gf('trackDepth');
-          if (ga('loop') === 'true') cue.loop = true;
-        }
-        restoredCues.push(cue);
+        Object.keys(cue).forEach(function(k){ if(cue[k]===undefined) delete cue[k]; });
+        trackMap[key].cues.push(cue);
       });
-      _lastRestoredTracks = restoredCues;  // Day 77: cached for re-send whenever Events tab opens — now holds a flat cue array, not grouped tracks (see var declaration comment)
-      // Real gap, confirmed live: restoring cues on scene load only ever
-      // populated _lastRestoredTracks (for re-sending to the Events Editor
-      // iframe whenever that tab opens) and pushed them into the iframe via
-      // postMessage -- it never touched _lastTimelineCues, the ONLY source
-      // exportSceneXML()/_doExportSceneXML() actually read from. _lastTimelineCues
-      // is otherwise set exclusively by the mccf_production_cues listener,
-      // i.e. only after the Events Editor tab has been opened AND has sent
-      // a "Save to Composer" round-trip in THIS session. Load a scene, never
-      // visit the Events tab, then Export -- and _lastTimelineCues is still
-      // null/stale, so _doExportSceneXML gets called with [] and silently
-      // writes no <EventCues> block at all: no error, no warning, nothing.
-      // Confirmed exactly this shape against a real export missing all 9
-      // cues (including the one "path" cue steering an agent's walk) after
-      // a same-session scene reload with the Events tab never opened.
-      // Fixed by populating _lastTimelineCues directly from the restore
-      // path too, so export has real data regardless of which tabs were
-      // visited this session -- mirrors how _lastDialogueLines is set
-      // directly on the Dialogue restore path below, not only via its own
-      // editor's save round-trip.
-      _lastTimelineCues = { cues: restoredCues };
-      if (restoredCues.length) _sendCuesToEventsEditor(restoredCues);
+      var restoredTracks = trackOrder.map(function(k){ return trackMap[k]; });
+      _lastRestoredTracks = restoredTracks;  // Day 77: cached for re-send whenever Events tab opens
+      if (restoredTracks.length) _sendCuesToEventsEditor(restoredTracks);
     }
 
     // ── 8b. Restore Dialogue → send to Dialogue Editor iframe (Day 83) ─────

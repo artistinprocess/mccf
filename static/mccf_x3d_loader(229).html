@@ -964,7 +964,12 @@ function selectBehaviorClip(agentSafeName, cv) {
 
 function applyBehaviorClip(agentSafeName, clip) {
   var timerMap = _behaviorTimerMap[agentSafeName];
-  if (!timerMap) return;
+  if (!timerMap) {
+    console.warn('applyBehaviorClip: no timerMap for', agentSafeName,
+                 '— behavior timers never resolved (check pbActivateX3DTimers logs for this agent; likely the exported scene is missing <IMPORT ... AS="' +
+                 (clip && clip.timerDEF) + '_' + agentSafeName + '"/> or it hasn\'t resolved yet).');
+    return false;
+  }
 
   // Disable all other behavior timers
   // MECHANISM (confirmed Day 25): enabled=true/false is the correct SAI path.
@@ -978,15 +983,16 @@ function applyBehaviorClip(agentSafeName, clip) {
   // Enable the selected clip
   var targetNode = timerMap[clip.timerDEF];
   if (!targetNode) {
-    console.warn('applyBehaviorClip: timer not found:', clip.timerDEF, agentSafeName);
-    return;
+    console.warn('applyBehaviorClip: timer not found:', clip.timerDEF, agentSafeName,
+                 '— timerMap has:', Object.keys(timerMap).join(', ') || '(empty)');
+    return false;
   }
 
   try {
     targetNode.enabled = true;
   } catch(e) {
     console.warn('applyBehaviorClip: SAI write failed for', agentSafeName, clip.timerDEF, e);
-    return;
+    return false;
   }
 
   var previous = _agentCurrentClip[agentSafeName] || '(none)';
@@ -1015,6 +1021,7 @@ function applyBehaviorClip(agentSafeName, clip) {
       if (returnClip) applyBehaviorClip(agentSafeName, returnClip);
     }, duration + 150);
   }
+  return true;
 }
 
 // ─────────────────────────────────────────────
@@ -2105,7 +2112,17 @@ function _parseEventCues(doc) {
       // it happens to read.
       dur:      gf('dur', 2),
       clip:     ga('clip')   || null,     // gesture cues only
-      pathId:   ga('pathId') || null,     // path cues only
+      pathId:      ga('pathId') || null,     // path cues only
+      walkGesture: ga('walkGesture') || null, // path cues only, optional
+      pathStart: (ga('pathStartX') !== null) ? [gf('pathStartX',0), gf('pathStartY',0), gf('pathStartZ',0)] : null,
+      pathStartOrient: (ga('pathStartAngle') !== null) ? [gf('pathStartAX',0), gf('pathStartAY',1), gf('pathStartAZ',0), gf('pathStartAngle',0)] : null,
+      // Day 88: real, new track types. triggerRef is the exact node name
+      // to look up via getImportedNode() — computed by Composer, not
+      // recomputed here, so this parser doesn't need to know the naming
+      // formula at all, just read what's given.
+      internalDef: ga('internalDef') || null,
+      triggerRef:  ga('triggerRef')  || null,
+      visible:     ga('visible') === 'false' ? false : true,  // movie cues only; defaults true (matches the form's own default)
     };
     if (cue.track === 'camera') {
       // Day 85: full camera field parse, matching exactly what the
@@ -2471,8 +2488,12 @@ function _dispatchCue(cue, firedVia) {
     case 'light':    _fireLightEventCue(cue);    break;
     case 'fog':      _fireFogEventCue(cue);      break;
     case 'bg':       _fireBgEventCue(cue);       break;
-    case 'gesture':  _fireGestureEventCue(cue);  break;
-    case 'behavior': _fireBehaviorEventCue(cue); break;
+    case 'gesture':   _fireGestureEventCue(cue);   break;
+    case 'behavior':  _fireBehaviorEventCue(cue);  break;
+    case 'movie':     _fireMovieVisibilityEventCue(cue); break;
+    case 'animation': _fireAnimationEventCue(cue); break;
+    case 'path':      _firePathEventCue(cue); break;
+    case 'turn':      _fireTurnEventCue(cue); break;
     default: console.warn('[EventCues] unknown track:', cue.track);
   }
 }
@@ -2806,6 +2827,38 @@ function _lookAtOrientation(camPos, targetPos, vAngleDeg) {
 function _resolveSubjectPos(subjectName) {
   if (!subjectName) return null;
   var safeName = subjectName.replace(/[^A-Za-z0-9_]/g, '_');
+
+  // ── Path 0: live X3D transform ────────────────────────────────────────
+  // Real bug fix: every path below (1-5) is backend waypoint/arc-step
+  // bookkeeping — none of them ever read the avatar's actual live
+  // Transform. That was fine while every agent moved exclusively via the
+  // waypoint/arc stepping system (each step genuinely fires a fresh
+  // "WP arrival" that keeps _agentCurrentStep current), but a
+  // RecordedPath-driven walk (the "path" EventCue) never fires those
+  // arrivals at all -- confirmed live: _agentCurrentStep['Anna'] gets set
+  // once, at the one-time initial "Begin arrive", and then never updates
+  // again for the rest of the run, however far the RecordedPath actually
+  // walks them. Every later camera cue computed its subject position from
+  // that single frozen starting coordinate -- explaining exactly why the
+  // camera kept framing near the start of the walk (in this scene's case,
+  // near the Island/lake) regardless of where Anna herself had actually
+  // arrived, while Anna's own position (driven independently by the
+  // RecordedPath's own interpolators via ROUTE) was always correct. The
+  // live Transform is authoritative for ANY locomotion mechanism, so it's
+  // tried first now; the existing paths remain as fallbacks for whatever
+  // this read can't handle (asset targets with no Avatar_ node, a subject
+  // not yet placed in the scene, etc).
+  try {
+    var _liveNode = canvas.browser.currentScene.getNamedNode('Avatar_' + safeName);
+    if (_liveNode) {
+      var _liveT = _liveNode.translation;
+      if (_liveT && typeof _liveT.x === 'number' && typeof _liveT.y === 'number' && typeof _liveT.z === 'number') {
+        var lpos = [_liveT.x, _liveT.y, _liveT.z];
+        console.log('[EventCues] _resolveSubjectPos «' + subjectName + '» → PATH 0 (live transform)', lpos);
+        return lpos;
+      }
+    }
+  } catch (eLive) { /* fall through to the bookkeeping-based paths below */ }
 
   // ── Path 1: runtime arrived position via _agentCurrentStep ──────────────
   // Preferred path: use the step number that was recorded when this cultivar
@@ -3679,24 +3732,409 @@ function _fireBehaviorEventCue(cue) {
 // oneshot-vs-loop handling and correct return-to-idle timing, not a bare
 // enable/disable toggle — given the actual resolved clip object from
 // _agentBehaviorClips[safeName].clips, not a bare string name.
-function _fireGestureEventCue(cue) {
+// Day 88: real, new capability — resolves triggerRef (an <IMPORT>-exposed
+// name, computed by Composer purely from cue.id — see the writer's own
+// comment) via getImportedNode() first, same proven pattern as every
+// other IMPORT-based lookup in this file, with a retry loop matching the
+// one already proven necessary for the movie's own start trigger (an
+// Inline'd asset isn't guaranteed to have finished loading the instant a
+// cue's t0 arrives). Shared by both new track types below.
+function _resolveEventCueTriggerNode(triggerRef, attempt, onFound, onGiveUp) {
+  attempt = attempt || 1;
+  var node;
+  try {
+    var scene = canvas.browser.currentScene;
+    try { node = scene.getImportedNode(triggerRef); } catch(ie) {}
+    if (!node) { try { node = scene.getNamedNode(triggerRef); } catch(ne) {} }
+  } catch(e) {}
+  if (node) { onFound(node, attempt); return; }
+  if (attempt < 10) {
+    setTimeout(function() { _resolveEventCueTriggerNode(triggerRef, attempt + 1, onFound, onGiveUp); }, 200);
+  } else if (onGiveUp) {
+    onGiveUp();
+  }
+}
+
+function _fireMovieVisibilityEventCue(cue) {
+  if (!cue.triggerRef || !cue.internalDef) {
+    console.warn('[EventCues] movie: cue missing internalDef (no Shape name authored) — nothing to fire:', cue);
+    return;
+  }
+  _resolveEventCueTriggerNode(cue.triggerRef, 1,
+    function(node, attempt) {
+      try {
+        node.visible = cue.visible;
+        console.log('[EventCues] movie: ' + cue.internalDef + ' visible=' + cue.visible,
+                    attempt > 1 ? '(attempt ' + attempt + ')' : '');
+      } catch(e) {
+        console.warn('[EventCues] movie: found ' + cue.triggerRef + ' but it has no visible field (not a Shape?):', e.message);
+      }
+    },
+    function() {
+      console.warn('[EventCues] movie: ' + cue.triggerRef + ' not found after retries — check the asset has a real <EXPORT localDEF="' + cue.internalDef + '" AS="' + cue.internalDef + '"/> statement in its own file');
+    }
+  );
+}
+
+// Turn cue — one-shot Y-axis rotation, routed to any placed agent or static
+// asset. Same fetch-and-mutate pattern as the path ease-in and camera fly:
+// TurnTimer/TurnInterp are baked once per cue at export time
+// (buildTurnCueNodes/buildTurnCueRoutes, mccf_scene_composer.html); nothing
+// is created dynamically here.
+function _fireTurnEventCue(cue) {
+  if (!cue.triggerRef || !cue.target) {
+    console.warn('[EventCues] turn: cue missing triggerRef or target — nothing to fire:', cue);
+    return;
+  }
+  _resolveEventCueTriggerNode(cue.triggerRef, 1,
+    function(turnTimer, attempt) {
+      try {
+        var scene = canvas.browser.currentScene;
+        var safeTarget = cue.target.replace(/[^A-Za-z0-9_]/g, '_');
+        var targetNode = null;
+        try { targetNode = scene.getNamedNode('Avatar_' + safeTarget); } catch(e1) {}
+        if (!targetNode) { try { targetNode = scene.getNamedNode('PlacedAsset_' + safeTarget); } catch(e2) {} }
+        if (!targetNode) {
+          console.warn('[EventCues] turn: target "' + cue.target + '" not found as Avatar_' + safeTarget +
+            ' or PlacedAsset_' + safeTarget + ' — nothing to rotate');
+          return;
+        }
+        var interpName = 'TurnInterp_' + cue.triggerRef.replace(/^TurnTimer_/, '');
+        var turnInterp = null;
+        try { turnInterp = scene.getNamedNode(interpName); } catch(eI) {}
+        if (!turnInterp) {
+          console.warn('[EventCues] turn: ' + interpName + ' not found — scene needs a fresh Export X3D to pick up the turn cue nodes');
+          return;
+        }
+        // Read the target's current Y-axis angle defensively — same
+        // reasoning as the path ease-in's rotation read: real, genuine
+        // uncertainty about SFRotation's exact read-back shape in this
+        // codebase, confirmed only for writes, not reads. A turn only
+        // means anything as a pure Y-axis rotation; if the current
+        // rotation's axis isn't recognizably (0,1,0) (or the identity/
+        // zero-angle axis X3D uses for "no rotation yet"), starting angle
+        // defaults to 0 rather than guessing at unsupported axis math —
+        // with a warning, so this is visible rather than silently wrong.
+        var curAngle = 0;
+        try {
+          var curRot = targetNode.rotation;
+          if (curRot && typeof curRot.angle === 'number') {
+            var ax = curRot.x, ay = curRot.y, az = curRot.z;
+            var isYAxis = (Math.abs(ax) < 1e-4 && Math.abs(az) < 1e-4 &&
+                           (Math.abs(ay - 1) < 1e-4 || Math.abs(ay) < 1e-4));
+            if (isYAxis) {
+              curAngle = (Math.abs(ay) < 1e-4) ? 0 : curRot.angle;
+            } else {
+              console.warn('[EventCues] turn: ' + cue.target + '\'s current rotation axis isn\'t (0,1,0) — (' +
+                ax + ',' + ay + ',' + az + '). Starting the turn from angle 0 rather than guessing; the turn ' +
+                'itself will still apply correctly, just not layered on top of whatever non-Y rotation is ' +
+                'already there.');
+            }
+          }
+        } catch (eR) { /* default curAngle=0 already set */ }
+
+        // Sign convention confirmed by direct author testing: positive
+        // degrees = turn right, negative degrees = turn left. (X3D's own
+        // right-hand-rule convention around +Y, viewed from above, would
+        // suggest the opposite for a "forward = -Z" rig — negated here to
+        // match the confirmed, tested result rather than that untested
+        // assumption.) invert remains available in case a different
+        // avatar's rig convention ever needs the opposite of this.
+        var deltaRad = -(cue.degrees || 0) * Math.PI / 180;
+        if (cue.invert) deltaRad = -deltaRad;
+        var endAngle = curAngle + deltaRad;
+
+        turnInterp.key.length = 0; turnInterp.keyValue.length = 0;
+        turnInterp.key[0] = 0; turnInterp.keyValue[0] = new X3D.SFRotation(0, 1, 0, curAngle);
+        turnInterp.key[1] = 1; turnInterp.keyValue[1] = new X3D.SFRotation(0, 1, 0, endAngle);
+
+        var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+          ? canvas.browser.currentTime : (performance.now() / 1000);
+        turnTimer.stopTime  = tNow - 0.01;
+        turnTimer.startTime = tNow + 0.05;
+        console.log('[EventCues] turn: ' + cue.target + ' — ' + (cue.degrees||0) + '\u00b0 over ' +
+          (cue.duration||2) + 's' + (cue.invert ? ' (inverted)' : '') + ', from ' +
+          (curAngle*180/Math.PI).toFixed(1) + '\u00b0 to ' + (endAngle*180/Math.PI).toFixed(1) + '\u00b0',
+          attempt > 1 ? '(attempt ' + attempt + ')' : '');
+      } catch (e) {
+        console.warn('[EventCues] turn: failed to fire (' + e.message + ')');
+      }
+    },
+    function() {
+      console.warn('[EventCues] turn: ' + cue.triggerRef + ' not found after retries — scene needs a fresh Export X3D to pick up the turn cue nodes');
+    }
+  );
+}
+
+function _fireAnimationEventCue(cue) {
+  if (!cue.triggerRef || !cue.internalDef) {
+    console.warn('[EventCues] animation: cue missing internalDef (no TimeSensor name authored) — nothing to fire:', cue);
+    return;
+  }
+  _resolveEventCueTriggerNode(cue.triggerRef, 1,
+    function(node, attempt) {
+      try {
+        var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+          ? canvas.browser.currentTime : (performance.now() / 1000);
+        node.stopTime  = tNow - 0.01;
+        node.startTime = tNow + 0.05;
+        console.log('[EventCues] animation: ' + cue.internalDef + ' started at t=' + tNow.toFixed(2),
+                    attempt > 1 ? '(attempt ' + attempt + ')' : '');
+      } catch(e) {
+        console.warn('[EventCues] animation: found ' + cue.triggerRef + ' but it has no startTime field (not a TimeSensor?):', e.message);
+      }
+    },
+    function() {
+      console.warn('[EventCues] animation: ' + cue.triggerRef + ' not found after retries — check the asset has a real <EXPORT localDEF="' + cue.internalDef + '" AS="' + cue.internalDef + '"/> statement in its own file');
+    }
+  );
+}
+
+// Day 88: real, new capability — recorded-path playback with a smooth
+// ease-in from wherever the target actually is, never an instant jump.
+// This is the one genuinely novel piece this session: everything else
+// wrote to EXISTING nodes' fields; this has to CONSTRUCT a short
+// transition at fire-time, since the target's current position isn't
+// knowable until the cue actually fires. Rather than bet on an unverified
+// JS-property convention for setting a freshly-created interpolator's
+// multi-value key/keyValue fields, this builds a small, self-contained
+// X3D XML string — the exact syntax already proven correct dozens of
+// times today — and parses it into the live scene, matching the
+// documented X3DExecutionContext SAI service. addRoute() (confirmed real
+// via X_ITE's own GitHub examples) wires the two pieces this snippet
+// can't reference on its own: the target's Transform (lives outside the
+// snippet, in the main scene) and the pre-built main path timer.
+function _firePathEventCue(cue) {
+  if (!cue.target || !cue.pathId || !cue.triggerRef) {
+    console.warn('[EventCues] path: cue missing target/pathId — nothing to fire:', cue);
+    return;
+  }
+  if (cue.walkGesture) {
+    // Reuses the exact same, already-proven gesture-firing logic — a
+    // synthetic cue object is all _fireGestureEventCue actually needs.
+    _fireGestureEventCue({ target: cue.target, clip: cue.walkGesture });
+  }
+  _resolveEventCueTriggerNode(cue.triggerRef, 1,
+    function(mainTimer) {
+      var scene = canvas.browser.currentScene;
+      var safeTarget = cue.target.replace(/[^A-Za-z0-9_]/g, '_');
+      var targetNode = null;
+      try { targetNode = scene.getNamedNode('Avatar_' + safeTarget); } catch(e) {}
+      if (!targetNode) { try { targetNode = scene.getNamedNode('PlacedAsset_' + safeTarget); } catch(e2) {} }
+      // Real bug fix: pbPushPosition (and several sibling functions —
+      // the broadcast-position write, pbJump, TTS-delay timing) already
+      // have a guard for exactly this class of conflict —
+      // `if (_x3dTimerActive[nodeName]) return;` — "if an X3D TimeSensor
+      // is driving this avatar, don't also write its position from JS."
+      // That guard has only ever been set by the OLD arc/waypoint
+      // Timer_{agent}_N system (pbActivateX3DTimers). A RecordedPath-driven
+      // agent never sets it, so every one of those guards silently never
+      // fires for an agent like this — confirmed live: pbPushPosition
+      // pushed Avatar_Anna straight to a waypoint file's "Begin"/"Sit"
+      // coordinates (both landing at/near the Island/lake zone) while the
+      // path's own continuous position control was simultaneously active,
+      // fighting over her Transform. Setting the SAME existing flag here
+      // makes all of those already-correct guards recognize a
+      // RecordedPath-driven agent too, rather than adding a new,
+      // narrower, one-off check just for this function. Cleared
+      // automatically wherever _x3dTimerActive already gets wholesale
+      // reset (pbReset, pbPlayAll's generation bump, pbStopX3DTimers) —
+      // no separate cleanup needed.
+      if (targetNode) {
+        _x3dTimerActive['Avatar_' + safeTarget] = true;
+        // Closes a real timing gap in the fix above: the flag only stops
+        // FUTURE pbPushPosition calls from starting a write. A waypoint
+        // "arrive" trigger firing before this cue's t0 (very common — the
+        // very first waypoint arrival typically fires near t=0, while a
+        // path cue often has its own t0 a second or so later) can already
+        // have a JS lerp (setInterval-driven, running for pace seconds —
+        // default 3s) actively in flight by the time this line runs. The
+        // flag alone doesn't stop an already-running interval; it has to
+        // be cancelled directly. Same cancellation pbPushPosition already
+        // does to itself when starting a new lerp — reused here so a path
+        // cue reliably wins over a lerp that's already mid-flight instead
+        // of the two fighting over the same Transform for the next couple
+        // of seconds.
+        if (_lerpActive[safeTarget]) {
+          clearInterval(_lerpActive[safeTarget].timer);
+          delete _lerpActive[safeTarget];
+        }
+      }
+      var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+        ? canvas.browser.currentTime : (performance.now() / 1000);
+      function startMainDirectly(why) {
+        mainTimer.stopTime  = tNow - 0.01;
+        mainTimer.startTime = tNow + 0.05;
+        console.log('[EventCues] path: ' + cue.target + ' — main path timer started directly (' + why + ')');
+      }
+      if (!targetNode || !cue.pathStart) {
+        startMainDirectly(!targetNode ? 'target node not found' : 'no pathStart recorded');
+        return;
+      }
+      var cur;
+      try { cur = targetNode.translation; } catch(e3) { cur = null; }
+      // Defensive: if the read-back shape isn't what's expected (real,
+      // remaining uncertainty about SFVec3f's exact property names on a
+      // read, vs. the constructor pattern confirmed for writes), fail
+      // safely to the instant-start fallback rather than risk computing
+      // NaN distances and silently building a broken ease-in.
+      if (cur && (typeof cur.x !== 'number' || typeof cur.y !== 'number' || typeof cur.z !== 'number')) {
+        console.warn('[EventCues] path: read back translation in an unexpected shape', cur, '— treating as unreadable');
+        cur = null;
+      }
+      var dx = cur ? (cue.pathStart[0]-cur.x) : 999, dy = cur ? (cue.pathStart[1]-cur.y) : 0, dz = cur ? (cue.pathStart[2]-cur.z) : 999;
+      var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (!cur || dist < 0.3) {
+        startMainDirectly(cur ? ('already at path start, dist=' + dist.toFixed(2)) : 'could not read current position');
+        return;
+      }
+      // Ease-in: fixed, reasonable duration rather than distance-scaled —
+      // simple, predictable, easy to reason about while this is new.
+      var easeDur = 1.5;
+      var cueSafe = cue.triggerRef.replace(/[^A-Za-z0-9_]/g, '_');
+      // Day 88: real, new capability — rotation ease, sharing the exact
+      // same EaseTimer as position (one clock, paired interpolators,
+      // same architecture as the main path playback itself). Read
+      // defensively, same reasoning as the translation read above —
+      // genuine, real uncertainty about SFRotation's exact read-back
+      // shape, not yet proven in this codebase the way writes are
+      // (confirmed via X_ITE's own examples). If anything about this
+      // looks wrong, orientation easing is just skipped — the target
+      // still gets the correct facing the instant the main path timer's
+      // own OrientationInterpolator takes over, it just won't have eased
+      // into it smoothly. Position easing is unaffected either way.
+      var curRot = null;
+      if (cue.pathStartOrient) {
+        try { curRot = targetNode.rotation; } catch(eR) { curRot = null; }
+        if (curRot && (typeof curRot.x !== 'number' || typeof curRot.y !== 'number' || typeof curRot.z !== 'number' || typeof curRot.angle !== 'number')) {
+          console.warn('[EventCues] path: read back rotation in an unexpected shape', curRot, '— skipping rotation ease, position ease unaffected');
+          curRot = null;
+        }
+      }
+      // Real fix, two bugs deep: this used to dynamically build a fresh
+      // TimeSensor/Interpolator via scene.createX3DFromString() on every
+      // single fire. That was broken on two separate counts, confirmed
+      // live: (1) createX3DFromString belongs to Browser, not X3DScene —
+      // "scene.createX3DFromString is not a function" fired on literally
+      // every attempt, so ease-in has never actually run; every path cue
+      // has always silently fallen back to an instant jump. (2) an earlier
+      // same-day fix to reuse nodes across Plays used bulk array assignment
+      // on the interpolator's keyValue field (`interp.keyValue = [...]`) —
+      // also unsupported by X_ITE's SAI, which only accepts indexed
+      // assignment (confirmed against X_ITE's own README, see
+      // _flyCameraTo's identical situation and fix above). Properly fixed
+      // by following this project's own already-proven pattern for exactly
+      // this problem: Composer now bakes reusable PathEaseTimer/
+      // PathEaseInterp/PathEaseOrient nodes (and their routes) into the
+      // compiled scene once per path cue, at export time, next to that
+      // cue's main path nodes — same relationship CAM_FlyTimer/
+      // CAM_FlyPosInterp/CAM_FlyOriInterp have to _flyCameraTo. Nothing
+      // is created at runtime here anymore; this just fetches the
+      // pre-baked nodes and mutates their fields with the confirmed
+      // indexed-assignment pattern, exactly like _flyCameraTo does.
+      var easeTimer, easeInterp, easeOrient = null;
+      try {
+        easeTimer  = scene.getNamedNode('PathEaseTimer_' + cueSafe);
+        easeInterp = scene.getNamedNode('PathEaseInterp_' + cueSafe);
+        if (curRot) { try { easeOrient = scene.getNamedNode('PathEaseOrient_' + cueSafe); } catch(eo) { easeOrient = null; } }
+      } catch(eLookup) {
+        console.warn('[EventCues] path: PathEaseTimer_' + cueSafe + '/PathEaseInterp_' + cueSafe +
+          ' not found (' + eLookup.message + ') — scene needs a fresh Export X3D to pick up the ease-in nodes. Falling back to instant jump + direct start.');
+        startMainDirectly('ease-in nodes not found in scene');
+        return;
+      }
+      if (!easeTimer || !easeInterp) {
+        console.warn('[EventCues] path: PathEaseTimer_' + cueSafe + '/PathEaseInterp_' + cueSafe +
+          ' not found — scene needs a fresh Export X3D to pick up the ease-in nodes. Falling back to instant jump + direct start.');
+        startMainDirectly('ease-in nodes not found in scene');
+        return;
+      }
+      try {
+        easeInterp.key.length = 0; easeInterp.keyValue.length = 0;
+        easeInterp.key[0] = 0; easeInterp.keyValue[0] = new X3D.SFVec3f(cur.x, cur.y, cur.z);
+        easeInterp.key[1] = 1; easeInterp.keyValue[1] = new X3D.SFVec3f(cue.pathStart[0], cue.pathStart[1], cue.pathStart[2]);
+        if (curRot && easeOrient) {
+          easeOrient.key.length = 0; easeOrient.keyValue.length = 0;
+          easeOrient.key[0] = 0; easeOrient.keyValue[0] = new X3D.SFRotation(curRot.x, curRot.y, curRot.z, curRot.angle);
+          easeOrient.key[1] = 1; easeOrient.keyValue[1] = new X3D.SFRotation(
+            cue.pathStartOrient[0], cue.pathStartOrient[1], cue.pathStartOrient[2], cue.pathStartOrient[3]);
+        }
+        // Restart the one-shot timer: stop just before now, start just after —
+        // same pattern startMainDirectly uses on mainTimer above. The route
+        // from this timer's cycleTime into mainTimer.set_startTime is baked
+        // statically into the scene now, so it keeps working across every
+        // repeated start/stop cycle without needing to be re-added here.
+        easeTimer.stopTime  = tNow - 0.01;
+        easeTimer.startTime = tNow + 0.05;
+        console.log('[EventCues] path: ' + cue.target + ' — easing in over ' + easeDur + 's (dist=' + dist.toFixed(2) + 'm'+(curRot&&easeOrient?', with rotation':'')+'), then main path timer starts');
+      } catch(e4) {
+        console.warn('[EventCues] path: ease-in field mutation failed (' + e4.message + ') — falling back to instant jump + direct start');
+        startMainDirectly('ease-in mutation failed');
+      }
+    },
+    function() {
+      console.warn('[EventCues] path: ' + cue.triggerRef + ' (main path timer) not found after retries — check the recorded path has real keys and the target (' + cue.target + ') is actually placed');
+    }
+  );
+}
+
+// Gesture cues scheduled at/near t0=0 race pbActivateX3DTimers: fireScheduledEventCues
+// is set up via setTimeout(...,0) at the very top of _pbPlayAllInner, before the
+// await fetch('/arc/playback/start/all') that _behaviorTimerMap-building (and
+// _agentBehaviorClips seeding, via _seedArcRecord) waits behind. A cue at t0=0 or
+// t0=1 can therefore fire before either is populated at all -- not bug #7's "12 of
+// 14 found" partial-map shape, but a genuinely empty/undefined timerMap, previously
+// showing as "no timerMap for <agent>". Same bounded-retry shape as
+// pbActivateX3DTimers's own timer-map loop, so an early cue gets a real chance to
+// resolve instead of silently no-op'ing.
+var GESTURE_CUE_MAX_ATTEMPTS = 20;
+var GESTURE_CUE_RETRY_MS = 250;
+
+function _fireGestureEventCue(cue, _retry) {
   if (!cue.target || !cue.clip) {
     console.warn('[EventCues] gesture: cue missing target or clip — nothing to fire:', cue);
     return;
   }
   var safeName = cue.target.replace(/[^A-Za-z0-9_]/g, '_');
+  var gen = (_retry && _retry.gen !== undefined) ? _retry.gen : _pbCbGeneration;
+  var attempts = _retry ? _retry.attempts : 0;
+
+  // Self-expire if a newer Play/Reset has superseded this cue.
+  if (gen !== _pbCbGeneration) return;
+
   var config = _agentBehaviorClips[safeName];
-  if (!config || !config.clips || !config.clips.length) {
-    console.warn('[EventCues] gesture: no behavior_clips loaded yet for', cue.target, '(' + safeName + ') — cue not fired. If this fires very early in scene load, behavior_clips may genuinely not have arrived yet.');
+  var clipsReady = !!(config && config.clips && config.clips.length);
+  var timerMapReady = !!_behaviorTimerMap[safeName];
+
+  if (!clipsReady || !timerMapReady) {
+    if (attempts < GESTURE_CUE_MAX_ATTEMPTS) {
+      if (attempts === 0) {
+        console.log('[EventCues] gesture: ' + cue.target + ' not ready yet for "' + cue.clip + '" (' +
+          (!clipsReady ? 'behavior_clips not loaded' : 'timer map not resolved') +
+          ') — retrying (up to ' + GESTURE_CUE_MAX_ATTEMPTS + '×' + GESTURE_CUE_RETRY_MS + 'ms) instead of dropping the cue');
+      }
+      setTimeout(function() { _fireGestureEventCue(cue, { attempts: attempts + 1, gen: gen }); }, GESTURE_CUE_RETRY_MS);
+    } else {
+      console.warn('[EventCues] gesture: gave up on "' + cue.clip + '" for ' + cue.target + ' after ' +
+        GESTURE_CUE_MAX_ATTEMPTS + ' retries (' +
+        (!clipsReady ? 'behavior_clips never loaded' : 'timer map never resolved') +
+        ') — check pbActivateX3DTimers logs for this agent.');
+    }
     return;
   }
+
   var clipObj = config.clips.find(function(c) { return c.name === cue.clip; });
   if (!clipObj) {
     console.warn('[EventCues] gesture: clip "' + cue.clip + '" not found in', cue.target + "'s behavior_clips — available:", config.clips.map(function(c){ return c.name; }).join(', '));
     return;
   }
-  applyBehaviorClip(safeName, clipObj);
-  console.log('[EventCues] gesture:', cue.target, '→', cue.clip);
+  var ok = applyBehaviorClip(safeName, clipObj);
+  if (ok) {
+    console.log('[EventCues] gesture:', cue.target, '→', cue.clip, attempts ? ('(resolved after ' + attempts + ' retries)') : '');
+  } else {
+    console.warn('[EventCues] gesture: FAILED to apply', cue.clip, 'on', cue.target,
+                 '— clip was found in behavior_clips but applyBehaviorClip could not enable the timer (see warning above).');
+  }
 }
 
 // TODO Day 56+: poll /field, compare EBPS values, fire threshold cues (trigger="field E>0.6" etc.)
@@ -3968,6 +4406,11 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
         var attempts = 0;
         var MAX_ATTEMPTS = 20;
         var RETRY_MS = 250;
+        // Hoisted out of tryMapTimers so a timer found on attempt N survives
+        // into attempt N+1 -- previously this was declared fresh inside the
+        // function and discarded every retry, so retrying never actually
+        // helped even when it ran.
+        var timerMapForAgent = {};
         function tryMapTimers() {
           if (_pbCbGeneration !== gen) return;  // reset fired — abandon
           attempts++;
@@ -3985,7 +4428,6 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
 
             // Retrieve imported nodes registered by the scene's <IMPORT> statements.
             // AS names follow convention: TimerBase_AgentSafeName (e.g. DefaultTimer_Cindy).
-            var timerMapForAgent = {};
             // Build the full set of timer bases: standard + any custom clips for this agent.
             // _agentBehaviorClips[sName] is populated by _seedArcRecord before this runs.
             var _timerBases = BEHAVIOR_TIMER_BASES.slice();
@@ -3997,6 +4439,7 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
               });
             }
             _timerBases.forEach(function(base) {
+              if (timerMapForAgent[base]) return;  // already resolved on a prior attempt
               var importedName = base + '_' + sName;
               try {
                 var node = sc.getImportedNode(importedName);
@@ -4006,11 +4449,27 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
               }
             });
 
-            var foundTimers = Object.keys(timerMapForAgent);
-            if (foundTimers.length > 0) {
+            var foundTimers  = Object.keys(timerMapForAgent);
+            var stillMissing = _timerBases.filter(function(b) { return !timerMapForAgent[b]; });
+            var complete     = stillMissing.length === 0;
+
+            if (foundTimers.length > 0 && (complete || attempts >= MAX_ATTEMPTS)) {
               _behaviorTimerMap[sName] = timerMapForAgent;
-              console.log('pbActivateX3DTimers: behavior timers mapped for', sName,
-                          '(attempt ' + attempts + ') —', foundTimers.join(', '));
+              if (complete) {
+                console.log('pbActivateX3DTimers: behavior timers mapped for', sName,
+                            '(attempt ' + attempts + ', complete) —', foundTimers.join(', '));
+              } else {
+                // Previously this case would have silently declared success
+                // on whatever partial set attempt 1 happened to find (e.g.
+                // 12 of 14 expected timers) and never retried for the rest --
+                // exactly what left Timer3/Timer7 permanently unresolved for
+                // Anna despite both having valid <IMPORT> statements. Now it
+                // only stops here after genuinely exhausting the retries.
+                console.warn('pbActivateX3DTimers: behavior timers PARTIALLY mapped for', sName,
+                            '(attempt ' + attempts + ', gave up retrying) — found:',
+                            foundTimers.join(', '), '— still missing:', stillMissing.join(', '),
+                            '— any gesture cue targeting a missing timer will fail; re-check that timer\'s <IMPORT> in the exported scene.');
+              }
               // Start DefaultTimer so avatar plays idle animation before first waypoint
               var defNode = timerMapForAgent['DefaultTimer'];
               if (defNode) {
@@ -4029,12 +4488,14 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
               // walk/idle switching driven purely by X3D timer events.
               _wirePathTimerBehavior(sName, gen);
             } else if (attempts < MAX_ATTEMPTS) {
-              console.log('pbActivateX3DTimers: behavior timers not yet available for', sName,
+              console.log('pbActivateX3DTimers: behavior timers not yet complete for', sName,
+                          '— have:', foundTimers.join(', ') || '(none)',
+                          '— missing:', stillMissing.join(', '),
                           '— retry', attempts, '/', MAX_ATTEMPTS);
               setTimeout(tryMapTimers, RETRY_MS);
             } else {
-              console.log('pbActivateX3DTimers: no behavior timers found for', sName,
-                          '— gave up after', MAX_ATTEMPTS, 'attempts');
+              console.warn('pbActivateX3DTimers: no behavior timers found for', sName,
+                          '— gave up after', MAX_ATTEMPTS, 'attempts. Every gesture cue for this agent will silently no-op (see applyBehaviorClip warnings when cues fire). Check the exported scene XML for <IMPORT inlineDEF="HAnim_' + sName + '" ... AS="..._' + sName + '"/> lines.');
             }
           } catch(e) {
             console.warn('pbActivateX3DTimers: behavior timer map error for', sName, e);
@@ -4326,9 +4787,16 @@ function _validateAndBuildOrderGroups(sceneDoc, cultivarList) {
   var pathEls = sceneDoc ? sceneDoc.querySelectorAll('Path') : [];
 
   if (!pathEls.length) {
-    if (el) el.textContent = 'HALT: no <Path> elements found in scene XML — cannot sequence.';
-    console.error('_validateAndBuildOrderGroups: no Path elements in scene XML');
-    return null;
+    // Not an authoring error -- plenty of valid scenes are pure EventCue
+    // cinematics (camera/gesture/movie cues) with no waypoint locomotion
+    // at all. Return false (not null) so the caller can tell this apart
+    // from a genuine validation failure below and fall through to
+    // simultaneous-fire instead of halting the whole scene's avatar
+    // activation -- that halt was silently skipping pbActivateX3DTimers
+    // for every agent, so gesture timers never got mapped at all.
+    if (el) el.textContent = 'No <Path> elements in scene XML — running as a pure EventCue scene (no waypoint sequencing).';
+    console.log('_validateAndBuildOrderGroups: no Path elements — treating as EventCue-only scene, not an error');
+    return false;
   }
 
   var groups = {};         // {orderInt: [safeName, ...]}
@@ -4524,6 +4992,25 @@ async function _pbPlayAllInner() {
 
     var sessions = data.sessions || {};
     var sessionIds = Object.keys(sessions);
+    // Real gap, found live: a per-session arc-parse failure
+    // (sessions[id].status === 'error', e.g. "not well-formed (invalid
+    // token): line 7, column 95" from a hand-edited arc XML file) had NO
+    // dedicated surfacing at all — only visible by manually reading the
+    // truncated JSON dump a few lines above in the console, which is how
+    // this got missed for two full test cycles in a row. This is
+    // EXACTLY the kind of thing an XML parser should hand straight back
+    // to the author, not bury. Surfaced now both in the console (as a
+    // real error, not a log line) and in the same visible status bar
+    // used for "Scene loaded"/"Ready. Press Play." — the one place an
+    // author's eye already goes.
+    var _arcErrors = sessionIds.filter(function(id){ return sessions[id] && sessions[id].status === 'error'; });
+    if (_arcErrors.length) {
+      _arcErrors.forEach(function(id) {
+        console.error('pbPlayAll: arc session "' + id + '" failed to parse —', sessions[id].error);
+      });
+      setStatus('⚠ Arc XML error — "' + _arcErrors[0] + '": ' + sessions[_arcErrors[0]].error +
+        (_arcErrors.length > 1 ? ' (+' + (_arcErrors.length - 1) + ' more)' : ''));
+    }
     pollingActive = true;  // resume polling now that start/all has returned
     console.log('pbPlayAll: polling resumed — sessionIds =', sessionIds);
     if (sessionIds.length === 0) {
@@ -4620,8 +5107,18 @@ async function _pbPlayAllInner() {
           var sceneXmlText = await sceneXmlResp.text();
           var sceneDoc = new DOMParser().parseFromString(sceneXmlText, 'text/xml');
           var _ogResult = _validateAndBuildOrderGroups(sceneDoc, allCultivars);
-          orderGroups = _ogResult ? _ogResult.groups : null;
-          if (_ogResult) _pathNamesByAgentOrder = _ogResult.pathNames;
+          if (_ogResult === false) {
+            // No <Path> elements at all -- not an error. Leave orderGroups
+            // falsy-but-not-null so the halt check below (which only fires
+            // on a genuine null, i.e. a real waypointOrder validation
+            // error) doesn't stop here, and so we fall into the existing
+            // simultaneous-fire else-branch below, which already calls
+            // pbActivateX3DTimers unconditionally for every cultivar.
+            orderGroups = false;
+          } else {
+            orderGroups = _ogResult ? _ogResult.groups : null;
+            if (_ogResult) _pathNamesByAgentOrder = _ogResult.pathNames;
+          }
           validatorRan = true;
         } else {
           console.warn('pbPlayAll: scene XML fetch failed (' + sceneXmlResp.status + ') — skipping waypointOrder validation, firing simultaneously');

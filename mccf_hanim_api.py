@@ -210,8 +210,18 @@ def upload_avatar():
     )
     stripped = stripped.replace('</Scene>', FACE_CONTROLLER + '\n</Scene>', 1)
 
-    with open(filepath, 'w', encoding='utf-8') as f:
+    # Day 89: real, confirmed vulnerability found while investigating a
+    # report of Anna.x3d ending up completely empty (0 bytes) after some
+    # action in the H-Anim Editor. This was the only write anywhere in
+    # this file that went straight to the real target path — every other
+    # save operation here writes to a tmp file first, then renames
+    # atomically, specifically so a mid-write failure can never leave the
+    # real file truncated (open(path, 'w') empties it immediately, before
+    # anything new is written). Matching that same safe pattern now.
+    tmp_path = filepath + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         f.write(stripped)
+    os.replace(tmp_path, filepath)
 
     return jsonify({
         'status':      'ok',
@@ -2847,13 +2857,28 @@ def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
         j.set('def',   def_val)
         j.set('hanim', hanim_name)
 
-    # Upsert HAnimFigure — update src if exists, else create
-    # Search with and without namespace to avoid creating duplicates
-    fig_el = root.find(_ns_tag('HAnimFigure')) or root.find('HAnimFigure')
-    if fig_el is None:
-        fig_el = _ET.Element('HAnimFigure')
-        root.append(fig_el)
+    # Upsert HAnimFigure — replace ALL existing HAnimFigure elements with a
+    # single fresh one.
+    #
+    # Previously: `root.find(_ns_tag('HAnimFigure')) or root.find('HAnimFigure')`.
+    # ElementTree Elements are falsy whenever they have zero children,
+    # regardless of whether find() matched — and a leaf, attribute-only
+    # element like <HAnimFigure src="..."/> always has zero children. So
+    # that `or` always fell through to the second find() (which then failed
+    # for the same namespace-unaware reason as bug #3's <Animations> lookup),
+    # leaving fig_el always None. Every call therefore appended a fresh
+    # <HAnimFigure> without ever removing the old one(s) -- confirmed via a
+    # real duplicate-laden cultivar file: 5 -> 6 -> 7 accumulating across
+    # three consecutive ingest runs. Fixed by unconditionally removing every
+    # existing HAnimFigure (namespaced or not) before appending exactly one
+    # -- idempotent, and self-heals any duplicates already on disk, same
+    # dedup-on-write approach already used for <Animations>/<Behaviors>.
+    for _fig_tag in (_ns_tag('HAnimFigure'), 'HAnimFigure'):
+        for old_fig in list(root.findall(_fig_tag)):
+            root.remove(old_fig)
+    fig_el = _ET.Element('HAnimFigure')
     fig_el.set('src', 'avatars/' + os.path.basename(hanim_src))
+    root.append(fig_el)
 
     # Append JointMap after HAnimFigure
     root.append(jm_el)
@@ -3389,6 +3414,63 @@ def hanim_ingest():
 
 
 
+def _humanize_gesture_label(description: str, fallback: str) -> str:
+    """
+    Derive an author-friendly gesture name from a TimeSensor's description
+    attribute. Handles both naming variants seen on Anna's file:
+      'Armature|preset:biped:look around' -> 'Look Around'
+      'preset:biped:look around'          -> 'Look Around'
+    Falls back to the bare timerDEF (never invents a label from nothing --
+    an empty or unrecognized description just means 'Timer3' etc., same
+    as GET /hanim/joints already does today).
+    """
+    desc = (description or '').strip()
+    if not desc:
+        return fallback
+    tail  = desc.split('|')[-1]          # drop an 'Armature|' prefix if present
+    label = tail.split(':')[-1].strip()  # last segment of preset:biped:<name>
+    if not label:
+        return fallback
+    return label.replace('_', ' ').replace('-', ' ').title()
+
+
+def _build_def_index(root):
+    """Map every DEF name in the tree to its element, for fingerprint lookups."""
+    idx = {}
+    for el in root.iter():
+        d = el.get('DEF')
+        if d and d not in idx:
+            idx[d] = el
+    return idx
+
+
+def _gesture_fingerprint(timer_def, existing_routes, def_index):
+    """
+    Build a comparable signature for what a TimeSensor actually animates:
+    the sorted (target joint, key, keyValue) for every interpolator it
+    drives, read off the real ROUTE graph rather than assumed from DEF
+    naming. Two TimeSensors with an identical fingerprint are driving
+    identical animation data -- a genuine duplicate, not just a name
+    collision. Confirmed against Anna's Timer1/Timer8 pair (same 42
+    joints, same keyValue arrays) before relying on this.
+    """
+    interp_defs = [r['toNode'] for r in existing_routes
+                   if r.get('fromNode') == timer_def
+                   and r.get('fromField') == 'fraction_changed']
+    sig = []
+    for interp_def in interp_defs:
+        target_routes = [r for r in existing_routes
+                          if r.get('fromNode') == interp_def
+                          and r.get('fromField') == 'value_changed']
+        target = target_routes[0]['toNode'] if target_routes else ''
+        el = def_index.get(interp_def)
+        sig.append((target,
+                    el.get('key', '')      if el is not None else '',
+                    el.get('keyValue', '') if el is not None else ''))
+    sig.sort(key=lambda t: t[0])
+    return tuple(sig)
+
+
 @hanim_bp.route('/hanim/ingest-mixamo', methods=['POST'])
 def hanim_ingest_mixamo():
     """
@@ -3613,22 +3695,28 @@ def hanim_ingest_mixamo():
     try:
         cv_tree = _ET_mix.parse(cultivar_path)
         cv_root = cv_tree.getroot()
-        anims_el = cv_root.find('Animations')
-        if anims_el is None:
-            anims_el = _ET_mix.SubElement(cv_root, 'Animations')
 
-        # Build name lookup from existing clips (keyed by timerDEF) so that
-        # re-ingest preserves names the user already has in the cultivar.
-        existing_clip_names = {
-            c.get('timerDEF'): c.get('name')
-            for c in anims_el.findall('Clip')
-            if c.get('timerDEF') and c.get('name')
-        }
-        # Clear all existing clips — we'll rewrite from the file's timer list
-        for old_clip in anims_el.findall('Clip'):
-            anims_el.remove(old_clip)
+        # NOTE: cultivar XML declares a default xmlns on the root, which
+        # every descendant inherits once parsed -- a bare .find('Animations')
+        # never matches {ns}Animations and silently creates a duplicate
+        # un-namespaced element on every re-ingest. Use a namespace wildcard,
+        # and actively remove ALL matches (not just the first) to mop up
+        # duplicates that already accumulated in live cultivar files before
+        # this was caught.
+        existing_anims_els = cv_root.findall('{*}Animations')
+        existing_clip_names = {}
+        for el in existing_anims_els:
+            for c in el.findall('{*}Clip'):
+                if c.get('timerDEF') and c.get('name'):
+                    existing_clip_names[c.get('timerDEF')] = c.get('name')
+        for el in existing_anims_els:
+            cv_root.remove(el)
+        anims_el = _ET_mix.SubElement(cv_root, 'Animations')
 
-        # Register every animation TimeSensor as a clip
+        # Register every animation TimeSensor as a clip. <Animations> stays a
+        # complete inventory of every TimeSensor physically in the file,
+        # duplicates included -- this is ingest's own record of what exists,
+        # not what's authorable.
         for timer_el in all_anim_timers:
             t_def  = timer_el.get('DEF', 'Timer1')
             t_ci   = timer_el.get('cycleInterval', '0')
@@ -3639,6 +3727,85 @@ def hanim_ingest_mixamo():
             c_el.set('timerDEF',      t_def)
             c_el.set('cycleInterval', t_ci)
             c_el.set('bone_count',    str(bone_count))
+
+        # ── Also populate <Behaviors> -- the table Composer/Events Editor
+        # actually read (see cultivar_lambda.py; CultivarDefinition has no
+        # concept of <Animations>, only <Behaviors>). Unlike <Animations>,
+        # this is meant to be the *authorable* clip list, so true duplicate
+        # tracks are collapsed to one entry each -- confirmed real duplicate
+        # (not just a name collision) via _gesture_fingerprint, which
+        # compares actual ROUTE-graph targets and keyframe data rather than
+        # trusting that a matching label means matching animation. Not
+        # hardcoded to any specific Timer range -- future avatars may not
+        # split their duplicate tracks evenly.
+        # NOTE: same wildcard-vs-bare namespace bug as Animations above --
+        # if MORE than one <Behaviors> exists (e.g. a stale one left over
+        # from before this fix), merge names from all of them, then
+        # collapse to a single element.
+        existing_beh_blocks = cv_root.findall('{*}Behaviors')
+        existing_beh_names = {}
+        for el in existing_beh_blocks:
+            for c in el.findall('{*}Clip'):
+                if c.get('timerDEF') and c.get('name'):
+                    existing_beh_names[c.get('timerDEF')] = c.get('name')
+        for el in existing_beh_blocks:
+            cv_root.remove(el)
+        beh_el = _ET_mix.SubElement(cv_root, 'Behaviors')
+
+        def_index   = _build_def_index(root)
+        seen_labels = {}   # fresh_label -> fingerprint of the entry already kept
+        seen_bases  = set()   # fresh (pre-disambiguation) labels already claimed
+        primary_timer_defs = []   # first timerDEF per FRESH label -- these get
+                                   # EXPORTed below so the Loader (IMPORT/
+                                   # getImportedNode) can reach them. Based on
+                                   # the description-derived label, not the
+                                   # preserved cultivar name, so a prior
+                                   # disambiguated name (e.g. 'Fold Arms 2'
+                                   # already stored for Timer9) can't be
+                                   # mistaken for a brand-new base label on a
+                                   # later re-ingest.
+        first_name  = None
+        for timer_el in all_anim_timers:
+            t_def = timer_el.get('DEF', 'Timer1')
+            t_ci  = timer_el.get('cycleInterval', '0')
+            desc  = timer_el.get('description', '')
+            fresh_label = _humanize_gesture_label(desc, t_def)
+            fp = _gesture_fingerprint(t_def, existing_routes, def_index)
+
+            if fresh_label not in seen_bases:
+                seen_bases.add(fresh_label)
+                primary_timer_defs.append(t_def)
+
+            dedup_key = fresh_label
+            if dedup_key in seen_labels:
+                if fp == seen_labels[dedup_key]:
+                    # Same joints, same keyframes -- true duplicate track.
+                    # Skip for authoring; still recorded in <Animations>.
+                    continue
+                # Same cleaned label, different data -- a real naming
+                # collision, not a duplicate. Disambiguate rather than
+                # silently drop someone's actual gesture.
+                base, n = dedup_key, 2
+                while f'{base} {n}' in seen_labels:
+                    n += 1
+                dedup_key = f'{base} {n}'
+            seen_labels[dedup_key] = fp
+
+            # Respect a human rename already stored for THIS timerDEF;
+            # otherwise use the freshly-derived (possibly disambiguated) key.
+            display_name = existing_beh_names.get(t_def) or dedup_key
+            if first_name is None:
+                first_name = display_name
+
+            b_el = _ET_mix.SubElement(beh_el, 'Clip')
+            b_el.set('name',          display_name)
+            b_el.set('timerDEF',      t_def)
+            b_el.set('cycleInterval', t_ci)
+            b_el.set('loop',          'true')
+            b_el.set('priority',      '0')
+
+        if first_name and not beh_el.get('default'):
+            beh_el.set('default', first_name)
 
         cv_tree.write(cultivar_path, encoding='unicode', xml_declaration=False)
     except Exception as exc:
@@ -3725,6 +3892,28 @@ def hanim_ingest_mixamo():
         vp_el = _ET_mix.SubElement(vp_group, 'Viewpoint')
         for k, v in vp.items():
             vp_el.set(k, v)
+
+    # ── EXPORT the primary gesture timers ──────────────────────────────────
+    # TimeSensor promotion (above) fixes getNamedNode() for the Character
+    # Creator, but the Loader reaches Anna's timers via IMPORT/
+    # getImportedNode, which requires the target file to EXPORT the node --
+    # promotion alone doesn't help the Loader. "Primary" here is the same
+    # first-occurrence-per-base-label set used to build <Behaviors> above
+    # (primary_timer_defs), so this list tracks that table automatically --
+    # not hardcoded to a Timer range, and it won't export the unconfirmed
+    # '2' duplicate tracks. Identity export (localDEF == AS), matching the
+    # "don't rename, just alias" convention already established for this
+    # file. Idempotent: removes any EXPORTs for this avatar's primary set
+    # left over from a prior ingest run before re-adding, so re-ingesting
+    # doesn't accumulate duplicates the way the cultivar writer once did.
+    for tag in ('EXPORT', f'{{{_X3D_NS}}}EXPORT'):
+        for ex in list(scene_el.findall(tag)):
+            if ex.get('localDEF') in primary_timer_defs:
+                scene_el.remove(ex)
+    for t_def in primary_timer_defs:
+        ex = _ET_mix.SubElement(scene_el, 'EXPORT')
+        ex.set('localDEF', t_def)
+        ex.set('AS',       t_def)
 
     # ── Atomic X3D write ───────────────────────────────────────────────────
     try:

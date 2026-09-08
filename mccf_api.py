@@ -44,6 +44,19 @@ from mccf_core import (
 
 import mimetypes
 mimetypes.add_type('model/x3d+xml', '.x3d')
+# Day 85: real bug found live — a placed .glb asset displayed correctly
+# when opened directly in a standalone X3D/glTF editor, but failed to
+# load via <Inline url="...glb"/> inside the full exported scene. Python's
+# mimetypes module has no built-in entry for .glb, so Flask's static file
+# serving was falling back to a generic type instead of the IANA-
+# registered model/gltf-binary — X_ITE's internal fetch-and-parse path for
+# an Inline-loaded asset is stricter about Content-Type than a browser
+# just displaying a file directly. .gltf (the non-binary, JSON-based
+# sibling format) gets the same treatment for the same reason, since
+# X_ITE's Inline loading supports both per the Web3D Consortium's own
+# X3D4/glTF2 feature comparison.
+mimetypes.add_type('model/gltf-binary', '.glb')
+mimetypes.add_type('model/gltf+json', '.gltf')
 
 app = Flask(__name__)
 CORS(app)  # X3D pages need cross-origin access
@@ -505,32 +518,162 @@ def list_media_files():
 @app.route('/x3d/assets/list', methods=['GET'])
 def list_x3d_assets():
     """
-    List available X3D asset files in static/x3d/X3DAssets/.
+    List available X3D/glTF asset files in static/x3d/X3DAssets/.
     Used by Scene Composer's zone editor to populate the "Inline Asset" dropdown,
-    so a zone can reference an existing X3D model (e.g. a fountain, statue) via
-    <Inline url="X3DAssets/<file>.x3d"/> nested inside the zone's Transform in
-    the exported scene — same relative-path convention as protos/ (see
-    buildCameraProtoDecls in mccf_scene_composer.html).
+    so a zone can reference an existing model (e.g. a fountain, statue) via
+    <Inline url="X3DAssets/<file>.x3d"/> (or .glb/.gltf) nested inside the zone's
+    Transform in the exported scene — same relative-path convention as protos/
+    (see buildCameraProtoDecls in mccf_scene_composer.html).
 
-    Non-recursive: only top-level .x3d files are listed. The texture/
+    Non-recursive: only top-level asset files are listed. The texture/
     subdirectory (referenced internally by asset files via their own relative
     paths) is intentionally not scanned or exposed here — same split as
     convolver/soundeffects staying separate from the flat media/ listing in
     /media/list above.
 
-    Returns { files: ["fountain.x3d", ...] }
+    Day 85: widened from .x3d-only to also include .glb and .gltf — X_ITE's
+    Inline node supports loading both directly (confirmed against the
+    Web3D Consortium's own X3D4/glTF2 feature comparison), and this
+    endpoint was the reason a real, valid .glb asset never appeared in the
+    placement dropdown at all, even though nothing downstream (this file's
+    own MIME registration above, or mccf_scene_composer.html's own
+    listing code) discriminated against it.
+
+    Returns { files: ["fountain.x3d", "TheGarden.glb", ...] }
     """
     assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'X3DAssets')
     if not os.path.isdir(assets_dir):
         return jsonify({'files': [], 'assets_dir': assets_dir})
 
+    ASSET_EXTENSIONS = ('.x3d', '.glb', '.gltf')
     files = sorted([
         f for f in os.listdir(assets_dir)
         if os.path.isfile(os.path.join(assets_dir, f))
-        and f.lower().endswith('.x3d')
+        and f.lower().endswith(ASSET_EXTENSIONS)
         and not f.startswith('.')
     ])
     return jsonify({'files': files, 'assets_dir': assets_dir})
+
+@app.route('/effects/list', methods=['GET'])
+def list_effects():
+    """
+    List saved Effect Asset files (Route Graph tool's "Save subsystem as
+    Effect Asset" / "Load Effect Asset" pair). Three-tier library, agreed
+    directly with the author: rich (faithful ports of official X_ITE
+    reference examples), common (simpler distilled versions), user
+    (anything saved live from the Route Graph tool, named whatever the
+    author typed at save time — never a name inherited from a demo file).
+    subdir selects which tier; defaults to 'user' since that's the tier
+    the live save flow writes into.
+
+    Same non-recursive, extension-filtered, sorted convention as
+    /x3d/assets/list above — deliberately mirrored, not a new pattern.
+
+    Returns { files: ["MyEffect.x3d", ...] }
+    """
+    subdir = request.args.get('subdir', 'user')
+    if subdir not in ('rich', 'common', 'user'):
+        return jsonify({'error': 'subdir must be rich, common, or user'}), 400
+    effects_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'Effects', subdir)
+    if not os.path.isdir(effects_dir):
+        return jsonify({'files': [], 'effects_dir': effects_dir})
+    files = sorted([
+        f for f in os.listdir(effects_dir)
+        if os.path.isfile(os.path.join(effects_dir, f))
+        and f.lower().endswith('.x3d')
+        and not f.startswith('.')
+    ])
+    return jsonify({'files': files, 'effects_dir': effects_dir})
+
+@app.route('/effects/save', methods=['POST'])
+def save_effect():
+    """
+    Save an Effect Asset generated by the Route Graph tool's
+    saveSubsystemAsAsset() into the server-side library, so it can later
+    be listed (/effects/list) and loaded back in (fetched directly from
+    its static/ URL, same as any other X3D asset). Previously this only
+    triggered a local browser download with no connection to any server
+    directory at all — meaningless for a shared library, since nothing
+    saved that way could ever be browsed or reloaded by anyone.
+
+    Body: { subdir: 'rich'|'common'|'user', filename: 'MyEffect.x3d', content: '<x3d ...' }
+    Always writes into the 'user' tier from the live tool regardless of
+    what's requested — 'rich'/'common' are populated deliberately (ported
+    reference examples), not by this endpoint, matching the three-tier
+    plan agreed directly with the author.
+    """
+    data = request.get_json(force=True) or {}
+    filename = data.get('filename', '')
+    content = data.get('content', '')
+    if not filename or not content:
+        return jsonify({'error': 'filename and content required'}), 400
+    # Sanitize to a bare filename — no path separators, no traversal, same
+    # charset discipline as safeId()'s own DEF-name sanitization elsewhere
+    # in this project, applied here to a filename instead of an X3D DEF.
+    safe_name = re.sub(r'[^A-Za-z0-9_.-]', '_', os.path.basename(filename))
+    if not safe_name.lower().endswith('.x3d'):
+        safe_name += '.x3d'
+    effects_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'Effects', 'user')
+    os.makedirs(effects_dir, exist_ok=True)
+    out_path = os.path.join(effects_dir, safe_name)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'saved', 'filename': safe_name, 'path': out_path})
+
+
+
+@app.route('/x3d/assets/save', methods=['POST'])
+def save_x3d_asset():
+    """
+    Overwrite an existing asset file's content — added for the Events
+    Editor's asset-file viewer (mccf_events_editor_prototype_2.html),
+    which already fetches an asset's own .x3d file directly to help an
+    author find internal DEF names (Shape/TimeSensor) for Movie/Animation
+    EventCues. This closes the loop: edit that same content in place and
+    write it back, instead of round-tripping through a separate text
+    editor on disk.
+
+    Path passed as X-Asset-Path request header — the exact same relative
+    url (e.g. "X3DAssets/movie_screen.x3d") already used everywhere else
+    as the asset's own placement url= (see mccf_scene_composer.html's
+    placedAssets[name].url), so no separate naming/lookup scheme is
+    needed on either side; the client just sends back what it already had.
+
+    Deliberately restricted to overwriting an EXISTING file only — this
+    is an editor for content the author already placed via Composer's own
+    Assets system, not a general file-upload endpoint, so it never creates
+    a new file or directory. Path is validated to stay strictly within
+    static/x3d/X3DAssets/ via realpath containment (not just string
+    prefix-checking, which a "../" segment could defeat) — same class of
+    concern _safe_path_component's own docstring flags for scene names,
+    but this path is a real multi-segment relative path (subdirectories
+    like X3DAssets/media/movies/ are legitimate), so a single-component
+    sanitizer isn't the right tool here.
+    """
+    assets_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'X3DAssets')
+    rel_path = request.headers.get('X-Asset-Path', '').strip()
+    if not rel_path:
+        return jsonify({'status': 'error', 'error': 'no path'}), 400
+    # Callers send the asset's own url= verbatim (always "X3DAssets/..."
+    # relative to static/x3d/) — strip that known prefix so this matches
+    # the one convention already used everywhere else, rather than
+    # inventing a different path format just for this endpoint.
+    for prefix in ('X3DAssets/', 'X3DAssets\\'):
+        if rel_path.startswith(prefix):
+            rel_path = rel_path[len(prefix):]
+            break
+    assets_root_real = os.path.realpath(assets_root)
+    candidate = os.path.realpath(os.path.join(assets_root, rel_path))
+    if os.path.commonpath([candidate, assets_root_real]) != assets_root_real:
+        return jsonify({'status': 'error', 'error': 'path escapes X3DAssets/'}), 400
+    if not os.path.isfile(candidate):
+        return jsonify({'status': 'error', 'error': 'file does not exist — this endpoint only overwrites an existing asset, it does not create new ones'}), 404
+    content = request.get_data(as_text=True)
+    if not content:
+        return jsonify({'status': 'error', 'error': 'no content'}), 400
+    with open(candidate, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return jsonify({'status': 'ok', 'path': 'X3DAssets/' + rel_path.replace(os.sep, '/')})
 
 
 @app.route('/scene/load/scene/raw', methods=['GET'])

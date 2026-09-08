@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Audio Chain Test</title>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #101018; font-family: monospace; }
+  x3d-canvas { width: 100%; height: 80%; display: block; }
+  #status { color: #8fe0b0; padding: 10px; font-size: 13px; }
+  #status.err { color: #f06060; }
+</style>
+</head>
+<body>
+<!--
+  Day 84: minimal, purpose-built loader for audio_chain_test.x3d — no
+  scene-selector, no waypoint/dialogue/EventCues/Chorus machinery, nothing
+  from mccf_x3d_loader.html beyond the one proven mechanism actually
+  needed: <script src=".../x_ite.min.js"> + <x3d-canvas> + canvas.src = url.
+  Confirmed against that file's own real code, not guessed.
+
+  Place audio_chain_test.x3d in the same static/x3d/ directory your real
+  scenes live in, then this page's own relative "x3d/audio_chain_test.x3d"
+  path should resolve correctly without editing anything — adjust the path
+  below only if you place it somewhere else.
+-->
+<div id="status">Loading X_ITE…</div>
+<x3d-canvas id="x3d" update="auto" contentScale="auto"></x3d-canvas>
+
+<script>
+  var statusEl = document.getElementById('status');
+  var canvas = document.getElementById('x3d');
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.className = isErr ? 'err' : '';
+  }
+
+  window.addEventListener('load', function() {
+    setStatus('Pointing canvas at audio_chain_test.x3d…');
+    canvas.addEventListener('load', function() {
+      setStatus('Scene loaded — should be playing clip 1 within ~1 second. Listen through all 46.');
+    });
+    canvas.addEventListener('error', function(e) {
+      setStatus('Load error — check the browser console. If this is a 404, confirm the file is actually placed under static/x3d/.', true);
+      console.error('[audio-chain-test] canvas load error:', e);
+    });
+    // Same relative-to-server-root path convention as the real loader —
+    // adjust here if you place the file somewhere other than static/x3d/.
+    canvas.src = 'x3d/audio_chain_test.x3d?t=' + Date.now();
+  });
+</script>
+</body>
+</html>

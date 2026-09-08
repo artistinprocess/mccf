@@ -4,8 +4,8 @@
     xmlns="http://mccf.artistinprocess.com/cultivar/v3">
 
   <!-- Channel weights sum to 1.0 -->
-  <Weights E="0.3287" B="0.2308"
-           P="0.1818" S="0.2587"/>
+  <Weights E="0.33" B="0.23"
+           P="0.18" S="0.26"/>
 
   <Regulation value="0.82"/>
 
@@ -29,17 +29,6 @@
   <Alias>Cindy Jenkins</Alias>
 
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
-  <HAnimFigure src="SalidaAnimations_repaired_test.x3d" loa="4"/>
-
-  <!-- Attentional filter: per-channel receptivity to coupler influence -->
-  <!-- 1.0 = fully receptive; 0.0 = fully resistant -->
-  <Receptivity E="0.71" B="0.61" P="0.71" S="0.83"/>
-
-  <!-- HAnim behavior clip selection table -->
-  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
-  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->
-  <Behaviors default="Default">
-    <Clip name="Default" timerDEF="DefaultTimer" loop="true" priority="0"/>
-  </Behaviors>
+  <HAnimFigure src="avatars/cindy_hanim.x3d" loa="4"/>
 
 </CultivarDefinition>

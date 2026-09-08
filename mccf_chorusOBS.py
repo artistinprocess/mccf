@@ -758,34 +758,18 @@ class ChorusManager:
             with self._lock:
                 self._last["pending"] = False
 
-    def fire_chorus_from_transcript(self, transcript: str, cv: dict, voice_actor_override: str = None):
+    def fire_chorus_from_transcript(self, transcript: str, cv: dict):
         """
         Async entry point for client-driven (X3D auto:false) playback.
         Receives a pre-assembled plain-text transcript from the loader —
         no arc file lookup, no XML parsing.
         Does nothing if no config or mute.
-
-        Day 84 — voice_actor_override, real bug fix, not a new feature
-        bolted on. Confirmed live: the Dialogue Editor's own "generate in
-        situ" flow has a real actor sitting on its authored arc-complete
-        Line, but this method always used whatever voice_actor was baked
-        into the static, zone-XML-loaded config — exactly the mechanism
-        already agreed (same session) to be the wrong one for a fully
-        scripted scene. Does NOT mutate self._config — the override only
-        applies to this one firing via a fresh ChorusConfig copy, so the
-        live, zone-tied arc-complete path (kept deliberately, still real,
-        still works for genuinely improvised dialogue) is completely
-        unaffected by this.
         """
         with self._lock:
             config = self._config
 
         if config is None or config.is_mute:
             return
-
-        if voice_actor_override:
-            from dataclasses import replace
-            config = replace(config, voice_actor=voice_actor_override)
 
         with self._lock:
             if self._last.get("pending"):
@@ -899,9 +883,7 @@ def chorus_fire():
     Body: {
         "transcript":  "...",   // plain-text scene transcript assembled by the loader
         "cv":          { "E": 0.12, "B": 0.09, "P": 0.11, "S": 0.08 },
-        "scene_name":  "garden_001",
-        "voice_actor": "Anna"   // optional, Day 84 — per-request override, see
-                                 // fire_chorus_from_transcript's own comment for why
+        "scene_name":  "garden_001"
     }
 
     The loader accumulates every line of dialogue as it plays and sends the
@@ -930,8 +912,7 @@ def chorus_fire():
         "S": float(cv_raw.get("S", 0.5)),
     }
 
-    voice_actor_override = (data.get("voice_actor") or "").strip() or None
-    mgr.fire_chorus_from_transcript(transcript, cv, voice_actor_override=voice_actor_override)
+    mgr.fire_chorus_from_transcript(transcript, cv)
     return jsonify({"status": "fired"}), 200
 
 

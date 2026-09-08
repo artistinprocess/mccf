@@ -156,6 +156,44 @@ svg.wire-layer path.wire-hit { pointer-events: stroke; cursor: pointer; }
   font-size: 13px; color: var(--dim); cursor: pointer; border-radius: 3px;
 }
 .node-del:hover { color: var(--accent2); background: rgba(240,96,96,0.15); }
+.node-hide {
+  position: absolute; top: 6px; right: 26px;
+  width: 16px; height: 16px; text-align: center; line-height: 16px;
+  font-size: 13px; color: var(--dim); cursor: pointer; border-radius: 3px;
+}
+.node-hide:hover { color: var(--accent3); background: rgba(96,168,240,0.15); }
+.node-api-trigger { border-color: var(--lime); box-shadow: 0 0 0 1px var(--lime); }
+.node-dimmed { opacity: 0.18; }
+.node-selected { border-color: var(--accent3); box-shadow: 0 0 0 2px var(--accent3); }
+.props-panel {
+  position: fixed; top: 90px; right: 0; bottom: 0; width: 280px;
+  background: var(--surface); border-left: 1px solid var(--border);
+  padding: 14px; overflow-y: auto; z-index: 20;
+}
+.props-panel h3 { font-size: 14px; color: var(--accent3); margin-bottom: 4px; }
+.props-panel .props-type { font-size: 12px; color: var(--dim); margin-bottom: 14px; }
+.props-field { margin-bottom: 12px; }
+.props-field label { display:block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+.props-field input[type="number"], .props-field input[type="text"] {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); padding: 4px 6px; font-family: inherit; font-size: 13px;
+}
+.props-field .vec-row { display:flex; gap:4px; }
+.props-field .vec-row input { width: 0; flex: 1; }
+.props-field input[type="checkbox"] { width: auto; }
+.props-readonly-note { font-size: 12px; color: var(--dim); line-height: 1.5; }
+.props-close { float: right; cursor: pointer; color: var(--dim); font-size: 16px; }
+.props-close:hover { color: var(--accent2); }
+.keyframes-list { display: flex; flex-direction: column; gap: 8px; }
+.keyframe-row { border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.keyframe-row-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.keyframe-del { cursor: pointer; color: var(--dim); font-size: 14px; padding: 2px 6px; border-radius: 3px; }
+.keyframe-del:hover { color: var(--accent2); background: rgba(240,96,96,0.15); }
+.keyframe-row input[type="color"] { border: 1px solid var(--border); border-radius: 3px; background: none; cursor: pointer; }
+.node-api-badge {
+  position: absolute; top: 6px; left: 6px;
+  font-size: 10px; color: var(--lime); letter-spacing: 0.03em;
+}
 .node-body { padding: 4px 0; }
 .field-row {
   display: flex;
@@ -196,10 +234,16 @@ svg.wire-layer path.wire-hit { pointer-events: stroke; cursor: pointer; }
   <div class="toolbar">
     <select id="add-type"></select>
     <select id="add-instance"></select>
+    <input type="text" id="add-custom-name" placeholder="name this node..." style="display:none" onkeydown="if(event.key==='Enter')addNodeFromToolbar()">
     <button class="tb-btn" onclick="addNodeFromToolbar()">+ Add node</button>
+    <button class="tb-btn" style="border-color:var(--accent3);color:var(--accent3)" onclick="importRoutesFromScene()">⬇ Import from scene</button>
+    <button class="tb-btn" onclick="relayoutGraph()">⇄ Re-layout</button>
+    <button class="tb-btn" style="border-color:var(--lime);color:var(--lime)" onclick="saveSubsystemAsAsset()">&#8595; Save subsystem as Effect Asset</button>
+    <button class="tb-btn" style="border-color:var(--purple);color:var(--purple)" onclick="loadEffectAsset()">&#8593; Load Effect Asset</button>
     <button class="tb-btn" style="border-color:var(--accent4);color:var(--accent4)" onclick="saveRouteGraph()">Save to Composer</button>
   </div>
   <div class="legend" id="legend"></div>
+  <div class="legend" id="type-layers" style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px"></div>
 </header>
 
 <div class="canvas-wrap" id="canvas-wrap">
@@ -216,6 +260,7 @@ svg.wire-layer path.wire-hit { pointer-events: stroke; cursor: pointer; }
     </div>
   </div>
 </div>
+<div class="props-panel" id="props-panel" style="display:none"></div>
 
 <script>
 // ── Field-type → color, and legend ──────────────────────────────────────
@@ -289,6 +334,81 @@ var NODE_TYPES = {
       { name:'fraction_changed', type:'Float', io:'out' }, // was folded into Time as a one-off fudge — see the CSS var comment on --lime for why that no longer holds
     ],
     instances: ['MasterClock','Timer_Cindy_1'],
+    creatable: true, // author can also type a brand-new name — see "utility nodes" toolbar mode
+    propsSchema: [
+      { key:'cycleInterval', label:'Cycle Interval (s)', type:'number', default:4 },
+      { key:'loop', label:'Loop', type:'checkbox', default:false },
+    ],
+  },
+  // Interpolator quartet — added for the "drop in a bare Timer/Interpolator
+  // as a reusable utility node" request, and doubles as the node-type
+  // vocabulary Import needs to recognise the same nodes buildRecordedPathInterpNodes/
+  // buildTurnCueNodes already bake into every compiled scene (PathInterp_*,
+  // PathOrient_*, TurnInterp_* are literally these tags under the hood).
+  // set_fraction/value_changed match the real X3D exposedField pair every
+  // interpolator has — not curated per-type the way Transform's field list
+  // deliberately isn't either, but these four are simple enough that the
+  // full real field set (key/keyValue) wouldn't add a usable port: key/
+  // keyValue are MFFloat/MFVec3f/MFColor/MFRotation authored once at
+  // creation, not something meaningfully routed at runtime the way
+  // set_fraction and value_changed are — same reasoning RecordedPath's own
+  // geometry fields are left out above. They ARE genuinely needed to make
+  // a freshly-baked interpolator do anything at all though (a fresh
+  // interpolator with no key/keyValue is inert) — that's what propsSchema
+  // is for: authored once via the node-properties panel, baked as real
+  // key/keyValue on export, rather than a routable port.
+  //
+  // Arbitrary keyframe count, not fixed at two — corrected after checking
+  // a real, professionally-authored reference file (a neon-sign colour-
+  // cycle effect): a genuine ColorInterpolator there carries 6 real
+  // keyframes cycling through a full colour wheel, not 2. A fixed 2-key
+  // start/end shape (which is what this project's OWN baked effects —
+  // PathEase, Turn cue, camera fly — all happen to use) was the right
+  // default for those specific one-shot transitions, but was never a
+  // general rule for interpolators, and was wrong to bake in as one here.
+  ScalarInterpolator: {
+    fields: [
+      { name:'set_fraction',  type:'Float', io:'in'  },
+      { name:'value_changed', type:'Float', io:'out' },
+    ],
+    instances: [],
+    creatable: true,
+    propsSchema: [
+      { key:'keyframes', label:'Keyframes', type:'keyframes', valueType:'float', default:[{fraction:0,value:0},{fraction:1,value:1}] },
+    ],
+  },
+  ColorInterpolator: {
+    fields: [
+      { name:'set_fraction',  type:'Float', io:'in'  },
+      { name:'value_changed', type:'Color', io:'out' },
+    ],
+    instances: [],
+    creatable: true,
+    propsSchema: [
+      { key:'keyframes', label:'Keyframes', type:'keyframes', valueType:'color', default:[{fraction:0,value:[1,1,1]},{fraction:1,value:[0,0,0]}] },
+    ],
+  },
+  PositionInterpolator: {
+    fields: [
+      { name:'set_fraction',  type:'Float', io:'in'  },
+      { name:'value_changed', type:'Vec3',  io:'out' },
+    ],
+    instances: [],
+    creatable: true,
+    propsSchema: [
+      { key:'keyframes', label:'Keyframes', type:'keyframes', valueType:'vec3', default:[{fraction:0,value:[0,0,0]},{fraction:1,value:[0,0,0]}] },
+    ],
+  },
+  OrientationInterpolator: {
+    fields: [
+      { name:'set_fraction',  type:'Float',    io:'in'  },
+      { name:'value_changed', type:'Rotation', io:'out' },
+    ],
+    instances: [],
+    creatable: true,
+    propsSchema: [
+      { key:'keyframes', label:'Keyframes (axis XYZ, angle rad)', type:'keyframes', valueType:'vec4', default:[{fraction:0,value:[0,1,0,0]},{fraction:1,value:[0,1,0,0]}] },
+    ],
   },
   RecordedPath: {
     fields: [
@@ -418,6 +538,13 @@ var NODE_TYPES = {
     instances: ['Cindy','Jack','Salida'], // touch sensors are typically parented inside an avatar's own Transform
   },
 };
+// Snapshot of the built-in type keys, taken once, before anything ever
+// gets dynamically registered (Script nodes, via _resolveOrRegisterType).
+// Needed to know which types in a saved graph are "real" (built-in,
+// always available) vs. dynamic (only exist because an import pass
+// registered them, and won't exist again on a fresh page load unless
+// persisted separately — see saveRouteGraph's own comment on this).
+var _STATIC_NODE_TYPE_KEYS = new Set(Object.keys(NODE_TYPES));
 
 // Live data from Composer (mccf_scene_data) — falls back to each type's
 // seed `instances` above until a real scene is loaded, same as the seed
@@ -456,8 +583,74 @@ var nodes = [];        // {id, type, name, x, y}
 var connections = [];  // {id, fromNode, fromField, toNode, toField, type}
 var _nodeSeq = 0, _connSeq = 0;
 var _selectedConn = null;
+var _highlightedChain = null; // {nodeIds:Set, connIds:Set} — the full end-to-end chain the selected wire belongs to, or null
+
+// Full connected component reachable from the clicked wire, walking BOTH
+// directions from BOTH endpoints — not just a single straight path. A node
+// can fan out to several destinations or fan in from several sources (the
+// whole point of a route graph, per the reason this tool exists), so "the
+// chain this event lives in" means everything connected, not one thread
+// through it.
+function _computeChainFromConnection(connId) {
+  var conn = connections.find(function(c){ return c.id === connId; });
+  if (!conn) return { nodeIds: new Set(), connIds: new Set() };
+  var nodeIds = new Set([conn.fromNode, conn.toNode]);
+  var connIds = new Set([conn.id]);
+  var queue = [conn.fromNode, conn.toNode];
+  while (queue.length) {
+    var nid = queue.shift();
+    connections.forEach(function(c) {
+      if (c.toNode === nid && !connIds.has(c.id)) {
+        connIds.add(c.id);
+        if (!nodeIds.has(c.fromNode)) { nodeIds.add(c.fromNode); queue.push(c.fromNode); }
+      }
+      if (c.fromNode === nid && !connIds.has(c.id)) {
+        connIds.add(c.id);
+        if (!nodeIds.has(c.toNode)) { nodeIds.add(c.toNode); queue.push(c.toNode); }
+      }
+    });
+  }
+  return { nodeIds: nodeIds, connIds: connIds };
+}
 var _drag = null;      // node-drag state
 var _wireDrag = null;  // in-progress connection-drag state
+var _hiddenTypes = new Set(); // "layer by node type" — types toggled off via the checkbox row
+var _hiddenNodeIds = new Set(); // individually-hidden nodes — finer than a whole type layer
+var _selectedNode = null; // node id currently shown in the properties panel, or null
+
+function hideNode(id) {
+  _hiddenNodeIds.add(id);
+  renderGraph();
+}
+function showAllHiddenNodes() {
+  _hiddenNodeIds.clear();
+  renderGraph();
+}
+
+function _renderTypeLayers() {
+  var el = document.getElementById('type-layers');
+  var typesPresent = Array.from(new Set(nodes.map(function(n){ return n.type; }))).sort();
+  var parts = [];
+  if (typesPresent.length) {
+    parts.push('<span class="legend-note" style="margin-right:8px">Layers:</span>');
+    parts.push(typesPresent.map(function(t) {
+      var checked = _hiddenTypes.has(t) ? '' : 'checked';
+      var count = nodes.filter(function(n){ return n.type===t; }).length;
+      var apiFlag = (NODE_TYPES[t] && NODE_TYPES[t].isApiTrigger) ? ' \u25CF' : '';
+      return '<label class="legend-item" style="cursor:pointer"><input type="checkbox" ' + checked +
+        ' onchange="toggleTypeLayer(\'' + t + '\')" style="width:auto;margin-right:4px">' + t + apiFlag + ' (' + count + ')</label>';
+    }).join(''));
+  }
+  if (_hiddenNodeIds.size) {
+    parts.push('<span class="legend-item" style="cursor:pointer;color:var(--accent3)" onclick="showAllHiddenNodes()">' +
+      _hiddenNodeIds.size + ' node(s) individually hidden — click to show all</span>');
+  }
+  el.innerHTML = parts.join('');
+}
+function toggleTypeLayer(type) {
+  if (_hiddenTypes.has(type)) _hiddenTypes.delete(type); else _hiddenTypes.add(type);
+  renderGraph();
+}
 
 (function populateToolbar() {
   var typeSel = document.getElementById('add-type');
@@ -468,6 +661,17 @@ var _wireDrag = null;  // in-progress connection-drag state
 function populateInstanceDropdown() {
   var type = document.getElementById('add-type').value;
   var instSel = document.getElementById('add-instance');
+  var customInput = document.getElementById('add-custom-name');
+  var isCreatable = !!NODE_TYPES[type].creatable;
+  // Utility nodes (TimeSensor as a generic timer, the interpolator quartet)
+  // aren't picked from a list of things already placed in the scene the
+  // way an Agent or Light is — they're spawned fresh, author-named, as
+  // many times as needed. Swap the dropdown for a text input for these
+  // types rather than forcing them through the "pick an existing instance"
+  // flow that makes no sense for a brand-new reusable node.
+  instSel.style.display     = isCreatable ? 'none' : '';
+  customInput.style.display = isCreatable ? '' : 'none';
+  if (isCreatable) { customInput.value = ''; customInput.focus(); return; }
   var list = NODE_TYPES[type].instances;
   instSel.innerHTML = list.length
     ? list.map(function(n) { return '<option value="'+n+'">'+n+'</option>'; }).join('')
@@ -475,9 +679,30 @@ function populateInstanceDropdown() {
 }
 function addNodeFromToolbar() {
   var type = document.getElementById('add-type').value;
-  var name = document.getElementById('add-instance').value;
-  if (!name) { alert((type==='TimelineTrigger') ? 'No Timeline cues yet — author and save one from the Timeline tab first.' : 'Nothing to add — no ' + type + ' instances available yet.'); return; }
-  addNode(type, name, 60 + (nodes.length % 5) * 40, 60 + Math.floor(nodes.length / 5) * 260);
+  var isCreatable = !!NODE_TYPES[type].creatable;
+  var name = isCreatable
+    ? document.getElementById('add-custom-name').value.trim()
+    : document.getElementById('add-instance').value;
+  if (!name) {
+    alert(isCreatable ? 'Type a name for the new ' + type + ' first.'
+      : (type==='TimelineTrigger') ? 'No Timeline cues yet — author and save one from the Timeline tab first.'
+      : 'Nothing to add — no ' + type + ' instances available yet.');
+    return;
+  }
+  if (isCreatable && nodes.some(function(n){ return n.name===name; })) {
+    // Real bug, found while answering a direct question about the rules
+    // here: this used to also check `n.type===type`, meaning a TimeSensor
+    // named "Foo" and a ScalarInterpolator ALSO named "Foo" would both be
+    // allowed — but X3D DEF names must be unique across the WHOLE
+    // document, not per-type. Fixed to check against every node's name
+    // regardless of type.
+    alert('A node named "' + name + '" already exists on the canvas (' +
+      nodes.find(function(n){return n.name===name;}).type + ') — DEF names must be unique across the whole scene, not just within one node type. Pick a different name.');
+    return;
+  }
+  var stagePos = _nextStagingPosition();
+  addNode(type, name, stagePos.x, stagePos.y);
+  if (isCreatable) document.getElementById('add-custom-name').value = '';
 }
 function addNode(type, name, x, y) {
   _nodeSeq++;
@@ -485,9 +710,47 @@ function addNode(type, name, x, y) {
   document.getElementById('empty-note').style.display = 'none';
   renderGraph();
 }
+// A new node placed via "+ Add node" (as opposed to Import, which does its
+// own real layered layout) used to land wherever a naive round-robin grid
+// put it — easy for it to end up overlapping an already-organised layout.
+// Instead: a reserved staging lane at the leftmost column position
+// (x=40, same X the layered layout itself uses for column 0 — this
+// deliberately extends that column downward rather than picking some
+// unrelated fixed spot, so "leftmost, obvious, out of the way" holds
+// whether or not a layout has run yet), stacking new nodes below whatever
+// already occupies that X position. Drag moves it wherever it actually
+// belongs; running Re-layout afterward will also correctly absorb it into
+// its real topological position automatically, once it's wired up, since
+// that recomputes every position from the actual connections rather than
+// caring where a node started.
+//
+// Real gap found live: stacking always continued from wherever the FIRST
+// node in the column ever landed, with no awareness of where the author
+// is actually scrolled to. After several adds in one session the column
+// grows tall, and a new node lands correctly-below-the-stack but far
+// below the visible viewport — "worked", but invisible and effectively
+// unreachable without knowing to scroll and hunt for it. Fixed by taking
+// the max of "below whatever's already staged" and "at least at the
+// current scroll position" — never overlaps existing staged nodes, but
+// also never lands somewhere the author isn't already looking.
+function _nextStagingPosition() {
+  var COL0_X = 40;
+  var maxBottom = 0;
+  nodes.forEach(function(n) {
+    if (Math.abs(n.x - COL0_X) < 5) maxBottom = Math.max(maxBottom, n.y + _nodeHeight(n.type));
+  });
+  var wrap = document.getElementById('canvas-wrap');
+  var visibleTop = wrap ? wrap.scrollTop + 20 : 40;
+  var visibleLeft = wrap ? wrap.scrollLeft + 40 : COL0_X;
+  return {
+    x: Math.max(COL0_X, visibleLeft),
+    y: Math.max(maxBottom ? maxBottom + 30 : 40, visibleTop),
+  };
+}
 function deleteNode(id) {
   nodes = nodes.filter(function(n) { return n.id !== id; });
   connections = connections.filter(function(c) { return c.fromNode !== id && c.toNode !== id; });
+  if (_selectedNode === id) closePropsPanel();
   renderGraph();
 }
 
@@ -497,13 +760,35 @@ function renderGraph() {
   // Remove existing node elements (keep the svg + empty-note siblings)
   inner.querySelectorAll('.node').forEach(function(el) { el.remove(); });
 
+  _renderTypeLayers();
+
   nodes.forEach(function(n) {
+    if (_hiddenTypes.has(n.type)) return; // "layer by node type" — hidden layers are skipped entirely, not just dimmed
+    if (_hiddenNodeIds.has(n.id)) return;  // individual per-node visibility — finer-grained than the type-layer toggle, for isolating one instance among many of the same type
     var def = NODE_TYPES[n.type];
+    if (!def) {
+      // Real crash found live: a dynamically-registered Script type (its
+      // schema only ever added to NODE_TYPES as a side effect of
+      // _resolveOrRegisterType running during an actual import pass) can
+      // outlive that import in persisted graph data — restoring nodes on
+      // a fresh page load brings the node back, but NODE_TYPES itself
+      // starts empty again on every fresh load, so the schema isn't there
+      // yet. This used to crash the entire render loop on the first such
+      // node — one bad entry took down every node after it too. Skipped
+      // now instead, with a clear console warning, so the rest of the
+      // graph still renders; see the save/restore fix alongside this for
+      // the actual root-cause repair (persisting the schema, not just the
+      // node).
+      console.warn('[RouteGraph] node "' + n.name + '" has type "' + n.type + '" with no matching NODE_TYPES entry \u2014 skipped, not rendered. Likely a Script type whose schema wasn\'t persisted; re-importing its source should restore it.');
+      return;
+    }
     var el = document.createElement('div');
-    el.className = 'node';
+    var inChain = _highlightedChain ? _highlightedChain.nodeIds.has(n.id) : true;
+    el.className = 'node' + (def.isApiTrigger ? ' node-api-trigger' : '') + (_highlightedChain && !inChain ? ' node-dimmed' : '') + (_selectedNode === n.id ? ' node-selected' : '');
     el.id = 'node-' + n.id;
     el.style.left = n.x + 'px';
     el.style.top  = n.y + 'px';
+    if (def.isApiTrigger) el.title = 'Declares an api_url field — likely a backend-bridging point (see this project\'s own MCCFMaster). Not proof the Script itself performs the HTTP call — inspect its CDATA to confirm where the actual fetch happens.';
 
     var rows = def.fields.map(function(f) {
       var leftDot  = (f.io === 'in'  || f.io === 'both') ? '<span class="port-dot left" style="background:'+FTYPE_COLOR[f.type]+'" data-node="'+n.id+'" data-field="'+f.name+'" data-io="in" data-type="'+f.type+'" onmousedown="startWireDrag(event)" onmouseup="finishWireDrag(event)"></span>' : '<span class="port-spacer"></span>';
@@ -513,6 +798,8 @@ function renderGraph() {
 
     el.innerHTML =
       '<div class="node-head" onmousedown="startNodeDrag(event,\''+n.id+'\')">' +
+        (def.isApiTrigger ? '<span class="node-api-badge" title="Likely API-bridging Script">&#9679; API</span>' : '') +
+        '<span class="node-hide" onclick="event.stopPropagation();hideNode(\''+n.id+'\')" title="Hide this node (Layers panel to bring it back)">&#8211;</span>' +
         '<span class="node-del" onclick="event.stopPropagation();deleteNode(\''+n.id+'\')" title="Delete node">×</span>' +
         '<div class="node-def">DEF: <b>' + n.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</b></div>' +
         '<div class="node-type">' + n.type + '</div>' +
@@ -553,12 +840,24 @@ function renderWires() {
   document.querySelectorAll('.wire-del-btn').forEach(function(e){ e.remove(); });
 
   connections.forEach(function(c) {
+    var fromN = nodes.find(function(n){ return n.id === c.fromNode; });
+    var toN   = nodes.find(function(n){ return n.id === c.toNode; });
+    if (!fromN || !toN || _hiddenTypes.has(fromN.type) || _hiddenTypes.has(toN.type) ||
+        _hiddenNodeIds.has(fromN.id) || _hiddenNodeIds.has(toN.id)) return; // hidden layer or individually-hidden node on either end — skip the wire too
     var p1 = _portPos(c.fromNode, c.fromField, 'out');
     var p2 = _portPos(c.toNode, c.toField, 'in');
     if (!p1 || !p2) return;
     var d = _bezier(p1, p2);
     var color = FTYPE_COLOR[c.type];
     var selected = _selectedConn === c.id;
+    // "Click a route, see the whole chain light up end to end" — every
+    // wire in the same connected component as the clicked one gets a
+    // bright, thick treatment; everything outside it dims down instead of
+    // just leaving everything else at normal weight, since dimming the
+    // rest is what actually makes a chain of several wires read as one
+    // continuous story at a glance rather than several separately-bright
+    // segments competing with the whole graph around them.
+    var inChain = _highlightedChain ? _highlightedChain.connIds.has(c.id) : true;
 
     var hit = document.createElementNS('http://www.w3.org/2000/svg','path');
     hit.setAttribute('d', d);
@@ -573,9 +872,9 @@ function renderWires() {
     var vis = document.createElementNS('http://www.w3.org/2000/svg','path');
     vis.setAttribute('d', d);
     vis.setAttribute('stroke', _resolveColor(color));
-    vis.setAttribute('stroke-width', selected ? '3' : '2');
+    vis.setAttribute('stroke-width', selected ? '3.5' : (inChain && _highlightedChain ? '3' : '2'));
     vis.setAttribute('fill', 'none');
-    vis.setAttribute('opacity', selected ? '1' : '0.75');
+    vis.setAttribute('opacity', !inChain ? '0.1' : (selected ? '1' : '0.9'));
     if (selected) vis.setAttribute('stroke-dasharray', '5,3');
     svg.appendChild(vis);
 
@@ -606,27 +905,37 @@ function renderWires() {
   }
 }
 
-function selectConnection(id) { _selectedConn = (_selectedConn === id) ? null : id; renderWires(); }
+function selectConnection(id) {
+  if (_selectedConn === id) {
+    _selectedConn = null;
+    _highlightedChain = null;
+  } else {
+    _selectedConn = id;
+    _highlightedChain = _computeChainFromConnection(id);
+  }
+  renderGraph(); // full re-render, not just wires — nodes need the dim treatment too now
+}
 function deleteConnection(id) {
   connections = connections.filter(function(c) { return c.id !== id; });
   _selectedConn = null;
-  renderWires();
+  _highlightedChain = null;
+  renderGraph();
 }
 document.addEventListener('keydown', function(e) {
   if ((e.key === 'Delete' || e.key === 'Backspace') && _selectedConn) { deleteConnection(_selectedConn); }
 });
 document.getElementById('canvas-wrap').addEventListener('click', function() {
-  if (_selectedConn) { _selectedConn = null; renderWires(); }
+  if (_selectedConn) { _selectedConn = null; _highlightedChain = null; renderGraph(); }
 });
 
 // ── Node dragging ────────────────────────────────────────────────────────
 function startNodeDrag(evt, nodeId) {
-  if (evt.target.classList.contains('node-del')) return;
+  if (evt.target.classList.contains('node-del') || evt.target.classList.contains('node-hide')) return;
   var n = nodes.find(function(x) { return x.id === nodeId; });
   if (!n) return;
   var el = document.getElementById('node-' + nodeId);
   el.classList.add('dragging');
-  _drag = { id: nodeId, startX: evt.clientX, startY: evt.clientY, origX: n.x, origY: n.y };
+  _drag = { id: nodeId, startX: evt.clientX, startY: evt.clientY, origX: n.x, origY: n.y, moved: false };
   document.addEventListener('mousemove', onNodeDragMove);
   document.addEventListener('mouseup', onNodeDragEnd);
   evt.preventDefault();
@@ -635,17 +944,223 @@ function onNodeDragMove(evt) {
   if (!_drag) return;
   var n = nodes.find(function(x) { return x.id === _drag.id; });
   if (!n) return;
-  n.x = Math.max(0, _drag.origX + (evt.clientX - _drag.startX));
-  n.y = Math.max(0, _drag.origY + (evt.clientY - _drag.startY));
+  var dx = evt.clientX - _drag.startX, dy = evt.clientY - _drag.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) _drag.moved = true; // real drag vs. a plain click that happens to jitter a pixel or two
+  n.x = Math.max(0, _drag.origX + dx);
+  n.y = Math.max(0, _drag.origY + dy);
   var el = document.getElementById('node-' + n.id);
   if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
   renderWires();
 }
 function onNodeDragEnd() {
-  if (_drag) { var el = document.getElementById('node-' + _drag.id); if (el) el.classList.remove('dragging'); }
+  if (_drag) {
+    var el = document.getElementById('node-' + _drag.id);
+    if (el) el.classList.remove('dragging');
+    // A click without a real drag selects the node for the properties
+    // panel instead — same node-head mousedown starts both gestures, so
+    // this is the only reliable point to tell them apart (movement over
+    // the course of the gesture, not just presence of a mouseup).
+    if (!_drag.moved) selectNode(_drag.id);
+  }
   _drag = null;
   document.removeEventListener('mousemove', onNodeDragMove);
   document.removeEventListener('mouseup', onNodeDragEnd);
+}
+
+// ── Node properties panel ───────────────────────────────────────────────
+// Scoped deliberately to only the five "creatable" utility types
+// (TimeSensor used generically, the interpolator quartet) — the ones
+// buildRouteGraphNodes actually bakes fresh on export. Imported/existing-
+// instance nodes (Transform, Light, Script, RecordedPath, an existing
+// TimeSensor already in the scene) already have real values living
+// elsewhere in the compiled scene or avatar file; editing them from here
+// wouldn't do anything on export (buildRouteGraphNodes's existing-DEF
+// guard means it's never re-baked), so the panel says that plainly rather
+// than offering inputs that would silently do nothing.
+function selectNode(id) {
+  _selectedNode = id;
+  renderPropsPanel();
+  renderGraph();
+}
+function closePropsPanel() {
+  _selectedNode = null;
+  document.getElementById('props-panel').style.display = 'none';
+  renderGraph();
+}
+function renderPropsPanel() {
+  var panel = document.getElementById('props-panel');
+  var n = nodes.find(function(x){ return x.id === _selectedNode; });
+  if (!n) { panel.style.display = 'none'; return; }
+  var def = NODE_TYPES[n.type];
+  panel.style.display = '';
+  var html = '<span class="props-close" onclick="closePropsPanel()">\u00D7</span>';
+
+  // Renaming is only safe for a node this tool actually created — an
+  // imported node's name IS the real DEF already sitting in the compiled
+  // scene; renaming it here would just make the baked ROUTE reference a
+  // DEF that doesn't exist under that name, silently breaking the wire.
+  // Newly-created nodes have no such external reference to go stale, so
+  // renaming just updates n.name — connections key off the node's internal
+  // id, never its name, so a rename can never orphan a wire.
+  if (n.imported) {
+    html += '<h3>' + n.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</h3>';
+  } else {
+    html += '<div class="props-field"><label>DEF (name)</label>' +
+      '<input type="text" value="' + n.name.replace(/"/g,'&quot;') + '" ' +
+      'onchange="renameNode(\''+n.id+'\',this.value)"></div>';
+  }
+  html += '<div class="props-type">' + n.type + '</div>';
+
+  if (!def.propsSchema) {
+    html += '<div class="props-readonly-note">No editable properties for this node type — its values are wired via routes only.</div>';
+    panel.innerHTML = html;
+    return;
+  }
+  if (n.imported) {
+    html += '<div class="props-readonly-note" style="color:var(--accent4);margin-bottom:12px">' +
+      'This node already exists in the compiled scene (imported, not newly created). ' +
+      'Property edits here won\u2019t take effect on export \u2014 an existing DEF is never re-baked. ' +
+      'Edit its real values wherever it was originally authored instead.</div>';
+  }
+
+  n.props = n.props || {};
+  def.propsSchema.forEach(function(pf) {
+    if (n.props[pf.key] === undefined) n.props[pf.key] = _deepClone(pf.default); // deep clone — pf.default is a shared object literal on NODE_TYPES; assigning it directly would let every node of this type mutate the same shared default
+    html += '<div class="props-field"><label>' + pf.label + '</label>' + _renderPropInput(n, pf) + '</div>';
+  });
+  panel.innerHTML = html;
+}
+function _deepClone(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
+
+// ── Colour conversion — HTML <input type="color"> is #rrggbb (0-255 per
+// channel); X3D SFColor is three floats, 0-1 per channel. Real conversion,
+// not approximated — round-trips exactly for any value the picker itself
+// can produce.
+function _hexToFloatRgb(hex) {
+  var r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+  return [Math.round(r*10000)/10000, Math.round(g*10000)/10000, Math.round(b*10000)/10000];
+}
+function _floatRgbToHex(rgb) {
+  function toHex(v) { var h = Math.round(Math.max(0,Math.min(1,v||0))*255).toString(16); return h.length<2 ? '0'+h : h; }
+  return '#' + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+}
+
+function _renderPropInput(n, pf) {
+  var val = n.props[pf.key];
+  if (pf.type === 'checkbox') {
+    return '<input type="checkbox" ' + (val ? 'checked' : '') +
+      ' onchange="setNodeProp(\''+n.id+'\',\''+pf.key+'\',this.checked)">';
+  }
+  if (pf.type === 'number') {
+    return '<input type="number" step="any" value="' + val + '" ' +
+      'onchange="setNodeProp(\''+n.id+'\',\''+pf.key+'\',parseFloat(this.value)||0)">';
+  }
+  if (pf.type === 'keyframes') {
+    return _renderKeyframesEditor(n, pf);
+  }
+  return '';
+}
+
+// Arbitrary-count keyframe list — the actual "add/delete key and value
+// pairs" request. valueType drives what the value side of each row looks
+// like: a real colour picker (paired with the exact 0-1 floats it
+// produces, shown alongside for precision — X3D wants the floats, the
+// picker is just a faster way to land near one) for 'color', a single
+// number for 'float', or N number inputs for 'vec3'/'vec4'.
+function _renderKeyframesEditor(n, pf) {
+  var kfs = n.props[pf.key];
+  var rows = kfs.map(function(kf, i) {
+    var valueHtml;
+    if (pf.valueType === 'color') {
+      var hex = _floatRgbToHex(kf.value);
+      valueHtml =
+        '<div style="display:flex;gap:4px;align-items:center">' +
+        '<input type="color" value="' + hex + '" ' +
+          'onchange="setKeyframeColorFromPicker(\''+n.id+'\',\''+pf.key+'\','+i+',this.value)" style="width:34px;padding:0;height:26px;flex-shrink:0">' +
+        '<div class="vec-row">' + ['R','G','B'].map(function(lab, ci) {
+          return '<input type="number" step="any" min="0" max="1" value="' + (kf.value[ci]!==undefined?kf.value[ci]:0) + '" title="' + lab + '" ' +
+            'onchange="setKeyframeVecComponent(\''+n.id+'\',\''+pf.key+'\','+i+','+ci+',parseFloat(this.value)||0)">';
+        }).join('') + '</div>' +
+        '</div>';
+    } else if (pf.valueType === 'float') {
+      valueHtml = '<input type="number" step="any" value="' + kf.value + '" ' +
+        'onchange="setKeyframeValue(\''+n.id+'\',\''+pf.key+'\','+i+',parseFloat(this.value)||0)">';
+    } else { // vec3 / vec4
+      var labels = pf.valueType === 'vec3' ? ['X','Y','Z'] : ['X','Y','Z','angle'];
+      valueHtml = '<div class="vec-row">' + labels.map(function(lab, ci) {
+        return '<input type="number" step="any" value="' + (kf.value[ci]!==undefined?kf.value[ci]:0) + '" title="' + lab + '" ' +
+          'onchange="setKeyframeVecComponent(\''+n.id+'\',\''+pf.key+'\','+i+','+ci+',parseFloat(this.value)||0)">';
+      }).join('') + '</div>';
+    }
+    return '<div class="keyframe-row">' +
+      '<div class="keyframe-row-top">' +
+        '<input type="number" step="any" min="0" max="1" value="' + kf.fraction + '" title="fraction (0\u20131)" ' +
+          'onchange="setKeyframeFraction(\''+n.id+'\',\''+pf.key+'\','+i+',parseFloat(this.value)||0)" style="width:60px">' +
+        '<span class="keyframe-del" onclick="removeKeyframe(\''+n.id+'\',\''+pf.key+'\','+i+')" title="Remove this keyframe">\u00D7</span>' +
+      '</div>' +
+      valueHtml +
+    '</div>';
+  }).join('');
+  return '<div class="keyframes-list">' + rows + '</div>' +
+    '<button class="tb-btn" style="margin-top:6px;width:100%" onclick="addKeyframe(\''+n.id+'\',\''+pf.key+'\')">+ Add keyframe</button>';
+}
+
+function setNodeProp(id, key, value) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.props = n.props || {};
+  n.props[key] = value;
+}
+function addKeyframe(id, key) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  var kfs = n.props[key];
+  var lastFraction = kfs.length ? kfs[kfs.length-1].fraction : 0;
+  var valueType = NODE_TYPES[n.type].propsSchema.find(function(p){return p.key===key;}).valueType;
+  var newVal = valueType === 'float' ? 0 : valueType === 'vec4' ? [0,1,0,0] : [0,0,0];
+  kfs.push({ fraction: Math.min(1, lastFraction + 0.1), value: newVal });
+  renderPropsPanel();
+}
+function removeKeyframe(id, key, index) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  if (n.props[key].length <= 2) { alert('An interpolator needs at least two keyframes to do anything.'); return; }
+  n.props[key].splice(index, 1);
+  renderPropsPanel();
+}
+function setKeyframeFraction(id, key, index, value) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.props[key][index].fraction = value;
+}
+function setKeyframeValue(id, key, index, value) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.props[key][index].value = value;
+}
+function setKeyframeVecComponent(id, key, index, ci, value) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.props[key][index].value[ci] = value;
+}
+function setKeyframeColorFromPicker(id, key, index, hex) {
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.props[key][index].value = _hexToFloatRgb(hex);
+  renderPropsPanel(); // refresh so the paired R/G/B number inputs reflect what the picker just set
+}
+function renameNode(id, newName) {
+  newName = newName.trim();
+  var n = nodes.find(function(x){ return x.id === id; });
+  if (!n || n.imported) return; // imported nodes can't be renamed at all — see renderPropsPanel's own comment
+  if (!newName) { renderPropsPanel(); return; } // reject empty, silently revert the input to the still-real current name
+  if (nodes.some(function(x){ return x.id !== id && x.name === newName; })) {
+    alert('A node named "' + newName + '" already exists — DEF names must be unique across the whole scene.');
+    renderPropsPanel();
+    return;
+  }
+  n.name = newName;
+  renderGraph();
 }
 
 // ── Wire (connection) dragging ──────────────────────────────────────────
@@ -744,7 +1259,36 @@ function finishWireDrag(evt) {
 // This closes the "vanishes on refresh" problem the design note flagged
 // for this file specifically; it does not close the export gap.
 function saveRouteGraph() {
-  var payload = { nodes: nodes, connections: connections };
+  // Includes hidden-layer/hidden-node display state alongside the
+  // structural data — not just nodes/connections. A saved graph with 40
+  // nodes where you'd deliberately hidden the noisy avatar-internal wiring
+  // to focus on one subsystem should come back looking the way you left
+  // it, not with everything visible again.
+  //
+  // Also includes the schema for any dynamically-registered type actually
+  // used by a node here (Script types, registered by _resolveOrRegisterType
+  // during import — their schema lives only in this page's own NODE_TYPES,
+  // never persisted anywhere on its own). Real crash found live without
+  // this: a saved graph containing a Script node restored fine as data on
+  // a fresh page load, but NODE_TYPES itself starts empty again on every
+  // load, so the schema wasn't there — renderGraph had nothing to read for
+  // that node's fields/isApiTrigger and crashed the whole render loop.
+  // Restoring the schema alongside the node data (see the mccf_scene_data
+  // handler below) is the actual fix; the render-loop guard alone would
+  // only have stopped the crash, not brought the node back working.
+  var dynamicTypes = {};
+  nodes.forEach(function(n) {
+    if (!_STATIC_NODE_TYPE_KEYS.has(n.type) && NODE_TYPES[n.type] && !dynamicTypes[n.type]) {
+      dynamicTypes[n.type] = NODE_TYPES[n.type];
+    }
+  });
+  var payload = {
+    nodes: nodes,
+    connections: connections,
+    hiddenTypes: Array.from(_hiddenTypes),
+    hiddenNodeIds: Array.from(_hiddenNodeIds),
+    dynamicTypes: dynamicTypes,
+  };
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: 'mccf_route_graph_save', data: payload }, '*');
   } else {
@@ -754,8 +1298,598 @@ function saveRouteGraph() {
 (function() {
   if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_ready' }, '*');
 })();
+// Real per-node height from actual field count, not a fixed guess —
+// exact for the two pieces CSS makes exact (.field-row has an explicit
+// height:20px, and box-sizing:border-box means that's the true row height
+// regardless of its own padding; .node-body's 4px+4px padding is exact
+// too), estimated for the one piece that isn't pinned to a literal pixel
+// value (.node-head's two text lines, ~56px including its own padding and
+// border — text line-height rendering varies slightly by font/browser, so
+// this number is a considered estimate, not a guarantee — worth an eyeball
+// check against the real render, same as everything else this session
+// that couldn't be verified without a live browser).
+var _NODE_HEADER_H = 56, _NODE_BODY_PAD = 8, _FIELD_ROW_H = 20;
+function _nodeHeight(type) {
+  var def = NODE_TYPES[type];
+  var fieldCount = def ? def.fields.length : 1;
+  return _NODE_HEADER_H + _NODE_BODY_PAD + fieldCount * _FIELD_ROW_H;
+}
+
+// ── Layered auto-layout (crossing minimisation) ─────────────────────────
+// Simplified Sugiyama-style layered layout: column = longest-path depth
+// in the connection DAG (so a node is never placed before anything that
+// feeds it), then a barycenter heuristic sorts nodes within each column by
+// the average position of their already-placed neighbours in the adjacent
+// column, alternating direction over a few passes — the same general
+// approach real graph-layout tools use, not a from-scratch invention.
+// Not guaranteed to find the true minimum-crossing arrangement (that's
+// NP-hard in general) but gets close in practice for graphs this size.
+// Disconnected nodes (zero connections at all) are pulled into their own
+// clearly-separated region below the main graph, grouped by type — the
+// direct answer to "eyeball whether there are any orphan systems," which
+// a uniform layout would otherwise bury by interspersing them randomly.
+// Known, honest limitation: a genuinely separate connected sub-graph (not
+// zero-connection, just never touching the main component) isn't detected
+// as its own cluster yet — it layers into the same column numbering as
+// the main graph and can end up visually interleaved with it. Worth a
+// real fix if it turns out to matter in practice; not attempted tonight.
+function _computeLayeredLayout(nodeList, connList) {
+  var preds = {}, succs = {}, undirected = {};
+  nodeList.forEach(function(n){ preds[n.id] = []; succs[n.id] = []; undirected[n.id] = []; });
+  connList.forEach(function(c) {
+    if (preds[c.toNode] && succs[c.fromNode]) {
+      preds[c.toNode].push(c.fromNode);
+      succs[c.fromNode].push(c.toNode);
+      undirected[c.fromNode].push(c.toNode);
+      undirected[c.toNode].push(c.fromNode);
+    }
+  });
+
+  var connectedIds = new Set();
+  connList.forEach(function(c){ connectedIds.add(c.fromNode); connectedIds.add(c.toNode); });
+
+  // Separate connected components — two chains that never touch each
+  // other shouldn't share column numbering (that's what let a second
+  // chain interleave with the main one before). Grouped by plain
+  // undirected reachability, independent of the depth/direction logic
+  // below, which then runs once per component rather than once for the
+  // whole graph.
+  var seen = new Set(), components = [];
+  nodeList.forEach(function(n) {
+    if (!connectedIds.has(n.id) || seen.has(n.id)) return;
+    var comp = [], queue = [n.id];
+    seen.add(n.id);
+    while (queue.length) {
+      var id = queue.shift();
+      comp.push(id);
+      undirected[id].forEach(function(nb) { if (!seen.has(nb)) { seen.add(nb); queue.push(nb); } });
+    }
+    components.push(comp);
+  });
+  // Stable, deterministic order — largest component first, so the main
+  // graph anchors at column 0 and smaller side-chains fall in after it,
+  // matching "put it in a column to the right of the last node of the
+  // existing chain" rather than an arbitrary/incidental ordering.
+  components.sort(function(a, b) { return b.length - a.length; });
+
+  var depth = {};
+  function computeDepth(id, visiting) {
+    if (depth[id] !== undefined) return depth[id];
+    if (visiting.has(id)) return 0; // cycle guard — this tool already rejects circular connections at wire-creation time, defensive only
+    visiting.add(id);
+    var ps = preds[id] || [];
+    var d = ps.length ? Math.max.apply(null, ps.map(function(p){ return computeDepth(p, visiting) + 1; })) : 0;
+    visiting.delete(id);
+    depth[id] = d;
+    return d;
+  }
+
+  var COL_W = 420, ROW_GAP = 30, positions = {};
+  var maxColY = 40;
+  var columnOffset = 0; // running column count consumed by components already placed
+
+  components.forEach(function(compIds) {
+    var compIdSet = new Set(compIds);
+    compIds.forEach(function(id) { computeDepth(id, new Set()); });
+
+    var columns = {};
+    compIds.forEach(function(id) { (columns[depth[id]] = columns[depth[id]] || []).push(id); });
+    var colKeys = Object.keys(columns).map(Number).sort(function(a,b){return a-b;});
+    var order = {};
+    colKeys.forEach(function(d) { columns[d].forEach(function(id, i) { order[id] = i; }); });
+
+    function barycenterPass(forward) {
+      var keys = forward ? colKeys : colKeys.slice().reverse();
+      keys.forEach(function(d) {
+        var neighbourCol = forward ? d - 1 : d + 1;
+        if (colKeys.indexOf(neighbourCol) === -1) return;
+        columns[d].forEach(function(id) {
+          var neighbours = (forward ? preds[id] : succs[id]).filter(function(nb){ return compIdSet.has(nb) && order[nb] !== undefined; });
+          if (!neighbours.length) return;
+          order[id] = neighbours.reduce(function(s,nb){ return s + order[nb]; }, 0) / neighbours.length;
+        });
+        columns[d].sort(function(a,b){ return order[a] - order[b]; });
+        columns[d].forEach(function(id, i) { order[id] = i; });
+      });
+    }
+    for (var pass = 0; pass < 4; pass++) barycenterPass(pass % 2 === 0);
+
+    colKeys.forEach(function(d) {
+      var y = 40;
+      columns[d].forEach(function(id) {
+        var n = nodeList.find(function(x){ return x.id === id; });
+        positions[id] = { x: 40 + (columnOffset + d) * COL_W, y: y };
+        y += _nodeHeight(n.type) + ROW_GAP;
+      });
+      maxColY = Math.max(maxColY, y);
+    });
+    columnOffset += colKeys.length ? (colKeys[colKeys.length - 1] + 1) : 0;
+  });
+
+  var orphanIds = nodeList.filter(function(n){ return !connectedIds.has(n.id); }).map(function(n){ return n.id; });
+  var orphanY = maxColY + 120;
+  var byOrphanType = {};
+  orphanIds.forEach(function(id) {
+    var n = nodeList.find(function(x){ return x.id === id; });
+    (byOrphanType[n.type] = byOrphanType[n.type] || []).push(id);
+  });
+  var oy = orphanY;
+  Object.keys(byOrphanType).sort().forEach(function(t) {
+    var ox = 40;
+    byOrphanType[t].forEach(function(id) { positions[id] = { x: ox, y: oy }; ox += 260; });
+    oy += _nodeHeight(t) + ROW_GAP;
+  });
+
+  return { positions: positions, orphanIds: orphanIds };
+}
+
+function relayoutGraph() {
+  var result = _computeLayeredLayout(nodes, connections);
+  nodes.forEach(function(n) {
+    var p = result.positions[n.id];
+    if (p) { n.x = p.x; n.y = p.y; }
+  });
+  renderGraph();
+  if (result.orphanIds.length) {
+    console.log('[RouteGraph] re-layout: ' + result.orphanIds.length + ' node(s) with zero connections, moved to the orphan area below the main graph.');
+  }
+}
+
+
+// Real X3D <ROUTE> elements name fields using whichever legal alias the
+// author/generator chose — set_translation / translation / translation_changed
+// are the SAME exposedField for a genuine exposedField (Transform's
+// translation, a light's intensity), and every baked ROUTE this project's
+// own export code writes (buildRecordedPathInterpNodes, buildTurnCueRoutes)
+// uses the set_/_changed alias form, confirmed directly, not assumed. But
+// TimeSensor/Interpolator's fraction_changed / set_fraction / value_changed
+// are NOT aliases of a shared field — they're genuinely distinct in-only
+// and out-only fields that already happen to be spelled with those affixes
+// as their real, permanent names. Blindly stripping set_/_changed would
+// wrongly turn "fraction_changed" into "fraction" (not a field that
+// exists) and break every TimeSensor/Interpolator route. So resolution
+// tries the exact name first — which is already correct for TimeSensor/
+// Interpolator — and only falls through to stripping the alias affixes
+// when the exact name isn't itself a defined field, which is exactly the
+// Transform/light case.
+function _resolveCanonicalField(nodeType, rawField) {
+  var def = NODE_TYPES[nodeType];
+  if (!def) return null;
+  var exact = def.fields.find(function(f){ return f.name === rawField; });
+  if (exact) return exact.name;
+  var stripped = rawField.replace(/^set_/, '').replace(/_changed$/, '');
+  var alias = def.fields.find(function(f){ return f.name === stripped; });
+  return alias ? alias.name : null;
+}
+
+// Real X3D tag name -> this tool's node-type vocabulary. Proto instances
+// in X3D's XML encoding are written as <ProtoName DEF="..."/> directly —
+// confirmed this session for the camera-rig protos (<AgentOrbitCamera
+// DEF="CAM_Orbit">, not wrapped in a generic <ProtoInstance> tag) — so
+// mccf_light_protos.x3d's BasicPointLight/BasicSpotLight/BasicDirectionalLight
+// appear as literal tag names too, matched directly below alongside the
+// raw non-proto light tags as a fallback.
+var _TAG_TO_NODE_TYPE = {
+  Transform: 'Transform',
+  TimeSensor: 'TimeSensor',
+  PositionInterpolator: 'PositionInterpolator',
+  OrientationInterpolator: 'OrientationInterpolator',
+  ScalarInterpolator: 'ScalarInterpolator',
+  ColorInterpolator: 'ColorInterpolator',
+  ProximitySensor: 'ProximitySensor',
+  TouchSensor: 'TouchSensor',
+  BasicPointLight: 'BasicPointLight',
+  BasicSpotLight: 'BasicSpotLight',
+  BasicDirectionalLight: 'BasicDirectionalLight',
+  PointLight: 'BasicPointLight',
+  SpotLight: 'BasicSpotLight',
+  DirectionalLight: 'BasicDirectionalLight',
+  BasicAudioSource: 'BasicAudioSource',
+  AudioClip: 'BasicAudioSource',
+};
+
+var _pendingImportRequestId = null;
+
+// Script nodes declare their own field schema per-instance in the XML
+// itself (real <field name= type= accessType=/> children) — not a fixed
+// type this tool can model statically the way TimeSensor/Transform are.
+// Introspected directly from each Script's own declared fields rather than
+// guessed. accessType inputOnly/outputOnly/inputOutput maps to io in/out/both,
+// same convention every other node type here already uses.
+var _X3D_FIELD_TO_FTYPE = {
+  SFBool:'Bool', SFTime:'Time', SFFloat:'Float',
+  SFInt32:'Float',  // no dedicated port colour for a lone integer field type — bucketed with Float rather than inventing a seventh colour for one field seen nowhere else in this project
+  SFVec3f:'Vec3', SFRotation:'Rotation', SFColor:'Color', SFNode:'Node',
+  SFString:'Node',  // no dedicated string colour either — bucketed with the structural/Node colour, same reasoning as SFInt32
+};
+// "API trigger" detection: an api_url field, or any field whose authored
+// value is a literal http(s) URL, is a real, declared signal — not a
+// guess. Confirmed directly against this project's own compiled scenes:
+// MCCFMaster is the only Script anywhere with such a field
+// (api_url="http://localhost:5000"), and it's the exact source of the
+// "MCCFMaster initialized." line that's opened every console log this
+// whole project. Precision matters here: this flags a Script as a likely
+// backend-bridging point (its field set matches exactly the shape of
+// something that would carry sensed scene events out to an API — position,
+// zone-active booleans, in; computed values like arousal, out) — it does
+// NOT claim the Script's own ECMAScript performs the HTTP call itself,
+// which would need parsing the CDATA to actually prove and, per X_ITE's
+// own Script sandbox, is unlikely to be where the real fetch() lives
+// anyway (Script execution contexts don't typically expose fetch/XHR —
+// the outer page's JS almost certainly does the actual call, listening to
+// this Script's fields from outside the X3D document).
+function _introspectScript(scriptEl) {
+  var fieldEls = Array.from(scriptEl.querySelectorAll('field'));
+  var fields = fieldEls.map(function(fEl) {
+    var accessType = fEl.getAttribute('accessType') || 'inputOutput';
+    var io = accessType === 'inputOnly' ? 'in' : accessType === 'outputOnly' ? 'out' : 'both';
+    var xType = fEl.getAttribute('type') || 'SFString';
+    return { name: fEl.getAttribute('name'), type: _X3D_FIELD_TO_FTYPE[xType] || 'Node', io: io };
+  });
+  var isApiTrigger = fieldEls.some(function(fEl) {
+    var name = (fEl.getAttribute('name') || '').toLowerCase();
+    var val = fEl.getAttribute('value') || '';
+    return name === 'api_url' || /^https?:\/\//.test(val);
+  });
+  return { fields: fields, isApiTrigger: isApiTrigger };
+}
+
+// ── Save subsystem as a reusable Effect Asset ───────────────────────────
+// Well-scoped first version: exports the currently-highlighted chain (see
+// _computeChainFromConnection — click a wire first) as a standalone,
+// complete X3D document, downloadable and directly usable via <Inline> in
+// another scene. Deliberately NOT a parameterised PROTO/ExternProto —
+// which internal values should become external, author-configurable
+// fields is a real design question worth doing deliberately, not guessing
+// at here. This exports the chain exactly as authored: creatable utility
+// nodes (TimeSensor, the interpolator quartet) get baked with their real
+// values, same logic as the scene export in mccf_scene_composer.html's
+// _routeGraphNodeAttrs, kept as a small local copy here rather than a
+// cross-file dependency, since this tool is designed to also work
+// standalone (see saveRouteGraph's own standalone fallback). Any imported/
+// existing node the chain touches (an avatar's Transform, a placed light)
+// is NOT re-declared as a fresh node — that would be wrong, it's not
+// something this fragment can create — but IS still referenced in the
+// generated ROUTEs, with a clear comment explaining that reusing this
+// fragment elsewhere needs either the same DEF name to already exist in
+// the target scene, or the target reference hand-edited first.
+function _nodeAttrsForExport(n) {
+  var p = n.props || {};
+  if (n.type === 'TimeSensor') {
+    return ' cycleInterval="' + (p.cycleInterval!==undefined?p.cycleInterval:4) + '" loop="' + (p.loop?'true':'false') + '"';
+  }
+  var kfs = (p.keyframes && p.keyframes.length >= 2) ? p.keyframes.slice().sort(function(a,b){return a.fraction-b.fraction;}) : null;
+  if (!kfs) return '';
+  var keyStr = kfs.map(function(kf){ return kf.fraction; }).join(',');
+  var keyValueStr = kfs.map(function(kf){ return Array.isArray(kf.value) ? kf.value.join(' ') : kf.value; }).join(',');
+  return ' key="' + keyStr + '" keyValue="' + keyValueStr + '"';
+}
+function saveSubsystemAsAsset() {
+  if (!_highlightedChain || !_highlightedChain.nodeIds.size) {
+    alert('Click a wire first \u2014 the whole connected chain it belongs to becomes the exported subsystem.');
+    return;
+  }
+  var name = prompt('Descriptive name for this Effect Asset (used as the file name and the exported scene\u2019s title):', 'MyEffect');
+  if (!name) return;
+  var safeName = name.trim().replace(/[^A-Za-z0-9_]/g, '_');
+  if (!safeName) { alert('Name needs at least one letter, digit, or underscore.'); return; }
+
+  var chainNodes = nodes.filter(function(n){ return _highlightedChain.nodeIds.has(n.id); });
+  var chainConns = connections.filter(function(c){ return _highlightedChain.connIds.has(c.id); });
+  var externalRefs = chainNodes.filter(function(n){ return n.imported; });
+
+  var x = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  x += '<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.1//EN" "https://www.web3d.org/specifications/x3d-4.1.dtd">\n';
+  x += '<X3D profile="Interchange" version="4.1">\n<head>\n';
+  x += '  <meta name="title" content="' + name.replace(/"/g,'&quot;') + '"/>\n';
+  x += '  <meta name="generator" content="MCCF Route Graph tool \u2014 saved subsystem"/>\n';
+  x += '  <meta name="created" content="' + new Date().toISOString() + '"/>\n';
+  if (externalRefs.length) {
+    x += '  <meta name="comment" content="References ' + externalRefs.length +
+      ' node(s) not included in this file (' + externalRefs.map(function(n){return n.name;}).join(', ') +
+      ') \u2014 reusing this fragment elsewhere needs either a node with the same DEF name already in the target scene, or the ROUTE target(s) below hand-edited first."/>\n';
+  }
+  x += '</head>\n<Scene>\n';
+  chainNodes.forEach(function(n) {
+    if (n.imported) { x += '  <!-- external reference, not declared here: ' + n.type + ' DEF="' + n.name + '" -->\n'; return; }
+    var tag = n.type; // ROUTE_GRAPH creatable types share their NODE_TYPES key with their real X3D tag name directly
+    x += '  <' + tag + ' DEF="' + n.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;') + '"' + _nodeAttrsForExport(n) + '/>\n';
+  });
+  chainConns.forEach(function(c) {
+    var fromN = nodes.find(function(n){return n.id===c.fromNode;}), toN = nodes.find(function(n){return n.id===c.toNode;});
+    if (!fromN || !toN) return;
+    x += '  <ROUTE fromNode="' + fromN.name + '" fromField="' + c.fromField + '" toNode="' + toN.name + '" toField="' + c.toField + '"/>\n';
+  });
+  x += '</Scene>\n</X3D>\n';
+
+  var blob = new Blob([x], { type: 'model/x3d+xml' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = safeName + '.x3d';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  console.log('[RouteGraph] saved subsystem "' + name + '" \u2014 ' + chainNodes.length + ' nodes, ' + chainConns.length +
+    ' routes' + (externalRefs.length ? ', ' + externalRefs.length + ' external reference(s)' : '') + '.');
+
+  // Also reach the server library — the local download alone was never
+  // enough for "browse and load one back in" to mean anything, since a
+  // file that only lands in the author's Downloads folder can't be
+  // listed or reloaded by anyone, including the same session next time.
+  // Always the 'user' tier from here — 'rich'/'common' are populated
+  // deliberately, not by this live save flow (see /effects/save's own
+  // comment on the same three-tier plan).
+  fetch('/effects/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: safeName + '.x3d', content: x }),
+  }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(res) { console.log('[RouteGraph] also saved to server library:', res); })
+    .catch(function(e) { console.warn('[RouteGraph] server save failed (' + e.message + ') — local download still succeeded, just not added to the browsable library'); });
+}
+
+// ── Load Effect Asset — the reverse of saveSubsystemAsAsset ─────────────
+// Browses the server-side three-tier library (/effects/list) and merges a
+// chosen file's nodes/routes into the current graph, reusing the exact
+// same parsing/layout pipeline as scene import (_importGraphFromXmlText)
+// rather than a second, separate implementation. An effect file's
+// "external reference" comments (see saveSubsystemAsAsset's own comment)
+// aren't real elements, so a ROUTE pointing at one simply won't resolve
+// here unless the current graph already has a node with that same name —
+// same honest "skip what can't be resolved, tell the author why" handling
+// scene import already uses, not special-cased for this source.
+function loadEffectAsset() {
+  var tier = prompt('Which tier? rich / common / user', 'user');
+  if (!tier) return;
+  tier = tier.trim().toLowerCase();
+  if (tier !== 'rich' && tier !== 'common' && tier !== 'user') {
+    alert('Tier must be exactly "rich", "common", or "user".');
+    return;
+  }
+  fetch('/effects/list?subdir=' + tier)
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(data) {
+      var files = data.files || [];
+      if (!files.length) { alert('No saved effects in the "' + tier + '" tier yet.'); return; }
+      var choice = prompt('Available in "' + tier + '":\n' + files.join('\n') + '\n\nType the exact filename to load:', files[0]);
+      if (!choice) return;
+      choice = choice.trim();
+      if (files.indexOf(choice) === -1) { alert('"' + choice + '" isn\u2019t in the list \u2014 check spelling and try again.'); return; }
+      fetch('/static/x3d/Effects/' + tier + '/' + choice)
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(function(xmlText) {
+          _importGraphFromXmlText(xmlText, 'the effect file "' + choice + '"', 'a node this effect file doesn\'t declare (an external reference \u2014 wire it to the matching node in this graph by hand)', true);
+        })
+        .catch(function(e) { alert('Could not fetch "' + choice + '": ' + e.message); });
+    })
+    .catch(function(e) { alert('Could not list the "' + tier + '" tier: ' + e.message); });
+}
+
+function importRoutesFromScene() {
+  if (nodes.length && !confirm('This will add every recognised route from the ' +
+      'current compiled scene to the canvas. Existing nodes/connections are ' +
+      'kept, not replaced. Continue?')) return;
+  if (!(window.parent && window.parent !== window)) {
+    alert('Import only works embedded in Composer (needs the compiled scene URL from it).');
+    return;
+  }
+  _pendingImportRequestId = 'imp' + Date.now();
+  window.parent.postMessage({ type: 'mccf_request_scene_x3d_url', id: _pendingImportRequestId }, '*');
+}
+
+function _handleSceneX3dUrl(id, url) {
+  if (id !== _pendingImportRequestId) return; // stale reply, ignore
+  _pendingImportRequestId = null;
+  if (!url) { alert('Composer has no compiled scene URL yet — export X3D at least once first.'); return; }
+  fetch(url).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }).then(function(xmlText) {
+    _importFromX3dText(xmlText);
+  }).catch(function(err) {
+    alert('Import failed — could not fetch/parse the compiled scene: ' + err.message);
+    console.error('[RouteGraph] import fetch/parse failed:', err);
+  });
+}
+
+// Script nodes don't map through the static tag table above — each one's
+// type IS its own DEF name, since its field schema is genuinely per-
+// instance (introspected real <field> children, not guessed). Registered
+// into NODE_TYPES dynamically, once per unique Script DEF, exactly once —
+// after that it renders through the same existing pipeline every other
+// node type already uses, no special-casing needed downstream.
+function _resolveOrRegisterType(el, defName) {
+  if (el.tagName === 'Script') {
+    if (!NODE_TYPES[defName]) {
+      var info = _introspectScript(el);
+      NODE_TYPES[defName] = { fields: info.fields, instances: [], isScript: true, isApiTrigger: info.isApiTrigger };
+    }
+    return defName;
+  }
+  return _TAG_TO_NODE_TYPE[el.tagName] || null;
+}
+
+function _importFromX3dText(xmlText) {
+  _importGraphFromXmlText(xmlText, 'the compiled scene', 'an avatar\'s own file rather than the scene itself', false);
+}
+// Reads a creatable-type element's real baked attributes back into the
+// props shape the properties panel edits — the inverse of
+// _routeGraphNodeAttrs/_nodeAttrsForExport. Only meaningful for editable
+// loads (see the `editable` parameter below); scene-imported nodes are
+// marked read-only and never need this, since editing them wouldn't take
+// effect on export anyway.
+function _parseNodePropsFromElement(type, el) {
+  if (type === 'TimeSensor') {
+    var ci = parseFloat(el.getAttribute('cycleInterval'));
+    return { cycleInterval: isNaN(ci) ? 4 : ci, loop: el.getAttribute('loop') === 'true' };
+  }
+  var keyAttr = el.getAttribute('key'), keyValueAttr = el.getAttribute('keyValue');
+  if (!keyAttr || !keyValueAttr) return {};
+  var fractions = keyAttr.split(',').map(function(s){ return parseFloat(s.trim()); });
+  var valueGroups = keyValueAttr.split(',').map(function(s){ return s.trim(); });
+  var keyframes = fractions.map(function(f, i) {
+    var raw = valueGroups[i] || '';
+    if (type === 'ScalarInterpolator') return { fraction: f, value: parseFloat(raw) || 0 };
+    return { fraction: f, value: raw.split(/\s+/).filter(Boolean).map(function(n){ return parseFloat(n) || 0; }) };
+  });
+  return { keyframes: keyframes };
+}
+// Generalized so effect-asset loading can reuse the exact same, already-
+// tested parsing/type-resolution/layout pipeline as scene import — the
+// logic never actually cared where the XML came from, only the two
+// user-facing message strings did, so those became parameters rather than
+// duplicating the whole function for a second source. `editable`
+// (default false, matching scene-import's original, unchanged behavior)
+// controls a real, deliberate difference: a scene-imported node is marked
+// read-only because it already exists elsewhere and editing it here would
+// never take effect on export — but a loaded Effect Asset is meant to
+// become a fully working, tunable copy in THIS graph, so it needs real
+// values parsed back into props and must NOT be marked imported.
+function _importGraphFromXmlText(xmlText, sourceLabel, elsewhereLabel, editable) {
+  var doc;
+  try {
+    doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('malformed XML');
+  } catch (e) {
+    alert('Import failed — ' + sourceLabel + ' did not parse as valid XML: ' + e.message);
+    return;
+  }
+
+  var routeEls = Array.from(doc.querySelectorAll('ROUTE'));
+  var defCache = {}; // DEF name -> resolved element, cached since the same DEF is looked up repeatedly across many routes
+  function resolveDef(defName) {
+    if (defCache.hasOwnProperty(defName)) return defCache[defName];
+    // CSS.escape not assumed available (older engines) — DEF names in this
+    // project are already confirmed sanitised to [A-Za-z0-9_] throughout
+    // (every export function this session strips to that charset), so a
+    // plain attribute selector is safe without needing to escape it.
+    var el = doc.querySelector('[DEF="' + defName + '"]');
+    defCache[defName] = el || null;
+    return defCache[defName];
+  }
+
+  var importedNodesByDef = {}; // DEF -> {type, name} for nodes newly created this import pass
+  var newConnections = [];
+  var skippedUnknownType = 0, skippedUnknownField = 0, skippedNoDef = 0, alreadyPresent = 0;
+
+  routeEls.forEach(function(rEl) {
+    var fromDef = rEl.getAttribute('fromNode'), toDef = rEl.getAttribute('toNode');
+    var fromFieldRaw = rEl.getAttribute('fromField'), toFieldRaw = rEl.getAttribute('toField');
+    if (!fromDef || !toDef || !fromFieldRaw || !toFieldRaw) { skippedNoDef++; return; }
+
+    var fromEl = resolveDef(fromDef), toEl = resolveDef(toDef);
+    if (!fromEl || !toEl) { skippedNoDef++; return; } // DEF not found in this document — very likely lives inside an avatar's own separately-loaded Inline file, out of scope for a scene-level route graph, not an error
+
+    var fromType = _resolveOrRegisterType(fromEl, fromDef);
+    var toType   = _resolveOrRegisterType(toEl, toDef);
+    if (!fromType || !toType) { skippedUnknownType++; return; } // real node type this tool doesn't model yet — skipped, not silently mis-rendered
+
+    var fromField = _resolveCanonicalField(fromType, fromFieldRaw);
+    var toField   = _resolveCanonicalField(toType, toFieldRaw);
+    if (!fromField || !toField) { skippedUnknownField++; return; }
+
+    // Already on the canvas from a prior import or manual authoring? Don't duplicate.
+    if (!importedNodesByDef[fromDef] && !nodes.some(function(n){ return n.type===fromType && n.name===fromDef; })) {
+      importedNodesByDef[fromDef] = { type: fromType, name: fromDef, imported: !editable, el: fromEl };
+    }
+    if (!importedNodesByDef[toDef] && !nodes.some(function(n){ return n.type===toType && n.name===toDef; })) {
+      importedNodesByDef[toDef] = { type: toType, name: toDef, imported: !editable, el: toEl };
+    }
+
+    var dupe = connections.some(function(c) {
+      var cf = nodes.find(function(n){ return n.id===c.fromNode; });
+      var ct = nodes.find(function(n){ return n.id===c.toNode; });
+      return cf && ct && cf.name===fromDef && ct.name===toDef && c.fromField===fromField && c.toField===toField;
+    });
+    if (dupe) { alreadyPresent++; return; }
+
+    newConnections.push({ fromDef: fromDef, fromField: fromField, toDef: toDef, toField: toField, ftype: _resolveFieldType(fromType, fromField) });
+  });
+
+  // Create the new nodes/connections first (placeholder positions — real
+  // layout happens after, over the FULL graph including anything already
+  // on the canvas, so a re-import onto existing work still produces one
+  // coherent layered arrangement rather than only positioning the newly
+  // imported piece).
+  var defToNodeId = {};
+  nodes.forEach(function(n) { defToNodeId[n.name] = n.id; });
+  Object.keys(importedNodesByDef).forEach(function(def) {
+    var n = importedNodesByDef[def];
+    _nodeSeq++;
+    var id = 'n' + _nodeSeq;
+    var nodeObj = { id: id, type: n.type, name: n.name, x: 0, y: 0, imported: n.imported };
+    // Real bug fixed here too: this used to hardcode imported:true
+    // unconditionally, silently ignoring whatever n.imported had actually
+    // been set to above (which respects `editable`) — meaning even before
+    // effect-loading existed, this line was already wrong for any future
+    // non-imported use of the shared pipeline. Editable loads also get
+    // their real authored values parsed back from the element itself.
+    if (editable) nodeObj.props = _parseNodePropsFromElement(n.type, n.el);
+    nodes.push(nodeObj);
+    defToNodeId[n.name] = id;
+  });
+  newConnections.forEach(function(nc) {
+    _connSeq++;
+    connections.push({
+      id: 'c' + _connSeq,
+      fromNode: defToNodeId[nc.fromDef], fromField: nc.fromField,
+      toNode: defToNodeId[nc.toDef], toField: nc.toField,
+      type: nc.ftype,
+    });
+  });
+
+  // "Layer it by node type so it's easy to find things" — real layered
+  // layout (see _computeLayeredLayout), not just a naive type-sorted grid.
+  var layoutResult = _computeLayeredLayout(nodes, connections);
+  nodes.forEach(function(n) {
+    var p = layoutResult.positions[n.id];
+    if (p) { n.x = p.x; n.y = p.y; }
+  });
+
+  document.getElementById('empty-note').style.display = nodes.length ? 'none' : '';
+  renderGraph();
+
+  var addedNodeCount = Object.keys(importedNodesByDef).length;
+  console.log('[RouteGraph] import complete — added', addedNodeCount, 'nodes,', newConnections.length, 'connections. Skipped:',
+    skippedUnknownType, 'unmodelled node types,', skippedUnknownField, 'unmodelled fields,', skippedNoDef, 'unresolvable DEFs (likely inside an avatar Inline),', alreadyPresent, 'already on canvas.');
+  alert('Imported ' + addedNodeCount + ' nodes, ' + newConnections.length + ' connections.\n' +
+    (skippedUnknownType + skippedUnknownField + skippedNoDef) + ' routes skipped (see console for the breakdown) — ' +
+    'either they touch a node type this tool doesn\'t model yet, or the DEF lives inside ' + elsewhereLabel + '.');
+}
+
+function _resolveFieldType(nodeType, fieldName) {
+  var def = NODE_TYPES[nodeType];
+  var f = def && def.fields.find(function(x){ return x.name === fieldName; });
+  return f ? f.type : null;
+}
+
 window.addEventListener('message', function(evt) {
   if (!evt.data || !evt.data.type) return;
+  if (evt.data.type === 'mccf_scene_x3d_url') {
+    _handleSceneX3dUrl(evt.data.id, evt.data.url);
+    return;
+  }
   if (evt.data.type === 'mccf_scene_data') {
     var d = evt.data.data || {};
     if (d.agents) AGENTS = d.agents;
@@ -771,8 +1905,19 @@ window.addEventListener('message', function(evt) {
     // session (e.g. after placing a new agent) never clobbers in-progress
     // editing with the last-saved snapshot.
     if (d.routeGraph && !nodes.length && !connections.length && d.routeGraph.nodes && d.routeGraph.nodes.length) {
+      // Merge dynamic type schemas back BEFORE restoring nodes/rendering —
+      // this is the actual fix, not just the render-loop guard. Without
+      // it, a restored Script node's type would still have no matching
+      // NODE_TYPES entry on this fresh page load, same crash as before.
+      if (d.routeGraph.dynamicTypes) {
+        Object.keys(d.routeGraph.dynamicTypes).forEach(function(t) {
+          if (!NODE_TYPES[t]) NODE_TYPES[t] = d.routeGraph.dynamicTypes[t];
+        });
+      }
       nodes = d.routeGraph.nodes;
       connections = d.routeGraph.connections || [];
+      _hiddenTypes = new Set(d.routeGraph.hiddenTypes || []);
+      _hiddenNodeIds = new Set(d.routeGraph.hiddenNodeIds || []);
       _nodeSeq = nodes.length; _connSeq = connections.length;
       document.getElementById('empty-note').style.display = 'none';
       renderGraph();
