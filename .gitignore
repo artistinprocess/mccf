@@ -55,6 +55,11 @@ static/x3d/media/convolver/IMreverbs.zip
 static/x3d/media/convolver/jack-lyons-concert-hall-university-york.zip
 static/avatars/
 HAnim/
+/HAnim/mixamo/AnnaWarrior.blend
+/HAnim/mixamo/GardenLadies.blend
+/static/avatars/reddress.x3d
+/static/avatars/reddress.x3d.bak
+
 
 # --- Session continuity notes — not part of the shipped project ---
 Seeds/
@@ -73,3 +78,8 @@ static/x3d/X3DAssets/
 static/x3d/*.x3d
 static/avatars/
 HAnim/
+cultivars/backups/
+backup_*/
+static_copy_*.html
+LIVE_*.html
+node_modules/

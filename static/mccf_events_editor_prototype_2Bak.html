@@ -543,7 +543,6 @@ x3d-canvas {
 .cue-camera  { background: rgba(96,168,240,0.28); color: var(--accent3); }
 .cue-light   { background: rgba(240,192,96,0.28); color: var(--accent4); }
 .cue-gesture { background: rgba(168,128,240,0.28); color: var(--purple); }
-.cue-face    { background: rgba(240,168,128,0.30); color: #f0a880; }   /* Day 95: facial gesture */
 .cue-path    { background: rgba(74,240,168,0.28); color: var(--accent); }
 .cue-audio   { background: rgba(240,120,200,0.28); color: var(--pink); }
 .cue-block .cue-target { color: var(--text); font-weight: 600; }
@@ -752,7 +751,6 @@ var WPS = [
   { name: 'WP3', t: 16 },
 ];
 var AGENTS   = ['Cindy','The Witness','The Steward'];
-var AGENT_EXPRESSIONS = {}; // Day 95: {agentName: [expressionName,...]} -- from the avatar's expressions file, via Composer. Face cue's dropdown.
 var AGENT_CLIPS = {}; // {agentName: [clipName,...]} — populated from Composer, which already loads this from /cultivars/xml. Falls back to ['Default'] per-agent below when an agent isn't in this map yet (e.g. before scene data has arrived).
 var CAMERAS  = []; // Day 64: placed free cameras, populated from Composer via mccf_scene_data
 var LIGHTS   = []; // Day 82: {name, type:'point'|'spot'|'directional', translation, rotation}[]
@@ -1916,7 +1914,6 @@ window.addEventListener('message', function(evt) {
   if (evt.data.type === 'mccf_scene_data') {
     var d = evt.data.data || {};
     if (d.agents   && d.agents.length)   AGENTS   = d.agents;
-    if (d.agentExpressions)              AGENT_EXPRESSIONS = d.agentExpressions; // Day 95: see Face cue editor
     if (d.agentClips)                    AGENT_CLIPS = d.agentClips; // {agentName: [clipName,...]} — see Gesture cue editor
     if (d.cameras)                       CAMERAS  = d.cameras; // Day 79: now {name,position,hAngle,vAngle,roll}[], not bare names — see _buildSceneData
     if (d.lights)                        LIGHTS   = d.lights;
@@ -2027,10 +2024,6 @@ var TRACKS = [
   { id:'camera',    label:'Camera',    multiLane:false },
   { id:'light',     label:'Light',     multiLane:true  },
   { id:'gesture',   label:'Gesture',   multiLane:true  },
-  // Day 95: facial gestures -- an EXPRESSION (a set of AU weights from the avatar's
-  // <name>_expressions.xml) faded in, held and faded out. Kept apart from Gesture: a gesture is
-  // a body animation clip; an expression is a face pose. Same one-line-per-track design.
-  { id:'face',      label:'Face',      multiLane:true  },
   { id:'path',      label:'Path',      multiLane:true  },
   { id:'turn',      label:'Turn',      multiLane:true  },
   { id:'audio',     label:'Audio',     multiLane:true  },
@@ -2198,10 +2191,6 @@ function addCueAtPlayhead(trackId, explicitTarget) {
     camera:  { target: explicitTarget || selCam || (CAMERAS[0] && CAMERAS[0].name) || '', shot: 'wide', subject: (explicitTarget && AGENTS.indexOf(explicitTarget)!==-1 ? explicitTarget : selAgent) || AGENTS[0] || '', distance: 8, height: 3, hAngle: 0, vAngle: 0, transition: 'cut', label: '', duration: 3 },
     light:   { target: lightTarget, label: 'fade', duration: 3 },
     gesture: { target: gestureTarget, label: (AGENT_CLIPS[gestureTarget] && AGENT_CLIPS[gestureTarget][0]) || 'Default', duration: 2 },
-    // Day 95: face -- label = the expression name. duration = the whole cue (fade in + hold +
-    // fade out); intensity scales the expression's AU weights (1 = as authored, >1 amplifies).
-    face:    { target: gestureTarget, label: (AGENT_EXPRESSIONS[gestureTarget] && AGENT_EXPRESSIONS[gestureTarget][0]) || '',
-               duration: 3, fadeIn: 0.5, fadeOut: 0.5, intensity: 1 },
     path:    { target: pathTarget,    label: '', duration: 6,
                params: { pathId: (RECORDED_PATHS[0] && RECORDED_PATHS[0].id) || '' } },
     // Turn — one-shot Y-axis rotation, routed to the same target
@@ -2463,7 +2452,7 @@ function renderCueEditor() {
   // field set below (renderCameraCueFields), and having BOTH render was a
   // real bug: a camera cue was showing a redundant generic Target select
   // stacked directly above the real Shot/Subject/etc. panel.
-  if (c.track === 'gesture' || c.track === 'face' || c.track === 'path' || c.track === 'turn' || c.track === 'light' || c.track === 'audio' || c.track === 'movie' || c.track === 'animation') {
+  if (c.track === 'gesture' || c.track === 'path' || c.track === 'turn' || c.track === 'light' || c.track === 'audio' || c.track === 'movie' || c.track === 'animation') {
     var opts = (c.track === 'light')  ? LIGHTS.map(function(x){return x.name;})
              : (c.track === 'audio')  ? AUDIO_SOURCES.map(function(x){return x.name;})
              : (c.track === 'movie' || c.track === 'animation') ? ASSET_NAMES
@@ -2482,9 +2471,7 @@ function renderCueEditor() {
     // agent's. Cheap (this panel is small), and correctness here matters
     // more than avoiding one extra render. Path's optional walk-gesture
     // dropdown has the exact same dependency, same reasoning.
-    var targetOnChange = (c.track === 'face')
-      ? "_faceTargetChanged(this.value);renderCueEditor();"
-      : (c.track === 'gesture' || c.track === 'path')
+    var targetOnChange = (c.track === 'gesture' || c.track === 'path')
       ? "setCueProp('target',this.value,false);renderCueEditor();"
       : "setCueProp('target',this.value,false)";
     html += '<div class="obj-field"><label>Target</label><select oninput="'+targetOnChange+'">' +
@@ -2512,21 +2499,6 @@ function renderCueEditor() {
         walkClipOpts.map(function(n) { return '<option value="'+n+'"'+(n===(c.walkGesture||'')?' selected':'')+'>'+(n||'— none —')+'</option>'; }).join('') +
         '</select></div>';
     }
-  } else if (c.track === 'face') {
-    // Day 95: expression dropdown, sourced from the target agent's expressions file (Composer
-    // fetches it). An expression named in a loaded scene that the file no longer has is kept as
-    // an extra, flagged option so opening a scene never silently changes the cue.
-    var exprOpts = (AGENT_EXPRESSIONS[c.target] || []).slice();
-    var missingExpr = c.label && exprOpts.indexOf(c.label) === -1;
-    if (missingExpr) exprOpts.push(c.label);
-    html += '<div class="obj-field"><label>Expression</label><select oninput="setCueProp(\'label\',this.value,false)">' +
-      (exprOpts.length
-        ? exprOpts.map(function(n) { return '<option value="'+n+'"'+(n===c.label?' selected':'')+'>'+n+(n===c.label&&missingExpr?' (not in expressions file)':'')+'</option>'; }).join('')
-        : '<option value="">-- no expressions found for this agent --</option>') +
-      '</select></div>';
-    html += _cueField('Fade in (seconds)', 'fadeIn', c.fadeIn === undefined ? 0.5 : c.fadeIn, 'number');
-    html += _cueField('Fade out (seconds)', 'fadeOut', c.fadeOut === undefined ? 0.5 : c.fadeOut, 'number');
-    html += _cueField('Intensity (1 = as authored; above 1 amplifies, capped at full weight)', 'intensity', c.intensity === undefined ? 1 : c.intensity, 'number');
   } else if (c.track === 'turn') {
     // One-shot Y-axis turn — degrees signed (positive/negative convention
     // not independently confirmed against this avatar rig; invert exists
@@ -2588,16 +2560,6 @@ function renderCueEditor() {
   body.innerHTML = html;
 }
 
-// Day 95: a face cue's stored expression must follow what the dropdown shows. Switching the
-// target to an agent that does not have the current expression used to leave the OLD name in the
-// cue while the dropdown displayed the new agent's first entry. Keep the name if the new agent has
-// it; otherwise take that agent's first expression, or '' when it has none.
-function _faceTargetChanged(agent) {
-  if (!_selCue) return;
-  _selCue.target = agent;
-  var list = AGENT_EXPRESSIONS[agent] || [];
-  if (list.indexOf(_selCue.label) === -1) _selCue.label = list.length ? list[0] : '';
-}
 function setCueProp(key, val, isNum) {
   if (!_selCue) return;
   _selCue[key] = isNum ? (parseFloat(val) || 0) : val;

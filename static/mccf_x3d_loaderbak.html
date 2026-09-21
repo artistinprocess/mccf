@@ -1011,7 +1011,7 @@ function applyHotHouseData(data) {
           var S = (cv && cv.S !== undefined) ? cv.S : 0.25;
           var rescale01 = function(raw) { return Math.min(1, Math.max(0, (raw - 0.05) * 1.78)); };
           var displacers = _getFacialDisplacers(suffix);
-          if (displacers && !_faceCueActive[suffix]) {   // Day 95: an authored face cue owns the face
+          if (displacers) {
             var Er = rescale01(E), Br = rescale01(B), Pr = rescale01(P), Sr = rescale01(S);
             var auWeights = {
               AU1_l:  Pr, AU1_r:  Pr,
@@ -1615,9 +1615,6 @@ function pbFacialEBPSChanged() {
   var cb = document.getElementById('pb-facial-ebps');
   _facialEBPSEnabled = cb.checked;
   console.log('[debug] facial EBPS driver (live only, not exported) ->', cb.checked);
-  // Day 95: with the driver off, authored face cues are the only thing that moves the face, so the
-  // baseline should be neutral -- not frozen at whatever E/B/P/S pose the driver last wrote.
-  if (!cb.checked) _faceNeutralizeAll();
 }
 
 function pbLoadVoices() {
@@ -2270,13 +2267,6 @@ function _parseEventCues(doc) {
       internalDef: ga('internalDef') || null,
       triggerRef:  ga('triggerRef')  || null,
       visible:     ga('visible') === 'false' ? false : true,  // movie cues only; defaults true (matches the form's own default)
-      // Day 95: facial cues (track="face"). expression = name in the avatar's expressions file;
-      // weights = its AU weights embedded by the Composer at export ("AU12_LipCornerPuller=0.85;...").
-      expression:  ga('expression') || null,
-      weights:     ga('weights')    || null,
-      fadeIn:      gf('fadeIn', 0.5),
-      fadeOut:     gf('fadeOut', 0.5),
-      intensity:   gf('intensity', 1),
     };
     if (cue.track === 'camera') {
       // Day 85: full camera field parse, matching exactly what the
@@ -2635,144 +2625,6 @@ function _fireDialogueArcComplete(agentSafeName) {
   });
 }
 
-// ==== FACE CUE BEGIN =====================================================
-// Day 95: FACIAL EVENT CUES (track="face"). An authored facial gesture: an expression from the
-// avatar's <name>_expressions.xml (a set of AU weights), faded in, held, and faded out. The
-// Composer embeds the expression's weights in the cue (weights="AU12_LipCornerPuller=0.85;...")
-// at scene export, so playback needs no server round trip and cannot break if the sidecar file
-// moves. While a face cue owns an agent's face the automatic E/B/P/S facial driver stands down
-// for that agent (see _faceCueActive, checked in the driver); it resumes when the cue ends.
-// Only AUs that Anna actually has a displacer for can move (AU1/2/4/5 l+r, AU6, AU12, AU26);
-// the rest are reported once and skipped.
-var _faceCueActive = {};   // safeName -> true while a face cue owns the face
-var _faceCueLoop   = {};   // safeName -> {stop: fn} for the running ramp
-var _faceCueWarned = {};   // 'safeName|AU' -> true (warn once)
-
-function _faceParseWeights(str) {
-  var out = {};
-  String(str || '').split(';').forEach(function(pair) {
-    var i = pair.indexOf('=');
-    if (i < 1) return;
-    var au = pair.slice(0, i).trim(), v = parseFloat(pair.slice(i + 1));
-    if (au && !isNaN(v)) out[au] = v;
-  });
-  return out;
-}
-
-// 'AU12_LipCornerPuller' -> ['AU12'];  'AU1_InnerBrowRaiser' -> ['AU1_l','AU1_r'];
-// 'AU1_InnerBrowRaiser_l' -> ['AU1_l'];  anything Anna has no displacer for -> [].
-function _faceKeysForAU(au) {
-  var m = /^AU(\d+)/.exec(au || '');
-  if (!m) return [];
-  var n = parseInt(m[1], 10);
-  if (n === 6 || n === 12 || n === 26) return ['AU' + n];
-  if (n === 1 || n === 2 || n === 4 || n === 5) {
-    if (/_l$/i.test(au)) return ['AU' + n + '_l'];
-    if (/_r$/i.test(au)) return ['AU' + n + '_r'];
-    return ['AU' + n + '_l', 'AU' + n + '_r'];
-  }
-  return [];
-}
-
-function _faceEase(k) { return k * k * (3 - 2 * k); }   // smoothstep
-
-// Neutral face for every agent whose displacers are cached (used when the automatic driver is
-// switched off, so it does not leave the face frozen at its last E/B/P/S pose).
-function _faceNeutralizeAll() {
-  Object.keys(_facialDisplacerCache).forEach(function(suffix) {
-    var d = _facialDisplacerCache[suffix];
-    if (!d || _faceCueActive[suffix]) return;
-    Object.keys(d).forEach(function(k) { try { d[k].weight = 0; } catch (e) {} });
-  });
-}
-
-function _fireFaceEventCue(cue, opts) {
-  opts = opts || {};
-  var gen = (opts.gen !== undefined) ? opts.gen : _pbCbGeneration;
-  if (gen !== _pbCbGeneration) return;                       // superseded by a newer Play/Reset
-  var safeName = String(cue.target || '').replace(/[^A-Za-z0-9_]/g, '_');
-  var weights  = _faceParseWeights(cue.weights);
-  if (!Object.keys(weights).length) {
-    console.warn('[EventCues] face: cue "' + (cue.expression || cue.label || '?') + '" for ' + cue.target +
-      ' carries no AU weights -- re-export the scene from the Composer (it embeds them from ' +
-      'the avatar\'s expressions file).');
-    return;
-  }
-  var displacers = _getFacialDisplacers(safeName);
-  if (!displacers) {
-    console.warn('[EventCues] face: no AU displacers for ' + cue.target + ' -- cue "' + (cue.expression || cue.label) + '" skipped.');
-    return;
-  }
-
-  // Target value per displacer node, scaled by the cue's intensity.
-  var intensity = (cue.intensity === undefined || isNaN(cue.intensity)) ? 1 : cue.intensity;
-  var target = {};
-  Object.keys(weights).forEach(function(au) {
-    var keys = _faceKeysForAU(au);
-    if (!keys.length && !_faceCueWarned[safeName + '|' + au]) {
-      _faceCueWarned[safeName + '|' + au] = true;
-      console.warn('[EventCues] face: ' + au + ' has no displacer on ' + cue.target + ' -- skipped.');
-    }
-    keys.forEach(function(k) {
-      if (displacers[k]) target[k] = Math.min(1, Math.max(0, weights[au] * intensity));
-    });
-  });
-  var keys = Object.keys(target);
-  if (!keys.length) {
-    console.warn('[EventCues] face: none of "' + (cue.expression || cue.label) + '"\'s AUs map to a displacer on ' + cue.target + '.');
-    return;
-  }
-
-  // A newer face cue takes over from a running one, starting from wherever the face is now.
-  if (_faceCueLoop[safeName]) _faceCueLoop[safeName].stop(false);
-  var start = {};
-  keys.forEach(function(k) { start[k] = (typeof displacers[k].weight === 'number') ? displacers[k].weight : 0; });
-
-  var totalMs = Math.max(0.05, cue.dur || 2) * 1000;
-  var inMs    = Math.max(0, Math.min(totalMs, (cue.fadeIn  === undefined ? 0.5 : cue.fadeIn)  * 1000));
-  var outMs   = Math.max(0, Math.min(totalMs - inMs, (cue.fadeOut === undefined ? 0.5 : cue.fadeOut) * 1000));
-  var holdEnd = totalMs - outMs;
-  var t0      = (window.performance && performance.now) ? performance.now() : Date.now();
-  var last    = {};
-  var stopped = false;
-
-  _faceCueActive[safeName] = true;
-  function write(k, v) {
-    if (last[k] !== undefined && Math.abs(last[k] - v) < 0.002) return;   // skip no-op writes
-    last[k] = v;
-    try { displacers[k].weight = v; } catch (e) {}
-  }
-  function finish(toNeutral) {
-    if (stopped) return;
-    stopped = true;
-    if (toNeutral) keys.forEach(function(k) { try { displacers[k].weight = 0; } catch (e) {} });
-    _faceCueActive[safeName] = false;
-    delete _faceCueLoop[safeName];
-  }
-  _faceCueLoop[safeName] = { stop: finish };
-
-  function step() {
-    if (stopped) return;
-    if (gen !== _pbCbGeneration) { finish(true); return; }        // Reset/Play -> back to neutral
-    var now = (window.performance && performance.now) ? performance.now() : Date.now();
-    var e = now - t0;
-    if (e >= totalMs) { keys.forEach(function(k) { write(k, 0); }); finish(false); return; }
-    keys.forEach(function(k) {
-      var v;
-      if (e < inMs)            v = start[k] + (target[k] - start[k]) * _faceEase(inMs > 0 ? e / inMs : 1);
-      else if (e < holdEnd)    v = target[k];
-      else                     v = target[k] * (1 - _faceEase(outMs > 0 ? (e - holdEnd) / outMs : 1));
-      write(k, v);
-    });
-    (window.requestAnimationFrame || function(f) { return setTimeout(f, 33); })(step);
-  }
-  console.log('[EventCues] face:', cue.target, '->', (cue.expression || cue.label), '| AUs', keys.join(','),
-              '| in', (inMs / 1000).toFixed(2) + 's hold', ((holdEnd - inMs) / 1000).toFixed(2) + 's out', (outMs / 1000).toFixed(2) + 's',
-              '| intensity', intensity);
-  step();
-}
-// ==== FACE CUE END =======================================================
-
 function _dispatchCue(cue, firedVia) {
   console.log('[EventCues] firing:', cue.track, '"' + (cue.label || cue.target || '') + '"', 'via', firedVia);
   switch (cue.track) {
@@ -2781,7 +2633,6 @@ function _dispatchCue(cue, firedVia) {
     case 'fog':      _fireFogEventCue(cue);      break;
     case 'bg':       _fireBgEventCue(cue);       break;
     case 'gesture':   _fireGestureEventCue(cue);   break;
-    case 'face':      _fireFaceEventCue(cue);      break;   // Day 95: authored facial gesture
     case 'behavior':  _fireBehaviorEventCue(cue);  break;
     case 'movie':     _fireMovieVisibilityEventCue(cue); break;
     case 'animation': _fireAnimationEventCue(cue); break;

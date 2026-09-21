@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.1//EN" "https://www.web3d.org/specifications/x3d-4.1.dtd">
+<X3D profile='Interchange' version='4.1'>
+  <head>
+    <component name='Scripting' level='1'/>
+    <meta name='title' content='EBPS Driver Test Scene'/>
+    <meta name='description' content='Minimal, standalone test of the EBPSDriver PROTO — wires one channel to a light intensity directly (no FaceController needed for this file) and includes the cycleComplete diagnostic bundled in, since both were flagged as next steps together. Load this in Sunrize/X_ITE on its own to confirm the plumbing before wiring into a real scene with Cindy.'/>
+  </head>
+  <Scene>
+
+    <ExternProtoDeclare name='EBPSDriver' url='"mccf_ebps_protos.x3d#EBPSDriver"'>
+      <field accessType='inputOutput' type='SFFloat' name='E' value='0.0'/>
+      <field accessType='inputOutput' type='SFFloat' name='B' value='0.0'/>
+      <field accessType='inputOutput' type='SFFloat' name='P' value='0.0'/>
+      <field accessType='inputOutput' type='SFFloat' name='S' value='0.0'/>
+      <field accessType='inputOutput' type='SFString' name='agentName' value='""'/>
+    </ExternProtoDeclare>
+
+    <!-- Note: EBPSToLight (the PROTO version) is declared in mccf_ebps_protos.x3d
+         for future reuse, but NOT instantiated here — testing showed IS-forwarding
+         into a Script's inputOnly field inside a ProtoBody doesn't fire in this
+         X_ITE build. Using a bare Script below instead, matching FaceController's
+         own already-proven pattern. -->
+
+    <!-- One EBPSDriver per agent — here, a single test instance -->
+    <ProtoInstance DEF='TestDriver' name='EBPSDriver'>
+      <fieldValue name='agentName' value='"TestAgent"'/>
+      <fieldValue name='E' value='0.0'/>
+      <fieldValue name='B' value='0.0'/>
+      <fieldValue name='P' value='0.0'/>
+      <fieldValue name='S' value='0.0'/>
+    </ProtoInstance>
+
+    <!-- P (Pathos) drives this light's intensity — bare Script, matching
+         FaceController's own proven pattern exactly (no PROTO, no IS
+         forwarding — that layer is what failed testing above). -->
+    <Script DEF='PathosLightScript' directOutput='true'>
+      <field accessType='inputOnly' type='SFFloat' name='set_channel'/>
+      <field accessType='inputOutput' type='SFFloat' name='baseIntensity' value='0.3'/>
+      <field accessType='inputOutput' type='SFFloat' name='scale' value='0.7'/>
+      <field accessType='outputOnly' type='SFFloat' name='intensity_changed'/>
+      <![CDATA[ecmascript:
+        function set_channel(value, time) {
+          console.log('PathosLightScript set_channel called with', value);
+          var v = baseIntensity + value * scale;
+          intensity_changed = Math.max(0, Math.min(1, v));
+          console.log('PathosLightScript intensity_changed set to', intensity_changed);
+        }
+      ]]>
+    </Script>
+    <ROUTE fromNode='TestDriver' fromField='P_changed' toNode='PathosLightScript' toField='set_channel'/>
+
+    <!-- Self-driving oscillator — P ramps 0->1->0 automatically on load, so
+         the light visibly pulses with zero manual input. This is the fast
+         "does the pipe even work" check; use the console (see message) for
+         deliberate, specific channel values afterward. -->
+    <TimeSensor DEF='PulseTimer' cycleInterval='4.0' loop='true'/>
+    <ScalarInterpolator DEF='PulseInterp' key='0 0.5 1' keyValue='0 1 0'/>
+    <ROUTE fromNode='PulseTimer' fromField='fraction_changed' toNode='PulseInterp' toField='set_fraction'/>
+    <ROUTE fromNode='PulseInterp' fromField='value_changed' toNode='TestDriver' toField='P'/>
+
+    <PointLight DEF='TestLight' location='0 2 2' intensity='0.3'/>
+    <ROUTE fromNode='PathosLightScript' fromField='intensity_changed' toNode='TestLight' toField='intensity'/>
+
+    <!-- Simple visible proof: a plain sphere lit by TestLight, so P's effect
+         is visually obvious without needing an avatar loaded at all -->
+    <Transform translation='0 0 0'>
+      <Shape>
+        <Appearance><Material diffuseColor='0.8 0.8 0.8'/></Appearance>
+        <Sphere radius='0.5'/>
+      </Shape>
+    </Transform>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         cycleComplete diagnostic — bundled in since both were flagged
+         as the same next step. Watch the console: if this X_ITE build
+         supports cycleComplete, "CYCLE COMPLETE FIRED" prints once per
+         loop, exactly every 2 seconds. If nothing ever prints, treat
+         that as a real, direct answer — no reply from anyone needed.
+         ═══════════════════════════════════════════════════════════ -->
+    <TimeSensor DEF='CycleTestTimer' cycleInterval='2.0' loop='true'/>
+    <Script DEF='CycleCompleteTester' directOutput='true'>
+      <field accessType='inputOnly' type='SFBool' name='set_cycleComplete'/>
+      <![CDATA[ecmascript:
+        function set_cycleComplete(value, time) {
+          if (value) console.log('CYCLE COMPLETE FIRED at', time);
+        }
+      ]]>
+    </Script>
+    <ROUTE fromNode='CycleTestTimer' fromField='cycleComplete' toNode='CycleCompleteTester' toField='set_cycleComplete'/>
+
+  </Scene>
+</X3D>

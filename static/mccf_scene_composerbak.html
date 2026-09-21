@@ -1774,54 +1774,6 @@ function camRigFetchManifestFresh(hanimSrc){
   }).catch(function(e){ _camRigManifestCache[stem]=null; console.log('[camRig]', stem, '-> fetch threw:', e); });
 }
 
-// -- Day 95: FACE CUES ---------------------------------------------------------------------------
-// A face cue names an EXPRESSION from the avatar's <name>_expressions.xml (a set of AU weights).
-// This Composer (a) tells the Events editor which expressions each placed agent has, and (b) EMBEDS
-// the chosen expression's AU weights in the exported <Cue> (weights="AU12_LipCornerPuller=0.8;..."),
-// so the Loader plays it with no server round trip and the scene stays self-contained. Same lesson
-// as camRigFetchManifestFresh above: never trust a stale cache for export -- refresh from disk at
-// the moments that matter (Events tab opened, cues saved, either export).
-var _faceExprCache = {};   // stem -> {exprName: {AUname: weight}} | null
-function faceExprStem(hanimSrc){
-  var base = String(hanimSrc||'').split('/').pop();
-  return base.replace(/_hanim\.x3d$/i,'').replace(/\.x3d$/i,'').toLowerCase();   // same rule as the server and the Character Creator
-}
-function faceExprFetchFresh(hanimSrc){
-  var stem = faceExprStem(hanimSrc);
-  if(!stem) return Promise.resolve();
-  return fetch('/static/avatars/'+stem+'_expressions.xml?_='+Date.now()).then(function(r){
-    if(!r.ok){ _faceExprCache[stem]=null; return null; }
-    return r.text();
-  }).then(function(text){
-    if(!text) return;
-    var doc = new DOMParser().parseFromString(text,'application/xml');
-    var out = {};
-    Array.prototype.slice.call(doc.getElementsByTagName('Expression')).forEach(function(ex){
-      var name = ex.getAttribute('name'); if(!name) return;
-      out[name] = {};
-      Array.prototype.slice.call(ex.getElementsByTagName('Weight')).forEach(function(w){
-        var v = parseFloat(w.getAttribute('value'));
-        if(w.getAttribute('au') && !isNaN(v)) out[name][w.getAttribute('au')] = v;
-      });
-    });
-    _faceExprCache[stem] = out;
-  }).catch(function(){ _faceExprCache[stem]=null; });
-}
-function faceExprRefreshAll(){
-  return Promise.all(Object.keys(placedAgents).map(function(n){ return placedAgents[n].hanim_src ? faceExprFetchFresh(placedAgents[n].hanim_src) : null; }));
-}
-function faceExprFor(agentName){
-  var a = placedAgents[agentName];
-  return (a && a.hanim_src) ? (_faceExprCache[faceExprStem(a.hanim_src)] || null) : null;
-}
-// "AU12_LipCornerPuller=0.8;AU6_CheekRaiser=0.6" -- non-zero weights only; '' if unknown.
-function faceWeightsString(agentName, exprName){
-  var ex = faceExprFor(agentName);
-  if(!ex || !ex[exprName]) return '';
-  return Object.keys(ex[exprName]).filter(function(au){ return ex[exprName][au] > 0; })
-    .map(function(au){ return au+'='+ex[exprName][au]; }).join(';');
-}
-
 var placedCameras = {}; // Day 64: free/world-space cameras placed on the grid, class 3 of the three-class camera model
 var placedAssets = {}; // Day 86: independently-placed X3D/glTF assets — {name, url, position:[x,y,z], rotationY, scale}. Deliberately separate from a zone's own single z.asset (kept as-is for zone-anchored set pieces like a fountain that belongs to one specific zone) — this is for anything that should exist in the scene on its own terms: the temple, billboards, fog volumes, a movie-texture screen, none of which are naturally "one per zone."
 var placedLights = {}; // Day 82: {name, type:'point'|'spot'|'directional', translation:[x,y,z], rotation:[ax,ay,az,angle]}
@@ -2326,7 +2278,7 @@ function setMode(m){
   // Going straight from Place to Events left placedAgents[x].behavior_clips
   // empty for the whole session, and the Gesture dropdown silently fell
   // back to ['Default'] with no indication anything was missing.
-  if(m==='events'){loadAgents(); faceExprRefreshAll().then(function(){ _sendSceneDataToEventsEditor(); });}   // Day 95: face cue dropdown
+  if(m==='events'){loadAgents();}
   if(m==='run'){populateRunUI();_renderDialogueExportStatus();}
   if(m==='network')populateNetworkUI();
   if(m==='scene'||m==='export')refreshSceneList();
@@ -2525,13 +2477,6 @@ function _buildSceneData() {
     // running data, not a new fetch. Falls back to ['Default'] for an
     // agent with no clips authored yet, matching every cultivar's own
     // <Behaviors default="Default"> fallback (see cultivar_lambda.py).
-    // Day 95: expression NAMES per agent, for the Events editor's Face cue dropdown (from each
-    // avatar's expressions file -- see faceExprFetchFresh). [] when the file is missing/not fetched yet.
-    agentExpressions: (function(){
-      var out = {};
-      Object.keys(placedAgents).forEach(function(n){ var ex = faceExprFor(n); out[n] = ex ? Object.keys(ex) : []; });
-      return out;
-    })(),
     agentClips: (function(){
       var out = {};
       Object.keys(placedAgents).forEach(function(n){
@@ -3034,7 +2979,6 @@ window.addEventListener('message', function(evt) {
   // _buildTimelineSceneData above.
   if (evt.data.type === 'mccf_production_cues') {
     _lastTimelineCues = evt.data.data || null;
-    faceExprRefreshAll();   // Day 95: fire-and-forget -- face cues embed expression weights at export
     var cueCount = _lastTimelineCues && _lastTimelineCues.cues ? _lastTimelineCues.cues.length : 0;
     console.log('[Composer] mccf_production_cues received —', cueCount, 'cues.');
     // Day 85: this toast used to say "Not yet wired into X3D export" —
@@ -6566,7 +6510,6 @@ async function exportX3D(silent){
   await Promise.all(Object.values(placedAgents)
     .filter(function(a){ return a.hanim_src; })
     .map(function(a){ console.log('[camRig] priming fresh manifest for agent', a.name||a, 'hanim_src=', a.hanim_src); return camRigFetchManifestFresh(a.hanim_src); }));
-  await faceExprRefreshAll();   // Day 95: face cues embed expression weights (see faceExprFetchFresh)
   // Same exact race, different data source, found live: buildAX3D's
   // per-clip IMPORTs (<IMPORT ... exportedDEF="Timer1" AS="Timer1_Anna"/>,
   // one per real cultivar clip) read a.behavior_clips as a pure in-memory
@@ -8258,10 +8201,7 @@ function exportSceneXML(){
   // live _lastTimelineCues (Day-81 cue system, populated by "Save to
   // Composer"). Confirmed by direct test: cues survived tab switches but not
   // a scene reload, because the exported file never actually had them.
-  // Day 95: face cues embed their expression's AU weights, so refresh those from disk first
-  // (an expression edited in the Character Creator since the Events tab was last opened is picked up).
-  var _cues = (_lastTimelineCues && _lastTimelineCues.cues) || [];
-  faceExprRefreshAll().catch(function(){}).then(function(){ _doExportSceneXML(_cues); });
+  _doExportSceneXML((_lastTimelineCues && _lastTimelineCues.cues) || []);
 }
 
 function _doExportSceneXML(_eventTracks){
@@ -8606,18 +8546,6 @@ function _doExportSceneXML(_eventTracks){
         if (cue.trackOffsetEnd !== undefined) x += ' trackOffsetEnd="'+cue.trackOffsetEnd+'"'; // agent_track only
         if (cue.trackDepth     !== undefined) x += ' trackDepth="'+cue.trackDepth+'"';         // agent_track only
         if (cue.loop) x += ' loop="true"';   // orbit / agent_orbit only, per spec §3
-      }
-      if (cue.track === 'face') {
-        // Day 95: facial gesture. expression = the name; weights = its AU weights, embedded now so the
-        // Loader needs no server round trip. No weights (expression missing from the file / file not
-        // found) is written as-is and the Loader says so at play time.
-        var _fw = faceWeightsString(cue.target, cue.label);
-        if (!_fw) console.warn('[face cue] no AU weights found for "' + cue.label + '" on ' + cue.target + ' -- check ' + ((placedAgents[cue.target]||{}).hanim_src||'(no hanim_src)') + ' expressions file');
-        if (cue.label) x += ' expression="'+xe(cue.label)+'"';
-        x += ' fadeIn="'+(cue.fadeIn!==undefined?cue.fadeIn:0.5)+'"';
-        x += ' fadeOut="'+(cue.fadeOut!==undefined?cue.fadeOut:0.5)+'"';
-        x += ' intensity="'+(cue.intensity!==undefined?cue.intensity:1)+'"';
-        if (_fw) x += ' weights="'+xe(_fw)+'"';
       }
       x += '/>' + '\n';
     });
@@ -9327,12 +9255,6 @@ function _restoreChorusFromXml(xml) {
           params:   {},
         };
         if (cue.track === 'gesture' && ga('clip')) cue.clip = ga('clip');
-        if (cue.track === 'face') {   // Day 95: the Events editor keeps the expression name in .label
-          if (ga('expression')) cue.label = ga('expression');
-          cue.fadeIn    = gf('fadeIn', 0.5);
-          cue.fadeOut   = gf('fadeOut', 0.5);
-          cue.intensity = gf('intensity', 1);
-        }
         if (cue.track === 'path' && ga('pathId')) {
           cue.params.pathId = ga('pathId');
           if (ga('walkGesture')) cue.walkGesture = ga('walkGesture');

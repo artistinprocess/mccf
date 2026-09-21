@@ -1,0 +1,734 @@
+--- /mnt/user-data/uploads/1789851834692_mccf_hanim_api.py	2026-09-19 21:03:54.143911000 +0000
++++ ../../mccf_hanim_api.py	2026-09-19 21:23:19.623219441 +0000
+@@ -29,6 +29,8 @@
+ """
+ 
+ import os
++import re as _re
++import time as _time_hanim
+ import math as _math
+ from flask import Blueprint, request, jsonify
+ import base64  as _b64
+@@ -599,10 +601,38 @@
+     return os.path.join(_avatar_dir(), f'{stem}_expressions.xml')
+ 
+ 
++_BACKUP_KEEP = 5   # timestamped generations kept per file (Anna.x3d is ~24 MB each)
++
++
+ def _hanim_backup(filepath: str) -> None:
+-    """Write .bak copy if file exists, overwriting any previous backup."""
+-    if os.path.exists(filepath):
+-        _shutil_hanim.copy2(filepath, filepath + '.bak')
++    """
++    Snapshot a file before it is modified.
++
++    Writes <file>.bak (latest — the atomic-rename rollback path in hanim_export reads
++    this) AND a timestamped copy under a sibling backups/ folder, pruned to the newest
++    _BACKUP_KEEP. The single .bak alone was overwritten on every export, so two exports in
++    a row destroyed the only good copy; the timestamped history survives that.
++    Best-effort for the history: a failure there never blocks the export.
++    """
++    if not os.path.exists(filepath):
++        return
++    _shutil_hanim.copy2(filepath, filepath + '.bak')
++    try:
++        base = os.path.basename(filepath)
++        bdir = os.path.join(os.path.dirname(filepath), 'backups')
++        os.makedirs(bdir, exist_ok=True)
++        stamp = _time_hanim.strftime('%Y%m%d-%H%M%S')
++        dst, n = os.path.join(bdir, f'{base}.{stamp}.bak'), 1
++        while os.path.exists(dst):
++            n += 1
++            dst = os.path.join(bdir, f'{base}.{stamp}-{n}.bak')
++        _shutil_hanim.copy2(filepath, dst)
++        mine = sorted((f for f in os.listdir(bdir) if f.startswith(base + '.') and f.endswith('.bak')),
++                      key=lambda f: os.path.getmtime(os.path.join(bdir, f)))
++        for old in mine[:-_BACKUP_KEEP]:
++            os.remove(os.path.join(bdir, old))
++    except OSError:
++        pass
+ 
+ 
+ def _parse_x3d_file(filepath: str):
+@@ -1159,206 +1189,369 @@
+     os.replace(tmp, path)
+ 
+ 
+-def _find_real_animated_clips(scene_el, existing_routes: dict) -> dict:
+-    """
+-    Map humanized clip label -> the REAL, already-wired TimerDEF that
+-    animates it, for every TimeSensor in the current scene that actually
+-    drives at least one interpolator via a ROUTE (fraction_changed out).
+-    WireTimer_ nodes (pose infrastructure, not clips) are excluded, same
+-    posture as GET /hanim/joints' own discovery scan.
+-
+-    This reuses the exact matching discipline hanim_ingest_mixamo already
+-    established (_humanize_gesture_label off the TimeSensor's own
+-    description attribute) rather than inventing a second convention —
+-    Character Creator's clip 'name' field is already that same humanized
+-    form (e.g. 'Look Around'), so a direct string match against this map
+-    is enough to recognize "this clip already has real animation, don't
+-    fabricate anything for it."
+-
+-    "Real" is decided by ROUTE presence, not by naming — a clip whose
+-    animation lives elsewhere in the file (Anna's Timer1-14, ingested
+-    from her own baked TimeSensors, not authored in this editor) will
+-    always be ROUTE-backed; a hollow placeholder from a prior buggy
+-    export (see _write_clip_nodes' own history) never is, so it's
+-    correctly ignored here even if one happens to already exist on disk
+-    under the exact DEF this export is about to touch.
++# ---------------------------------------------------------------------------
++# Clip export — timer index + safe writer  (Day 95 rewrite; closes S1/S2/S4)
++#
++# The contract this block enforces, in one place:
++#   1. A TimeSensor that has ROUTEs out of fraction_changed is REAL. Export
++#      never strips, rewrites, renames or re-parents it. (Old code deleted
++#      Anna's routed Timer6 this way and left 51 dangling ROUTEs.)
++#   2. A clip is AUTHORED only if some keyframe actually holds joints. The
++#      editor seeds every clip with two empty default keyframes, so "has a
++#      keyframes list" says nothing (old `if not keyframes` was never true).
++#   3. A clip's own timerDEF is honoured as-is when it resolves (by DEF or by
++#      EXPORT alias, e.g. BowTimer -> Timer8) to a real timer. It is never
++#      swapped for a description-matched neighbour — that is what pointed the
++#      cultivar at Timer8/Timer13 while the scene imports BowTimer.
++#   4. Only nodes this writer created (and that no author-supplied ROUTE
++#      touches beyond its own interpolators) are ever removed on re-export.
++# ---------------------------------------------------------------------------
++
++def _tag_local(el) -> str:
++    """Element tag without its namespace; '' for comments/PIs."""
++    t = el.tag
++    return t.rsplit('}', 1)[-1] if isinstance(t, str) else ''
++
++
++def _safe_def(name: str) -> str:
++    """Valid X3D DEF for names WE create (timers, interpolators): [A-Za-z0-9_] only."""
++    return _re.sub(r'[^A-Za-z0-9_]', '_', name or '')
++
++
++def _build_timer_index(scene_el, existing_routes: list):
+     """
+-    ns = _X3D_NS
+-    routed_from = {r.get('fromNode') for r in existing_routes
+-                   if r.get('fromField') == 'fraction_changed'}
+-    real_by_label = {}
+-    for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
+-        for el in scene_el.iter(tag):
+-            def_val = el.get('DEF', '')
+-            if not def_val or def_val.startswith('WireTimer_'):
+-                continue
+-            if def_val not in routed_from:
+-                continue  # not actually driving anything — not "real"
+-            label = _humanize_gesture_label(el.get('description', ''), def_val)
+-            real_by_label.setdefault(label, def_val)
+-    return real_by_label
+-
+-
+-def _strip_clip_nodes_by_def(scene_el, timer_def: str) -> None:
+-    """
+-    Remove any existing TimeSensor/EXPORT/OrientationInterpolator elements
+-    for a given clip timerDEF before (re)writing it — the dedup step
+-    _write_clip_nodes never had (see that function's own Day-83-era
+-    comment acknowledging this gap). Without this, every export appends
+-    another copy of the same DEF on top of the last one instead of
+-    replacing it, which is exactly how Anna's file ended up with dozens
+-    of duplicate Timer1/Timer2/DefaultTimer blocks. Interpolator DEFs are
+-    matched by the 'Interp_' convention _write_clip_nodes itself uses, so
+-    this only ever touches nodes this function is responsible for — never
+-    a real, ROUTE-backed clip's own nodes, which are never passed to this
+-    helper (see the real/fabricated split in _write_clip_nodes below).
++    Facts about every clip-candidate TimeSensor (WireTimer_* pose plumbing is excluded).
++
++    Returns (timers, alias):
++      timers: { DEF: {def, el, routes, exports, description, loop} } in document order,
++              routes = number of fraction_changed ROUTEs leaving it (0 = hollow)
++      alias:  { EXPORT AS name: DEF }  so a clip can reference a timer by the name the
++              scene IMPORTs (BowTimer) as well as by its DEF (Timer8).
+     """
+-    ns = _X3D_NS
+-    for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
+-        for el in list(scene_el.iter(tag)):
+-            if el.get('DEF') == timer_def:
+-                scene_el.remove(el)
+-    for tag in (f'{{{ns}}}EXPORT', 'EXPORT'):
+-        for el in list(scene_el.iter(tag)):
+-            if el.get('localDEF') == timer_def:
+-                scene_el.remove(el)
+-    for tag in (f'{{{ns}}}OrientationInterpolator', 'OrientationInterpolator'):
+-        for el in list(scene_el.iter(tag)):
+-            d = el.get('DEF', '')
+-            if d.startswith('Interp_' + timer_def) or f'{timer_def}_' in d:
+-                scene_el.remove(el)
++    routed = {}
++    for r in existing_routes:
++        if r.get('fromField') == 'fraction_changed':
++            routed[r.get('fromNode')] = routed.get(r.get('fromNode'), 0) + 1
++    exports = {}
++    for el in scene_el.iter():
++        if _tag_local(el) == 'EXPORT' and el.get('localDEF'):
++            exports.setdefault(el.get('localDEF'), []).append(el.get('AS') or el.get('localDEF'))
++    timers = {}
++    for el in scene_el.iter():
++        if _tag_local(el) != 'TimeSensor':
++            continue
++        d = el.get('DEF', '')
++        if not d or d.startswith('WireTimer_') or d in timers:
++            continue
++        timers[d] = {'def': d, 'el': el, 'routes': routed.get(d, 0),
++                     'exports': exports.get(d, []),
++                     'description': el.get('description', ''), 'loop': el.get('loop')}
++    alias = {}
++    for d, info in timers.items():
++        for a in info['exports']:
++            alias.setdefault(a, d)
++    return timers, alias
++
++
++def _resolve_timer_ref(ref: str, timers: dict, alias: dict):
++    """Timer info for a clip's timerDEF, whether it is a DEF or an EXPORT alias."""
++    if ref in timers:
++        return timers[ref]
++    return timers.get(alias.get(ref, ''))
++
++
++def _reachable_name(info: dict) -> str:
++    """The name a scene can IMPORT this timer under: its own DEF if exported under
++    that name, else its first EXPORT alias, else the DEF (exists but unreachable)."""
++    if info['def'] in info['exports']:
++        return info['def']
++    return info['exports'][0] if info['exports'] else info['def']
++
++
++def _find_real_clips_by_label(timers: dict) -> dict:
++    """
++    Fallback only — used when a clip's own timerDEF resolves to nothing real.
++    { humanized label: [timer info, ...] } for ROUTED timers, most reachable first
++    (a timer with an EXPORT can be IMPORTed by a scene; one without cannot).
++    """
++    by_label = {}
++    for d, info in timers.items():
++        if info['routes'] <= 0:
++            continue
++        label = _humanize_gesture_label(info['description'], d)
++        by_label.setdefault(label, []).append(info)
++    for lst in by_label.values():
++        lst.sort(key=lambda i: 0 if i['exports'] else 1)   # stable: keeps document order
++    return by_label
++
++
++def _clip_is_authored(clip: dict) -> bool:
++    """True only if some keyframe really holds joint rotations."""
++    for kf in clip.get('keyframes') or []:
++        if isinstance(kf, dict) and kf.get('joints'):
++            return True
++    return False
++
++
++def _joint_lookup(scene_el):
++    """(by_def, by_name): HAnimJoint DEF set, and name -> DEF. The editor keys keyframes
++    by the joint's `name`, but a ROUTE must target its DEF — in Anna 38 of 96 joints
++    differ (DEF 'L-Thigh', name 'L_Thigh'), so name-targeted ROUTEs dangled."""
++    by_def, by_name = set(), {}
++    for el in scene_el.iter():
++        if _tag_local(el) != 'HAnimJoint' or el.get('USE'):
++            continue
++        d = el.get('DEF')
++        if d:
++            by_def.add(d)
++            if el.get('name'):
++                by_name.setdefault(el.get('name'), d)
++    return by_def, by_name
++
++
++def _authored_interp_prefixes(timer_def: str, clip_name: str) -> tuple:
++    """DEF prefixes this writer has used for a clip's interpolators: current
++    '<timer>_Interp_' and the legacy '<clipname>Interp_'."""
++    pfx = [f'{timer_def}_Interp_']
++    if clip_name:
++        pfx.append(f'{clip_name}Interp_')
++    return tuple(pfx)
++
++
++def _is_own_authored(timer_def: str, clip_name: str, routes: list) -> bool:
++    """True if every fraction_changed ROUTE out of this timer feeds an interpolator
++    carrying this writer's own naming — i.e. it is our previous output, safe to replace.
++    A timer wired to anything else (Blender/Mixamo/Sunrize animation) is never ours."""
++    pfx = _authored_interp_prefixes(timer_def, clip_name)
++    outs = [r for r in routes if r.get('fromNode') == timer_def
++            and r.get('fromField') == 'fraction_changed']
++    return all(r.get('toNode', '').startswith(pfx) for r in outs)
++
++
++def _remove_authored_clip(scene_el, timer_def: str, clip_name: str) -> set:
++    """
++    Remove a previous version of a clip THIS WRITER authored: the TimeSensor, its EXPORT
++    and its own-named OrientationInterpolators. Callers must have checked
++    _is_own_authored first. Every removal is on the direct-child list it lives in
++    (nested nodes are handled too). Returns the set of removed DEFs so the caller can
++    drop the ROUTEs that touched them (no dangling endpoints).
++    """
++    pfx = _authored_interp_prefixes(timer_def, clip_name)
++    removed = set()
++    for parent in list(scene_el.iter()):
++        for child in list(parent):
++            t = _tag_local(child)
++            if t == 'TimeSensor' and child.get('DEF') == timer_def:
++                removed.add(timer_def); parent.remove(child)
++            elif t == 'EXPORT' and child.get('localDEF') == timer_def:
++                parent.remove(child)
++            elif t == 'OrientationInterpolator' and child.get('DEF', '').startswith(pfx):
++                removed.add(child.get('DEF')); parent.remove(child)
++    return removed
+ 
+ 
+ def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
+     """
+-    Append TimeSensor + OrientationInterpolator nodes for each clip, then
+-    re-append all ROUTEs (existing + new clip ROUTEs) as the last nodes in
+-    the Scene element.  Enforces ROUTE-last invariant regardless of clips[].
+-
+-    In Phase 1, clips is [] — only existing_routes are re-appended last.
+-    In Phase 2, clips[] is populated from the editor's keyframe state.
+-
+-    Day 94 fix: two real bugs closed here, both confirmed against Anna's
+-    file (13 hollow placeholder TimeSensors — Default/Walk/Bow/Fold Arms/
+-    Idle/Look Around/Sit/Wait plus their '2' duplicates — none with a
+-    single ROUTE, sitting alongside the real, fully-wired Timer1-14 that
+-    actually animate her):
+-      1. A clip whose real, ROUTE-backed animation already exists
+-         elsewhere in the file (matched via _find_real_animated_clips, by
+-         humanized label — same convention hanim_ingest_mixamo already
+-         uses) is no longer fabricated as a second, empty TimeSensor.
+-         Only clips with real client-side keyframes (genuinely authored
+-         in this editor, not just discovered/ingested) get a node written
+-         at all now.
+-      2. Whatever IS written gets any stale prior version of itself
+-         removed first (_strip_clip_nodes_by_def) — no more silent
+-         duplicate-DEF accumulation on repeat Save.
+-
+-    Returns (clips_written: int, routes_written: int, resolved_defs: dict)
+-    — resolved_defs maps clip name -> the timerDEF that actually ended up
+-    real for it (the existing one if matched, the fabricated one
+-    otherwise), so the caller can save the CORRECT DEF into the
+-    cultivar's behavior_clips instead of trusting whatever timerDEF the
+-    client happened to send.
++    Resolve every clip in the export payload against the file, write nodes only for
++    genuinely authored clips, and re-append all ROUTEs last (ROUTE-last invariant).
++
++    Per clip, in order:
++      1. clip.timerDEF resolves (DEF or EXPORT alias) to a timer that has ROUTEs
++         -> REAL. Nothing in the file is touched, resolved name = the timerDEF as sent.
++         Exceptions: (a) clip.loop_edited -> ONLY that timer's loop attribute is set;
++         (b) the clip also carries authored keyframes AND the timer is this writer's own
++         earlier output -> falls through to a clean rewrite (step 3).
++         Authored keyframes on someone else's routed timer are ignored, with a warning.
++      2. Not authored (no keyframe holds joints) and no real timer of that ref ->
++         label fallback (description match, only timers that have an EXPORT); else skipped.
++         Never writes and never strips anything.
++      3. Authored -> (re)write TimeSensor(enabled=false)+EXPORT+OrientationInterpolators
++         with sanitised DEFs, joints mapped name->DEF; refuse (warning) rather than
++         overwrite anything that isn't our own earlier output.
++
++    Returns (clips_written, routes_written, resolved_defs, report) where report =
++    {'warnings': [str], 'loop_updated': [str], 'skipped': [str]}. resolved_defs maps clip
++    name -> the timerDEF the cultivar should store.
+     """
+     ns = _X3D_NS
+     clips_written = 0
+     new_routes    = list(existing_routes)
+     resolved_defs = {}
++    report        = {'warnings': [], 'loop_updated': [], 'skipped': []}
+ 
+-    real_by_label = _find_real_animated_clips(scene_el, existing_routes)
++    timers, alias   = _build_timer_index(scene_el, existing_routes)
++    by_label        = _find_real_clips_by_label(timers)
++    joint_defs, joint_names = _joint_lookup(scene_el)
++    used_defs = {el.get('DEF') for el in scene_el.iter() if el.get('DEF')}
+ 
+     for clip in clips:
+-        name      = clip.get('name', 'Default')
+-        timer_def = clip.get('timerDEF', f'{name}Timer')
+-        cycle     = float(clip.get('cycleInterval', 6.0))
+-        loop      = 'true' if clip.get('loop', True) else 'false'
+-        keyframes = clip.get('keyframes', [])
+-
+-        real_def = real_by_label.get(name)
+-        if real_def:
+-            # Real animation for this clip already exists and is already
+-            # ROUTE-wired — nothing to write. Just make sure a stale
+-            # fabricated node from a PRIOR buggy export under this
+-            # clip's own timerDEF isn't left behind (harmless on disk,
+-            # but exactly the duplication this fix exists to stop).
+-            if timer_def != real_def:
+-                _strip_clip_nodes_by_def(scene_el, timer_def)
+-            resolved_defs[name] = real_def
+-            clips_written += 1
++        name     = clip.get('name') or 'Default'
++        ref      = (clip.get('timerDEF') or '').strip()
++        authored = _clip_is_authored(clip)
++        info     = _resolve_timer_ref(ref, timers, alias) if ref else None
++        real     = info is not None and info['routes'] > 0
++
++        # ── 1. The clip's own timer is real and wired ───────────────────
++        if real:
++            own = _is_own_authored(info['def'], name, existing_routes)
++            if not (authored and own):
++                if authored:
++                    report['warnings'].append(
++                        f"clip '{name}': keyframes ignored — timer '{ref}' already animates "
++                        f"{info['routes']} joints and was not authored by this editor; "
++                        f"add a NEW clip to author a new animation")
++                if clip.get('loop_edited'):
++                    want = 'true' if clip.get('loop', True) else 'false'
++                    if (info['el'].get('loop') or 'false') != want:
++                        info['el'].set('loop', want)
++                        report['loop_updated'].append(f"{info['def']} loop={want}")
++                resolved_defs[name] = ref
++                clips_written += 1
++                continue
++            # else: our own earlier authored output being re-authored — rewrite below,
++            # under the timer's real DEF even if the clip referenced it by EXPORT alias
++            ref = info['def']
++
++        # ── 2. Nothing authored: resolve by label, never write/strip ───
++        if not authored:
++            # Only a timer a scene can IMPORT (has an EXPORT) is a usable target; resolving to
++            # an unexported one (Anna's Timer13) would point the cultivar somewhere unreachable.
++            cands = [i for i in (by_label.get(name) or []) if i['exports']]
++            if cands:
++                resolved_defs[name] = _reachable_name(cands[0])
++                clips_written += 1
++            else:
++                report['skipped'].append(f"clip '{name}' (timerDEF '{ref}'): no real animation, "
++                                         f"no authored keyframes — nothing written")
+             continue
+ 
+-        if not keyframes:
+-            # No real existing animation AND nothing authored client-side
+-            # for this clip — writing a bare enabled="false" TimeSensor
+-            # with no interpolators is exactly the hollow-placeholder bug
+-            # this fix closes. Skip it rather than fabricate a dead node.
++        # ── 3. Genuinely authored clip: (re)write it ────────────────────
++        timer_def = _safe_def(ref or (name + 'Timer'))
++        if timer_def != ref and ref:
++            report['warnings'].append(f"clip '{name}': timerDEF '{ref}' is not a valid DEF; "
++                                      f"written as '{timer_def}'")
++        clash = timers.get(timer_def)
++        if clash is not None and clash['routes'] > 0 and not _is_own_authored(timer_def, name, existing_routes):
++            report['warnings'].append(f"clip '{name}': '{timer_def}' is a routed timer this editor "
++                                      f"did not author — clip not written")
+             continue
+ 
+-        # Genuinely new / hand-authored clip — (re)write it, clearing any
+-        # earlier version of itself first so this doesn't accumulate.
+-        _strip_clip_nodes_by_def(scene_el, timer_def)
++        joint_kfs = {}   # joint DEF -> [(t, rot)]
++        for kf in sorted(clip.get('keyframes') or [], key=lambda k: k.get('t', 0.0)):
++            for jkey, rot in (kf.get('joints') or {}).items():
++                jdef = jkey if jkey in joint_defs else joint_names.get(jkey)
++                if jdef is None:
++                    report['warnings'].append(f"clip '{name}': joint '{jkey}' not in this file — skipped")
++                    continue
++                if rot and len(rot) == 4:
++                    joint_kfs.setdefault(jdef, []).append((kf.get('t', 0.0), rot))
++        if not joint_kfs:
++            report['skipped'].append(f"clip '{name}': no keyframe joints match this file — nothing written")
++            continue
++
++        removed = _remove_authored_clip(scene_el, timer_def, name)
++        if removed:
++            used_defs -= removed
++            new_routes = [r for r in new_routes
++                          if r.get('fromNode') not in removed and r.get('toNode') not in removed]
++
++        cycle = float(clip.get('cycleInterval', 6.0))
++        loop  = 'true' if clip.get('loop', True) else 'false'
+ 
+-        # TimeSensor — enabled="false" invariant
+         ts = _ET_hanim.SubElement(scene_el, f'{{{ns}}}TimeSensor')
+         ts.set('DEF',           timer_def)
+         ts.set('cycleInterval', str(cycle))
+         ts.set('loop',          loop)
+-        ts.set('enabled',       'false')
++        ts.set('enabled',       'false')          # invariant: never starts on its own
++        used_defs.add(timer_def)
+ 
+-        # EXPORT so the loader can reach this timer via getImportedNode
+-        # after the scene's <IMPORT> statement registers it.
+-        # Identity export: localDEF and AS are the same bare name.
+-        # The agent-suffix (e.g. WalkTimer_Cindy) is applied by the
+-        # Scene Composer's IMPORT AS= attribute, not here.
++        # Identity EXPORT so the loader can reach it via getImportedNode once the
++        # scene's <IMPORT> registers it (agent suffix is added by Composer's AS=).
+         ex = _ET_hanim.SubElement(scene_el, f'{{{ns}}}EXPORT')
+         ex.set('localDEF', timer_def)
+         ex.set('AS',       timer_def)
+ 
+-        # OrientationInterpolators per joint
+-        joint_names = set()
+-        for kf in keyframes:
+-            joint_names.update(kf.get('joints', {}).keys())
+-
+-        for joint in sorted(joint_names):
+-            interp_def = f'{name}Interp_{joint}'
+-            keys, key_vals = [], []
+-            for kf in sorted(keyframes, key=lambda k: k.get('t', 0.0)):
+-                rot = kf['joints'].get(joint)
+-                if rot and len(rot) == 4:
+-                    keys.append(str(round(kf.get('t', 0.0), 4)))
+-                    key_vals.append(' '.join(str(round(v, 6)) for v in rot))
+-            if not keys:
+-                continue
++        for jdef in sorted(joint_kfs):
++            base = f'{timer_def}_Interp_{_safe_def(jdef)}'
++            interp_def, n = base, 2
++            while interp_def in used_defs:
++                interp_def, n = f'{base}_{n}', n + 1
++            used_defs.add(interp_def)
++            pts = joint_kfs[jdef]
+             interp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}OrientationInterpolator')
+             interp.set('DEF',      interp_def)
+-            interp.set('key',      ' '.join(keys))
+-            interp.set('keyValue', ' '.join(key_vals))
+-            # ROUTEs for this interpolator
++            interp.set('key',      ' '.join(str(round(t, 4)) for t, _ in pts))
++            interp.set('keyValue', ' '.join(' '.join(str(round(v, 6)) for v in rot) for _, rot in pts))
+             new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
+-                                'toNode':   interp_def, 'toField':   'set_fraction'})
++                               'toNode':   interp_def, 'toField':   'set_fraction'})
+             new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
+-                                'toNode':   joint,      'toField':   'rotation'})
++                               'toNode':   jdef,       'toField':   'set_rotation'})
+ 
+         resolved_defs[name] = timer_def
+         clips_written += 1
+ 
+     # Deduplicate and append all ROUTEs last — INVARIANT
+-    seen_r   = set()
+-    unique_r = []
++    seen_r, unique_r = set(), []
+     for r in new_routes:
+-        key = (r.get('fromNode',''), r.get('fromField',''),
+-               r.get('toNode',''),  r.get('toField',''))
++        key = (r.get('fromNode', ''), r.get('fromField', ''), r.get('toNode', ''), r.get('toField', ''))
+         if key not in seen_r:
+             seen_r.add(key)
+             unique_r.append(r)
+-
+     for r_attrib in unique_r:
+         re_el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}ROUTE')
+         for k, v in r_attrib.items():
+             re_el.set(k, v)
+ 
+-    return clips_written, len(unique_r), resolved_defs
++    return clips_written, len(unique_r), resolved_defs, report
++
++
++def _x3d_integrity(root) -> dict:
++    """
++    Structural problems in an X3D tree, as {category: sorted [names]} — used to compare a
++    file BEFORE and AFTER an export mutates it. Categories: dangling_route (ROUTE endpoint
++    not defined), export_undefined (EXPORT localDEF not defined), export_duplicate_as,
++    def_duplicate, def_whitespace (invalid X3D name).
++    """
++    defs, imported = {}, set()
++    routes, exports = [], []
++    for el in root.iter():
++        t = _tag_local(el)
++        d = el.get('DEF')
++        if d:
++            defs[d] = defs.get(d, 0) + 1
++        if t == 'ROUTE':
++            routes.append(el)
++        elif t == 'EXPORT':
++            exports.append(el)
++        elif t == 'IMPORT':
++            imported.add(el.get('AS') or el.get('importedDEF') or '')
++    known = set(defs) | imported
++    endpoints = set()
++    for r in routes:
++        endpoints.add(r.get('fromNode', '')); endpoints.add(r.get('toNode', ''))
++    as_count = {}
++    for e in exports:
++        n = e.get('AS') or e.get('localDEF') or ''
++        as_count[n] = as_count.get(n, 0) + 1
++    return {
++        'dangling_route':      sorted(n for n in endpoints if n not in known),
++        'export_undefined':    sorted({e.get('localDEF', '') for e in exports if e.get('localDEF') not in defs}),
++        'export_duplicate_as': sorted(n for n, c in as_count.items() if c > 1),
++        'def_duplicate':       sorted(n for n, c in defs.items() if c > 1),
++        'def_whitespace':      sorted(n for n in defs if _re.search(r'\s', n)),
++    }
++
++
++def _integrity_regressions(before: dict, after: dict) -> list:
++    """Problems present AFTER but not BEFORE, as human-readable strings. Problems the file
++    already had (e.g. Anna's five whitespace-DEF stubs) do not block an export."""
++    out = []
++    for cat, names in after.items():
++        new = sorted(set(names) - set(before.get(cat, [])))
++        if new:
++            out.append(f"{cat}: {', '.join(new[:8])}" + (f" (+{len(new) - 8} more)" if len(new) > 8 else ''))
++    return out
++
+ 
+ 
+ @hanim_bp.route('/hanim/skin_upload', methods=['POST'])
+@@ -1425,6 +1618,18 @@
+     Phase 1: skin URL + cultivar XML (HAnimFigure/Receptivity/Behaviors) only.
+     Phase 2: clips[] populated — TimeSensor + OrientationInterpolator nodes written.
+ 
++    Day 95 contract (see _write_clip_nodes):
++      * A clip is written only if some keyframe holds joints; a routed TimeSensor is never
++        stripped/rewritten; clip.timerDEF (DEF or EXPORT alias) is honoured as sent.
++      * clip.loop_edited=true (set by the editor only when the author changed Loop) is the
++        ONLY thing that lets export touch the loop attribute of an existing real timer.
++      * cameraRig absent/null = leave the avatar's CAM_* rig nodes untouched; an explicit
++        object (even all-disabled) replaces them.
++      * The result is integrity-checked against the file as it arrived; an export that would
++        add a dangling ROUTE / undefined EXPORT / duplicate or whitespace DEF is refused with
++        HTTP 409 and NOTHING is written.
++      * Response adds: warnings, loop_updated, skipped, preexisting_problems.
++
+     Atomic triple-write via .tmp + os.replace().  All three files backed up first.
+     No file is modified if any write fails.
+ 
+@@ -1506,9 +1711,14 @@
+     if scene_el is None:
+         return jsonify({'status': 'error',
+                         'error': 'No <Scene> element found in X3D file'}), 500
++    # Snapshot the file's structural problems BEFORE anything mutates it, so the gate
++    # below refuses only problems this export would introduce (Anna already carries five
++    # whitespace-DEF stubs; those must not block every future export).
++    integrity_before = _x3d_integrity(x3d_root)
+     _remove_routes(scene_el)
+ 
+-    clips_written, routes_written, resolved_timer_defs = _write_clip_nodes(scene_el, clips, existing_routes)
++    clips_written, routes_written, resolved_timer_defs, clip_report = \
++        _write_clip_nodes(scene_el, clips, existing_routes)
+ 
+     # ── Write camera rig nodes (Day 77) ────────────────────────────────────
+     # camera_rig: { agent_eye: {enabled}, agent_side: {enabled},
+@@ -1519,8 +1729,11 @@
+     # Written into the avatar's OWN Scene (this file), not the calling scene —
+     # per the Avatar Camera Rig Manifest doc's decision that rigs are authored once
+     # per avatar file, not injected generically at Composer export time.
+-    camera_rig = body.get('cameraRig') or {}
+-    camera_rig_written = _write_camera_rig_nodes(scene_el, camera_rig)
++    # cameraRig ABSENT/null = "editor did not load the rig state" -> leave the rig nodes
++    # exactly as they are. Only an explicit object (even all-disabled) replaces the rig.
++    # (An empty {} used to wipe CAM_Eye/Side/Orbit/Track and their EXPORTs.)
++    camera_rig = body.get('cameraRig')
++    camera_rig_written = [] if camera_rig is None else _write_camera_rig_nodes(scene_el, camera_rig)
+ 
+     # ── Write AU displacer weights ────────────────────────────────────────
+     displacers      = body.get('displacers') or []
+@@ -1579,12 +1792,15 @@
+                 # — _write_clip_nodes wrote nothing for it. Don't add a
+                 # cultivar entry pointing at a timerDEF that doesn't exist.
+                 continue
+-            c = {
++            # Start from the existing entry so keys this merge doesn't own (e.g. cycleInterval)
++            # survive instead of being dropped by the wholesale replace.
++            c = dict(existing_by_name.get(name) or {})
++            c.update({
+                 'name':     name,
+                 'timerDEF': resolved_def,
+                 'loop':     bool(clip.get('loop', True)),
+                 'priority': int(clip.get('priority', 0)),
+-            }
++            })
+             cv = clip.get('cv_conditions') or {}
+             for ch in ('E', 'B', 'P', 'S'):
+                 for bound in ('min', 'max'):
+@@ -1602,6 +1818,20 @@
+             p0[0]['name'] if p0 else cultivar_def.behavior_clips[0]['name']
+         )
+ 
++    # ── Integrity gate ───────────────────────────────────────────────────
++    # Refuse (writing NOTHING) if this export would leave the avatar with a structural
++    # problem it did not have on the way in: a ROUTE to a node that no longer exists, an
++    # EXPORT of an undefined DEF, a duplicate DEF/EXPORT name, or a whitespace DEF.
++    integrity_after = _x3d_integrity(x3d_root)
++    regressions = _integrity_regressions(integrity_before, integrity_after)
++    if regressions:
++        return jsonify({
++            'status':      'error',
++            'error':       'export refused — it would corrupt the avatar file (nothing was written): '
++                           + '; '.join(regressions),
++            'regressions': regressions,
++        }), 409
++
+     # ── Atomic triple-write ──────────────────────────────────────────────
+     # 1. Back up all three files (expressions XML may not exist yet — that is fine)
+     _hanim_backup(x3d_filepath)
+@@ -1665,7 +1895,8 @@
+     # a phantom rig claim is not) but still best-effort try/except so a manifest
+     # write failure doesn't turn a successful export into a 500.
+     try:
+-        _write_camera_rig_manifest(hanim_src, camera_rig, camera_rig_written)
++        if camera_rig is not None:
++            _write_camera_rig_manifest(hanim_src, camera_rig, camera_rig_written)
+     except OSError as exc:
+         return jsonify({
+             'status': 'ok',
+@@ -1678,6 +1909,8 @@
+             'expressions_written': expressions_written,
+             'camera_rig_written': camera_rig_written,
+             'camera_rig_manifest_warning': f'manifest write failed: {exc}',
++            'warnings': clip_report['warnings'], 'loop_updated': clip_report['loop_updated'],
++            'skipped': clip_report['skipped'],
+         })
+ 
+     return jsonify({
+@@ -1691,6 +1924,11 @@
+         'camera_rig_written':   camera_rig_written,
+         'displacers_updated':   displacers_updated,
+         'expressions_written':  expressions_written,
++        # Day 95: what the export did NOT do, and what it noticed
++        'warnings':             clip_report['warnings'],
++        'loop_updated':         clip_report['loop_updated'],
++        'skipped':              clip_report['skipped'],
++        'preexisting_problems': {k: len(v) for k, v in integrity_before.items() if v},
+     })
+ 
+ 
+@@ -1930,6 +2168,21 @@
+ 
+     # ── Scan for TimeSensor nodes — playable clips ──────────────────────────
+     # Skip WireTimer_ nodes — those are pose infrastructure, not animation clips
++    #
++    # Day 95 (S3): every entry now says whether it is REAL. `routes` = number of
++    # fraction_changed ROUTEs leaving the timer; `hollow` = routes == 0 (a stub that
++    # animates nothing — duplicates and leftovers of old exports; Anna has ~82 of them).
++    # `exported_as` = the names a scene can IMPORT it under. The full list is still returned
++    # (the wiring/ingest detection below relies on it); the editor filters on `hollow`.
++    _routes_all = _collect_routes(root)
++    _routed = {}
++    for _r in _routes_all:
++        if _r.get('fromField') == 'fraction_changed':
++            _routed[_r.get('fromNode')] = _routed.get(_r.get('fromNode'), 0) + 1
++    _exported = {}
++    for _el in root.iter():
++        if _tag_local(_el) == 'EXPORT' and _el.get('localDEF'):
++            _exported.setdefault(_el.get('localDEF'), []).append(_el.get('AS') or _el.get('localDEF'))
+     clips = []
+     seen_defs = set()
+     for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
+@@ -1971,8 +2224,14 @@
+                 'name':          name,
+                 'timerDEF':      def_val,
+                 'cycleInterval': cycle,
+-                'loop':          el.get('loop', 'true').lower() == 'true',
++                # X3D's default for TimeSensor.loop is FALSE. This used to default to
++                # 'true', so every timer with no loop attribute (Anna's Bow, Idle, Wait)
++                # was reported — and shown in the editor — as looping when it isn't.
++                'loop':          el.get('loop', 'false').lower() == 'true',
+                 'enabled':       el.get('enabled', 'false').lower() == 'true',
++                'routes':        _routed.get(def_val, 0),
++                'hollow':        _routed.get(def_val, 0) == 0,
++                'exported_as':   _exported.get(def_val, []),
+             })
+ 
+     # ── Load joint map from cultivar if one is linked ────────────────────

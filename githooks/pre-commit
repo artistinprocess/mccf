@@ -1,0 +1,62 @@
+#!/bin/sh
+# MCCF pre-commit hook — CultivarDefinition field-parity check
+#
+# Lives in the repo (githooks/pre-commit), NOT in .git/hooks/, so it's
+# tracked, visible in a code review, and survives a fresh clone rather
+# than being invisible local machine state. Activated once per clone
+# via: git config core.hooksPath githooks
+#
+# What this actually checks: whenever mccf_cultivar_lambda.py is part
+# of the commit, runs check_cultivar_field_parity.py against it. That
+# script mechanically diffs CultivarDefinition's real dataclass fields
+# against every hand-written representation of the same record
+# (to_dict, the POST handler's constructor, the bulk GET response,
+# etc.) — the exact bug shape that cost most of a day in Sept 2026
+# (portrait, then receptivity, silently dropped in one representation
+# while present in all the others).
+#
+# Deliberately scoped to only fire when that one file changed — every
+# other commit runs instantly, untouched.
+#
+# KNOWN SIMPLIFICATION: checks the working-tree copy of the file, not
+# the exact staged blob. For a normal solo workflow (stage, commit,
+# same moment) these are identical in practice. If you ever stage a
+# file, then keep editing it further before committing, this checks
+# what's currently on disk, not what's actually staged — worth knowing,
+# not treated as equivalent to a byte-exact staged-content check.
+
+CHECKED_FILE="mccf_cultivar_lambda.py"
+CHECKER_SCRIPT="check_cultivar_field_parity.py"
+
+# Only run if the checked file is actually part of this commit.
+if git diff --cached --name-only | grep -qx "$CHECKED_FILE"; then
+    echo "── ${CHECKED_FILE} changed — running field parity check ──"
+
+    if [ ! -f "$CHECKER_SCRIPT" ]; then
+        echo "WARNING: ${CHECKER_SCRIPT} not found at repo root — skipping check."
+        echo "(This should not happen if the checker script is committed alongside this hook.)"
+        exit 0
+    fi
+
+    python3 "$CHECKER_SCRIPT" "$CHECKED_FILE"
+    RESULT=$?
+
+    if [ $RESULT -ne 0 ]; then
+        echo ""
+        echo "════════════════════════════════════════════════════════════"
+        echo " COMMIT BLOCKED — field parity check failed."
+        echo ""
+        echo " A field exists on CultivarDefinition but is missing from"
+        echo " one of its hand-written representations (see output above)."
+        echo ""
+        echo " Fix it, OR if the exclusion is genuinely intentional, add"
+        echo " it to EXPECTED_GAPS in ${CHECKER_SCRIPT} with a stated"
+        echo " reason — then commit again."
+        echo "════════════════════════════════════════════════════════════"
+        exit 1
+    fi
+
+    echo "── field parity check passed ──"
+fi
+
+exit 0

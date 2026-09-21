@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scene xmlns="http://mccf.artistinprocess.com/v1" id="GardenOfTheGoddess" timestamp="2026-09-08T14:00:00" zone_set="GardenOfTheGoddess" mode="improvisation" width="40" depth="40" seed="test-seed-123">
+  <SceneSound>
+    <Track id="music" url="static/x3d/media/piano1.mp3" loop="true" gain="0.70"/>
+  </SceneSound>
+  <Zones>
+    <Zone id="z1" name="Temple" zone_type="library">
+      <Descriptor>Quiet study zone</Descriptor>
+      <Weights E="0.25" B="0.25" P="0.4" S="0.1"/>
+      <Position x="0" y="0" z="5"/>
+      <Radius value="4"/>
+      <AmbientTheme scale="major" tempo="medium"/>
+    </Zone>
+  </Zones>
+  <AgentPlacement cultivar="Anna" actor="ollama" voice="Microsoft Zira">
+    <StartPosition x="0" y="0" z="0"/>
+  </AgentPlacement>
+  <Waypoints>
+    <Waypoint name="w1" label="Begin" pos_x="0.00" pos_y="0.00" pos_z="0.00" dwell="2" pace="1.4">
+      <Question speaker="Anna">What brings you here?</Question>
+    </Waypoint>
+  </Waypoints>
+  <Cameras>
+    <Camera name="FreeWide" x="0" y="1.7" z="10"/>
+  </Cameras>
+  <Background def="MainBackground">
+    <SkyStop r="0.04" g="0.05" b="0.08"/>
+  </Background>
+  <EventCues>
+    <Cue track="gesture" target="Anna" t0="1.5" clip="Bow"/>
+    <Cue track="turn" target="Anna" t0="3.0" degrees="90" triggerRef="TurnTimer_EC_1"/>
+  </EventCues>
+  <Dialogue enabled="true">
+    <Line id="d1" actor="Anna" type="Statement" mode="static" blocking="true" trigger="scene-start">Welcome to the garden.</Line>
+    <Line id="d2" actor="Anna" type="Response" mode="tts" blocking="false" trigger="touch:TouchSensor1" ttsText="Welcome to the garden." tagSource="authored" emoteE="0.30" emoteB="0.15" emoteP="0.20" emoteS="0.65">Welcome to the garden.</Line>
+  </Dialogue>
+</Scene>

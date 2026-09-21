@@ -345,6 +345,8 @@ textarea { resize: vertical; line-height: 1.5; }
   <button class="pill-btn" onclick="openImportKateModal()">↓ Import tagged</button>
   <button class="pill-btn" onclick="openImportChorusModal()">🎭 Import from Chorus</button>
   <button class="pill-btn" onclick="openGenerateChorusModal()">💬 Generate Chorus response</button>
+  <button class="pill-btn" onclick="openGenerateImprovModal()">🗣 Generate improv lines</button>
+  <button class="pill-btn" onclick="openRunArcModal()">▶ Run Arc (batch persist)</button>
   <button class="pill-btn" onclick="openSplitMonologueModal()">✂ Split monologue</button>
   <button class="pill-btn" onclick="rechainSequentially()">⛓ Re-chain sequentially</button>
   <button class="pill-btn" onclick="openBulkAssignAudioModal()">🔊 Bulk-assign audio</button>
@@ -501,6 +503,17 @@ textarea { resize: vertical; line-height: 1.5; }
         errors.push(`${where}: ttsText must be a string`);
       }
 
+      const hasEmoteWeights = l.emoteWeights !== undefined && l.emoteWeights !== null;
+      if (hasEmoteWeights && !hasTtsText) {
+        errors.push(`${where}: emoteWeights present but ttsText missing — weights were captured alongside a tag that's no longer there`);
+      } else if (hasEmoteWeights) {
+        const ew = l.emoteWeights;
+        const chans = ['E', 'B', 'P', 'S'];
+        if (!chans.every((ch) => Number.isFinite(ew[ch]))) {
+          errors.push(`${where}: emoteWeights must have finite E/B/P/S values`);
+        }
+      }
+
       const hasAudioFile = l.audioFile !== undefined && l.audioFile !== null;
       const hasAudioSource = l.audioSource !== undefined && l.audioSource !== null;
       if (hasAudioFile && !hasAudioSource) {
@@ -535,6 +548,17 @@ textarea { resize: vertical; line-height: 1.5; }
         `mode="${l.mode}" blocking="${l.blocking}" trigger="${xmlEscape(trig)}"`;
       if (l.ttsText !== undefined && l.ttsText !== null) {
         attrs += ` ttsText="${xmlEscape(l.ttsText)}" tagSource="${xmlEscape(serializeTagSource(l.tagSource))}"`;
+      }
+      if (l.emoteWeights !== undefined && l.emoteWeights !== null) {
+        // Prefixed emoteE/emoteB/emoteP/emoteS rather than bare E/B/P/S —
+        // this element already carries many flat attributes, and a bare
+        // "E" here could be misread as belonging to some other E/B/P/S
+        // group elsewhere in a merged document. Flat attributes (not a
+        // nested element) to match this element's own existing
+        // convention rather than introducing a new shape for just this
+        // one field.
+        const ew = l.emoteWeights;
+        attrs += ` emoteE="${ew.E}" emoteB="${ew.B}" emoteP="${ew.P}" emoteS="${ew.S}"`;
       }
       if (l.audioFile !== undefined && l.audioFile !== null) {
         attrs += ` audioFile="${xmlEscape(l.audioFile)}" audioSource="${xmlEscape(serializeAudioSource(l.audioSource))}"`;
@@ -572,6 +596,14 @@ textarea { resize: vertical; line-height: 1.5; }
         if (attrs.tagSource !== undefined) {
           line.tagSource = parseTagSource(attrs.tagSource);
         }
+      }
+      if (attrs.emoteE !== undefined && attrs.emoteB !== undefined && attrs.emoteP !== undefined && attrs.emoteS !== undefined) {
+        line.emoteWeights = {
+          E: parseFloat(attrs.emoteE),
+          B: parseFloat(attrs.emoteB),
+          P: parseFloat(attrs.emoteP),
+          S: parseFloat(attrs.emoteS),
+        };
       }
       if (attrs.audioFile !== undefined) {
         line.audioFile = attrs.audioFile.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
@@ -767,6 +799,24 @@ var sceneName = '';
 var loadedRawXml = null; // raw scene XML text once loaded, else null
 
 function apiBase() { return apiBaseUrl.replace(/\/$/, ''); }
+
+// Small POST-JSON helper — this file otherwise inlines fetch() at each call
+// site (see the Chorus functions); added here rather than following that
+// pattern a third time, since Run Arc's /arc/record and /arc/export calls
+// don't need streaming (unlike /voice/speak, which stays a raw fetch with
+// its own reader loop above).
+async function apiPost(path, body) {
+  const resp = await fetch(`${apiBase()}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}${errText ? ' — ' + errText.slice(0, 200) : ''}`);
+  }
+  return resp.json();
+}
 function onApiBaseChange(v) { apiBaseUrl = v; }
 
 function uid(prefix) {
@@ -1104,11 +1154,36 @@ async function runPreview() {
   }
 }
 
+// Snapshot the analysis's E/B/P/S weights onto the line itself, at the
+// moment a tag actually gets committed to ttsText. Without this, the
+// weights _preview.weights holds only exist as long as this session's
+// in-memory preview state does — l._preview is discarded on navigation
+// or re-analysis, and was never part of what gets sent to Composer or
+// written into the exported <Line> element. Any downstream consumer
+// that wants "this line's emotional weight" as an EBPS-fielded input
+// had nothing to read. Captured regardless of signal strength — even a
+// "no strong signal — natural delivery" result is a real value (all
+// four channels near-neutral), not an absence of one, and locking it
+// in alongside whichever tag the author accepted keeps the two
+// consistent with each other rather than one drifting from the other
+// on a later re-analysis.
+function _captureEmoteWeights(l) {
+  if (l._preview && l._preview.weights) {
+    l.emoteWeights = {
+      E: l._preview.weights.E,
+      B: l._preview.weights.B,
+      P: l._preview.weights.P,
+      S: l._preview.weights.S,
+    };
+  }
+}
+
 function acceptSuggestedTag() {
   const l = lines.find((x) => x.id === selectedId);
   if (!l || !l._preview) return;
   l.ttsText = l._preview.suggested_tts_text;
   l.tagSource = { type: 'algorithmic' };
+  _captureEmoteWeights(l);
   renderAll();
 }
 
@@ -1126,13 +1201,14 @@ function onTtsTextEdit(value) {
   const l = lines.find((x) => x.id === selectedId);
   if (!l) return;
   if (value === '') {
-    // Fully cleared — drop both fields rather than leaving an empty
-    // string ttsText with a stale tagSource (validateDialogueLines
-    // requires them present or absent together, but an empty string is
-    // still "present" and would trip the "ttsText must be a string" —
-    // actually valid — check; clearing is meant to mean "no tag at all").
+    // Fully cleared — drop all three fields rather than leaving stale
+    // data behind. emoteWeights was captured alongside whichever tag
+    // is being removed here; keeping it around after the tag is gone
+    // would let a future read see weights with no corresponding tag to
+    // explain where they came from.
     delete l.ttsText;
     delete l.tagSource;
+    delete l.emoteWeights;
   } else {
     l.ttsText = value;
     l.tagSource = { type: 'authored' }; // editing by hand promotes provenance, same rule as the real design
@@ -1150,6 +1226,14 @@ function insertTag(tag) {
   const base = l.ttsText || l.text;
   l.ttsText = `[${tag}] ${base}`;
   l.tagSource = { type: 'authored' };
+  // Manually choosing a tag from the toolbar is still "accepting a
+  // tag" — just not necessarily the algorithmic suggestion. If
+  // analysis has been run on this line (l._preview exists), the
+  // weights it produced describe the line's actual text regardless of
+  // which specific tag the author ultimately picked, so the same
+  // capture applies here as in acceptSuggestedTag(). No-ops silently
+  // if no analysis has been run yet — nothing to capture in that case.
+  _captureEmoteWeights(l);
   renderAll();
 }
 
@@ -1798,6 +1882,301 @@ async function fireChorusGeneration() {
   };
   poll();
 }
+
+// ── Generate improv lines + Run Arc (batch persist) ─────────────────────
+// Carries the waypoint (Constitutional tool) mechanism over into this
+// editor, per direct intent: "an API call to the LLM fired on an empty
+// response line... my intent... was to assign a character to the LLM such
+// that it could potentially ask questions, respond, or make statements in
+// character." Generalizes the waypoint version (reply-only, fired on an
+// empty Response) to all three LINE_TYPES, since a dialogue line isn't
+// always a reply the way a waypoint always was.
+//
+// TWO SEPARATE ACTIONS, deliberately not one pass — this was the first
+// version's real mistake. LLM output is chatty and needs editing before
+// its EBPS gets locked in; persistence has to happen post-edit, the same
+// two-step shape Chorus already uses (generate → review/edit → explicit
+// import/persist), not fused into one generate-and-record pass:
+//   1. "Generate improv lines" — fires LLM generation for every improv-mode
+//      line with empty text, writes the result into l.text, and STOPS.
+//      No /arc/record call anywhere in this step. The author reviews and
+//      edits the generated lines exactly like any other line afterward,
+//      in the normal editor — this step never touches EBPS at all.
+//   2. "Run Arc (batch persist)" — separate action, walks every real line
+//      (static, edited-improv, Chorus-imported — all identical by this
+//      point, just text on a line) and calls /arc/record in sequence.
+//      Purely a persistence pass now — no generation, no LLM calls. A
+//      line with a mode of 'improv' that's STILL empty (never generated,
+//      or generated then cleared) is skipped with a visible count, not
+//      silently dropped or auto-generated on the fly.
+//
+// Both on-demand only — explicit buttons, never automatic on typing or
+// line creation, matching the whole editor's on-demand EBPS philosophy.
+//
+// Walks `lines` in array order (not the sensed-chain graph — dialogue is
+// linear in practice, and this matches how Composer's own Record Arc walks
+// Paths in order).
+//
+// Generation deliberately sets record_to_field:false on every /voice/speak
+// call. /voice/speak's own internal record_to_field:true write uses a
+// cruder sentiment-only CV and (confirmed this session) writes to a
+// hardcoded, non-scope-aware field reference — moot here anyway now that
+// generation and recording are separate steps, but kept false on principle:
+// generation should never silently touch field state on its own.
+//
+// Run Arc persists the whole run as a real arc export (/arc/export — the
+// same scenes/<scene>/arcs/<take>/arc_<id>.xml format Composer produces),
+// not just an in-memory display — this is what finally gives a dialogue
+// scene queryable historical EBPS data, the same substrate already
+// identified for validating whether P (or any channel) carries real
+// predictive information rather than just lexical register.
+
+let _runArcResults = [];
+
+// Builds the /voice/speak 'text' (the incoming utterance the character
+// responds to) based on line type — this is the generalization beyond the
+// waypoint version's reply-only mechanism. Response has a natural
+// incoming utterance (whatever came before); Question and Statement don't,
+// so they get an explicit stage-direction-style instruction instead, since
+// /voice/speak has no separate 'instruction vs utterance' channel — both
+// fold into the same 'text' field the adapter sees as what it's replying to.
+function _buildImprovPrompt(line, priorLine) {
+  if (line.type === 'Response') {
+    return priorLine && priorLine.text
+      ? priorLine.text
+      : '(The scene has just begun. Respond in character to open it.)';
+  }
+  if (line.type === 'Question') {
+    return priorLine && priorLine.text
+      ? `(Given what was just said — "${priorLine.text}" — ask a question in character. Ask only; do not answer it yourself.)`
+      : '(Ask a question in character, arising naturally as the scene opens. Ask only; do not answer it yourself.)';
+  }
+  // Statement
+  return priorLine && priorLine.text
+    ? `(Given what was just said — "${priorLine.text}" — make a statement in character. Not a question, not a reply awaiting response — a standalone statement.)`
+    : '(Make a standalone statement in character, arising naturally as the scene opens.)';
+}
+
+// ── Step 1: Generate improv lines ───────────────────────────────────────
+function openGenerateImprovModal() {
+  const realLines = lines.filter((l) => l.trigger.type !== 'arc-complete');
+  const empties = realLines.filter((l) => l.mode === 'improv' && !(l.text || '').trim());
+  if (empties.length === 0) {
+    toast('No empty improv lines to generate — every improv line already has text.', true);
+    return;
+  }
+
+  document.getElementById('modal-title').textContent = 'Generate improv lines';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Generates text for ${empties.length} empty improv line(s), in character, as each line's own Question, Response, or Statement. Writes straight into each line's text — nothing is recorded to EBPS in this step. Review and edit the results normally afterward, then run <b>Run Arc (batch persist)</b> separately when you're happy with them.</p>
+    <p style="color:var(--warm)">LLM output is often chatty — expect to trim these before persisting.</p>
+    <label style="display:block;margin-top:10px">LLM Adapter</label>
+    <select id="genimprov-adapter" class="input" style="width:100%;margin-top:4px">
+      <option value="ollama">ollama (local)</option>
+      <option value="stub">stub (no LLM)</option>
+      <option value="anthropic">anthropic</option>
+      <option value="openai">openai</option>
+    </select>
+    <label style="display:block;margin-top:8px">API key (if required)</label>
+    <input type="text" id="genimprov-apikey" class="input" style="width:100%;margin-top:4px" placeholder="leave blank for local/ollama">
+    <div id="genimprov-status" style="margin-top:12px"></div>
+  `;
+  document.getElementById('modal-foot').innerHTML = `
+    <div class="modal-foot-left"></div>
+    <div class="modal-foot-right"><button class="pill-btn primary" id="genimprov-fire-btn" onclick="fireGenerateImprov()">Generate</button></div>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function fireGenerateImprov() {
+  const statusEl = document.getElementById('genimprov-status');
+  const fireBtn  = document.getElementById('genimprov-fire-btn');
+  const adapter  = document.getElementById('genimprov-adapter').value;
+  const apikey   = document.getElementById('genimprov-apikey').value.trim();
+  if (fireBtn) fireBtn.disabled = true;
+
+  const setStatus = (msg, isErr) => {
+    if (statusEl) statusEl.innerHTML = `<p style="color:${isErr ? 'var(--danger)' : 'var(--dim)'}">${esc(msg)}</p>`;
+  };
+
+  const realLines = lines.filter((l) => l.trigger.type !== 'arc-complete');
+  let configuredActors = {};  // avoid redundant /voice/configure calls per actor
+  let generatedCount = 0;
+
+  for (let i = 0; i < realLines.length; i++) {
+    const line = realLines[i];
+    if (!(line.mode === 'improv' && !(line.text || '').trim())) continue;  // only empty improv lines
+    const prior = i > 0 ? realLines[i - 1] : null;
+    setStatus(`Generating ${generatedCount + 1} — ${line.actor} (${line.type})…`);
+
+    try {
+      if (!configuredActors[line.actor]) {
+        await fetch(`${apiBase()}/voice/configure`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adapter_id: adapter, api_key: apikey || '',
+            persona: { name: line.actor, role: 'agent', description: '' },
+            params: { max_tokens: 300, temperature: 0.72 },
+            clear_history: true
+          })
+        });
+        configuredActors[line.actor] = true;
+      }
+      const promptText = _buildImprovPrompt(line, prior);
+      const speakResp = await fetch(`${apiBase()}/voice/speak`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // record_to_field:false — generation never touches field state on
+        // its own; persistence is Run Arc's job alone, as a later, separate,
+        // explicit step.
+        body: JSON.stringify({ text: promptText, agent_name: line.actor, position: [0, 0, 0], record_to_field: false })
+      });
+      const reader = speakResp.body.getReader(), dec = new TextDecoder();
+      let buf = '', generated = '';
+      while (true) {
+        const r = await reader.read();
+        if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        const slines = buf.split('\n'); buf = slines.pop();
+        for (const sline of slines) {
+          if (!sline.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(sline.slice(6));
+            if (evt.type === 'token') generated += evt.content;
+          } catch (pe) {}
+        }
+      }
+      line.text = generated.trim();
+      generatedCount++;
+    } catch (e) {
+      setStatus(`Generation failed on "${line.actor}" (${line.type}) — ${e.message}. Stopping — later lines may have been meant to reply to this one.`, true);
+      if (fireBtn) fireBtn.disabled = false;
+      renderAll();
+      return;
+    }
+  }
+
+  setStatus(`Generated ${generatedCount} line(s). Close this and review/edit them like any other line before running Run Arc.`);
+  renderAll();
+  if (fireBtn) fireBtn.disabled = false;
+}
+
+// ── Step 2: Run Arc (batch persist) — separate, post-edit ────────────────
+function openRunArcModal() {
+  const realLines = lines.filter((l) => l.trigger.type !== 'arc-complete');
+  if (realLines.length === 0) {
+    toast('No lines to run yet.', true);
+    return;
+  }
+  const stillEmptyImprov = realLines.filter((l) => l.mode === 'improv' && !(l.text || '').trim()).length;
+  const recordable = realLines.length - stillEmptyImprov;
+
+  document.getElementById('modal-title').textContent = 'Run Arc (batch persist)';
+  document.getElementById('modal-body').innerHTML = `
+    <p>Calls /arc/record for ${recordable} line(s) with text, in order. No generation happens here — this is persistence only.${stillEmptyImprov > 0
+      ? ` ${stillEmptyImprov} improv line(s) still have no text and will be skipped — run "Generate improv lines" first if you want them included.`
+      : ''}</p>
+    <p style="color:var(--warm)">This is a real, persisted run, saved as a real arc export — not a preview.</p>
+    <div id="runarc-status" style="margin-top:12px"></div>
+    <div id="runarc-chart" style="margin-top:10px"></div>
+  `;
+  document.getElementById('modal-foot').innerHTML = `
+    <div class="modal-foot-left"></div>
+    <div class="modal-foot-right"><button class="pill-btn primary" id="runarc-fire-btn" onclick="fireRunArc()">Run</button></div>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function fireRunArc() {
+  const statusEl = document.getElementById('runarc-status');
+  const chartEl  = document.getElementById('runarc-chart');
+  const fireBtn  = document.getElementById('runarc-fire-btn');
+  if (fireBtn) fireBtn.disabled = true;
+
+  const setStatus = (msg, isErr) => {
+    if (statusEl) statusEl.innerHTML = `<p style="color:${isErr ? 'var(--danger)' : 'var(--dim)'}">${esc(msg)}</p>`;
+  };
+
+  const realLines = lines.filter((l) => l.trigger.type !== 'arc-complete');
+  _runArcResults = [];
+  let skipped = 0;
+
+  for (let i = 0; i < realLines.length; i++) {
+    const line = realLines[i];
+    if (!(line.text || '').trim()) { skipped++; continue; }  // nothing to record — no generation happens here
+    setStatus(`Line ${i + 1}/${realLines.length} — ${line.actor} (${line.type})…`);
+
+    try {
+      const recResp = await apiPost('/arc/record', {
+        cultivar: line.actor,
+        step:     i + 1,
+        waypoint: line.id,
+        response: line.text
+      });
+      const cv = recResp.cv || null;
+      line.arcCV        = cv;
+      line.arcCoherence = recResp.coherence != null ? recResp.coherence : null;
+      // recResp.mode does not exist at top level — the agent's behavioral
+      // mode (exploit/explore/repair/avoid/shift) lives nested under
+      // meta_state.mode. lineMode keeps the line's own static/improv
+      // authoring mode separate from that, since they're different things
+      // that happen to share the word "mode".
+      const behavioralMode = recResp.meta_state ? recResp.meta_state.mode : '';
+      _runArcResults.push({
+        step: i + 1, actor: line.actor, type: line.type, waypoint: line.id,
+        text: line.text, E: cv ? cv.E : null, B: cv ? cv.B : null,
+        P: cv ? cv.P : null, S: cv ? cv.S : null,
+        coherence: recResp.coherence != null ? recResp.coherence : null,
+        lineMode: line.mode, behavioralMode: behavioralMode
+      });
+    } catch (e) {
+      setStatus(`/arc/record failed on line ${i + 1} (${line.actor}) — ${e.message}. Stopping.`, true);
+      if (fireBtn) fireBtn.disabled = false;
+      renderAll();
+      return;
+    }
+  }
+
+  const skipNote = skipped > 0 ? ` (${skipped} skipped — no text)` : '';
+  setStatus(`Done — ${_runArcResults.length} line(s) recorded${skipNote}. Saving arc export…`);
+  renderAll();  // reflect per-line arcCV immediately
+
+  // Persist as a real arc export, same format/endpoint Composer uses — see
+  // file-level comment above: this is what gives the scene queryable
+  // historical EBPS data, not just an in-editor display.
+  try {
+    const takeId = 'dialogue_' + Date.now();
+    await apiPost('/arc/export', {
+      cultivar:   _runArcResults.length ? _runArcResults[0].actor : 'unknown',
+      timestamp:  new Date().toISOString(),
+      scene_name: sceneName || '',
+      take_name:  takeId,
+      rows:       _runArcResults.map((r) => ({
+        step: r.step, waypoint: r.waypoint, E: r.E, B: r.B, P: r.P, S: r.S,
+        mode: r.behavioralMode, coherence: r.coherence,
+        qaLines: [{ type: r.type, speaker: r.actor, text: r.text }]
+      }))
+    });
+    setStatus(`Done — ${_runArcResults.length} line(s) recorded${skipNote} and saved to scenes/${esc(sceneName || '(unscoped)')}/arcs/${takeId}/.`);
+  } catch (e) {
+    setStatus(`Recorded ${_runArcResults.length} line(s)${skipNote}, but the arc export save failed — ${e.message}. Per-line values are still on each line (check Emotional Preview) even though the persisted export didn't save.`, true);
+  }
+
+  if (chartEl) {
+    chartEl.innerHTML = `
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Coherence per line —</div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:60px;border-bottom:1px solid var(--border)">
+        ${_runArcResults.map((r) => {
+          const h = Math.max(2, Math.round((r.coherence != null ? r.coherence : 0.5) * 60));
+          return `<div title="${esc(r.actor)} step ${r.step}: ${r.coherence != null ? r.coherence.toFixed(3) : '?'}"
+                   style="flex:1;height:${h}px;background:var(--accent)"></div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  if (fireBtn) fireBtn.disabled = false;
+}
+
 
 function openImportChorusModal() {
   document.getElementById('modal-title').textContent = 'Import from Chorus';

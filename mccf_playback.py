@@ -223,7 +223,6 @@ def parse_arc_file(filepath: str) -> dict:
         # Some exports have Cultivar as direct child
         cultivar_els = [root] if root.tag == "Cultivar" else []
 
-    by_cultivar = {}
     all_waypoints = []
 
     for cel in cultivar_els:
@@ -272,6 +271,33 @@ def parse_arc_file(filepath: str) -> dict:
                             "text":    txt,
                         })
             wp.qa_lines = qa_lines
+            # Real root-cause fix (Day 89 — the whole "Anna never seeded"
+            # investigation): a single <Cultivar agentname="..."> element
+            # can wrap a MULTI-SPEAKER sequence — the Dialogue Editor's
+            # Run Arc export puts every line from every actor in a scene
+            # under one <Cultivar> labeled by whoever spoke first (see
+            # fireRunArc() in mccf_dialogue_editor.html). Blindly inheriting
+            # cultivar_name for every waypoint meant every OTHER speaker's
+            # lines silently vanished as far as playback was concerned —
+            # their real text was sitting right there in qa_lines, but the
+            # waypoint itself claimed to belong to whoever spoke first,
+            # every single step, for the entire file. The real per-line
+            # speaker was always being parsed above (child.get("speaker"))
+            # — just never read back out to correct wp.cultivar. Only
+            # overrides when qa_lines actually names someone; a waypoint
+            # with no speaker attribute (older, genuinely single-cultivar
+            # exports, e.g. the Constitutional tool's own 7-waypoint files)
+            # keeps inheriting cultivar_name exactly as before — this is
+            # additive, not a behavior change for anything that worked.
+            _wp_speakers = set(l["speaker"] for l in qa_lines if l.get("speaker"))
+            if len(_wp_speakers) == 1:
+                wp.cultivar = next(iter(_wp_speakers))
+            elif len(_wp_speakers) > 1:
+                # Multiple speakers in one waypoint (a multi-line beat) —
+                # no single correct owner; keep the file-level label rather
+                # than guess, but this case is worth knowing about if it
+                # ever actually occurs in real exports.
+                pass
             # Legacy single fields — first Question / last Response
             q_items = [l for l in qa_lines if l["type"] == "Question"]
             r_items = [l for l in qa_lines if l["type"] == "Response"]
@@ -285,7 +311,16 @@ def parse_arc_file(filepath: str) -> dict:
             all_waypoints.append(wp)
 
         waypoints.sort(key=lambda w: w.stepno)
-        by_cultivar[cultivar_name] = waypoints
+
+    # Group by each waypoint's own (now speaker-corrected) cultivar, not by
+    # the outer <Cultivar> wrapper it happened to be nested under — see the
+    # fix note above. A waypoint whose speaker never got corrected simply
+    # keeps landing under its original wrapper label, same as before.
+    by_cultivar = {}
+    for w in all_waypoints:
+        by_cultivar.setdefault(w.cultivar, []).append(w)
+    for c in by_cultivar:
+        by_cultivar[c].sort(key=lambda w: w.stepno)
 
     all_waypoints.sort(key=lambda w: (w.stepno, w.cultivar))
 
@@ -554,11 +589,20 @@ class PlaybackManager:
             raw = ""
             try:
                 with open(fpath, encoding="utf-8") as f:
-                    raw = f.read(2000)  # read first 2KB only
+                    raw = f.read(2000)  # quick peek — enough for cultivar/path_name, which sit near the top
                 m = re.search(r'agentname="([^"]+)"', raw)
                 if m:
                     cultivar = m.group(1)
-                steps = len(re.findall(r'<Waypoint ', raw))
+                # steps_seen needs the REAL total, not a 2KB-peek estimate —
+                # confirmed wrong (reported 4 for a 48-waypoint file, since
+                # only ~4 waypoints' worth of attributes fit in that first
+                # slice). Cheap fix: count <Waypoint tags across the whole
+                # file directly rather than re-reading through parse_arc_file
+                # (which does a full ET.fromstring parse — correct, but
+                # heavier than list_files() needs just to report a count).
+                with open(fpath, encoding="utf-8") as f:
+                    full_raw = f.read()
+                steps = len(re.findall(r'<Waypoint ', full_raw))
             except Exception:
                 pass
             # Extract path_name: prefer XML attribute, fall back to filename parse

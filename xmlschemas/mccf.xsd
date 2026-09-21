@@ -1,0 +1,1102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:mccf="http://mccf.artistinprocess.com/v1"
+           targetNamespace="http://mccf.artistinprocess.com/v1"
+           elementFormDefault="qualified">
+
+  <xs:annotation>
+    <xs:documentation>
+      MCCF Combined Schema — v1
+
+      Single-namespace schema covering all three live MCCF-invented XML
+      document types:
+
+        - CultivarDefinition — a character's constitutional data
+        - Scene              — Scene Composer's own save/load format
+        - EmotionalArc       — a recorded take's waypoint/beat sequence
+
+      Consolidated from three separately-namespaced schemas
+      (mccf_cultivar.xsd / mccf_scene.xsd / mccf_arc.xsd) into one file
+      under one shared namespace, so a single XML editor session — or a
+      single xsi:schemaLocation reference — covers the whole system.
+      True cross-namespace combination in one physical XSD file is not
+      possible under the XSD/XML spec (an xs:schema document has
+      exactly one targetNamespace); this consolidation is the real
+      alternative: one namespace, one file, three root elements.
+
+      Explicitly NOT covered: the compiled X3D geometry output. That is
+      real, standard X3D — the Web3D/ISO schema already governs its
+      shape, plus this project's own EXTERNPROTOs — and is not
+      redefined here.
+
+      ─────────────────────────────────────────────────────────────
+      THE NAMING COLLISION — NOW ACTUALLY RESOLVED, NOT JUST NOTED
+      ─────────────────────────────────────────────────────────────
+      Before this consolidation, the bare string "EmotionalArc" was
+      used for three unrelated things across three separately-
+      namespaced schemas: (1) the current CultivarDefinition format's
+      OLD, deprecated predecessor (different namespace entirely, not
+      part of this file — see the standalone note below), (2) this
+      schema's own take-recording root element, and (3) a per-agent
+      placement stub nested inside Scene Composer's Scene documents.
+      Each schema individually footnoted the collision as "worth
+      renaming in a future revision." Merging into one namespace is
+      that future revision: XSD requires every global element
+      declaration in a namespace to have a unique name, so keeping two
+      *different* global &lt;EmotionalArc&gt; elements in this one
+      namespace was not actually an option once merged — it forced the
+      fix rather than just recommending it.
+
+      RESOLUTION: the take-recording root element keeps the name
+      EmotionalArc (it is the older, more established usage, and
+      renaming it would mean touching a live backend endpoint's actual
+      wire format — mccf_api.py's arc_export_save — for a purely
+      cosmetic gain). Scene Composer's per-agent placement stub is
+      renamed here to AgentPlacement, its actual meaning. This IS a
+      breaking change to Scene Composer's own save/load format's
+      element name — _doExportSceneXML() and its matching load path in
+      mccf_scene_composer.html still write/read the literal string
+      "EmotionalArc" for this purpose and will need updating to match
+      this schema, OR this schema's AgentPlacement element needs an
+      xs:alternateName-style accommodation if the rename can't land in
+      code immediately. Flagged here explicitly so the schema and the
+      writer code are never silently out of sync about which name is
+      current.
+
+      One collision remains OUTSIDE this file's scope, by construction:
+      the OLD, deprecated cultivar format (root &lt;EmotionalArc&gt; with
+      a nested &lt;Cultivar agentname="..."&gt; child, no namespace of its
+      own, read-only backward-compat support in
+      CultivarRegistry._load_from_disk). It predates namespacing
+      entirely and is not schematized here or anywhere — it is legacy
+      data, not a second schema to maintain. Any file still using it is
+      a migration candidate.
+    </xs:documentation>
+  </xs:annotation>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ═══  DOCUMENT TYPE 1 — CultivarDefinition  ═══════════════════
+       ═══════════════════════════════════════════════════════════ -->
+
+  <xs:element name="CultivarDefinition" type="mccf:CultivarDefinitionType"/>
+
+  <xs:complexType name="CultivarDefinitionType">
+    <xs:annotation>
+      <xs:documentation>
+        Element order matches CultivarDefinition.to_xml()'s actual write
+        order (mccf_cultivar_lambda.py) exactly, not an idealized order
+        — an XML editor driving its authoring UI from this schema
+        presents fields in the same order the hand-written serializer
+        already uses.
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="Weights" type="mccf:ChannelVectorType"/>
+      <xs:element name="Regulation" type="mccf:RegulationType"/>
+      <xs:element name="ShadowContext" type="mccf:ShadowContextType"/>
+      <xs:element name="ZoneAffinity" type="mccf:ZoneAffinityType" minOccurs="0"/>
+      <xs:element name="Description" type="xs:string" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          Character Creator's "Disposition" field is stored here too —
+          per get_cultivars_xml()'s comment "disposition lives in
+          description field," Disposition and Description are the SAME
+          underlying value client-side, not two independent fields that
+          happen to look similar.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="ConstitutionalNotes" type="xs:string" minOccurs="0"/>
+      <xs:element name="SignaturePhrases" type="mccf:SignaturePhrasesType" minOccurs="0"/>
+      <xs:element name="FailureMode" type="xs:string" minOccurs="0"/>
+      <xs:element name="Voice" type="mccf:VoiceType" minOccurs="0"/>
+      <xs:element name="Alias" type="xs:string" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          Optional narrative name (e.g. a Cherokee name vs. a family
+          name). minOccurs="0" is a real constraint, confirmed
+          absent-safe on every read path.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="Portrait" type="mccf:PortraitType" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          Node icon shown in Composer's Affects graph. Session-hardened
+          Sept 2026 — six write/read points across the dataclass,
+          to_dict, to_xml, from_xml, from_dict, and the single-cultivar
+          GET path all correctly round-trip this field; the bulk-list
+          GET response (get_cultivars_xml, no-name-param branch) is a
+          SEPARATE hand-built dict and must independently include
+          "portrait": d.portrait — this is the exact field that was
+          missing for real, in production, for most of a day. If this
+          schema is ever used to code-generate the seven read/write
+          sites instead of hand-maintaining them, this specific failure
+          mode becomes structurally impossible rather than something a
+          human has to remember to keep in sync.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="HAnimFigure" type="mccf:HAnimFigureType" minOccurs="0"/>
+      <xs:element name="Receptivity" type="mccf:ReceptivityType" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          Only written when it differs from the all-1.0 default. ABSENCE
+          means "fully receptive on every channel," not "unset" — a
+          reader must apply that default itself; it lives in Python code
+          (`{'E':1.0,'B':1.0,'P':1.0,'S':1.0}`), not restated here as an
+          XSD default, to avoid the two silently drifting apart.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="Behaviors" type="mccf:BehaviorsType" minOccurs="0"/>
+      <xs:element name="Metadata" type="mccf:MetadataType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        THE registry key (self._cultivars[defn.name] = defn) — NOT the
+        filename. Two files with different filenames but the same name
+        attribute collide silently at load time, last-processed-wins,
+        no error, no warning. Not hypothetical: a stale
+        cultivar_AnnaOld.xml with name="Anna" silently overwrote the
+        correct, actively-maintained Anna data on every server restart
+        for most of a session (Sept 2026) before being traced to
+        source. Tooling built against this schema should treat two
+        files sharing an @name value as a hard error, regardless of
+        filename.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+    <xs:attribute name="role" type="xs:string" use="optional" default="agent"/>
+    <xs:attribute name="color" type="mccf:HexColorType" use="optional" default="#aaaaaa"/>
+  </xs:complexType>
+
+  <xs:complexType name="ChannelVectorType">
+    <xs:annotation><xs:documentation>
+      The four-channel affective vector — Eros, Boundary, Pathos,
+      Sophia. Recurs in Weights, Receptivity, and Zone weights (Scene
+      document type below) — one named type so the four channels can't
+      silently drift into different constraints across uses.
+    </xs:documentation></xs:annotation>
+    <xs:attribute name="E" type="xs:decimal" use="required"/>
+    <xs:attribute name="B" type="xs:decimal" use="required"/>
+    <xs:attribute name="P" type="xs:decimal" use="required"/>
+    <xs:attribute name="S" type="xs:decimal" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="RegulationType">
+    <xs:attribute name="value" type="mccf:UnitInterval" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="ShadowContextType">
+    <xs:attribute name="lambda" type="xs:decimal" use="required">
+      <xs:annotation><xs:documentation>
+        Arc-memory decay constant. Character Studio slider range is
+        LAMBDA_MIN–LAMBDA_MAX (constants in mccf_cultivar_lambda.py,
+        not restated numerically here since they're tunable).
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="note" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="ZoneAffinityType">
+    <xs:attribute name="zones" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Space-separated list, not a repeated element — matches
+        `" ".join(self.zone_affinity)`. A single xs:string rather than
+        xs:list since individual zone IDs' own character set isn't
+        formally constrained elsewhere yet.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="SignaturePhrasesType">
+    <xs:sequence>
+      <xs:element name="Phrase" type="xs:string" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="VoiceType">
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        A full TTS voice name as reported by the browser/OS voice list,
+        not a short code. Only as portable as the voice actually being
+        installed on whatever machine loads the scene.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="lang" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>Client-side default when unset is "en-US".</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="rate" type="xs:decimal" use="required">
+      <xs:annotation><xs:documentation>Client-side default when unset is 1.0.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="pitch" type="xs:decimal" use="required">
+      <xs:annotation><xs:documentation>Client-side default when unset is 1.0.</xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="PortraitType">
+    <xs:attribute name="src" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Either a registered media path (X3DAssets/media/icons/...) once
+        a real /media/upload endpoint exists for this purpose, or a
+        data: URL for an image uploaded before that endpoint existed.
+        Both forms valid today; no upload endpoint yet exists, so most
+        real portraits in the wild are data: URLs.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="HAnimFigureType">
+    <xs:attribute name="src" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Path to the stripped H-Anim/X3D figure file, inlined at agent
+        placement in the compiled scene.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="loa" type="xs:nonNegativeInteger" use="optional" default="4">
+      <xs:annotation><xs:documentation>Level of articulation.</xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ReceptivityType">
+    <xs:complexContent>
+      <xs:extension base="mccf:ChannelVectorType"/>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="BehaviorsType">
+    <xs:sequence>
+      <xs:element name="Clip" type="mccf:BehaviorClipType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="default" type="xs:string" use="optional" default="Default"/>
+  </xs:complexType>
+
+  <xs:complexType name="BehaviorClipType">
+    <xs:annotation><xs:documentation>
+      Runtime/storage shape is FLAT (this type) — selectBehaviorClip
+      reads clip.E_min/clip.E_max directly. The wire/transport shape
+      used by mccf_hanim_api.py's hanim_export payload NESTS these same
+      four bounds inside a cv_conditions object instead; that nested
+      shape is a transport contract translated at one point
+      (_heClipForExport() in mccf_character_creator.html), not a second
+      persisted format. Only the flat, persisted shape is schematized
+      here.
+    </xs:documentation></xs:annotation>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="timerDEF" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Two clip entries sharing the same timerDEF is how "two EBPS
+        states trigger the same underlying clip" is expressed — two
+        Clip elements, not two trigger ranges on one element.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="loop" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="cycleInterval" type="xs:decimal" use="optional" default="6.0"/>
+    <xs:attribute name="priority" type="xs:integer" use="optional" default="0"/>
+    <xs:attribute name="E_min" type="xs:decimal" use="optional"/>
+    <xs:attribute name="E_max" type="xs:decimal" use="optional"/>
+    <xs:attribute name="B_min" type="xs:decimal" use="optional"/>
+    <xs:attribute name="B_max" type="xs:decimal" use="optional"/>
+    <xs:attribute name="P_min" type="xs:decimal" use="optional"/>
+    <xs:attribute name="P_max" type="xs:decimal" use="optional"/>
+    <xs:attribute name="S_min" type="xs:decimal" use="optional"/>
+    <xs:attribute name="S_max" type="xs:decimal" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataType">
+    <xs:sequence>
+      <xs:element name="Meta" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="key" type="xs:string" use="required"/>
+          <xs:attribute name="value" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ═══  DOCUMENT TYPE 2 — Scene (Composer save/load format)  ═════
+       ═══════════════════════════════════════════════════════════ -->
+
+  <xs:element name="Scene" type="mccf:SceneType"/>
+
+  <xs:complexType name="SceneType">
+    <xs:annotation><xs:documentation>
+      Scene Composer's OWN save/load working format
+      (_doExportSceneXML() in mccf_scene_composer.html) — DIFFERENT
+      from the compiled X3D geometry file the same tool also produces
+      (real X3D, not schematized here). Element order below follows
+      the writer's actual block-by-block order.
+    </xs:documentation></xs:annotation>
+    <xs:sequence>
+      <xs:element name="SceneSound" type="mccf:SceneSoundType" minOccurs="0"/>
+      <xs:element name="Zones" type="mccf:ZonesType" minOccurs="0"/>
+      <xs:element name="AgentPlacement" type="mccf:AgentPlacementType" minOccurs="0" maxOccurs="unbounded">
+        <xs:annotation><xs:documentation>
+          RENAMED from "EmotionalArc" as part of the Sept 2026 schema
+          consolidation — see this file's root-level documentation for
+          the full collision history. Writer code
+          (_doExportSceneXML()/its load counterpart) still emits/reads
+          the literal element name "EmotionalArc" for this purpose as
+          of this schema version; needs a matching code update to emit
+          "AgentPlacement" before a document produced by the live
+          system will actually validate against this schema for this
+          element. Until that lands, treat this element name as the
+          schema's TARGET shape, not yet the code's ACTUAL output.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="Waypoints" type="mccf:WaypointsType" minOccurs="0"/>
+      <xs:element name="Paths" type="mccf:PathsType" minOccurs="0"/>
+      <xs:element name="RecordedPaths" type="mccf:RecordedPathsType" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          Per-element content serialized by path-recorder.js's
+          MCCFPathRecorder.serializeRecordedPath() — a module not yet
+          fragment-gathered into this schema. RecordedPath children are
+          xs:anyType placeholders, a known, stated gap.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="Cameras" type="mccf:CamerasType" minOccurs="0"/>
+      <xs:element name="Assets" type="mccf:AssetsType" minOccurs="0"/>
+      <xs:element name="Background" type="mccf:BackgroundType" minOccurs="0"/>
+      <xs:element name="Lights" type="mccf:LightsType" minOccurs="0"/>
+      <xs:element name="AudioSources" type="mccf:AudioSourcesType" minOccurs="0"/>
+      <xs:element name="Network" type="mccf:NetworkType" minOccurs="0"/>
+      <xs:element name="RouteGraph" type="mccf:RouteGraphType" minOccurs="0"/>
+      <xs:element name="EventCues" type="mccf:EventCuesType" minOccurs="0"/>
+      <xs:element name="Dialogue" type="mccf:DialogueType" minOccurs="0">
+        <xs:annotation><xs:documentation>
+          A SECOND, separate dialogue mechanism from Waypoint's own
+          Question/Response/Statement children (the original design,
+          still live and unchanged) — this one is the standalone
+          Dialogue Editor module's richer per-line system: its own
+          trigger vocabulary (not tied to a specific waypoint), TTS
+          tagging, and audio-file linkage. Both mechanisms coexist in
+          the same exported Scene document; confirmed by direct code
+          trace, not assumed, Sept 2026 (the original three-file XSD
+          split had left this as a stated, honest gap pending exactly
+          this trace).
+
+          REAL WORKFLOW GOTCHA, worth knowing rather than assuming this
+          always populates: the writer's source (client-side
+          _lastDialogueLines) only gets set by the Dialogue Editor's own
+          explicit "Save to Composer" action, or by restoring a
+          previously-saved scene. If dialogue is authored in that tab
+          during a session and neither of those has happened yet, this
+          element is written EMPTY — no error, no warning. The
+          Composer UI does show a status line saying exactly that
+          ("this export's &lt;Dialogue&gt; block will be empty...") when
+          the condition applies, but nothing in the XML itself
+          distinguishes "genuinely no dialogue" from "dialogue exists
+          but was never saved to Composer before export." An absent or
+          empty Dialogue element is therefore NOT reliable evidence a
+          scene has no dialogue — only that this document doesn't
+          record any, for whatever reason.
+        </xs:documentation></xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>Scene name/identifier.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="timestamp" type="xs:string" use="required"/>
+    <xs:attribute name="zone_set" type="xs:string" use="required"/>
+    <xs:attribute name="mode" type="xs:string" use="required" fixed="improvisation"/>
+    <xs:attribute name="width" type="xs:decimal" use="required"/>
+    <xs:attribute name="depth" type="xs:decimal" use="required"/>
+    <xs:attribute name="labelsEnabled" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="dialogueTTYEnabled" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="seed" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        Gesture constellation §6 base/default seed. Empty/absent means
+        "unset" — the seeded PRNG randomizes fresh at the start of every
+        take. The RESOLVED seed actually used for a given take is
+        recorded separately, per-take, in that take's own EmotionalArc
+        export (this schema's Seed element, below) — not here, since
+        this is only the scene-level default.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="SceneSoundType">
+    <xs:sequence>
+      <xs:element name="Track" type="mccf:SoundTrackType" minOccurs="0" maxOccurs="2"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="SoundTrackType">
+    <xs:attribute name="id" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="music"/>
+          <xs:enumeration value="bed"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="url" type="xs:string" use="required"/>
+    <xs:attribute name="loop" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="gain" type="mccf:UnitInterval" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="ZonesType">
+    <xs:sequence>
+      <xs:element name="Zone" type="mccf:ZoneType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ZoneType">
+    <xs:sequence>
+      <xs:element name="Descriptor" type="xs:string" minOccurs="0"/>
+      <xs:element name="Weights" type="mccf:ChannelVectorType"/>
+      <xs:element name="Position">
+        <xs:complexType>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="required" fixed="0"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Radius">
+        <xs:complexType><xs:attribute name="value" type="xs:decimal" use="required"/></xs:complexType>
+      </xs:element>
+      <xs:element name="AmbientTheme">
+        <xs:complexType>
+          <xs:attribute name="scale" type="xs:string" use="required"/>
+          <xs:attribute name="tempo" type="xs:string" use="optional" default="medium"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Chorus" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="Persona" type="xs:string" minOccurs="0"/>
+          </xs:sequence>
+          <xs:attribute name="llm" type="xs:string" use="required"/>
+          <xs:attribute name="tone" type="xs:string" use="required"/>
+          <xs:attribute name="max_tokens" type="xs:positiveInteger" use="required"/>
+          <xs:attribute name="display" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="SoundDesign" minOccurs="0">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="Track" maxOccurs="2">
+              <xs:complexType>
+                <xs:attribute name="id" use="required">
+                  <xs:simpleType>
+                    <xs:restriction base="xs:string">
+                      <xs:enumeration value="ambient"/>
+                      <xs:enumeration value="dwell"/>
+                    </xs:restriction>
+                  </xs:simpleType>
+                </xs:attribute>
+                <xs:attribute name="url" type="xs:string" use="required"/>
+                <xs:attribute name="loop" type="xs:boolean" use="optional"/>
+                <xs:attribute name="gain" type="mccf:UnitInterval" use="optional"/>
+                <xs:attribute name="spatialize" type="xs:boolean" use="optional"/>
+                <xs:attribute name="maxFront" type="xs:decimal" use="optional"/>
+                <xs:attribute name="filter" type="xs:string" use="optional"/>
+                <xs:attribute name="filterFreq" type="xs:decimal" use="optional"/>
+                <xs:attribute name="filterQ" type="xs:decimal" use="optional"/>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Asset" minOccurs="0">
+        <xs:complexType>
+          <xs:attribute name="url" type="xs:string" use="required"/>
+          <xs:attribute name="offsetX" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="offsetY" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="offsetZ" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="rotationY" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="scale" type="xs:decimal" use="optional" default="1"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+    <xs:attribute name="name" type="xs:string" use="optional"/>
+    <xs:attribute name="zone_type" type="xs:string" use="required"/>
+    <xs:attribute name="template" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="AgentPlacementType">
+    <xs:sequence>
+      <xs:element name="StartPosition">
+        <xs:complexType>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="cultivar" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Must match a CultivarDefinition/@name elsewhere in this schema
+        — cross-document referential integrity this schema alone
+        cannot enforce structurally, since the two documents are
+        separate files even though they now share one namespace.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="actor" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>Client-side default when unset is "ollama".</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="voice" type="xs:string" use="optional"/>
+    <xs:attribute name="hanim_src" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="WaypointsType">
+    <xs:sequence>
+      <xs:element name="Waypoint" type="mccf:WaypointType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="WaypointType">
+    <xs:sequence>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="Question" type="mccf:DialogueLineType"/>
+        <xs:element name="Response" type="mccf:DialogueLineType"/>
+        <xs:element name="Statement" type="mccf:DialogueLineType"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="label" type="xs:string" use="optional"/>
+    <xs:attribute name="zone" type="xs:string" use="optional"/>
+    <xs:attribute name="pos_x" type="xs:decimal" use="required"/>
+    <xs:attribute name="pos_y" type="xs:decimal" use="required">
+      <xs:annotation><xs:documentation>Written as 0 when the agent's placement has no explicit Y coordinate.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="pos_z" type="xs:decimal" use="required"/>
+    <xs:attribute name="dwell" type="xs:decimal" use="optional" default="2"/>
+    <xs:attribute name="pace" type="xs:decimal" use="optional" default="1.4"/>
+  </xs:complexType>
+
+  <xs:complexType name="DialogueLineType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="speaker" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="PathsType">
+    <xs:sequence>
+      <xs:element name="Path" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="PathWaypoint" minOccurs="0" maxOccurs="unbounded">
+              <xs:complexType>
+                <xs:attribute name="ref" type="xs:string" use="required">
+                  <xs:annotation><xs:documentation>
+                    Must reference a Waypoint/@name in the same
+                    document. Consecutive duplicate refs are stripped at
+                    write time as a double-click guard; non-consecutive
+                    repeats (A→B→A) are valid choreography and kept.
+                  </xs:documentation></xs:annotation>
+                </xs:attribute>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="agent" type="xs:string" use="required"/>
+          <xs:attribute name="waypointOrder" type="xs:integer" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RecordedPathsType">
+    <xs:sequence>
+      <xs:element name="RecordedPath" minOccurs="0" maxOccurs="unbounded" type="xs:anyType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CamerasType">
+    <xs:sequence>
+      <xs:element name="Camera" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="optional" default="1.7"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+          <xs:attribute name="hAngle" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="vAngle" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="roll" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="fieldOfView" type="xs:decimal" use="optional" default="0.785398"/>
+          <xs:attribute name="nearDistance" type="xs:decimal" use="optional" default="-1"/>
+          <xs:attribute name="farDistance" type="xs:decimal" use="optional" default="-1"/>
+          <xs:attribute name="jump" type="xs:boolean" use="optional" default="true"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AssetsType">
+    <xs:sequence>
+      <xs:element name="Asset" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="url" type="xs:string" use="required"/>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+          <xs:attribute name="rotationY" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="scale" type="xs:decimal" use="optional" default="1"/>
+          <xs:attribute name="isMovie" type="xs:boolean" use="optional" default="false"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="BackgroundType">
+    <xs:sequence>
+      <xs:element name="SkyStop" type="mccf:GradientStopType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="GroundStop" type="mccf:GradientStopType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="def" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="GradientStopType">
+    <xs:attribute name="r" type="mccf:UnitInterval" use="required"/>
+    <xs:attribute name="g" type="mccf:UnitInterval" use="required"/>
+    <xs:attribute name="b" type="mccf:UnitInterval" use="required"/>
+    <xs:attribute name="angle" type="xs:decimal" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="LightsType">
+    <xs:sequence>
+      <xs:element name="Light" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="type" type="xs:string" use="required"/>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="required"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+          <xs:attribute name="rx" type="xs:decimal" use="required"/>
+          <xs:attribute name="ry" type="xs:decimal" use="required"/>
+          <xs:attribute name="rz" type="xs:decimal" use="required"/>
+          <xs:attribute name="angle" type="xs:decimal" use="required"/>
+          <xs:attribute name="on" type="xs:boolean" use="optional" default="true"/>
+          <xs:attribute name="color" type="xs:string" use="optional" default="1 1 1"/>
+          <xs:attribute name="intensity" type="xs:decimal" use="optional" default="1"/>
+          <xs:attribute name="ambientIntensity" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="attenC" type="xs:decimal" use="optional" default="1"/>
+          <xs:attribute name="attenL" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="attenQ" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="radius" type="xs:decimal" use="optional" default="100"/>
+          <xs:attribute name="cutOffAngle" type="xs:decimal" use="optional" default="0.785398"/>
+          <xs:attribute name="beamWidth" type="xs:decimal" use="optional" default="0.785398"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AudioSourcesType">
+    <xs:sequence>
+      <xs:element name="AudioSource" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="url" type="xs:string" use="optional"/>
+          <xs:attribute name="loop" type="xs:boolean" use="optional" default="false"/>
+          <xs:attribute name="gain" type="mccf:UnitInterval" use="optional" default="0.8"/>
+          <xs:attribute name="x" type="xs:decimal" use="required"/>
+          <xs:attribute name="y" type="xs:decimal" use="required"/>
+          <xs:attribute name="z" type="xs:decimal" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="NetworkType">
+    <xs:sequence>
+      <xs:element name="Link" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="from" type="xs:string" use="required"/>
+          <xs:attribute name="to" type="xs:string" use="required"/>
+          <xs:attribute name="strength" type="xs:decimal" use="required"/>
+          <xs:attribute name="couplers" type="xs:string" use="required">
+            <xs:annotation><xs:documentation>
+              Comma-separated coupler type list, or a single legacy type
+              code — not a repeated element, matches `clist.join(',')`.
+            </xs:documentation></xs:annotation>
+          </xs:attribute>
+          <xs:attribute name="coupler_params" type="xs:string" use="optional">
+            <xs:annotation><xs:documentation>
+              JSON object serialized into a single, apostrophe-quoted
+              attribute value. Opaque to this schema — a JSON Schema
+              applied to the decoded content would be a separate,
+              complementary artifact, not something XSD expresses.
+            </xs:documentation></xs:annotation>
+          </xs:attribute>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RouteGraphType">
+    <xs:attribute name="data" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Full JSON-serialized Route Graph editor state in one attribute
+        — same JSON-in-attribute convention as Network's
+        coupler_params. This is the actual persistence layer for the
+        graph editor's working state; the structural nodes/routes baked
+        into the compiled X3D are a separate, one-way, lossy
+        derivation, not a second copy of this same data.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="EventCuesType">
+    <xs:sequence>
+      <xs:element name="Cue" type="mccf:CueType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CueType">
+    <xs:annotation><xs:documentation>
+      A Cue's valid attribute SET depends on @track — e.g.
+      degrees/triggerRef/invert only apply when track="turn". XSD 1.0
+      can't express that conditional cleanly without duplicating shared
+      attributes across ten near-identical branches, so this type
+      declares the full union of all track types' attributes as
+      optional, documented per-attribute with which track(s) use it. A
+      document combining mismatched track/attribute pairs would
+      validate here even though the Loader ignores the nonsensical
+      combination — tightening this needs XSD 1.1's xs:assert or a
+      Schematron layer on top, noted as real follow-on work.
+    </xs:documentation></xs:annotation>
+    <xs:attribute name="track" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="camera"/>
+          <xs:enumeration value="gesture"/>
+          <xs:enumeration value="behavior"/>
+          <xs:enumeration value="light"/>
+          <xs:enumeration value="fog"/>
+          <xs:enumeration value="bg"/>
+          <xs:enumeration value="movie"/>
+          <xs:enumeration value="animation"/>
+          <xs:enumeration value="path"/>
+          <xs:enumeration value="turn"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="target" type="xs:string" use="optional"/>
+    <xs:attribute name="label" type="xs:string" use="optional"/>
+    <xs:attribute name="t0" type="xs:decimal" use="required">
+      <xs:annotation><xs:documentation>Written as 0 when unset client-side.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="dur" type="xs:decimal" use="optional" default="0"/>
+    <xs:attribute name="clip" type="xs:string" use="optional"/>
+    <xs:attribute name="degrees" type="xs:decimal" use="optional"/>
+    <xs:attribute name="invert" type="xs:boolean" use="optional"/>
+    <xs:attribute name="pathId" type="xs:string" use="optional"/>
+    <xs:attribute name="walkGesture" type="xs:string" use="optional"/>
+    <xs:attribute name="pathStartX" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartY" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartZ" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartAX" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartAY" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartAZ" type="xs:decimal" use="optional"/>
+    <xs:attribute name="pathStartAngle" type="xs:decimal" use="optional"/>
+    <xs:attribute name="triggerRef" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        Computed purely from @track and the cue's own id, using the
+        SAME formula independently in both the writer here and
+        exportX3D()'s matching &lt;IMPORT&gt;. Prefix varies by track:
+        "EC_" for movie/animation, "TurnTimer_EC_" for turn,
+        "PathTimer_EC_" for path.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="internalDef" type="xs:string" use="optional"/>
+    <xs:attribute name="visible" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="shot" type="xs:string" use="optional"/>
+    <xs:attribute name="subject" type="xs:string" use="optional"/>
+    <xs:attribute name="camera" type="xs:string" use="optional"/>
+    <xs:attribute name="viewpoint" type="xs:string" use="optional"/>
+    <xs:attribute name="jump" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="transition" type="xs:string" use="optional"/>
+    <xs:attribute name="flyDuration" type="xs:decimal" use="optional"/>
+    <xs:attribute name="distance" type="xs:decimal" use="optional"/>
+    <xs:attribute name="height" type="xs:decimal" use="optional"/>
+    <xs:attribute name="hAngle" type="xs:decimal" use="optional"/>
+    <xs:attribute name="vAngle" type="xs:decimal" use="optional"/>
+    <xs:attribute name="distanceEnd" type="xs:decimal" use="optional"/>
+    <xs:attribute name="heightEnd" type="xs:decimal" use="optional"/>
+    <xs:attribute name="hAngleEnd" type="xs:decimal" use="optional"/>
+    <xs:attribute name="vAngleEnd" type="xs:decimal" use="optional"/>
+    <xs:attribute name="arcDepth" type="xs:decimal" use="optional">
+      <xs:annotation><xs:documentation>crane_up shot type only.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="trackOffset" type="xs:decimal" use="optional">
+      <xs:annotation><xs:documentation>agent_track shot type only.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="trackOffsetEnd" type="xs:decimal" use="optional">
+      <xs:annotation><xs:documentation>agent_track shot type only.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="trackDepth" type="xs:decimal" use="optional">
+      <xs:annotation><xs:documentation>agent_track shot type only.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="loop" type="xs:boolean" use="optional">
+      <xs:annotation><xs:documentation>orbit / agent_orbit shot types only.</xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DialogueType">
+    <xs:sequence>
+      <xs:element name="Line" type="mccf:DialogueEditorLineType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="enabled" type="xs:boolean" use="required">
+      <xs:annotation><xs:documentation>
+        Real, separate control from any Dispatcher-runtime toggle
+        elsewhere — gates whether the Loader fires per-line TTY/dialogue
+        at all, for an author using a single pre-mixed audio track
+        instead of per-line playback.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DialogueEditorLineType">
+    <xs:annotation><xs:documentation>
+      NOT the same shape as WaypointType's Question/Response/Statement
+      children (DialogueLineType, above) — this is the Dialogue
+      Editor's own, richer per-line record: flat attributes, a
+      standalone trigger vocabulary, optional TTS and audio-file
+      metadata. Two genuinely different dialogue mechanisms, both real,
+      both live in the same Scene document — see Scene/Dialogue's own
+      documentation for the full explanation.
+    </xs:documentation></xs:annotation>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="id" type="xs:string" use="required"/>
+        <xs:attribute name="actor" type="xs:string" use="required"/>
+        <xs:attribute name="type" type="xs:string" use="required">
+          <xs:annotation><xs:documentation>
+            Always written by the current writer. A reader tolerating
+            hand-authored or older documents should fall back to
+            "Statement" if absent — matches the load-side restore
+            code's own defensive default.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="mode" type="xs:string" use="required">
+          <xs:annotation><xs:documentation>
+            Always written by the current writer. A reader tolerating
+            hand-authored or older documents should fall back to
+            "static" if absent — matches the load-side restore code's
+            own defensive default.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="blocking" type="xs:boolean" use="required"/>
+        <xs:attribute name="trigger" type="xs:string" use="required">
+          <xs:annotation><xs:documentation>
+            Compound string encoding, not a structured type — matches
+            _dlgSerializeTrigger()'s real output exactly. One of:
+            "scene-start" | "touch:&lt;sensor&gt;" | "zone:&lt;zone&gt;" |
+            "sensed:&lt;lineId&gt;" | "declared:&lt;time&gt;" |
+            "arc-complete" | "arc-complete:&lt;zone&gt;" |
+            "legacy-waypoint:&lt;waypoint&gt;". An unrecognized trigger
+            type degrades to "scene-start" at write time rather than
+            throwing — deliberate, so one malformed trigger never blocks
+            an entire scene export.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="ttsText" type="xs:string" use="optional"/>
+        <xs:attribute name="tagSource" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            Only present alongside ttsText. "authored" or
+            "llm-interpreted:&lt;name&gt;" — same compound-string encoding
+            style as trigger.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="emoteE" type="xs:decimal" use="optional"/>
+        <xs:attribute name="emoteB" type="xs:decimal" use="optional"/>
+        <xs:attribute name="emoteP" type="xs:decimal" use="optional"/>
+        <xs:attribute name="emoteS" type="xs:decimal" use="optional">
+          <xs:annotation><xs:documentation>
+            The four E/B/P/S channel weights POST /voice/preview computed
+            for this line's text, snapshotted at the moment a tag was
+            accepted into ttsText — the exact moment this Line's tag was
+            chosen, so the weights and the tag they informed stay
+            consistent with each other rather than one silently drifting
+            from a later re-analysis. Present regardless of signal
+            strength: even a "no strong signal — natural delivery" result
+            is a real captured value, not an absence of one. Only ever
+            present alongside ttsText — a Line with emote weights but no
+            tag would mean the weights were captured for a tag that was
+            later cleared, which the writer's own validation treats as an
+            inconsistent state, not a valid one. Added Sept 2026 — before
+            this, these weights were computed live by the Dialogue Editor
+            but existed only in that editor's own ephemeral, in-session
+            preview state; nothing downstream that wanted to use a line's
+            emotional weight as an EBPS-fielded input had anything to
+            read. Prefixed (not bare E/B/P/S) since this element already
+            carries several other flat attributes and a bare "E" here
+            could be misread as belonging to an unrelated E/B/P/S group
+            elsewhere in a merged document.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="audioFile" type="xs:string" use="optional"/>
+        <xs:attribute name="audioSource" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            Only present alongside audioFile. "recorded" or
+            "other-engine:&lt;name&gt;".
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ═══  DOCUMENT TYPE 3 — EmotionalArc (take/beat recording)  ════
+       ═══════════════════════════════════════════════════════════ -->
+
+  <xs:element name="EmotionalArc" type="mccf:ArcExportType">
+    <xs:annotation><xs:documentation>
+      Written by mccf_api.py's arc_export_save() (POST /arc/export),
+      one file per recorded take:
+      scenes/&lt;scene_name&gt;/arcs/&lt;take_name&gt;/arc_&lt;id&gt;.xml.
+      Records the ordered waypoint/beat sequence actually traversed
+      during a take, plus (gesture constellation §6) the seeded-PRNG
+      value that produced that take's specific behavior. This is the
+      one global element in this schema still literally named
+      "EmotionalArc" — see this file's root documentation for why it
+      keeps the name while Scene's per-agent placement element does
+      not.
+    </xs:documentation></xs:annotation>
+  </xs:element>
+
+  <xs:complexType name="ArcExportType">
+    <xs:sequence>
+      <xs:element name="title" type="xs:string" fixed="MCCF Constitutional Arc Export"/>
+      <xs:element name="Cultivar" type="mccf:ArcCultivarType"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        &lt;path_slug&gt;_&lt;timestamp&gt;, built by the writer, not
+        author-chosen.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="scene" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        Present only when the caller supplied scene_name — an older
+        client or a direct API call may omit it, in which case the
+        file lands in the degraded scenes/_unscoped_arcs/ location
+        rather than failing outright. Absence is meaningful: it marks
+        a take that won't appear scene-scoped in the playback dropdown.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ArcCultivarType">
+    <xs:sequence>
+      <xs:element name="Timestamp">
+        <xs:complexType>
+          <xs:attribute name="date" type="xs:string" use="required"/>
+          <xs:attribute name="time" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Genre" minOccurs="0">
+        <xs:complexType>
+          <xs:attribute name="narrative" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Seed" type="mccf:SeedType" minOccurs="0"/>
+      <xs:element name="Waypoint" type="mccf:ArcWaypointType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>Same value as the parent EmotionalArc/@id — written twice by the serializer, not independently chosen.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="agentname" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Should match a CultivarDefinition/@name elsewhere in this
+        schema — cross-document integrity this schema alone cannot
+        enforce structurally.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="path_name" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="SeedType">
+    <xs:annotation><xs:documentation>
+      Gesture constellation §6: the RESOLVED seed actually used for
+      this specific take — as opposed to Scene/@seed (document type 2,
+      above), which is only the scene-level default. Only this element
+      makes "re-run this exact take" possible, since a take with an
+      unset scene default still resolves to some concrete seed at
+      runtime, and that resolved value is what's recorded here.
+    </xs:documentation></xs:annotation>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:attribute name="source" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        "explicit" (author pinned a seed in Scene Setup) or "randomized"
+        (none set; one generated for this take only). Absence means the
+        take predates this field — treat as unknown, not as either
+        value, since guessing would misrepresent whether the take is
+        actually reproducible by re-entering its seed.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="note" type="xs:string" use="optional" fixed="arc noise locked for reproducibility"/>
+  </xs:complexType>
+
+  <xs:complexType name="ArcWaypointType">
+    <xs:sequence>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="Question" type="mccf:ArcDialogueLineType"/>
+        <xs:element name="Response" type="mccf:ArcDialogueLineType"/>
+        <xs:element name="Statement" type="mccf:ArcDialogueLineType"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+    <xs:attribute name="stepno" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        Written as a bare integer at the value level but declared
+        xs:string, matching row.get("step","") — the writer passes
+        through whatever the client sent without coercion, so an
+        empty/non-numeric value is possible in practice.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation><xs:documentation>
+        Same value as @id — written twice deliberately (preserves the
+        scene XML's own waypoint name so EventCues trigger matching
+        works), not a copy-paste duplication to clean up.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="E" type="xs:string" use="optional"/>
+    <xs:attribute name="B" type="xs:string" use="optional"/>
+    <xs:attribute name="P" type="xs:string" use="optional"/>
+    <xs:attribute name="S" type="xs:string" use="optional"/>
+    <xs:attribute name="Mode" type="xs:string" use="optional"/>
+    <xs:attribute name="Coherence" type="xs:string" use="optional"/>
+    <xs:attribute name="Uncertainty" type="xs:string" use="optional"/>
+    <xs:attribute name="Valence" type="xs:string" use="optional"/>
+    <xs:attribute name="Reward" type="xs:string" use="optional"/>
+    <xs:attribute name="pos_x" type="xs:string" use="optional" default="0.00"/>
+    <xs:attribute name="pos_y" type="xs:string" use="optional" default="0.00"/>
+    <xs:attribute name="pos_z" type="xs:string" use="optional" default="0.00"/>
+  </xs:complexType>
+
+  <xs:complexType name="ArcDialogueLineType">
+    <xs:annotation><xs:documentation>
+      Full multi-line dialogue (qaLines) is preferred when present; a
+      single legacy question/response pair is written only as a
+      fallback when qaLines is absent — the writer's own logic is an
+      if/else, not a merge, though this schema doesn't forbid both
+      appearing.
+    </xs:documentation></xs:annotation>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="speaker" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       Shared primitive restrictions — defined ONCE here, used by all
+       three document types above (previously duplicated independently
+       in the cultivar and scene schemas before this consolidation).
+       ═══════════════════════════════════════════════════════════ -->
+
+  <xs:simpleType name="UnitInterval">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0.0"/>
+      <xs:maxInclusive value="1.0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="HexColorType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="#[0-9a-fA-F]{6}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

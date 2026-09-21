@@ -1007,14 +1007,26 @@ class AgentRuntimeState:
     def set_constitutional(self, E: float, B: float, P: float, S: float,
                            regulation: float = None) -> None:
         """
-        Write ϕ from arc/record.  Also resets ϵ to ϕ (arc start = clean slate).
-        Optionally refreshes regulation from the live Agent.
-        Called only by arc/record — never by couplers.
+        Write ϕ from arc/record. Also resets ϵ to zero (arc start = clean
+        slate, no expressive drift yet). Optionally refreshes regulation
+        from the live Agent. Called only by arc/record — never by couplers.
+
+        BUGFIX: previously initialized expressive_cv to dict(constitutional_cv)
+        (i.e. equal to ϕ) instead of zeros. Since observed_cv = ϕ + ϵ, that
+        made observed_cv start at ~2×ϕ (clamped to 1.0) immediately after
+        every arc/record call, for every regulation level — including
+        regulation=1.0, which the original spec defines as "ϵ locked to
+        zero — pure constitutional state." Confirmed against mccf_couplers.py's
+        own Damping coupler, whose docstring ("pull expressive component
+        toward zero (toward constitutional baseline)") only makes sense if
+        ϵ's rest state is zero. Fixed to match spec exactly.
         """
         self.constitutional_cv = {"E": round(E, 4), "B": round(B, 4),
                                    "P": round(P, 4), "S": round(S, 4)}
-        # ϵ starts equal to ϕ; couplers will drift it from here
-        self.expressive_cv = dict(self.constitutional_cv)
+        # ϵ starts at zero — no expressive drift yet; couplers will drift
+        # it from here. observed_cv = ϕ + ϵ = ϕ + 0 = ϕ at this instant,
+        # exactly matching "ϵ locked to zero = pure constitutional state."
+        self.expressive_cv = {"E": 0.0, "B": 0.0, "P": 0.0, "S": 0.0}
         if regulation is not None:
             self.regulation = regulation
         self.last_record_time = time.time()
@@ -1062,19 +1074,39 @@ class AgentRuntimeState:
         }
 
 
-# Registry: agent name → AgentRuntimeState
+# Registry: (scope, agent name) → AgentRuntimeState
+#
+# scope distinguishes cultivar-template testing from live character state —
+# a cultivar has no history by definition (it's a re-testable template);
+# a character is nothing BUT accumulated history. Before this, both used
+# the same _agent_runtime[name] slot, so testing "Anna" against the
+# Constitutional waypoint arc and playing a scene with a character named
+# "Anna" wrote into the same entry — a test run could silently leave its
+# state behind for the next scene to inherit, or a scene's real history
+# could bleed into what should have been an isolated template test.
+# Default scope is 'character' everywhere nothing else is specified, so
+# every existing caller (scenes, dialogue, couplers) keeps working exactly
+# as before. Only cultivar-template testing (mccf_constitutional.html)
+# needs to opt into 'cultivar_test' explicitly.
 _agent_runtime: dict[str, AgentRuntimeState] = {}
 
 
-def get_runtime(name: str, regulation: float = 0.7) -> AgentRuntimeState:
+def _rt_key(name: str, scope: str = 'character') -> str:
+    """Composite registry key — see _agent_runtime comment above."""
+    return f"{scope}::{name}"
+
+
+def get_runtime(name: str, scope: str = 'character',
+                 regulation: float = 0.7) -> AgentRuntimeState:
     """
-    Return the AgentRuntimeState for `name`, creating it if absent.
-    `regulation` is used only on first creation; subsequent updates come
-    from set_constitutional() calls in arc/record.
+    Return the AgentRuntimeState for `name` within `scope`, creating it if
+    absent. `regulation` is used only on first creation; subsequent updates
+    come from set_constitutional() calls in arc/record.
     """
-    if name not in _agent_runtime:
-        _agent_runtime[name] = AgentRuntimeState(name=name, regulation=regulation)
-    return _agent_runtime[name]
+    key = _rt_key(name, scope)
+    if key not in _agent_runtime:
+        _agent_runtime[key] = AgentRuntimeState(name=name, regulation=regulation)
+    return _agent_runtime[key]
 
 
 # ---------------------------------------------------------------------------
@@ -1200,7 +1232,7 @@ def _compute_arc_residue(agent_name: str) -> dict:
         return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
 
     # Distribute residue proportionally across channels using constitutional CV
-    runtime = _agent_runtime.get(agent_name)
+    runtime = _agent_runtime.get(_rt_key(agent_name))
     if not runtime:
         return {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
 
@@ -1468,10 +1500,13 @@ def get_field():
     # constitutional weights.
     for name, agent in field.agents.items():
         agents_summary[name]["weights"] = dict(agent.weights)
-    # Attach runtime state (ϕ/ϵ split) to each agent summary
+    # Attach runtime state (ϕ/ϵ split) to each agent summary — 'character'
+    # scope only, so a cultivar-template test run never bleeds into the
+    # live scene view. See _agent_runtime comment for why scope exists.
     for name in agents_summary:
-        if name in _agent_runtime:
-            agents_summary[name]["runtime"] = _agent_runtime[name].as_dict()
+        rt_key = _rt_key(name)
+        if rt_key in _agent_runtime:
+            agents_summary[name]["runtime"] = _agent_runtime[rt_key].as_dict()
     return jsonify({
         "matrix":              matrix,
         "echo_chamber_risks":  echo,
@@ -1512,12 +1547,23 @@ def get_field_runtime():
     }
 
     delta = 0 for all channels until mccf_couplers.py is wired.
+
+    Query param 'scope' (default 'character') selects which registry
+    scope to read — 'character' for live scene state (the normal case
+    for this panel), 'cultivar_test' to inspect Constitutional-tool test
+    runs instead. The two scopes never mix in one response, matching the
+    isolation _agent_runtime's composite key enforces.
     """
+    scope = request.args.get('scope', 'character')
+    prefix = f"{scope}::"
     return jsonify({
         "agents": {
             name: rs.as_dict()
-            for name, rs in _agent_runtime.items()
+            for key, rs in _agent_runtime.items()
+            if key.startswith(prefix)
+            for name in [key[len(prefix):]]
         },
+        "scope": scope,
         "timestamp": time.time()
     })
 
@@ -1565,8 +1611,8 @@ def get_agent(name):
         "weights": agent.weights,
         "affect_toward": params
     }
-    if name in _agent_runtime:
-        response["runtime"] = _agent_runtime[name].as_dict()
+    if _rt_key(name) in _agent_runtime:
+        response["runtime"] = _agent_runtime[_rt_key(name)].as_dict()
     return jsonify(response)
 
 
@@ -2108,6 +2154,13 @@ def arc_record():
     cultivar = data.get("cultivar")
     step     = int(data.get("step", 1))
     response = data.get("response", "")
+    # 'scope' distinguishes testing a cultivar template (no history, always
+    # re-testable — mccf_constitutional.html sends 'cultivar_test') from
+    # driving a live character (pure accumulated history — everything else,
+    # the default). Two calls with the same cultivar/character name but
+    # different scope write to entirely separate AgentRuntimeState slots —
+    # see _agent_runtime's comment for why this separation exists.
+    rt_scope = data.get("scope", "character")
 
     if not cultivar:
         return jsonify({"error": "cultivar required"}), 400
@@ -2174,7 +2227,7 @@ def arc_record():
     # arc/record is the ONLY writer of ϕ.  ϵ is reset to ϕ here so each
     # waypoint starts from a clean expressive baseline; couplers drift it
     # from this point until the next waypoint fires.
-    runtime = get_runtime(cultivar, regulation=agent._affect_regulation)
+    runtime = get_runtime(cultivar, scope=rt_scope, regulation=agent._affect_regulation)
 
     # Attentional filter: load receptivity from cultivar definition if available.
     # Only refreshed here (not on every tick) — it is a character property.
@@ -2590,7 +2643,17 @@ def couplers_tick():
                     network = []
                 break
 
-    agents = dict(_agent_runtime)
+    # 'character' scope only — couplers drive live scene state via network
+    # topology; a cultivar_test run (mccf_constitutional.html) is an isolated
+    # single-agent test against a fixed waypoint arc and never goes through
+    # this endpoint, but filtering explicitly here means that stays true
+    # even if something else ever calls /couplers/tick unexpectedly.
+    _char_prefix = "character::"
+    agents = {
+        key[len(_char_prefix):]: rs
+        for key, rs in _agent_runtime.items()
+        if key.startswith(_char_prefix)
+    }
     if not agents:
         return jsonify({
             'status':        'ok',
@@ -2744,9 +2807,15 @@ def arc_residue():
 
     # If we have a non-trivial residue, apply it to the runtime state now.
     # set_constitutional() will have been called just before in arc/record,
-    # resetting ϵ = ϕ.  We add residue on top via apply_expressive_delta().
-    if applied and cultivar in _agent_runtime:
-        _agent_runtime[cultivar].apply_expressive_delta(residue)
+    # resetting ϵ = 0 (see bugfix note on set_constitutional — it used to
+    # incorrectly reset ϵ = ϕ). We add residue on top via
+    # apply_expressive_delta(), so the arc starts at ϵ = 0 + residue rather
+    # than a clean ϵ = 0. 'character' scope always — residue is narrative
+    # continuity across scenes, which has no meaning for a stateless
+    # cultivar_test run, and the Constitutional tool never calls this
+    # endpoint at all.
+    if applied and _rt_key(cultivar) in _agent_runtime:
+        _agent_runtime[_rt_key(cultivar)].apply_expressive_delta(residue)
 
     # Report the salience of the most recent salient entry for diagnostics
     history = _arc_coherence_history.get(cultivar, [])
@@ -2981,8 +3050,10 @@ def zone_command():
         return jsonify({'error': f'Unknown command: {command!r}. '
                        f'Known: {list(_ZONE_COMMAND_VOCAB)}'}), 400
 
-    # Get current observed_cv for this cultivar
-    runtime = _agent_runtime.get(cultivar)
+    # Get current observed_cv for this cultivar — 'character' scope: a zone
+    # command happens within a live scene, never against an isolated
+    # cultivar_test run.
+    runtime = _agent_runtime.get(_rt_key(cultivar))
     obs_cv  = runtime.observed_cv if runtime else {
         'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
 

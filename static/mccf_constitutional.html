@@ -1247,7 +1247,15 @@ async function runStep(stepIndex) {
                 cultivar:  selectedCultivar,
                 step:      stepIndex + 1,
                 waypoint:  wp.key,
-                response:  fullText
+                response:  fullText,
+                // Isolates this test run's AgentRuntimeState from any live
+                // character of the same name — a cultivar template has no
+                // history by definition (it's re-testable), a character is
+                // pure accumulated history. Without this, testing "Anna"
+                // here and playing a scene with a character named "Anna"
+                // would silently write into the same runtime slot. See
+                // mccf_api.py's _agent_runtime comment for the full reasoning.
+                scope: 'cultivar_test'
               };
               if (seedVal && seedVal.trim() !== '') arcBody.seed = parseInt(seedVal);
               const arcResp = await fetch(API + '/arc/record', {

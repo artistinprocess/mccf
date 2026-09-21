@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.1//EN" "https://www.web3d.org/specifications/x3d-4.1.dtd">
+<X3D profile='Interchange' version='4.1'>
+  <head>
+    <component name='Scripting' level='1'/>
+    <meta name='title' content='MCCF EBPS Driver PROTO'/>
+    <meta name='description' content='Reusable, avatar-agnostic carrier for live E/B/P/S affect state. Pure plumbing — no consumer-specific mapping logic. Individual connector Scripts (see EBPSToFaceController, EBPSToLight below) define what a given consumer actually does with the values. Lives at static/x3d/protos/mccf_ebps_protos.x3d, same directory convention as mccf_camera_protos.x3d.'/>
+  </head>
+  <Scene>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         EBPSDriver — the carrier
+         ═══════════════════════════════════════════════════════════ -->
+    <ProtoDeclare name='EBPSDriver'>
+      <ProtoInterface>
+        <field accessType='inputOutput' type='SFFloat' name='E' value='0.0'/>
+        <field accessType='inputOutput' type='SFFloat' name='B' value='0.0'/>
+        <field accessType='inputOutput' type='SFFloat' name='P' value='0.0'/>
+        <field accessType='inputOutput' type='SFFloat' name='S' value='0.0'/>
+        <field accessType='inputOutput' type='SFString' name='agentName' value='""'/>
+      </ProtoInterface>
+      <ProtoBody>
+        <!--
+          Deliberately empty beyond the interface itself. inputOutput fields
+          already generate *_changed output events on write (standard X3D
+          behavior) — a coupler/affects system writes E/B/P/S directly on
+          this node, and any consumer ROUTEs from E_changed/B_changed/
+          P_changed/S_changed. No internal Script needed here; the mapping
+          logic belongs to consumers, not the carrier. agentName exists so
+          a scene with multiple EBPSDriver instances (one per agent) can be
+          told apart when debugging — not read by the carrier itself.
+        -->
+        <Group/>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         EBPSToFaceController — example connector, EBPS → one AU
+         ═══════════════════════════════════════════════════════════ -->
+    <ProtoDeclare name='EBPSToFaceController'>
+      <ProtoInterface>
+        <field accessType='inputOnly' type='SFFloat' name='set_channel'/>
+        <field accessType='inputOutput' type='SFString' name='auName' value='"BrowLowerer"'/>
+        <field accessType='inputOutput' type='SFFloat' name='scale' value='1.0'/>
+        <field accessType='inputOutput' type='SFString' name='targetFaceController' value='"FaceController"'/>
+      </ProtoInterface>
+      <ProtoBody>
+        <!--
+          EXAMPLE MAPPING, not a fixed rule — whatever channel gets
+          ROUTEd into set_channel becomes au_weight for whatever auName
+          is configured, scaled linearly. Wire several instances
+          (P->BrowLowerer, S->LidTightener, etc.) for a multi-channel
+          face, same pattern each time.
+        -->
+        <Script DEF='EBPSToFaceControllerScript' directOutput='true'>
+          <field accessType='inputOnly' type='SFFloat' name='set_channel'/>
+          <field accessType='inputOutput' type='SFString' name='auName' value='"BrowLowerer"'/>
+          <field accessType='inputOutput' type='SFFloat' name='scale' value='1.0'/>
+          <field accessType='inputOutput' type='SFString' name='targetFaceController' value='"FaceController"'/>
+          <IS>
+            <connect nodeField='set_channel' protoField='set_channel'/>
+            <connect nodeField='auName' protoField='auName'/>
+            <connect nodeField='scale' protoField='scale'/>
+            <connect nodeField='targetFaceController' protoField='targetFaceController'/>
+          </IS>
+          <![CDATA[ecmascript:
+            function set_channel(value, time) {
+              var fc = Browser.currentScene.getNamedNode(targetFaceController);
+              if (!fc) return;
+              var nameField = fc.getField('au_name');
+              var weightField = fc.getField('au_weight');
+              if (nameField) nameField.setValue(auName);
+              if (weightField) weightField.setValue(Math.max(0, Math.min(1, value * scale)));
+            }
+          ]]>
+        </Script>
+      </ProtoBody>
+    </ProtoDeclare>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         EBPSToLight — example connector, EBPS → light intensity
+         ═══════════════════════════════════════════════════════════ -->
+    <ProtoDeclare name='EBPSToLight'>
+      <ProtoInterface>
+        <field accessType='inputOnly' type='SFFloat' name='set_channel'/>
+        <field accessType='inputOutput' type='SFFloat' name='baseIntensity' value='0.3'/>
+        <field accessType='inputOutput' type='SFFloat' name='scale' value='0.7'/>
+        <field accessType='outputOnly' type='SFFloat' name='intensity_changed'/>
+      </ProtoInterface>
+      <ProtoBody>
+        <!--
+          intensity = baseIntensity + channel*scale, clamped 0-1.
+          IS block is a single direct child of Script (not nested inside
+          each field) — confirmed correct structure against a real,
+          working reference example (Holger Seelig's BouncingBall proto).
+          An earlier version of this file nested IS inside each <field>
+          individually, which is invalid placement and silently failed
+          to fire — real bug, not an engine limitation.
+        -->
+        <Script DEF='EBPSToLightScript' directOutput='true'>
+          <field accessType='inputOnly' type='SFFloat' name='set_channel'/>
+          <field accessType='inputOutput' type='SFFloat' name='baseIntensity' value='0.3'/>
+          <field accessType='inputOutput' type='SFFloat' name='scale' value='0.7'/>
+          <field accessType='outputOnly' type='SFFloat' name='intensity_changed'/>
+          <IS>
+            <connect nodeField='set_channel' protoField='set_channel'/>
+            <connect nodeField='baseIntensity' protoField='baseIntensity'/>
+            <connect nodeField='scale' protoField='scale'/>
+            <connect nodeField='intensity_changed' protoField='intensity_changed'/>
+          </IS>
+          <![CDATA[ecmascript:
+            function set_channel(value, time) {
+              var v = baseIntensity + value * scale;
+              intensity_changed = Math.max(0, Math.min(1, v));
+            }
+          ]]>
+        </Script>
+      </ProtoBody>
+    </ProtoDeclare>
+
+  </Scene>
+</X3D>

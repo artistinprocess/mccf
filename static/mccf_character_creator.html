@@ -1474,7 +1474,7 @@
                ondrop="heDropSkin(event)">
             <input type="file" accept="image/png,image/jpeg" onchange="heSkinFileSelected(event)">
             <canvas id="he-atlas-canvas" class="he-atlas-canvas" width="80" height="80"></canvas>
-            <div class="he-atlas-name" id="he-atlas-name">Jin.png</div>
+            <div class="he-atlas-name" id="he-atlas-name">atlas.png</div>
             <div class="he-atlas-hint">drop replacement atlas · 256×256 PNG/JPG</div>
           </div>
         </div>
@@ -1505,7 +1505,7 @@
           <div style="display:flex;gap:6px">
             <input type="text" id="he-skin-url" class="input"
                    style="flex:1;font-family:var(--mono);font-size:14px;"
-                   placeholder="avatars/Jin.png"
+                   placeholder="avatars/atlas.png"
                    oninput="heSkinUrlChanged()">
             <button class="btn" onclick="heApplySkinUrl()">apply</button>
             <button class="btn" onclick="heResetSkin()">reset</button>
@@ -1740,43 +1740,14 @@
                style="margin-top:4px;font-size:13px;color:var(--muted);min-height:14px;"></div>
         </div>
 
-        <!-- ── Face AU morph capture ─────────────────────────────── -->
-        <div class="he-section" id="he-face-capture-section">
-          <div class="he-sec-label" style="display:flex;align-items:center;justify-content:space-between;">
-            morph target capture
-            <button class="he-preset-btn" onclick="heFaceCapturePoll()"
-                    style="font-size:12px;padding:2px 8px;">↺ refresh</button>
-          </div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:6px;line-height:1.5;">
-            For each region: pose avatar → capture morph, then reset → capture rest.
-            When all regions have both, click Inject AUs.
-          </div>
-          <div id="he-face-capture-grid" style="display:grid;grid-template-columns:1fr auto auto;gap:3px 6px;align-items:center;font-size:13px;font-family:var(--mono);"></div>
-          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn" onclick="heFaceCaptureRegion('rest')"
-                    id="he-capture-rest-btn" title="Capture current pose as REST for selected region">capture rest</button>
-            <button class="btn" onclick="heFaceCaptureRegion('morph')"
-                    id="he-capture-morph-btn" title="Pose face then capture as MORPH for selected region">capture morph</button>
-            <button class="btn primary" onclick="heFaceInjectAUs()"
-                    id="he-inject-aus-btn" title="Write AnimationAdapter nodes to X3D">inject AUs →</button>
-          </div>
-          <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
-            <span style="font-size:13px;color:var(--muted);">region:</span>
-            <select id="he-face-capture-region" class="input"
-                    style="font-family:var(--mono);font-size:13px;flex:1;">
-              <option value="skull">skull</option>
-              <option value="jaw">jaw</option>
-              <option value="l_eyelid">l_eyelid</option>
-              <option value="r_eyelid">r_eyelid</option>
-              <option value="l_eyeball">l_eyeball</option>
-              <option value="r_eyeball">r_eyeball</option>
-              <option value="l_eyebrow">l_eyebrow</option>
-              <option value="r_eyebrow">r_eyebrow</option>
-            </select>
-          </div>
-          <div id="he-face-capture-status"
-               style="margin-top:4px;font-size:13px;color:var(--muted);min-height:14px;"></div>
-        </div>
+        <!-- Face AU morph capture (region-by-region rest/morph pose
+             capture, inject AnimationAdapter nodes) removed. Superseded:
+             real per-vertex AU deltas now come straight from Blender's
+             shape keys via glTF export (anna_au_deltas.json) and drive
+             HAnimDisplacer.weight directly — nothing in this editor needs
+             to pose-and-diff the mesh live anymore. See
+             SEED_facial_displacer_breakthrough.md. -->
+
 
         <div class="he-section">
           <div class="he-sec-label">facs action units · weight (0–1)</div>
@@ -1805,12 +1776,19 @@
                idea on the radius version — chosen because building a
                second, differently-shaped matcher for faces when a working
                one already exists for bodies would mean two systems doing
-               the same job, and this project already has one place it went
-               off a shared pattern for a real reason (the displacer/AU
-               capture system, built custom because standard H-Anim
-               displacers didn't resolve mesh coordinates precisely enough
-               as given) — that was necessity, not a template to repeat
-               where a working shared pattern already exists.
+               the same job.
+               (Correction, Sept 2026: this comment used to justify the
+               choice partly by pointing at the old capture/AnimationAdapter
+               displacer system as a case where going off-pattern was
+               "necessity" — that claim was wrong. HAnimDisplacer.weight
+               works directly and precisely, sparsely indexed against
+               HAnimHumanoid.skinCoord, confirmed against Anna's real
+               mesh. See SEED_facial_displacer_breakthrough.md. The old
+               capture/inject-AnimationAdapter pipeline this comment
+               referred to has been removed from the server; nothing here
+               depends on it. The per-channel min/max decision above still
+               stands on its own merits, independent of that removed
+               system.)
                No existing authoring UI for E_min/E_max ever existed
                anywhere in this tool before this — behavior_clips' own
                ranges have apparently always been hand-authored outside it.
@@ -2025,6 +2003,10 @@ function heCameraRigDefaults(){
   };
 }
 let _heCameraRig = heCameraRigDefaults();
+// Day 95: true only once the manifest fetch has SETTLED (found or 404) or the author has
+// edited the rig form. Until then export sends cameraRig:null and the server leaves the
+// avatar's CAM_* rig nodes alone — sending the all-disabled defaults would wipe them.
+let _heCameraRigLoaded = false;
 
 // ── Portrait (character node image) ─────────────────────────────────────
 // Used as this character's icon in the Composer's Network/Affect graph.
@@ -2538,6 +2520,16 @@ function readForm() {
     phrases:     getPhrases(),
     hanimSrc:    _hanimPath || '',
     hanimLoa:    _hanimLoa  || 4,
+    // Round-tripped, not directly editable on this form — same pattern
+    // as hanimSrc/hanimLoa above. _heReceptivity is correctly loaded
+    // from the cultivar on open (see the H-Anim Editor's own load path)
+    // but was never read back out here, meaning every ordinary Save
+    // Character click silently reset receptivity to the all-1.0
+    // default regardless of what H-Anim Editor's own Export had
+    // previously and correctly saved via /hanim/export. Confirmed real,
+    // active bug — not hypothetical — found during the Sept 2026
+    // systemic field-parity audit.
+    receptivity: (typeof _heReceptivity !== 'undefined' && _heReceptivity) || {E:1.0,B:1.0,P:1.0,S:1.0},
     portrait:    _portraitSrc || ''
   };
 }
@@ -2635,6 +2627,12 @@ function loadForm(c) {
     _heClips   = [];
     _heClipIdx = 0;
   }
+  _heRemovedClips = [];
+  // C2 fix (Day 95): nothing rendered the clip dropdown after a cultivar load, so it sat
+  // empty (or showed the PREVIOUS character's clips) until the first control was touched —
+  // and that first touch ran the C1 handler on clip 0 (Bow). Render it here, where
+  // _heClips is filled, so what the dropdown shows is always what will be exported.
+  hePoseRenderClipList();
   const hd   = document.getElementById('hanim-file-display');
   const emptyEl = document.getElementById('hanim-empty-msg');
   if (_hanimPath) {
@@ -2768,40 +2766,57 @@ async function saveCharacter() {
     // H-Anim — stub, populated when H-Anim integration complete
     hanim_src:    data.hanimSrc,
     hanim_loa:    data.hanimLoa || 4,
+    // Round-tripped from readForm() — see that function's comment for
+    // why this is here even though this form has no direct receptivity
+    // control of its own.
+    receptivity:  data.receptivity,
     // Node icon for the Composer's Network/Affect graph. Registered media
     // path (X3DAssets/media/icons/...) once a file exists there, or a data
     // URL if uploaded before /media/upload for images is built (see
     // onPortraitFileSelected's own note on that gap).
     portrait:     data.portrait || '',
-    // Day 83: real bug fix, confirmed by direct test (H-Anim Editor exports
-    // the cultivar with only Default even though real, working clips exist
-    // and fire from this editor's own playback buttons). behavior_clips was
-    // never in this payload at all before now — not even on the "NOTE FOR
-    // API EXTENSION" TODO comment above, a genuinely untracked gap.
+    // Day 83 fixed one half of this ("exports with only Default"). Day 92:
+    // fixed the other half — this used to serialize _hePlaybackClips, NOT
+    // _heClips. Those are two different lists (see _hePlaybackClips's own
+    // comment a few hundred lines down), and only _heClips is what the
+    // clip-editing panel (he-clip-loop, he-clip-priority, he-clip-cycle,
+    // the E/B/P/S trigger-range fields) actually writes to. Saving
+    // _hePlaybackClips instead meant every one of those controls edited a
+    // value that got silently discarded at Save — confirmed directly: the
+    // loop checkbox looked live, took clicks, showed the right state, and
+    // had zero path to the saved cultivar. Same shape of bug as the
+    // Dialogue-Editor/Arc-file split elsewhere in this project — two
+    // stores that look like one and drift apart.
     //
-    // Serializes _hePlaybackClips, NOT _heClips — these are two different
-    // lists (see _hePlaybackClips's own comment a few hundred lines down:
-    // "pre-existing animation clips baked into the X3D file. Distinct from
-    // authoring clips (_heClips) which are new keyframe sequences.").
-    // _hePlaybackClips comes straight from the server's own parse of the
-    // loaded H-Anim file (GET /hanim/joints' d.clips) and carries the REAL
-    // timerDEF values — exactly what this editor's own buttons fire.
-    // _heClips is a mostly-empty pose-authoring scratchpad that self-seeds
-    // with one hardcoded "Default" entry whenever empty, independent of how
-    // many real clips the loaded file actually has — wiring THAT list in
-    // instead would still only ever save "Default" in the common case,
-    // which is exactly the second half of the double-whammy reported.
-    behavior_clips: _hePlaybackClips.map(function(c) {
-      return {
+    // _heClips is seeded two ways now (see heLoadJoints): from a
+    // previously-saved cultivar's own behavior_clips (loadForm, unchanged
+    // by this fix), or — new as of Day 92 — from the real discovered
+    // TimeSensors (d.clips) the first time a cultivar with no saved clips
+    // yet gets its avatar ingested, instead of collapsing to a single fake
+    // "Default" entry regardless of how many real clips exist. So this is
+    // now the one list that's both editable and what actually gets saved.
+    behavior_clips: _heClips.map(function(c) {
+      var out = {
         name:          c.name,
         timerDEF:      c.timerDEF,
         loop:          c.loop !== false,
         cycleInterval: c.cycleInterval || 6.0,
-        // Not discoverable from the X3D file itself — real priority
-        // authoring (EBPS-conditional selection order, cv_conditions) is a
-        // separate, not-yet-built concern. Left at 0 rather than fabricated.
-        priority:      0
+        priority:      c.priority || 0
       };
+      // E/B/P/S trigger-range bounds — real fields the clip panel edits
+      // and the server already parses/serializes (_parse_behavior_clips /
+      // _serialize_behavior_clips in mccf_cultivar_lambda.py), but which
+      // _hePlaybackClips never carried, so they were being silently
+      // dropped on every save even when an author had set them. Only
+      // included when present so a clip with no authored range still
+      // round-trips as "unconstrained" rather than gaining a fabricated
+      // 0/1 pair.
+      ['E','B','P','S'].forEach(function(ch) {
+        var minKey = ch + '_min', maxKey = ch + '_max';
+        if (c[minKey] !== undefined) out[minKey] = c[minKey];
+        if (c[maxKey] !== undefined) out[maxKey] = c[maxKey];
+      });
+      return out;
     })
   };
 
@@ -2888,39 +2903,39 @@ var _heAuWeights   = {};       // current AU weights
 // ── FACS AU table ─────────────────────────────────────────────────────────
 var _he_aus = [
   // Brow
-  ['JinBrowLowerer',      'AU4' ],
-  ['JinInnerBrowRaiser',  'AU1' ],
-  ['JinOuterBrowRaiser',  'AU2' ],
+  ['AU4_BrowLowerer',      'AU4' ],
+  ['AU1_InnerBrowRaiser',  'AU1' ],
+  ['AU2_OuterBrowRaiser',  'AU2' ],
   // Eye / Lid
-  ['JinBlink',            'AU46'],
-  ['JinEyesClosed',       'AU43'],
-  ['JinLidDroop',         'AU41'],
-  ['JinLidTightener',     'AU7' ],
-  ['JinSquint',           'AU44'],
-  ['JinSlit',             'AU44b'],
-  ['JinUpperLidRaiser',   'AU5' ],
-  ['JinWink',             'AU46b'],
+  ['AU46_Blink',            'AU46'],
+  ['AU43_EyesClosed',       'AU43'],
+  ['AU41_LidDroop',         'AU41'],
+  ['AU7_LidTightener',     'AU7' ],
+  ['AU44_Squint',           'AU44'],
+  ['AU44b_Slit',             'AU44b'],
+  ['AU5_UpperLidRaiser',   'AU5' ],
+  ['AU46b_Wink',             'AU46b'],
   // Nose / Cheek
-  ['JinNoseWrinkler',     'AU9' ],
-  ['JinCheekRaiser',      'AU6' ],
-  ['JinCheekPuffer',      'AU33'],
-  ['JinNasolabialDeepener','AU11'],
+  ['AU9_NoseWrinkler',     'AU9' ],
+  ['AU6_CheekRaiser',      'AU6' ],
+  ['AU33_CheekPuffer',      'AU33'],
+  ['AU11_NasolabialDeepener','AU11'],
   // Mouth / Lip
-  ['JinJawDrop',          'AU26'],
-  ['JinLipCornerPuller',  'AU12'],
-  ['JinLipCornerDepressor','AU15'],
-  ['JinLipsPart',         'AU25'],
-  ['JinLipStretcher',     'AU20'],
-  ['JinLipFunneler',      'AU22'],
-  ['JinLipPuckerer',      'AU18'],
-  ['JinLipSuck',          'AU28'],
-  ['JinLipPressor',       'AU24'],
-  ['JinLipTightener',     'AU23'],
-  ['JinUpperLipRaiser',   'AU10'],
-  ['JinLowerLipDepressor','AU16'],
-  ['JinMouthStretch',     'AU27'],
-  ['JinDimpler',          'AU14'],
-  ['JinChinRaiser',       'AU17'],
+  ['AU26_JawDrop_LipCorrective',          'AU26'],
+  ['AU12_LipCornerPuller',  'AU12'],
+  ['AU15_LipCornerDepressor','AU15'],
+  ['AU25_LipsPart',         'AU25'],
+  ['AU20_LipStretcher',     'AU20'],
+  ['AU22_LipFunneler',      'AU22'],
+  ['AU18_LipPuckerer',      'AU18'],
+  ['AU28_LipSuck',          'AU28'],
+  ['AU24_LipPressor',       'AU24'],
+  ['AU23_LipTightener',     'AU23'],
+  ['AU10_UpperLipRaiser',   'AU10'],
+  ['AU16_LowerLipDepressor','AU16'],
+  ['AU27_MouthStretch',     'AU27'],
+  ['AU14_Dimpler',          'AU14'],
+  ['AU17_ChinRaiser',       'AU17'],
 ];
 
 // ── Open / Close ──────────────────────────────────────────────────────────
@@ -2985,6 +3000,7 @@ function closeHAnimEditor() {
 // MetadataString shape, read independently on each side since they're different
 // apps, not a shared module.
 function heCameraRigLoadManifest(hanimSrc) {
+  _heCameraRigLoaded = false;
   _heCameraRig = heCameraRigDefaults();  // reset first — a 404 (no rig authored yet
                                           // for this avatar) must not carry over the
                                           // PREVIOUS avatar's rig state into the form
@@ -2995,6 +3011,7 @@ function heCameraRigLoadManifest(hanimSrc) {
     if (!r.ok) return null;
     return r.text();
   }).then(function(text) {
+    _heCameraRigLoaded = true;   // fetch settled: found (parsed below) or 404 (no rig yet)
     if (!text) return;
     var doc = new DOMParser().parseFromString(text, 'application/xml');
     var entries = Array.prototype.slice.call(doc.getElementsByTagName('MetadataString'));
@@ -3046,6 +3063,7 @@ function heCameraRigRenderForm() {
 // Read the form back into _heCameraRig on any field change. Called via oninput/
 // onchange from every camera-rig form element.
 function heCameraRigFieldChanged() {
+  _heCameraRigLoaded = true;   // the author is editing the rig — it is now authoritative
   ['agent_eye', 'agent_side', 'agent_orbit', 'agent_track'].forEach(function(rt) {
     var cb = document.getElementById('he-cam-' + rt.replace('agent_', '') + '-enabled');
     if (cb) _heCameraRig[rt].enabled = cb.checked;
@@ -3226,47 +3244,47 @@ function heResetSkin() {
 // Human-readable labels for mortals — HAnim AU names are medical terminology
 var _HE_AU_LABELS = {
   // Brow
-  'JinBrowLowerer':       'Brow lower',
-  'JinInnerBrowRaiser':   'Inner brow raise',
-  'JinOuterBrowRaiser':   'Outer brow raise',
+  'AU4_BrowLowerer':       'Brow lower',
+  'AU1_InnerBrowRaiser':   'Inner brow raise',
+  'AU2_OuterBrowRaiser':   'Outer brow raise',
   // Eye / Lid
-  'JinBlink':             'Blink',
-  'JinEyesClosed':        'Eyes closed',
-  'JinLidDroop':          'Lid droop',
-  'JinLidTightener':      'Lid tighten',
-  'JinSquint':            'Squint',
-  'JinSlit':              'Eye slit',
-  'JinUpperLidRaiser':    'Upper lid raise',
-  'JinWink':              'Wink',
+  'AU46_Blink':             'Blink',
+  'AU43_EyesClosed':        'Eyes closed',
+  'AU41_LidDroop':          'Lid droop',
+  'AU7_LidTightener':      'Lid tighten',
+  'AU44_Squint':            'Squint',
+  'AU44b_Slit':              'Eye slit',
+  'AU5_UpperLidRaiser':    'Upper lid raise',
+  'AU46b_Wink':              'Wink',
   // Nose / Cheek
-  'JinNoseWrinkler':      'Nose wrinkle',
-  'JinCheekRaiser':       'Cheek raise',
-  'JinCheekPuffer':       'Cheek puff',
-  'JinNasolabialDeepener':'Nasolabial fold',
+  'AU9_NoseWrinkler':      'Nose wrinkle',
+  'AU6_CheekRaiser':       'Cheek raise',
+  'AU33_CheekPuffer':       'Cheek puff',
+  'AU11_NasolabialDeepener':'Nasolabial fold',
   // Mouth / Lip
-  'JinJawDrop':           'Jaw drop',
-  'JinLipCornerPuller':   'Smile',
-  'JinLipCornerDepressor':'Frown',
-  'JinLipsPart':          'Lips part',
-  'JinLipStretcher':      'Lip stretch',
-  'JinLipFunneler':       'Lip funnel',
-  'JinLipPuckerer':       'Lip pucker',
-  'JinLipSuck':           'Lip suck',
-  'JinLipPressor':        'Lips press',
-  'JinLipTightener':      'Lip tighten',
-  'JinUpperLipRaiser':    'Upper lip raise',
-  'JinLowerLipDepressor': 'Lower lip depress',
-  'JinMouthStretch':      'Mouth stretch',
-  'JinDimpler':           'Dimple',
-  'JinChinRaiser':        'Chin raise',
+  'AU26_JawDrop_LipCorrective':           'Jaw drop',
+  'AU12_LipCornerPuller':   'Smile',
+  'AU15_LipCornerDepressor':'Frown',
+  'AU25_LipsPart':          'Lips part',
+  'AU20_LipStretcher':      'Lip stretch',
+  'AU22_LipFunneler':       'Lip funnel',
+  'AU18_LipPuckerer':       'Lip pucker',
+  'AU28_LipSuck':           'Lip suck',
+  'AU24_LipPressor':        'Lips press',
+  'AU23_LipTightener':      'Lip tighten',
+  'AU10_UpperLipRaiser':    'Upper lip raise',
+  'AU16_LowerLipDepressor': 'Lower lip depress',
+  'AU27_MouthStretch':      'Mouth stretch',
+  'AU14_Dimpler':           'Dimple',
+  'AU17_ChinRaiser':        'Chin raise',
 };
 
 // AU group dividers for the slider list
 var _HE_AU_GROUPS = [
-  { label: 'brow',       aus: ['JinBrowLowerer','JinInnerBrowRaiser','JinOuterBrowRaiser'] },
-  { label: 'eyes & lids',aus: ['JinBlink','JinEyesClosed','JinLidDroop','JinLidTightener','JinSquint','JinSlit','JinUpperLidRaiser','JinWink'] },
-  { label: 'nose & cheeks', aus: ['JinNoseWrinkler','JinCheekRaiser','JinCheekPuffer','JinNasolabialDeepener'] },
-  { label: 'mouth & lips', aus: ['JinJawDrop','JinLipCornerPuller','JinLipCornerDepressor','JinLipsPart','JinLipStretcher','JinLipFunneler','JinLipPuckerer','JinLipSuck','JinLipPressor','JinLipTightener','JinUpperLipRaiser','JinLowerLipDepressor','JinMouthStretch','JinDimpler','JinChinRaiser'] },
+  { label: 'brow',       aus: ['AU4_BrowLowerer','AU1_InnerBrowRaiser','AU2_OuterBrowRaiser'] },
+  { label: 'eyes & lids',aus: ['AU46_Blink','AU43_EyesClosed','AU41_LidDroop','AU7_LidTightener','AU44_Squint','AU44b_Slit','AU5_UpperLidRaiser','AU46b_Wink'] },
+  { label: 'nose & cheeks', aus: ['AU9_NoseWrinkler','AU6_CheekRaiser','AU33_CheekPuffer','AU11_NasolabialDeepener'] },
+  { label: 'mouth & lips', aus: ['AU26_JawDrop_LipCorrective','AU12_LipCornerPuller','AU15_LipCornerDepressor','AU25_LipsPart','AU20_LipStretcher','AU22_LipFunneler','AU18_LipPuckerer','AU28_LipSuck','AU24_LipPressor','AU23_LipTightener','AU10_UpperLipRaiser','AU16_LowerLipDepressor','AU27_MouthStretch','AU14_Dimpler','AU17_ChinRaiser'] },
 ];
 
 function _heBuildAuList() {
@@ -3285,7 +3303,7 @@ function _heBuildAuList() {
     group.aus.forEach(function(name) {
       var au   = _he_aus.find(function(a){ return a[0] === name; });
       var code = au ? au[1] : '';
-      var label = _HE_AU_LABELS[name] || name.replace('Jin','');
+      var label = _HE_AU_LABELS[name] || name;
       _heAuWeights[name] = 0;
       var row = document.createElement('div');
       row.className = 'he-au-row';
@@ -3402,7 +3420,7 @@ function heLoadSelectedExpression() {
   // Show active AUs in status line
   var active = Object.entries(expr.weights)
     .filter(function(kv){ return kv[1] > 0.05; })
-    .map(function(kv){ return kv[0].replace('Jin','') + ':' + kv[1].toFixed(1); })
+    .map(function(kv){ return kv[0] + ':' + kv[1].toFixed(1); })
     .join(' · ');
   document.getElementById('he-expr-load-status').textContent =
     active || 'all 0';
@@ -3503,14 +3521,24 @@ function _heRenderTriggerList() {
 // the endpoint that receives it actually unpacks). This function is the
 // one place that bridges them, so neither shape has to pretend to be the
 // other everywhere else in this file.
+// C3 (Day 95): _heNewClipObj seeds EVERY clip with two empty anchor keyframes, and this
+// used to send them as-is — so the server saw a non-empty keyframes list and treated every
+// untouched clip as "authored" (rewriting/stripping its timer). A clip has authored
+// content only if some keyframe actually holds joint rotations.
+function _heClipHasAuthoredKeyframes(clip) {
+  return (clip.keyframes || []).some(function(kf) {
+    return kf && kf.joints && Object.keys(kf.joints).length > 0;
+  });
+}
+
 function _heClipForExport(clip) {
-  return {
+  var out = {
     name:          clip.name,
     timerDEF:      clip.timerDEF,
     cycleInterval: clip.cycleInterval,
     loop:          clip.loop,
     priority:      clip.priority,
-    keyframes:     clip.keyframes,
+    keyframes:     _heClipHasAuthoredKeyframes(clip) ? clip.keyframes : [],
     cv_conditions: {
       E_min: clip.E_min, E_max: clip.E_max,
       B_min: clip.B_min, B_max: clip.B_max,
@@ -3518,6 +3546,8 @@ function _heClipForExport(clip) {
       S_min: clip.S_min, S_max: clip.S_max,
     },
   };
+  if (clip._loopEdited) out.loop_edited = true;   // see hePoseClipPropChanged
+  return out;
 }
 
 function heSaveExpression() {
@@ -3543,7 +3573,7 @@ function _heRenderExprList() {
   el.innerHTML = _heExpressions.map(function(e) {
     var active = Object.entries(e.weights)
       .filter(function(kv){ return kv[1] > 0.05; })
-      .map(function(kv){ return kv[0].replace('Jin','') + ':' + kv[1].toFixed(1); })
+      .map(function(kv){ return kv[0] + ':' + kv[1].toFixed(1); })
       .join(' · ');
     return '<div style="padding:3px 0;border-bottom:1px solid var(--surface2)">' +
       '<span style="color:var(--accent3)">' + e.name + '</span>' +
@@ -3587,89 +3617,12 @@ function heSetStatus(msg) {
   document.getElementById('he-status-text').textContent = msg || 'ready';
 }
 
-// ── Export ────────────────────────────────────────────────────────────────
-async function heExport() {
-  var btn = document.getElementById('he-export-btn');
-  btn.disabled = true;
-  btn.textContent = 'exporting…';
-  heSetStatus('exporting…');
+// heExport() lives further down (search 'heExport = async function') —
+// this was previously duplicated here as a plain function declaration,
+// which JS hoists and which the later `heExport = async function(){...}`
+// reassignment then permanently shadows. The declaration here never ran;
+// removed rather than left as dead code implying two code paths exist.
 
-  try {
-    // Build payload
-    // expressions maps _heExpressions' internal {name, weights, triggers}
-    // shape to the server's real contract, {name, au_weights, triggers} —
-    // _write_expressions_xml() reads expr.get('au_weights'), and sending
-    // 'weights' instead meant every expression's AU data was silently
-    // dropped (au_weights defaulted to {}, which fails the "not au_weights"
-    // check and skips the whole expression) — a real, pre-existing bug,
-    // not something introduced by adding triggers.
-    var payload = {
-      cultivar:    _selectedName,
-      hanim_src:   _hanimPath,
-      skin_url:    _heSkinPending || null,
-      receptivity: _heReceptivity,
-      expressions: _heExpressions.map(function(e){
-        return { name: e.name, au_weights: e.weights, triggers: e.triggers || [] };
-      }),
-      au_weights:  _heAuWeights,
-      clips:       _heClips.map(_heClipForExport),
-      // Displacer export: send all non-zero AU weights as {def, weight} pairs
-      // DEF convention: <MeshName>_MorphInterpolator_<AUName> — server resolves by AU suffix
-      displacers:  Object.entries(_heAuWeights)
-                     .filter(function(kv){ return kv[1] > 0; })
-                     .map(function(kv){ return { au: kv[0], weight: kv[1] }; })
-    };
-
-    // If skin is a data URL (file drop), upload image first
-    if (_heSkinPending && _heSkinPending.startsWith('data:')) {
-      var imgRes = await fetch(API_URL + '/hanim/skin_upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cultivar:  _selectedName,
-          data_url:  _heSkinPending
-        })
-      });
-      if (imgRes.ok) {
-        var imgData = await imgRes.json();
-        payload.skin_url = imgData.path || payload.skin_url;
-      }
-    }
-
-    var res = await fetch(API_URL + '/hanim/export', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify(payload)
-    });
-
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.error || 'export failed');
-
-    // Update Character Creator state
-    if (data.hanim_path) {
-      _hanimPath = data.hanim_path;
-      document.getElementById('hanim-file-display').textContent = _hanimPath;
-      document.getElementById('hanim-file-display').style.display = 'block';
-    }
-    if (data.clips_written) {
-      _renderHAnimClips(data.clips_written);
-    }
-
-    _heDirty = false;
-    document.getElementById('he-dirty-label').style.display = 'none';
-    heSetStatus('exported → ' + (data.hanim_path || _hanimPath));
-    toast('HAnim export saved');
-    setDirty(); // mark character creator dirty so Save Character reflects new hanim
-
-  } catch(e) {
-    heSetStatus('export failed: ' + e.message);
-    toast('Export failed: ' + e.message, true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'export →';
-  }
-}
 
 // ── Enable/disable the Open HAnim Editor button ───────────────────────────
 // Called after hanim file upload succeeds and on clearHAnim
@@ -3720,6 +3673,9 @@ var _hePoseSelected = null;
 var _hePoseTouched  = new Set();
 var _heFineMode     = false;   // fine mode: angle slider ±30° instead of ±180°
 var _heClips        = [];
+// Day 95: cultivar entries the author deleted in this session (names). Sent with Export so the
+// clip actually leaves the cultivar — the export merge used to preserve every existing entry.
+var _heRemovedClips = [];
 var _heClipIdx      = 0;
 var _heTlT          = 0.0;
 var _heTlDragging   = null;
@@ -3817,20 +3773,48 @@ var _HE_GROUP_PRESETS = {
 // Fallback path: consult _heJointMap — if the avatar's DEF maps to the preset
 // HAnim name, that joint is the match.  This makes group presets work for
 // Blender/Mixamo avatars without renaming the X3D file.
+//
+// Day 95: third path — RIG ALIASES. The group presets above are written in H-Anim
+// names (vc7, skullbase, l_shoulder ...). Anna's Tripo -> Blender rig uses its own
+// names (Head, Spine02, L_Upperarm ...) and her cultivar has no usable joint map, so
+// every group silently resolved to nothing and the sliders did nothing. This table
+// says which of her joints plays each preset role; it is consulted only when the
+// direct match and the joint map both fail, and it writes nothing to any file.
+// The chain is bottom -> top: Waist, Spine01, Spine02 (spine group primary),
+// NeckTwist01, NeckTwist02, Head. Tune the coupling RATIOS in _HE_GROUP_PRESETS above;
+// tune which joint plays which role here. Roles with no counterpart (vc1, vc3) are
+// simply skipped, exactly as a missing joint always was.
+var _HE_JOINT_ALIASES = {
+  vt12: ['Waist'], vt10: ['Spine01'], vc7: ['Spine02'],
+  vc4: ['NeckTwist01'], vc2: ['NeckTwist02'], skullbase: ['Head'],
+  l_shoulder: ['L_Upperarm'], l_elbow: ['L_Forearm'], l_wrist: ['L_Hand'],
+  r_shoulder: ['R_Upperarm'], r_elbow: ['R_Forearm'], r_wrist: ['R_Hand'],
+  l_hip: ['L_Thigh'], l_knee: ['L_Calf'], l_ankle: ['L_Foot'],
+  r_hip: ['R_Thigh'], r_knee: ['R_Calf'], r_ankle: ['R_Foot']
+};
+
 function _heResolveJoint(presetName) {
+  function byName(n) {
+    return _hePoseJoints.find(function(j) { return j.name === n || j.def === n; }) || null;
+  }
   // Direct match first (HAnim-native or already normalized)
-  var direct = _hePoseJoints.find(function(j) {
-    return j.name === presetName || j.def === presetName;
-  });
+  var direct = byName(presetName);
   if (direct) return direct;
 
   // Translation map lookup: find a joint whose DEF maps to this HAnim name
   if (_heJointMap && Object.keys(_heJointMap).length > 0) {
-    return _hePoseJoints.find(function(j) {
+    var mapped = _hePoseJoints.find(function(j) {
       return _heJointMap[j.def] === presetName;
-    }) || null;
+    });
+    if (mapped) return mapped;
   }
 
+  // Rig alias table (see _HE_JOINT_ALIASES)
+  var cands = _HE_JOINT_ALIASES[presetName] || [];
+  for (var i = 0; i < cands.length; i++) {
+    var hit = byName(cands[i]);
+    if (hit) return hit;
+  }
   return null;
 }
 
@@ -3839,6 +3823,16 @@ function _heResolveJoint(presetName) {
 function heRegionSelect(region) {
   var preset = _HE_GROUP_PRESETS[region];
   if (!preset) return;
+
+  // Day 95: a group whose primary joint does not exist on this avatar used to "select"
+  // a phantom joint (title showed e.g. 'vc7' while nothing was actually selected), and
+  // every slider then returned silently. Say so, and leave group mode off. (The face
+  // group is exempt: its AU sliders are useful even without the skullbase rotation.)
+  if (region !== 'face' && !_heResolveJoint(preset.primary)) {
+    toast('This avatar has no joint for the "' + preset.label + '" group (' + preset.primary +
+          ') \u2014 click SOLO and pick joints from the list', true);
+    return;
+  }
 
   _heActiveGroup = region;
 
@@ -3888,8 +3882,14 @@ function heRegionSelect(region) {
       document.getElementById('he-joint-search').value.trim() || undefined);
   }
 
-  toast('Group: ' + preset.label + ' — ' + preset.coupled.length + ' coupled joint' +
-        (preset.coupled.length !== 1 ? 's' : ''));
+  var movers = [], held = [];
+  preset.coupled.forEach(function(c) {
+    var j = _heResolveJoint(c.name);
+    if (!j || j === primaryJoint) return;
+    (_heHasRest(j) ? held : movers).push(j.name);
+  });
+  toast('Group: ' + preset.label + ' — ' + movers.length + ' coupled joint' + (movers.length !== 1 ? 's' : '') +
+        (held.length ? '; held at rest (non-zero rest pose): ' + held.join(', ') : ''));
 }
 
 function heRegionClear() {
@@ -3909,23 +3909,54 @@ function heRegionClear() {
 // For each coupled joint, scales the angle by ratio (axis unchanged except
 // for negative ratio which inverts it — useful for knee/ankle antagonism).
 
-function _hePoseSendCoupled(ax, ay, az, angleRad) {
-  if (!_heActiveGroup) return;
-  var preset = _HE_GROUP_PRESETS[_heActiveGroup];
-  if (!preset) return;
+// Day 95 — REST-AWARE coupling. Anna is a Blender/Tripo rig: 30 of her 48 joints carry a
+// non-zero REST rotation (thighs 173 deg, upper arms 90, waist 137). The original coupling
+// (built for an H-Anim-native rig where every joint rests at zero) sent each follower an
+// ABSOLUTE rotation, which replaces its rest pose — the joint snaps the moment a slider is
+// touched. So: a follower with a non-zero rest is held exactly at rest (never written); a
+// follower that rests at zero couples exactly as before.
+var _HE_REST_EPS = 0.0087;   // ~0.5 deg
 
+function _heRestOf(j) {
+  return (j && j.rest && j.rest.length === 4) ? j.rest : [0, 0, 1, 0];
+}
+function _heHasRest(j) { return Math.abs(_heRestOf(j)[3]) > _HE_REST_EPS; }
+
+// Angle the followers should scale: how far the PRIMARY has moved from its own rest. When
+// the primary rests at zero this is simply the slider angle (unchanged behaviour); when it
+// rests non-zero and the axis is still its rest axis, the movement is angle - restAngle.
+function _heCoupleDelta(ax, ay, az, angleRad) {
+  var r = _heRestOf(_hePoseSelected);
+  if (Math.abs(r[3]) < 1e-6) return angleRad;
+  var n1 = Math.sqrt(ax*ax + ay*ay + az*az), n2 = Math.sqrt(r[0]*r[0] + r[1]*r[1] + r[2]*r[2]);
+  if (n1 < 1e-6 || n2 < 1e-6) return angleRad;
+  var dot = (ax*r[0] + ay*r[1] + az*r[2]) / (n1 * n2);
+  return dot > 0.999 ? angleRad - r[3] : angleRad;
+}
+
+// Rotations the active group's followers should take for the given primary rotation.
+// Returns [{joint, rotation}] (movers) and [{joint, held:true}] (non-zero rest, left alone).
+function _heCoupledRotations(ax, ay, az, angleRad) {
+  var out = [];
+  if (!_heActiveGroup || !_hePoseSelected) return out;
+  var preset = _HE_GROUP_PRESETS[_heActiveGroup];
+  if (!preset) return out;
+  var delta = _heCoupleDelta(ax, ay, az, angleRad);
   preset.coupled.forEach(function(c) {
     var joint = _heResolveJoint(c.name);
-    if (!joint) return;   // joint not present in this model — skip silently
+    if (!joint || joint === _hePoseSelected) return;    // absent on this model: skip silently
+    if (_heHasRest(joint)) { out.push({ joint: joint, held: true }); return; }
+    out.push({ joint: joint,
+               rotation: [ax, ay, az * (c.ratio < 0 ? -1 : 1), delta * Math.abs(c.ratio)] });
+  });
+  return out;
+}
 
-    var scaledAngle = angleRad * Math.abs(c.ratio);
-    var signFlip    = c.ratio < 0 ? -1 : 1;
-    hePoseSendSAI({
-      type:     'setJointRotation',
-      joint:    joint.def,
-      rotation: [ax, ay, az * signFlip, scaledAngle],
-    });
-    _hePoseTouched.add(c.name);
+function _hePoseSendCoupled(ax, ay, az, angleRad) {
+  _heCoupledRotations(ax, ay, az, angleRad).forEach(function(c) {
+    if (c.held) return;
+    hePoseSendSAI({ type: 'setJointRotation', joint: c.joint.def, rotation: c.rotation });
+    _hePoseTouched.add(c.joint.name);   // the joint's real name (was the preset's phantom name)
   });
 }
 
@@ -3964,7 +3995,16 @@ function heLoadJoints(src) {
       _hePoseJoints = d.joints || [];
       _heJointMap   = d.joint_map || {};
       hePoseRenderTree(_hePoseJoints);
-      _heRenderPlaybackClips(d.clips || []);
+      // S3 (Day 95): the server now flags `hollow` timers (no ROUTEs — stubs and
+      // duplicates left by old exports; Anna has ~82 next to her 14 real ones). Those
+      // animate nothing, so they are kept out of the playback panel and out of the
+      // clip list seeded below. d.clips itself stays whole for the wiring detection.
+      var realClips = (d.clips || []).filter(function(c) { return !c.hollow; });
+      if (realClips.length !== (d.clips || []).length) {
+        console.info('[hanim] ' + ((d.clips || []).length - realClips.length) +
+                     ' hollow timer stub(s) hidden (no ROUTEs); ' + realClips.length + ' real clip(s) shown');
+      }
+      _heRenderPlaybackClips(realClips);
       var wireBtn         = document.getElementById('he-wire-btn');
       var normBtn         = document.getElementById('he-normalize-btn');
       var ingestBtn       = document.getElementById('he-ingest-btn');
@@ -3978,8 +4018,31 @@ function heLoadJoints(src) {
       if (ingestBtn)       ingestBtn.style.display       = unwired   ? '' : 'none';
       if (mixamoIngestBtn) mixamoIngestBtn.style.display = mixamoRaw ? '' : 'none';
       if (_heClips.length === 0) {
-        _heClips.push(_heNewClipObj('Default', 6.0, true, 0));
+        // Day 92: seed from the REAL discovered TimeSensors (d.clips) when
+        // there are any, instead of always collapsing to one fake
+        // "Default" — that fallback used to fire unconditionally here
+        // regardless of how many real clips the file actually had,
+        // because _heClips only ever gets populated from a previously-
+        // saved cultivar's own behavior_clips (loadForm) otherwise. A
+        // freshly-ingested avatar with no saved cultivar record yet (the
+        // common case for a new character, e.g. Cindy) would reach this
+        // branch with real clips sitting unused in _hePlaybackClips and
+        // nothing editable for them. Each preserves its own real
+        // timerDEF and the file's own loop attribute (via _heNewClipObj's
+        // loop !== false, same as the cultivar-load path a few hundred
+        // lines up) rather than defaulting every clip to loop=true.
+        if (realClips.length) {
+          _heClips = realClips.map(function(cl) {
+            return _heNewClipObj(cl.name || 'Default', cl.cycleInterval || 6.0,
+                                  cl.loop !== false, 0, cl.timerDEF, cl);
+          });
+        } else {
+          _heClips.push(_heNewClipObj('Default', 6.0, true, 0));
+        }
         _heClipIdx = 0;
+        hePoseRenderClipList();
+      } else {
+        // C2: clips already came from the saved cultivar (loadForm) — just show them.
         hePoseRenderClipList();
       }
     })
@@ -4234,13 +4297,25 @@ function hePoseMirror() {
 
 function hePoseResetJoint() {
   if (!_hePoseSelected) return;
-  _hePoseSetSliders([0, 0, 1, 0]);
+  // Day 95: return to the joint's REAL rest pose (was a hard-coded zero rotation, which is
+  // not "rest" on a rig whose bones carry baked orientation), and in group mode return the
+  // followers too — before, only the selected joint went home and the followers stayed put.
+  var rest = _heRestOf(_hePoseSelected);
+  _hePoseSetSliders(rest);
   hePoseSendSAI({
     type:     'setJointRotation',
     joint:    _hePoseSelected.def,
-    rotation: [0, 0, 1, 0]
+    rotation: rest
   });
   _hePoseTouched.delete(_hePoseSelected.name);
+  if (_heActiveGroup && _HE_GROUP_PRESETS[_heActiveGroup]) {
+    _HE_GROUP_PRESETS[_heActiveGroup].coupled.forEach(function(c) {
+      var j = _heResolveJoint(c.name);
+      if (!j || j === _hePoseSelected) return;
+      hePoseSendSAI({ type: 'setJointRotation', joint: j.def, rotation: _heRestOf(j) });
+      _hePoseTouched.delete(j.name);
+    });
+  }
   hePoseRenderTree(_hePoseJoints,
     document.getElementById('he-joint-search').value.trim() || undefined);
 }
@@ -4279,6 +4354,13 @@ function hePoseAddKeyframe() {
 
   if (_hePoseSelected) {
     existing.joints[_hePoseSelected.name] = [ax, ay, az, angleRad];
+    // Day 95: in group mode the followers move in the preview — record them too, exactly as
+    // shown. Before, only the selected joint was recorded, so a head gesture authored with
+    // the neck following exported as a head-only gesture. Followers held at rest (non-zero
+    // rest pose) are not moving and are not recorded.
+    _heCoupledRotations(ax, ay, az, angleRad).forEach(function(c) {
+      if (!c.held) existing.joints[c.joint.name] = c.rotation.slice();
+    });
   }
   // Also store all previously touched joints at this keyframe from other kf
   _hePoseTouched.forEach(function(jname) {
@@ -4645,158 +4727,13 @@ async function heIngestMixamo() {
 
 
 
-// Known face regions and their Coordinate node DEF names
-// coord_def is avatar-prefixed; we try both JackCoord_ and CindyCoord_ patterns
-// at capture time by asking the API for the face morph status first.
-var _faceRegions = ['skull','jaw','l_eyelid','r_eyelid','l_eyeball','r_eyeball','l_eyebrow','r_eyebrow'];
-var _faceCaptureStatus = {};   // { region: { rest:bool, morph:bool, coord_def:str } }
-var _faceCaptureResolve = null; // pending coordPositions promise resolver
+// The old capture/status/inject-AUs JS (heFaceCapturePoll,
+// _heFaceRenderGrid, heFaceCaptureRegion, _heFaceReadCoords,
+// heFaceInjectAUs) lived here, driving the removed morph-capture panel
+// and the removed /hanim/save-face-morph, /hanim/get-face-morph-status,
+// /hanim/inject-face-aus endpoints. Removed together as one dead
+// pipeline — see SEED_facial_displacer_breakthrough.md.
 
-// Refresh capture status from API and redraw grid
-async function heFaceCapturePoll() {
-  if (!_selectedName) return;
-  try {
-    var resp = await fetch(API_URL + '/hanim/get-face-morph-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cultivar: _selectedName })
-    });
-    var d = await resp.json();
-    if (d.status === 'ok') {
-      _faceCaptureStatus = d.regions || {};
-      _heFaceRenderGrid();
-    }
-  } catch(e) {}
-}
-
-function _heFaceRenderGrid() {
-  var grid = document.getElementById('he-face-capture-grid');
-  if (!grid) return;
-  var html = '';
-  _faceRegions.forEach(function(r) {
-    var st = _faceCaptureStatus[r] || {};
-    var restDot  = st.rest  ? '<span style="color:#4f4;font-size:15px;">●</span>' : '<span style="color:#444;font-size:15px;">○</span>';
-    var morphDot = st.morph ? '<span style="color:#4af;font-size:15px;">●</span>' : '<span style="color:#444;font-size:15px;">○</span>';
-    html += '<span>' + r + '</span><span title="rest captured">' + restDot + ' rest</span><span title="morph captured">' + morphDot + ' morph</span>';
-  });
-  grid.innerHTML = html;
-}
-
-// Capture current coordinate positions for selected region + pose
-async function heFaceCaptureRegion(pose) {
-  var region = (document.getElementById('he-face-capture-region') || {}).value;
-  if (!region) { toast('Select a region first', true); return; }
-  if (!_selectedName) { toast('Select a cultivar first', true); return; }
-  if (!_hanimPath)    { toast('No avatar loaded', true);        return; }
-
-  var statusEl = document.getElementById('he-face-capture-status');
-  if (statusEl) statusEl.textContent = 'Reading ' + region + ' coordinates…';
-
-  // Determine coord_def — try existing status first, then fall back to avatar-prefixed patterns
-  var st = _faceCaptureStatus[region] || {};
-  var coordDef = st.coord_def || '';
-
-  if (!coordDef) {
-    // Try common patterns: {AvatarName}Coord_{region}
-    var src = (_hanimPath || '').split('/').pop().replace('_hanim.x3d','').replace('.x3d','');
-    var cap = src.charAt(0).toUpperCase() + src.slice(1);
-    coordDef = cap + 'Coord_' + region;  // e.g. JackCoord_skull, FinalCoord_skull
-  }
-
-  // Request coords from X_ITE via SAI
-  var points = await _heFaceReadCoords(coordDef, region);
-
-  if (!points || points.length === 0) {
-    if (statusEl) statusEl.textContent = '✗ ' + coordDef + ' not found in scene';
-    toast('Coord node not found: ' + coordDef, true);
-    return;
-  }
-
-  if (statusEl) statusEl.textContent = 'Saving ' + region + ' ' + pose + ' (' + (points.length/3) + ' pts)…';
-
-  // Save to cultivar
-  try {
-    var resp = await fetch(API_URL + '/hanim/save-face-morph', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cultivar:  _selectedName,
-        region:    region,
-        pose:      pose,
-        coord_def: coordDef,
-        points:    points
-      })
-    });
-    var d = await resp.json();
-    if (d.status === 'ok') {
-      toast('✓ ' + region + ' ' + pose + ' captured (' + d.point_count + ' pts)');
-      if (statusEl) statusEl.textContent = '✓ ' + region + ' ' + pose + ' saved';
-      await heFaceCapturePoll();
-    } else {
-      toast('Save failed: ' + (d.error || '?'), true);
-      if (statusEl) statusEl.textContent = '✗ ' + (d.error || 'save failed');
-    }
-  } catch(e) {
-    toast('Capture error: ' + e.message, true);
-    if (statusEl) statusEl.textContent = '✗ ' + e.message;
-  }
-}
-
-// SAI round-trip: ask preview frame for coordinate positions, wait for response
-function _heFaceReadCoords(coordDef, region) {
-  return new Promise(function(resolve) {
-    var timeout = setTimeout(function() {
-      window.removeEventListener('message', handler);
-      resolve([]);
-    }, 3000);
-
-    function handler(evt) {
-      var msg = evt.data;
-      if (!msg || msg.type !== 'coordPositions') return;
-      if (msg.region !== region) return;
-      clearTimeout(timeout);
-      window.removeEventListener('message', handler);
-      resolve(msg.found ? (msg.points || []) : []);
-    }
-
-    window.addEventListener('message', handler);
-    hePoseSendSAI({ type: 'getCoordPositions', coordDef: coordDef, region: region });
-  });
-}
-
-// Inject AnimationAdapter nodes into X3D from cultivar FaceMorphs data
-async function heFaceInjectAUs() {
-  if (!_selectedName) { toast('Select a cultivar first', true); return; }
-  if (!_hanimPath)    { toast('No avatar loaded', true);        return; }
-
-  var btn = document.getElementById('he-inject-aus-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'injecting…'; }
-
-  var src = _hanimPath.split('/').pop();
-  try {
-    var resp = await fetch(API_URL + '/hanim/inject-face-aus', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hanim_src: src, cultivar: _selectedName })
-    });
-    var d = await resp.json();
-    if (d.status === 'ok') {
-      var msg = '✓ Injected AUs: ' + (d.regions || []).join(', ');
-      if (d.skipped && d.skipped.length) msg += ' | skipped: ' + d.skipped.join(', ');
-      toast(msg);
-      if (btn) { btn.disabled = false; btn.textContent = 'inject AUs ✓'; }
-      // Reload iframe so new AnimationAdapter nodes are live
-      var iframe = document.getElementById('he-xite-frame') || document.querySelector('iframe');
-      if (iframe) iframe.src = iframe.src;
-    } else {
-      toast('Inject AUs failed: ' + (d.error || '?'), true);
-      if (btn) { btn.disabled = false; btn.textContent = 'inject AUs →'; }
-    }
-  } catch(e) {
-    toast('Inject AUs error: ' + e.message, true);
-    if (btn) { btn.disabled = false; btn.textContent = 'inject AUs →'; }
-  }
-}
 
 
 // ── Clip list management ──────────────────────────────────────────────────
@@ -4838,9 +4775,27 @@ function hePoseSelectClip(idx) {
   hePoseLoadClipProps();
 }
 
+// Day 95: a NEW clip's timerDEF (the DEF of the TimeSensor its export will create) follows
+// its name until the clip has actually been exported; after that it is frozen (C1 fix).
+// Always a valid DEF ([A-Za-z0-9_]) and unique among the clips being edited and the
+// timers already in the file, so two gestures can never share — and overwrite — one timer.
+function _heUniqueTimerDef(name, exceptClip) {
+  var base = (name || 'Clip').replace(/[^A-Za-z0-9_]/g, '_') + 'Timer';
+  if (/^[0-9]/.test(base)) base = 'C' + base;
+  var taken = {};
+  _heClips.forEach(function(c) { if (c !== exceptClip && c.timerDEF) taken[c.timerDEF] = true; });
+  (_hePlaybackClips || []).forEach(function(c) { if (c.timerDEF) taken[c.timerDEF] = true; });
+  var td = base, n = 2;
+  while (taken[td]) { td = base + '_' + n; n++; }
+  return td;
+}
+
 function hePoseNewClip() {
   var name = 'Clip' + (_heClips.length + 1);
-  _heClips.push(_heNewClipObj(name, 6.0, true, _heClips.length));
+  var nc = _heNewClipObj(name, 6.0, true, _heClips.length);
+  nc._isNew = true;
+  nc.timerDEF = _heUniqueTimerDef(name, nc);
+  _heClips.push(nc);
   _heClipIdx = _heClips.length - 1;
   hePoseRenderClipList();
   heMarkDirty('new clip: ' + name);
@@ -4848,6 +4803,12 @@ function hePoseNewClip() {
 
 function hePoseDeleteClip() {
   if (_heClips.length <= 1) { toast('Cannot delete the last clip', true); return; }
+  var gone = _heClips[_heClipIdx];
+  if (gone && !gone._isNew) {
+    // A renamed clip is known to the cultivar by its ORIGINAL name.
+    var known = gone._origName !== undefined ? gone._origName : gone.name;
+    if (_heRemovedClips.indexOf(known) === -1) _heRemovedClips.push(known);
+  }
   _heClips.splice(_heClipIdx, 1);
   _heClipIdx = Math.min(_heClipIdx, _heClips.length - 1);
   hePoseRenderClipList();
@@ -4858,11 +4819,26 @@ function hePoseClipPropChanged() {
   var clip = hePoseCurrentClip();
   if (!clip) return;
   var newName = document.getElementById('he-clip-name').value.trim() || clip.name;
+  // Remember the name the CULTIVAR knows this clip by, once, at its first rename — so Export
+  // can drop the old entry instead of leaving a duplicate that still fires the same timer.
+  if (!clip._isNew && newName !== clip.name && clip._origName === undefined) clip._origName = clip.name;
   clip.name          = newName;
-  clip.timerDEF      = newName + 'Timer';
+  // A brand-new, never-exported clip may still take its timerDEF from its name.
+  if (clip._isNew) clip.timerDEF = _heUniqueTimerDef(newName, clip);
+  // C1 fix (Day 95): timerDEF is the clip's IDENTITY — the DEF of a real TimeSensor in
+  // the avatar file (or the EXPORT name the scene imports). It is set exactly once, in
+  // _heNewClipObj, and is NEVER re-derived from the display name here. This line used to
+  // be `clip.timerDEF = newName + 'Timer'`, so ticking Loop (or touching any control)
+  // silently retargeted Bow from its real timer to a made-up 'BowTimer' — and, for names
+  // with spaces, to an invalid DEF like 'Fold ArmsTimer'.
   clip.cycleInterval = parseFloat(document.getElementById('he-clip-cycle').value) || 6.0;
   clip.priority      = parseInt(document.getElementById('he-clip-priority').value) || 0;
-  clip.loop          = document.getElementById('he-clip-loop').checked;
+  var newLoop        = document.getElementById('he-clip-loop').checked;
+  // Remember that the AUTHOR changed loop on this clip. Only then may the export touch the
+  // loop attribute of the clip's real timer in the file; an untouched clip must never
+  // have its timer rewritten just because it was carried through an export.
+  if (newLoop !== clip.loop) clip._loopEdited = true;
+  clip.loop          = newLoop;
   // Flat properties — matches mccf_x3d_loader.html's selectBehaviorClip/
   // conditionMet exactly (clip[ch+'_min']/clip[ch+'_max']), not nested
   // under clip.cv_conditions (see this panel's own HTML comment for why
@@ -4870,8 +4846,10 @@ function hePoseClipPropChanged() {
   ['E','B','P','S'].forEach(function(ch) {
     var minEl = document.getElementById('he-clip-' + ch + '_min');
     var maxEl = document.getElementById('he-clip-' + ch + '_max');
-    clip[ch + '_min'] = minEl ? (parseFloat(minEl.value) || 0.0) : 0.0;
-    clip[ch + '_max'] = maxEl ? (parseFloat(maxEl.value) || 1.0) : 1.0;
+    // isNaN, not `|| default`: a max of 0 is legitimate and `0 || 1.0` silently made it 1.
+    var lo = minEl ? parseFloat(minEl.value) : NaN, hi = maxEl ? parseFloat(maxEl.value) : NaN;
+    clip[ch + '_min'] = isNaN(lo) ? 0.0 : lo;
+    clip[ch + '_max'] = isNaN(hi) ? 1.0 : hi;
   });
   hePoseRenderClipList();
   heMarkDirty('clip props changed');
@@ -4884,7 +4862,6 @@ var _orig_heShowTab = heShowTab;
 heShowTab = function(t) {
   _orig_heShowTab(t);
   if (t === 'pose') hePoseInit();
-  if (t === 'face') heFaceCapturePoll();
 };
 
 // ── heExport hook — populate clips[] from pose state ─────────────────────
@@ -4913,17 +4890,30 @@ heExport = async function() {
       hanim_src:   _hanimPath,
       skin_url:    _heSkinPending || null,
       receptivity: _heReceptivity,
-      // Same fix as the shadowed heExport definition above: server reads
-      // expr.au_weights, not expr.weights — this is the definition that
-      // actually runs (this whole function reassigns heExport, so the
-      // earlier "function heExport()" declaration never executes), so
-      // this is the one that matters.
+      // Server reads expr.au_weights, not expr.weights — sending 'weights'
+      // instead would silently drop every expression's AU data (au_weights
+      // defaults to {} server-side, which fails the "not au_weights" check
+      // and skips the whole expression). Real, previously-found bug — keep
+      // this mapping exact.
       expressions: _heExpressions.map(function(e){
         return { name: e.name, au_weights: e.weights, triggers: e.triggers || [] };
       }),
       au_weights:  _heAuWeights,
       clips:       clips,
-      cameraRig:   _heCameraRig,
+      // Deleted / renamed clips (see _heRemovedClips, _origName): the server drops the old
+      // cultivar entries. The avatar's timer nodes are left alone.
+      removed_clips: _heRemovedClips.slice(),
+      renamed_clips: _heClips.filter(function(c) { return c._origName !== undefined && c._origName !== c.name; })
+                             .map(function(c) { return { from: c._origName, to: c.name }; }),
+      // null (not the all-disabled defaults) until the rig state has really loaded or been
+      // edited — the server treats null as "leave the avatar's CAM_* nodes untouched".
+      cameraRig:   _heCameraRigLoaded ? _heCameraRig : null,
+      // Displacer export: {au, weight} pairs for every non-zero AU slider.
+      // Server matches by exact HAnimDisplacer DEF: '<au>_displacer',
+      // '<au>_l_displacer', or '<au>_r_displacer' — see
+      // _update_displacer_weights() in mccf_hanim_api.py. AU names here
+      // (e.g. 'AU4_BrowLowerer') match anna_au_deltas.json's own keys
+      // directly; no avatar-name prefix is added anywhere in this chain.
       displacers:  Object.entries(_heAuWeights)
                      .filter(function(kv){ return kv[1] > 0; })
                      .map(function(kv){ return { au: kv[0], weight: kv[1] }; })
@@ -4947,9 +4937,10 @@ heExport = async function() {
       body:    JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.error || 'export failed');
+    // Read the body even on an error status: since Day 95 the server REFUSES an export that
+    // would corrupt the avatar (HTTP 409) and says exactly why; 'HTTP 409' alone hid that.
+    var data = await res.json().catch(function() { return {}; });
+    if (!res.ok || data.status !== 'ok') throw new Error(data.error || ('HTTP ' + res.status));
 
     if (data.hanim_path) {
       _hanimPath = data.hanim_path;
@@ -4961,9 +4952,22 @@ heExport = async function() {
     }
 
     _heDirty = false;
+    _heRemovedClips = [];
+    _heClips.forEach(function(c) {
+      delete c._origName;                                       // rename applied — the new name is now canonical
+      delete c._loopEdited;                                     // applied (or reported) — clear
+      if (c._isNew && _heClipHasAuthoredKeyframes(c)) delete c._isNew;   // written -> timerDEF now frozen
+    });
     document.getElementById('he-dirty-label').style.display = 'none';
-    heSetStatus('exported · ' + data.clips_written + ' clips · ' + (data.hanim_path || _hanimPath));
+    heSetStatus('exported · ' + data.clips_written + ' clips · ' + (data.hanim_path || _hanimPath) +
+                (data.loop_updated && data.loop_updated.length ? ' · loop set: ' + data.loop_updated.join(', ') : ''));
     toast('HAnim export saved');
+    // Things the server declined to do (e.g. keyframes on a real, already-animated clip).
+    var notes = (data.warnings || []).concat(data.skipped || []);
+    if (notes.length) {
+      console.warn('[hanim export] server notes:', notes);
+      toast('Export note: ' + notes[0] + (notes.length > 1 ? '  (+' + (notes.length - 1) + ' more — see console)' : ''), true);
+    }
     setDirty();
 
   } catch(e) {

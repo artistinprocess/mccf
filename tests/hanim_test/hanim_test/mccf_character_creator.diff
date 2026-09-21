@@ -1,0 +1,204 @@
+--- /mnt/user-data/uploads/1789851805842_mccf_character_creator.html	2026-09-19 21:03:25.238956000 +0000
++++ ../../mccf_character_creator.html	2026-09-19 21:21:18.148337985 +0000
+@@ -2003,6 +2003,10 @@
+   };
+ }
+ let _heCameraRig = heCameraRigDefaults();
++// Day 95: true only once the manifest fetch has SETTLED (found or 404) or the author has
++// edited the rig form. Until then export sends cameraRig:null and the server leaves the
++// avatar's CAM_* rig nodes alone — sending the all-disabled defaults would wipe them.
++let _heCameraRigLoaded = false;
+ 
+ // ── Portrait (character node image) ─────────────────────────────────────
+ // Used as this character's icon in the Composer's Network/Affect graph.
+@@ -2623,6 +2627,11 @@
+     _heClips   = [];
+     _heClipIdx = 0;
+   }
++  // C2 fix (Day 95): nothing rendered the clip dropdown after a cultivar load, so it sat
++  // empty (or showed the PREVIOUS character's clips) until the first control was touched —
++  // and that first touch ran the C1 handler on clip 0 (Bow). Render it here, where
++  // _heClips is filled, so what the dropdown shows is always what will be exported.
++  hePoseRenderClipList();
+   const hd   = document.getElementById('hanim-file-display');
+   const emptyEl = document.getElementById('hanim-empty-msg');
+   if (_hanimPath) {
+@@ -2990,6 +2999,7 @@
+ // MetadataString shape, read independently on each side since they're different
+ // apps, not a shared module.
+ function heCameraRigLoadManifest(hanimSrc) {
++  _heCameraRigLoaded = false;
+   _heCameraRig = heCameraRigDefaults();  // reset first — a 404 (no rig authored yet
+                                           // for this avatar) must not carry over the
+                                           // PREVIOUS avatar's rig state into the form
+@@ -3000,6 +3010,7 @@
+     if (!r.ok) return null;
+     return r.text();
+   }).then(function(text) {
++    _heCameraRigLoaded = true;   // fetch settled: found (parsed below) or 404 (no rig yet)
+     if (!text) return;
+     var doc = new DOMParser().parseFromString(text, 'application/xml');
+     var entries = Array.prototype.slice.call(doc.getElementsByTagName('MetadataString'));
+@@ -3051,6 +3062,7 @@
+ // Read the form back into _heCameraRig on any field change. Called via oninput/
+ // onchange from every camera-rig form element.
+ function heCameraRigFieldChanged() {
++  _heCameraRigLoaded = true;   // the author is editing the rig — it is now authoritative
+   ['agent_eye', 'agent_side', 'agent_orbit', 'agent_track'].forEach(function(rt) {
+     var cb = document.getElementById('he-cam-' + rt.replace('agent_', '') + '-enabled');
+     if (cb) _heCameraRig[rt].enabled = cb.checked;
+@@ -3508,14 +3520,24 @@
+ // the endpoint that receives it actually unpacks). This function is the
+ // one place that bridges them, so neither shape has to pretend to be the
+ // other everywhere else in this file.
++// C3 (Day 95): _heNewClipObj seeds EVERY clip with two empty anchor keyframes, and this
++// used to send them as-is — so the server saw a non-empty keyframes list and treated every
++// untouched clip as "authored" (rewriting/stripping its timer). A clip has authored
++// content only if some keyframe actually holds joint rotations.
++function _heClipHasAuthoredKeyframes(clip) {
++  return (clip.keyframes || []).some(function(kf) {
++    return kf && kf.joints && Object.keys(kf.joints).length > 0;
++  });
++}
++
+ function _heClipForExport(clip) {
+-  return {
++  var out = {
+     name:          clip.name,
+     timerDEF:      clip.timerDEF,
+     cycleInterval: clip.cycleInterval,
+     loop:          clip.loop,
+     priority:      clip.priority,
+-    keyframes:     clip.keyframes,
++    keyframes:     _heClipHasAuthoredKeyframes(clip) ? clip.keyframes : [],
+     cv_conditions: {
+       E_min: clip.E_min, E_max: clip.E_max,
+       B_min: clip.B_min, B_max: clip.B_max,
+@@ -3523,6 +3545,8 @@
+       S_min: clip.S_min, S_max: clip.S_max,
+     },
+   };
++  if (clip._loopEdited) out.loop_edited = true;   // see hePoseClipPropChanged
++  return out;
+ }
+ 
+ function heSaveExpression() {
+@@ -3892,7 +3916,16 @@
+       _hePoseJoints = d.joints || [];
+       _heJointMap   = d.joint_map || {};
+       hePoseRenderTree(_hePoseJoints);
+-      _heRenderPlaybackClips(d.clips || []);
++      // S3 (Day 95): the server now flags `hollow` timers (no ROUTEs — stubs and
++      // duplicates left by old exports; Anna has ~82 next to her 14 real ones). Those
++      // animate nothing, so they are kept out of the playback panel and out of the
++      // clip list seeded below. d.clips itself stays whole for the wiring detection.
++      var realClips = (d.clips || []).filter(function(c) { return !c.hollow; });
++      if (realClips.length !== (d.clips || []).length) {
++        console.info('[hanim] ' + ((d.clips || []).length - realClips.length) +
++                     ' hollow timer stub(s) hidden (no ROUTEs); ' + realClips.length + ' real clip(s) shown');
++      }
++      _heRenderPlaybackClips(realClips);
+       var wireBtn         = document.getElementById('he-wire-btn');
+       var normBtn         = document.getElementById('he-normalize-btn');
+       var ingestBtn       = document.getElementById('he-ingest-btn');
+@@ -3919,8 +3952,8 @@
+         // timerDEF and the file's own loop attribute (via _heNewClipObj's
+         // loop !== false, same as the cultivar-load path a few hundred
+         // lines up) rather than defaulting every clip to loop=true.
+-        if (d.clips && d.clips.length) {
+-          _heClips = d.clips.map(function(cl) {
++        if (realClips.length) {
++          _heClips = realClips.map(function(cl) {
+             return _heNewClipObj(cl.name || 'Default', cl.cycleInterval || 6.0,
+                                   cl.loop !== false, 0, cl.timerDEF, cl);
+           });
+@@ -3929,6 +3962,9 @@
+         }
+         _heClipIdx = 0;
+         hePoseRenderClipList();
++      } else {
++        // C2: clips already came from the saved cultivar (loadForm) — just show them.
++        hePoseRenderClipList();
+       }
+     })
+     .catch(function(e) { toast('Joints fetch error: ' + e.message, true); });
+@@ -4662,10 +4698,20 @@
+   if (!clip) return;
+   var newName = document.getElementById('he-clip-name').value.trim() || clip.name;
+   clip.name          = newName;
+-  clip.timerDEF      = newName + 'Timer';
++  // C1 fix (Day 95): timerDEF is the clip's IDENTITY — the DEF of a real TimeSensor in
++  // the avatar file (or the EXPORT name the scene imports). It is set exactly once, in
++  // _heNewClipObj, and is NEVER re-derived from the display name here. This line used to
++  // be `clip.timerDEF = newName + 'Timer'`, so ticking Loop (or touching any control)
++  // silently retargeted Bow from its real timer to a made-up 'BowTimer' — and, for names
++  // with spaces, to an invalid DEF like 'Fold ArmsTimer'.
+   clip.cycleInterval = parseFloat(document.getElementById('he-clip-cycle').value) || 6.0;
+   clip.priority      = parseInt(document.getElementById('he-clip-priority').value) || 0;
+-  clip.loop          = document.getElementById('he-clip-loop').checked;
++  var newLoop        = document.getElementById('he-clip-loop').checked;
++  // Remember that the AUTHOR changed loop on this clip. Only then may the export touch the
++  // loop attribute of the clip's real timer in the file; an untouched clip must never
++  // have its timer rewritten just because it was carried through an export.
++  if (newLoop !== clip.loop) clip._loopEdited = true;
++  clip.loop          = newLoop;
+   // Flat properties — matches mccf_x3d_loader.html's selectBehaviorClip/
+   // conditionMet exactly (clip[ch+'_min']/clip[ch+'_max']), not nested
+   // under clip.cv_conditions (see this panel's own HTML comment for why
+@@ -4673,8 +4719,10 @@
+   ['E','B','P','S'].forEach(function(ch) {
+     var minEl = document.getElementById('he-clip-' + ch + '_min');
+     var maxEl = document.getElementById('he-clip-' + ch + '_max');
+-    clip[ch + '_min'] = minEl ? (parseFloat(minEl.value) || 0.0) : 0.0;
+-    clip[ch + '_max'] = maxEl ? (parseFloat(maxEl.value) || 1.0) : 1.0;
++    // isNaN, not `|| default`: a max of 0 is legitimate and `0 || 1.0` silently made it 1.
++    var lo = minEl ? parseFloat(minEl.value) : NaN, hi = maxEl ? parseFloat(maxEl.value) : NaN;
++    clip[ch + '_min'] = isNaN(lo) ? 0.0 : lo;
++    clip[ch + '_max'] = isNaN(hi) ? 1.0 : hi;
+   });
+   hePoseRenderClipList();
+   heMarkDirty('clip props changed');
+@@ -4725,7 +4773,9 @@
+       }),
+       au_weights:  _heAuWeights,
+       clips:       clips,
+-      cameraRig:   _heCameraRig,
++      // null (not the all-disabled defaults) until the rig state has really loaded or been
++      // edited — the server treats null as "leave the avatar's CAM_* nodes untouched".
++      cameraRig:   _heCameraRigLoaded ? _heCameraRig : null,
+       // Displacer export: {au, weight} pairs for every non-zero AU slider.
+       // Server matches by exact HAnimDisplacer DEF: '<au>_displacer',
+       // '<au>_l_displacer', or '<au>_r_displacer' — see
+@@ -4755,9 +4805,10 @@
+       body:    JSON.stringify(payload)
+     });
+ 
+-    if (!res.ok) throw new Error('HTTP ' + res.status);
+-    var data = await res.json();
+-    if (data.status !== 'ok') throw new Error(data.error || 'export failed');
++    // Read the body even on an error status: since Day 95 the server REFUSES an export that
++    // would corrupt the avatar (HTTP 409) and says exactly why; 'HTTP 409' alone hid that.
++    var data = await res.json().catch(function() { return {}; });
++    if (!res.ok || data.status !== 'ok') throw new Error(data.error || ('HTTP ' + res.status));
+ 
+     if (data.hanim_path) {
+       _hanimPath = data.hanim_path;
+@@ -4769,9 +4820,17 @@
+     }
+ 
+     _heDirty = false;
++    _heClips.forEach(function(c) { delete c._loopEdited; });   // applied (or reported) — clear
+     document.getElementById('he-dirty-label').style.display = 'none';
+-    heSetStatus('exported · ' + data.clips_written + ' clips · ' + (data.hanim_path || _hanimPath));
++    heSetStatus('exported · ' + data.clips_written + ' clips · ' + (data.hanim_path || _hanimPath) +
++                (data.loop_updated && data.loop_updated.length ? ' · loop set: ' + data.loop_updated.join(', ') : ''));
+     toast('HAnim export saved');
++    // Things the server declined to do (e.g. keyframes on a real, already-animated clip).
++    var notes = (data.warnings || []).concat(data.skipped || []);
++    if (notes.length) {
++      console.warn('[hanim export] server notes:', notes);
++      toast('Export note: ' + notes[0] + (notes.length > 1 ? '  (+' + (notes.length - 1) + ' more — see console)' : ''), true);
++    }
+     setDirty();
+ 
+   } catch(e) {

@@ -29,6 +29,8 @@ register_generate_api, register_playback_api, register_chorus_api):
 """
 
 import os
+import re as _re
+import time as _time_hanim
 import math as _math
 from flask import Blueprint, request, jsonify
 import base64  as _b64
@@ -184,31 +186,20 @@ def upload_avatar():
             '<component name="HAnim"',
             '<component name="Scripting" level="1" />\n    <component name="HAnim"', 1)
 
-    # 9. Remove any existing FaceController (clean slate)
+    # 9. Remove any leftover FaceController (migration cleanup for avatars
+    #    uploaded under the earlier AnimationAdapter-based pipeline — that
+    #    Script and the CoordinateInterpolator/set_fraction indirection it
+    #    drove are superseded now that HAnimDisplacer.weight is confirmed
+    #    to be settable directly, per spec, on a single skinned mesh. See
+    #    SEED_facial_displacer_breakthrough.md. No replacement is injected:
+    #    EBPS connectors and the editor's AU sliders both drive
+    #    HAnimDisplacer nodes directly by name (convention:
+    #    '<AUName>_displacer', or '<AUName>_l_displacer'/'_r_displacer' for
+    #    laterally-split AUs) — there is no longer a central controller
+    #    node for a fresh upload to carry.
     stripped = _re.sub(
         r'\s*<Script DEF=["\']FaceController["\'].*?</Script>',
         '', stripped, flags=_re.DOTALL)
-
-    # 10. Inject FaceController before </Scene>
-    FACE_CONTROLLER = (
-        '\n  <Script DEF="FaceController" directOutput="true">\n'
-        '    <field name="au_name"   type="SFString" accessType="inputOnly"/>\n'
-        '    <field name="au_weight" type="SFFloat"  accessType="inputOnly"/>\n'
-        '    <![CDATA[ecmascript:\n'
-        '      function au_weight(value, time) {\n'
-        '        var adapter = Browser.currentScene.getNamedNode(\n'
-        "                        'AnimationAdapter_' + _au);\n"
-        '        if (adapter) {\n'
-        "          var field = adapter.getField('set_fraction');\n"
-        '          if (field) field.setValue(value * 0.5);\n'
-        '        }\n'
-        '      }\n'
-        '      function au_name(value, time) { _au = value; }\n'
-        "      var _au = '';\n"
-        '    ]]>\n'
-        '  </Script>'
-    )
-    stripped = stripped.replace('</Scene>', FACE_CONTROLLER + '\n</Scene>', 1)
 
     # Day 89: real, confirmed vulnerability found while investigating a
     # report of Anna.x3d ending up completely empty (0 bytes) after some
@@ -239,21 +230,23 @@ def avatar_preview():
     GET /avatar/preview?src=avatars/foo_hanim.x3d
     Serves a minimal X_ITE HTML page that renders the H-Anim figure locally.
 
-    Morph driver is avatar-agnostic (Day 32):
-    - Derives avatar name from src filename (jack_hanim.x3d -> 'jack')
-    - Fetches {avatarname}_expressions.xml for AU data
-    - On scene load, discovers face coord DEF names by scanning for a Group
-      DEF matching '*FaceCoords' pattern, reads its Coordinate children
-    - Supports two morph modes detected automatically:
-        SEGMENT mode (Cindy): coord nodes ARE the rendered geometry;
-          write displacement directly to each named coord node.
-        GLOBAL mode (Jack):   coord nodes are metadata holders inside
-          head HAnimSegment; each carries a globalIndices attribute
-          mapping local indices to global skin mesh (_3).
-          Write displacements into _3 (the rendered node).
-      Detection: if any discovered coord node has globalIndices='local'
-      or a numeric globalIndices list, it is GLOBAL mode.
-      If globalIndices absent on all nodes, it is SEGMENT mode (Cindy).
+    Morph driver is avatar-agnostic and spec-compliant: it drives
+    HAnimDisplacer.weight directly, by DEF name, and does no per-avatar
+    discovery, probing, or displacement math of its own — that's the
+    renderer's job once a node is a real HAnimDisplacer.
+
+    Naming convention: 'setDisplacerWeight' messages carry an AU name
+    (e.g. 'AU4_BrowLowerer'); the driver tries '<AUName>_displacer' and
+    the laterally-split '<AUName>_l_displacer' / '<AUName>_r_displacer'
+    variants via getNamedNode, and writes .weight on whichever exist.
+    Avatars that don't have a given AU's displacer simply don't match
+    anything — no error, no special-casing per avatar.
+
+    Superseded (Sept 2026): the old avatar-specific *Coord_<region> /
+    AnimationAdapter_<region> CoordinateInterpolator pipeline (per-region
+    Coordinate nodes hand-written back with computed deltas, one JS mode
+    for "segment" avatars and another for "global mesh" avatars). See
+    SEED_facial_displacer_breakthrough.md for why that was unnecessary.
     """
     src = request.args.get('src', '').strip()
     if not src:
@@ -268,18 +261,6 @@ def avatar_preview():
         x3d_src = f'/static/{src}'
     else:
         x3d_src = f'/static/avatars/{src}'
-
-    # Derive avatar name and expressions filename from src
-    # 'avatars/jack_hanim.x3d' -> 'jack'
-    # 'avatars/cindy_hanim.x3d' -> 'cindy'
-    import re as _re
-    _basename = os.path.basename(src)                        # jack_hanim.x3d
-    _stem     = _re.sub(r'_hanim\.x3d$', '', _basename,
-                        flags=_re.IGNORECASE)                # jack
-    _stem     = _re.sub(r'\.x3d$', '', _stem,
-                        flags=_re.IGNORECASE)                # fallback strip
-    _stem     = _stem.lower()                                # normalise
-    _expressions_url = f'/static/avatars/{_stem}_expressions.xml'
 
     html = """<!DOCTYPE html>
 <html>
@@ -312,405 +293,60 @@ def avatar_preview():
   <div id="err"></div>
   <x3d-canvas id="canvas" src="__X3D_SRC__"></x3d-canvas>
   <div id="morph-overlay">
-    <div class="mo-title">morph driver</div>
+    <div class="mo-title">displacer driver</div>
     <div id="mo-coords">waiting for scene...</div>
     <div id="mo-aus"></div>
     <div id="mo-status" class="mo-status"></div>
   </div>
   <script type="module">
-    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.mjs';
+    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@16.1.3/dist/x_ite.min.mjs';
+    // Bumped from 11.6.0 → 16.1.3 to match mccf_x3d_loader.html's pin
+    // (same verified-latest version, not the unconfirmed "16.3" from the
+    // cycleComplete seed note). Kept in sync so this preview and the main
+    // Loader show the same X_ITE build/loading screen rather than
+    // silently drifting apart. This page is a simpler, read-only preview
+    // (no timer-switching, no behavior-clip logic), so the four
+    // documented 11.6-specific SAI quirks matter less here than in the
+    // full loader — but worth a quick visual check after this change,
+    // same discipline as any other version bump in this project.
     const canvas  = document.getElementById('canvas');
-    const EXPRESSIONS_URL = '__EXPRESSIONS_URL__';
 
     let _browser = null, _scene = null;
+    var _animTimersStopped = [];  // animation timer DEFs stopped by joint-drag — restart on play
+    var _enabledTimers     = [];  // timer DEFs currently turned on via enableTimer — avatar-agnostic Stop
 
-    // Discovered at scene load — filled by _discoverFaceCoords()
-    var _faceCoordDefs  = [];   // ['JackCoord_skull', 'JackCoord_jaw', ...]
-    var _globalMode     = false; // true = Jack-style global skin mesh write
-    var _globalIndices  = {};   // def -> Int32Array of global vert indices (global mode)
-    var _skinMeshDef    = '_3';  // global skin mesh Coordinate DEF (fallback lookup)
-    var _skinCoordNode  = null;  // live Coordinate node inside the rendered Shape (preferred)
+    // ── Displacer weight driver ───────────────────────────────────────────
+    // Spec-compliant and avatar-agnostic: HAnimDisplacer carries its own
+    // 'weight' SFFloat field, driven directly by DEF name. No discovery,
+    // no rest-pose caching, no manual displacement math — the renderer
+    // (X_ITE) applies the displacement itself once weight is set, exactly
+    // as it would for any other native X3D node. See
+    // SEED_facial_displacer_breakthrough.md for how this was confirmed.
+    //
+    // Naming convention: '<AUName>_displacer' for a single displacer, or
+    // '<AUName>_l_displacer' / '<AUName>_r_displacer' for AUs split across
+    // two HAnimJoints (most facial AUs are bilateral). All three name
+    // variants are tried for every incoming AU; whichever exist on this
+    // particular avatar get written, the rest are silently skipped. This
+    // is what makes the driver avatar-agnostic: it carries no per-avatar
+    // prefix, mesh name, or region list of any kind.
+    var _auWeights = {};
 
-    var _restPose   = {};  // def -> Float32Array of rest-pose XYZ
-    var _auWeights  = {};
-    var _auData     = {};
-    var _morphReady = false;
-    var _animTimersStopped = [];  // animation timer DEFs stopped by slider — restart on play
+    function _displacerCandidates(auName) {
+      return [auName + '_displacer', auName + '_l_displacer', auName + '_r_displacer'];
+    }
 
-    // ── Discover face coord nodes from scene ─────────────────────────────
-    // Looks for a Group DEF ending in 'FaceCoords' (e.g. JackFaceCoords,
-    // CindyFaceCoords). Falls back to scanning for any Coordinate DEF
-    // matching *Coord_skull pattern.
-    // Sets _faceCoordDefs, _globalMode, _globalIndices.
-    function _discoverFaceCoords() {
-      var found = [];
-
-      // Strategy 1: look for *FaceCoords group — Jack-style pipeline output
-      var suffixes = ['FaceCoords'];
-      var allNodes = _scene.rootNodes;
-
-      // Try to find group by scanning named nodes for *FaceCoords
-      // We probe known prefix patterns rather than iterating (SAI has no listNodes)
-      // The pipeline script always names it [AvatarName]FaceCoords
-      // We derive avatar prefix from expressions URL
-      var avatarPrefix = EXPRESSIONS_URL
-        .split('/').pop()
-        .replace('_expressions.xml','');
-      var groupDef = avatarPrefix.charAt(0).toUpperCase() +
-                     avatarPrefix.slice(1) + 'FaceCoords';
-      var grp = null;
-      try { grp = _scene.getNamedNode(groupDef); } catch(e) {}
-
-      if (grp) {
-        // Group found — read its Coordinate children by probing DEF names
-        // We know the naming pattern: [AvatarName]Coord_[region]
-        var regions = ['skull','jaw','l_eyebrow','r_eyebrow',
-                       'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
-        var pfx = avatarPrefix.charAt(0).toUpperCase() +
-                  avatarPrefix.slice(1) + 'Coord_';
-        regions.forEach(function(r) {
-          found.push(pfx + r);
-        });
-        console.log('Discovered coords via group', groupDef, ':', found);
-      } else {
-        // Strategy 2: Cindy-style — probe CindyCoord_* directly
-        var cindyRegions = ['skull','jaw','l_eyebrow','r_eyebrow',
-                            'l_eyelid','r_eyelid','l_eyeball','r_eyeball'];
-        cindyRegions.forEach(function(r) {
-          found.push('CindyCoord_' + r);
-        });
-        console.log('No FaceCoords group found, trying Cindy pattern');
-      }
-
-      _faceCoordDefs = found;
-
-      // Detect global vs segment mode by checking globalIndices attribute
-      // on the skull coord node (most reliable indicator)
-      _globalMode = false;
-      found.forEach(function(def) {
+    function _setDisplacerWeight(auName, weight) {
+      var written = 0;
+      _displacerCandidates(auName).forEach(function(def) {
         try {
           var node = _scene.getNamedNode(def);
           if (!node) return;
-          // SAI exposes custom XML attributes via getUserData / getField.
-          // globalIndices was written as an XML attribute; X_ITE exposes
-          // unknown attributes via node.getField() returning null, but
-          // they ARE accessible via the underlying DOM if X_ITE passes
-          // through. We use a workaround: fetch the X3D file text and
-          // parse globalIndices from it client-side.
-          // Flag set after _fetchGlobalIndices() completes.
-        } catch(e) {}
-      });
-    }
-
-    // ── Fetch X3D and parse globalIndices for each face coord node ───────
-    // This runs once after scene load for global-mode avatars.
-    // Populates _globalIndices[def] = Int32Array and sets _globalMode.
-    function _fetchGlobalIndices(x3dUrl, callback) {
-      fetch(x3dUrl)
-        .then(function(r) { return r.text(); })
-        .then(function(text) {
-          var parser = new DOMParser();
-          var doc = parser.parseFromString(text, 'application/xml');
-          var hasGlobal = false;
-          _faceCoordDefs.forEach(function(def) {
-            var el = doc.querySelector('Coordinate[DEF="' + def + '"]');
-            if (!el) return;
-            var gi = el.getAttribute('globalIndices');
-            if (!gi) return;
-            if (gi === 'local') {
-              // eyeball: local coords, write directly to named node
-              _globalIndices[def] = 'local';
-              hasGlobal = true;
-            } else {
-              var arr = gi.trim().split(/[,\\s]+/).map(Number)
-                          .filter(function(n){return !isNaN(n);});
-              if (arr.length > 0) {
-                _globalIndices[def] = new Int32Array(arr);
-                hasGlobal = true;
-              }
-            }
-          });
-          _globalMode = hasGlobal;
-          console.log('Global mode:', _globalMode,
-                      '— mapped regions:', Object.keys(_globalIndices).length);
-          callback();
-        })
-        .catch(function(e) {
-          console.warn('globalIndices fetch failed, assuming segment mode:', e);
-          _globalMode = false;
-          callback();
-        });
-    }
-
-    // ── Cache rest poses for all discovered face coord nodes ─────────────
-    function _cacheRestPoses() {
-      var lines = [], allOk = true;
-      _faceCoordDefs.forEach(function(def) {
-        try {
-          var node = _scene.getNamedNode(def);
-          if (!node) throw new Error('null');
-          var pts = node.point;
-          var flat = new Float32Array(pts.length * 3);
-          for (var i = 0; i < pts.length; i++) {
-            flat[i*3]   = pts[i].x;
-            flat[i*3+1] = pts[i].y;
-            flat[i*3+2] = pts[i].z;
-          }
-          _restPose[def] = flat;
-          // Strip prefix for display: JackCoord_skull -> skull
-          var label = def.replace(/^[A-Za-z]+Coord_/, '');
-          lines.push('<div class="mo-coord">' + label + ': ' +
-                     pts.length + 'v &#10003;</div>');
-        } catch(e) {
-          var label = def.replace(/^[A-Za-z]+Coord_/, '');
-          lines.push('<div class="mo-coord missing">' + label + ': MISSING</div>');
-          allOk = false;
-        }
-      });
-
-      // Also cache global skin mesh rest pose if in global mode.
-      // IMPORTANT: the rendered IndexedTriangleSet holds a USE copy of _3,
-      // not the DEF node. X_ITE only re-renders when the node the geometry
-      // actually references is written. So we navigate via the rendered
-      // Shape (containerField='skin') to get the live coord node.
-      // Strategy: scan HAnimHumanoid skin shapes for containerField='skin',
-      // get the first IndexedTriangleSet's coord field. Fall back to DEF '_3'.
-      if (_globalMode) {
-        try {
-          var skinCoord = null;
-
-          // Walk scene root nodes looking for HAnimHumanoid
-          var roots = _scene.rootNodes;
-          outer: for (var ri = 0; ri < roots.length; ri++) {
-            var root = roots[ri];
-            // HAnimHumanoid may be nested inside a Group
-            var candidates = [root];
-            if (root.getNodeTypeName && root.getNodeTypeName() !== 'HAnimHumanoid') {
-              // Try children
-              try {
-                var fc = root.children;
-                if (fc) for (var ci = 0; ci < fc.length; ci++) candidates.push(fc[ci]);
-              } catch(e) {}
-            }
-            for (var ci = 0; ci < candidates.length; ci++) {
-              var node = candidates[ci];
-              if (!node || !node.getNodeTypeName) continue;
-              if (node.getNodeTypeName() === 'HAnimHumanoid') {
-                // skin field holds the rendered Shape(s)
-                try {
-                  var skinShapes = node.skin;
-                  if (skinShapes && skinShapes.length > 0) {
-                    for (var si = 0; si < skinShapes.length; si++) {
-                      var shape = skinShapes[si];
-                      if (!shape) continue;
-                      var geom = shape.geometry;
-                      if (!geom) continue;
-                      var coord = geom.coord;
-                      if (coord && coord.point && coord.point.length > 0) {
-                        skinCoord = coord;
-                        break outer;
-                      }
-                    }
-                  }
-                } catch(e) {
-                  console.warn('skin field traversal failed:', e.message);
-                }
-                break outer;
-              }
-            }
-          }
-
-          // Fallback: getNamedNode by DEF
-          if (!skinCoord) {
-            skinCoord = _scene.getNamedNode(_skinMeshDef);
-            console.log('Skin coord: using DEF fallback (_3)');
-          } else {
-            console.log('Skin coord: found via HAnimHumanoid.skin field');
-          }
-
-          if (skinCoord) {
-            _skinCoordNode = skinCoord;
-            var pts = skinCoord.point;
-            var flat = new Float32Array(pts.length * 3);
-            for (var i = 0; i < pts.length; i++) {
-              flat[i*3]   = pts[i].x;
-              flat[i*3+1] = pts[i].y;
-              flat[i*3+2] = pts[i].z;
-            }
-            _restPose[_skinMeshDef] = flat;
-            console.log('Global skin mesh cached:', pts.length, 'verts');
-          } else {
-            console.warn('Could not find skin coord node');
-          }
-        } catch(e) {
-          console.warn('Could not cache global skin mesh:', e.message);
-        }
-      }
-
-      document.getElementById('mo-coords').innerHTML = lines.join('');
-      return allOk;
-    }
-
-    // ── Load AU data from expressions XML ────────────────────────────────
-    function _loadAuData() {
-      fetch(EXPRESSIONS_URL)
-        .then(function(r) { return r.text(); })
-        .then(function(xml) {
-          var parser = new DOMParser();
-          var doc = parser.parseFromString(xml, 'application/xml');
-          var result = {};
-          doc.querySelectorAll('AU').forEach(function(au) {
-            var auName = au.getAttribute('name');
-            result[auName] = {};
-            au.querySelectorAll('Displacement').forEach(function(d) {
-              var coord   = d.getAttribute('coord');
-              var indices = d.getAttribute('coordIndex').trim()
-                             .split(/\\s+/).map(Number);
-              var vecs    = d.getAttribute('vectors').trim()
-                             .split(/\\s+/).map(Number);
-              var deltas  = [];
-              for (var i = 0; i < vecs.length; i += 3)
-                deltas.push([vecs[i], vecs[i+1], vecs[i+2]]);
-              result[auName][coord] = {indices: indices, deltas: deltas};
-            });
-          });
-          _auData = result;
-          document.getElementById('mo-status').textContent =
-            'AU data loaded (' + Object.keys(result).length + ' AUs)';
-          console.log('AU data loaded:', Object.keys(result).length, 'AUs');
-        })
-        .catch(function(e) {
-          console.warn('AU data fetch failed:', e);
-          document.getElementById('mo-status').textContent = 'AU data: fetch failed';
-        });
-    }
-
-    // ── Apply morph: SEGMENT mode (Cindy) ────────────────────────────────
-    // Write displacement directly to each named coord node.
-    function _applyMorphSegment() {
-      var modified = {};
-      _faceCoordDefs.forEach(function(def) {
-        if (_restPose[def]) modified[def] = new Float32Array(_restPose[def]);
-      });
-      Object.keys(_auWeights).forEach(function(au) {
-        var w = _auWeights[au]; if (!w || w <= 0) return;
-        var auDef = _auData[au]; if (!auDef) return;
-        Object.keys(auDef).forEach(function(cd) {
-          var e = auDef[cd];
-          if (!e || !e.indices || !modified[cd]) return;
-          e.indices.forEach(function(vi, k) {
-            var d = e.deltas[k];
-            modified[cd][vi*3]   += d[0] * w;
-            modified[cd][vi*3+1] += d[1] * w;
-            modified[cd][vi*3+2] += d[2] * w;
-          });
-        });
-      });
-      var written = 0;
-      Object.keys(modified).forEach(function(def) {
-        try {
-          var node = _scene.getNamedNode(def); if (!node) return;
-          var flat = modified[def], verts = [];
-          for (var i = 0; i < flat.length / 3; i++)
-            verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
-          node.point = new X3D.MFVec3f(...verts);
-          written++;
-        } catch(ee) { console.warn('morph write failed', def, ee.message); }
+          var wf = node.getField('weight');
+          if (wf) { wf.setValue(weight); written++; }
+        } catch(e) { /* node doesn't exist on this avatar — skip */ }
       });
       return written;
-    }
-
-    // ── Apply morph: GLOBAL mode (Jack) ──────────────────────────────────
-    // Accumulate displacements into global skin mesh (_3), write it back.
-    // Local-coord nodes (eyeballs) written directly as in segment mode.
-    function _applyMorphGlobal() {
-      if (!_restPose[_skinMeshDef]) return 0;
-
-      // Working copy of global skin mesh
-      var globalFlat = new Float32Array(_restPose[_skinMeshDef]);
-
-      // Local-coord nodes (eyeballs): separate working copies
-      var localModified = {};
-      _faceCoordDefs.forEach(function(def) {
-        if (_globalIndices[def] === 'local' && _restPose[def])
-          localModified[def] = new Float32Array(_restPose[def]);
-      });
-
-      // Accumulate all AU displacements
-      Object.keys(_auWeights).forEach(function(au) {
-        var w = _auWeights[au]; if (!w || w <= 0) return;
-        var auDef = _auData[au]; if (!auDef) return;
-
-        Object.keys(auDef).forEach(function(coordName) {
-          var e = auDef[coordName];
-          if (!e || !e.indices) return;
-
-          var gi = _globalIndices[coordName];
-
-          if (gi === 'local') {
-            // Eyeball: write to local coord node
-            if (!localModified[coordName]) return;
-            e.indices.forEach(function(vi, k) {
-              var d = e.deltas[k];
-              localModified[coordName][vi*3]   += d[0] * w;
-              localModified[coordName][vi*3+1] += d[1] * w;
-              localModified[coordName][vi*3+2] += d[2] * w;
-            });
-          } else if (gi && gi.length) {
-            // Global region: map local index -> global index, write into globalFlat
-            e.indices.forEach(function(localVi, k) {
-              var globalVi = gi[localVi];
-              if (globalVi === undefined) return;
-              var d = e.deltas[k];
-              globalFlat[globalVi*3]   += d[0] * w;
-              globalFlat[globalVi*3+1] += d[1] * w;
-              globalFlat[globalVi*3+2] += d[2] * w;
-            });
-          }
-        });
-      });
-
-      // Write global skin mesh.
-      // Use _skinCoordNode (the live node inside the rendered Shape) if available.
-      // This is critical: writing to the DEF node does NOT trigger X_ITE to
-      // re-render — only the node the IndexedTriangleSet's coord field points to
-      // will cause a visual update. _skinCoordNode was resolved at cache time
-      // by navigating via HAnimHumanoid.skin rather than by DEF name.
-      var written = 0;
-      try {
-        var skinNode = _skinCoordNode || _scene.getNamedNode(_skinMeshDef);
-        if (skinNode) {
-          var verts = [];
-          for (var i = 0; i < globalFlat.length / 3; i++)
-            verts.push(new X3D.SFVec3f(globalFlat[i*3], globalFlat[i*3+1], globalFlat[i*3+2]));
-          skinNode.point = new X3D.MFVec3f(...verts);
-          written++;
-        }
-      } catch(ee) { console.warn('global skin write failed:', ee.message); }
-
-      // Write local coord nodes (eyeballs)
-      Object.keys(localModified).forEach(function(def) {
-        try {
-          var node = _scene.getNamedNode(def); if (!node) return;
-          var flat = localModified[def], verts = [];
-          for (var i = 0; i < flat.length / 3; i++)
-            verts.push(new X3D.SFVec3f(flat[i*3], flat[i*3+1], flat[i*3+2]));
-          node.point = new X3D.MFVec3f(...verts);
-          written++;
-        } catch(ee) { console.warn('local eyeball write failed', def, ee.message); }
-      });
-
-      return written;
-    }
-
-    // ── Dispatch to correct morph mode ────────────────────────────────────
-    function _applyMorph() {
-      if (!_morphReady) return;
-      var written = _globalMode ? _applyMorphGlobal() : _applyMorphSegment();
-      _updateOverlayAus();
-      var modeLabel = _globalMode ? 'global' : 'segment';
-      document.getElementById('mo-status').textContent =
-        written + ' node(s) written [' + modeLabel + ']';
     }
 
     function _updateOverlayAus() {
@@ -724,7 +360,7 @@ def avatar_preview():
       }
       el.innerHTML = active.map(function(kv) {
         var b = Math.round(kv[1] * 10);
-        return '<div class="mo-au-active">' + kv[0].replace('Jin','') +
+        return '<div class="mo-au-active">' + kv[0] +
                ' ' + '█'.repeat(b) + '░'.repeat(10-b) +
                ' ' + kv[1].toFixed(2) + '</div>';
       }).join('');
@@ -737,19 +373,7 @@ def avatar_preview():
         _browser = X3D.getBrowser(canvas);
         _scene   = _browser.currentScene;
         console.log('SAI ready — scene nodes:', _scene.rootNodes.length);
-
-        _discoverFaceCoords();
-
-        // Fetch X3D to read globalIndices, then complete init
-        _fetchGlobalIndices('__X3D_SRC__', function() {
-          var allOk = _cacheRestPoses();
-          _loadAuData();
-          _morphReady = true;
-          var modeLabel = _globalMode ? ' [global mesh]' : ' [segment]';
-          document.getElementById('mo-status').textContent =
-            (allOk ? 'morph driver ready' : 'some coords missing') + modeLabel;
-        });
-
+        document.getElementById('mo-coords').textContent = 'displacer driver ready';
       } catch(e) {
         console.warn('SAI init failed:', e.message);
         document.getElementById('mo-status').textContent = 'SAI init failed: ' + e.message;
@@ -781,11 +405,11 @@ def avatar_preview():
           try { interp = _scene.getNamedNode(interpDef); } catch(e) {}
           if (interp) {
             // Stop animation timers only if needed — they fight WireInterp writes.
-            // For Mixamo avatars Timer1 runs continuously and overwrites poses.
-            // For Cindy-style avatars the animation timers are already disabled
-            // during pose mode so we only stop what's actually running.
-            ['Timer1','DefaultTimer','WalkTimer','RunTimer','JumpTimer',
-             'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {
+            // Uses _enabledTimers (whatever enableTimer actually turned on)
+            // rather than a hardcoded name list — same fix, same reasoning
+            // as disableAllTimers below; this was an independent copy of
+            // the identical bug, not touched by that earlier fix.
+            _enabledTimers.forEach(function(def) {
               try {
                 var t = _scene.getNamedNode(def);
                 if (t && t.enabled) {
@@ -834,8 +458,11 @@ def avatar_preview():
           var auName = msg.au;
           var weight = typeof msg.weight === 'number' ? msg.weight : 0;
           _auWeights[auName] = weight;
-          if (_morphReady) _applyMorph();
-          console.log('morph:', auName, weight.toFixed(3));
+          var written = _setDisplacerWeight(auName, weight);
+          _updateOverlayAus();
+          document.getElementById('mo-status').textContent =
+            written + ' displacer(s) updated';
+          console.log('displacer:', auName, weight.toFixed(3), '->', written, 'node(s)');
 
         } else if (msg.type === 'enableTimer') {
           // Start animation — set enabled=true only. loop/cycleInterval are
@@ -846,53 +473,40 @@ def avatar_preview():
             var timer = _scene.getNamedNode(msg.timerDEF);
             if (timer) {
               timer.enabled = true;
+              // Track it so disableAllTimers can turn off exactly what's
+              // running, regardless of what this avatar calls its timers —
+              // no hardcoded name list needed for any naming convention.
+              if (_enabledTimers.indexOf(msg.timerDEF) === -1) {
+                _enabledTimers.push(msg.timerDEF);
+              }
             } else {
               console.warn('enableTimer: node not found:', msg.timerDEF);
             }
           } catch(e) { console.warn('enableTimer error:', e.message); }
 
         } else if (msg.type === 'disableAllTimers') {
-          // Disable all known animation timers (stop button)
+          // Disable whatever enableTimer actually turned on. Avatar-agnostic
+          // by construction: no assumption about timer DEF naming (Tripo's
+          // Timer1..Timer14, or DefaultTimer/WalkTimer/etc. on other rigs) —
+          // we only ever disable timers this driver itself enabled.
           _animTimersStopped = [];
-          ['Timer1','DefaultTimer','WalkTimer','RunTimer','JumpTimer',
-           'KickTimer','PitchTimer','YawTimer','RollTimer'].forEach(function(def) {
+          _enabledTimers.forEach(function(def) {
             try { var t = _scene.getNamedNode(def); if (t) t.enabled = false; } catch(e) {}
           });
+          _enabledTimers = [];
 
-        } else if (msg.type === 'getCoordPositions') {
-          // Read current point values from a named Coordinate node.
-          // Used by face AU capture to snapshot rest or posed vertex positions.
-          // Returns { type:'coordPositions', region, points:[x,y,z,...] }
-          var coordDef = msg.coordDef;  // e.g. 'JackCoord_skull'
-          var region   = msg.region;    // e.g. 'skull'
-          var coordNode = null;
-          try { coordNode = _scene.getNamedNode(coordDef); } catch(e) {}
-          var pts = [];
-          if (coordNode) {
-            try {
-              var pf = coordNode.getField('point');
-              var n  = pf.length;
-              for (var i = 0; i < n; i++) {
-                var p = pf.getValue(i);
-                pts.push(p.x, p.y, p.z);
-              }
-            } catch(e) { console.warn('getCoordPositions error:', e.message); }
-          }
-          evt.source.postMessage({
-            type:   'coordPositions',
-            region: region,
-            coordDef: coordDef,
-            points: pts,
-            found:  coordNode !== null
-          }, '*');
         }
+        // 'getCoordPositions' removed: it existed only to snapshot rest/posed
+        // vertex positions for the old capture-rest/capture-morph pipeline.
+        // Real per-vertex AU deltas now come straight from Blender's shape
+        // keys via glTF export (see anna_au_deltas.json) — nothing in this
+        // preview needs to read coordinates back out of the live scene.
       } catch(e) { console.warn('SAI write error:', e.message, msg); }
     });
   </script>
 </body>
 </html>"""
-    html = html.replace('__X3D_SRC__',          x3d_src)
-    html = html.replace('__EXPRESSIONS_URL__',  _expressions_url)
+    html = html.replace('__X3D_SRC__', x3d_src)
 
     return html, 200, {'Content-Type': 'text/html'}
 
@@ -947,7 +561,24 @@ def _avatar_dir() -> str:
 
 
 def _cultivar_xml_path(cultivar_name: str) -> str:
-    safe = cultivar_name.strip().replace(' ', '_')
+    # Day 94: MUST match CultivarRegistry._save_to_disk's own slug exactly
+    # (mccf_cultivar_lambda.py) — that lowercases; this used not to. Two
+    # different casings meant hanim_export() was writing a cultivar's
+    # clip data to a SEPARATE file (e.g. cultivar_Anna.xml) from the one
+    # CultivarRegistry actually serves reads from (cultivar_anna.xml) —
+    # both get loaded into the in-memory registry at startup since
+    # _load_from_disk() scans every .xml file and keys by the <Cultivar
+    # DEFinition name="..."> attribute, not the filename, so neither file
+    # errors or goes missing; the lowercase one just sorts after the
+    # capitalized one alphabetically and silently wins, discarding
+    # whatever hanim_export had just written. Confirmed against Anna:
+    # her avatar X3D resolved and wrote correctly after the Day 94 clip
+    # fix, but GET /cultivars/Anna kept serving pre-fix data regardless
+    # of a full server restart — restarting reloads both files and
+    # reproduces the exact same shadowing, so it looked like the fix
+    # hadn't taken even though the file on disk it actually targets was
+    # already right.
+    safe = cultivar_name.strip().lower().replace(' ', '_')
     return os.path.join(_hanim_base_dir(), 'cultivars', f'cultivar_{safe}.xml')
 
 
@@ -970,10 +601,38 @@ def _expressions_xml_path(hanim_src: str) -> str:
     return os.path.join(_avatar_dir(), f'{stem}_expressions.xml')
 
 
+_BACKUP_KEEP = 5   # timestamped generations kept per file (Anna.x3d is ~24 MB each)
+
+
 def _hanim_backup(filepath: str) -> None:
-    """Write .bak copy if file exists, overwriting any previous backup."""
-    if os.path.exists(filepath):
-        _shutil_hanim.copy2(filepath, filepath + '.bak')
+    """
+    Snapshot a file before it is modified.
+
+    Writes <file>.bak (latest — the atomic-rename rollback path in hanim_export reads
+    this) AND a timestamped copy under a sibling backups/ folder, pruned to the newest
+    _BACKUP_KEEP. The single .bak alone was overwritten on every export, so two exports in
+    a row destroyed the only good copy; the timestamped history survives that.
+    Best-effort for the history: a failure there never blocks the export.
+    """
+    if not os.path.exists(filepath):
+        return
+    _shutil_hanim.copy2(filepath, filepath + '.bak')
+    try:
+        base = os.path.basename(filepath)
+        bdir = os.path.join(os.path.dirname(filepath), 'backups')
+        os.makedirs(bdir, exist_ok=True)
+        stamp = _time_hanim.strftime('%Y%m%d-%H%M%S')
+        dst, n = os.path.join(bdir, f'{base}.{stamp}.bak'), 1
+        while os.path.exists(dst):
+            n += 1
+            dst = os.path.join(bdir, f'{base}.{stamp}-{n}.bak')
+        _shutil_hanim.copy2(filepath, dst)
+        mine = sorted((f for f in os.listdir(bdir) if f.startswith(base + '.') and f.endswith('.bak')),
+                      key=lambda f: os.path.getmtime(os.path.join(bdir, f)))
+        for old in mine[:-_BACKUP_KEEP]:
+            os.remove(os.path.join(bdir, old))
+    except OSError:
+        pass
 
 
 def _parse_x3d_file(filepath: str):
@@ -1007,8 +666,10 @@ def _serialise_x3d(xml_decl: str, root) -> str:
 def _update_image_texture_url(root, new_url: str) -> bool:
     """
     Find the atlas ImageTexture node and update its url attribute.
-    Prefers DEF containing 'TextureAtlas' (Jin convention).
-    Falls back to first ImageTexture found in tree (with or without namespace).
+    Prefers a DEF containing 'TextureAtlas' (a naming convention, not a
+    requirement — any avatar's atlas texture can use it).
+    Falls back to first ImageTexture found in tree (with or without namespace),
+    so this works even on avatars that don't follow the convention at all.
     Returns True if a node was updated.
     """
     ns = _X3D_NS
@@ -1070,10 +731,20 @@ def _update_displacer_weights(scene_el, displacers: list) -> int:
     """
     Write AU weight values back into HAnimDisplacer nodes in the X3D tree.
 
-    displacers: list of { au: 'JinBlink', weight: 0.75 }
+    displacers: list of { au: 'AU4_BrowLowerer', weight: 0.75 }
 
-    DEF naming convention (Jin/Colson): <Mesh>_MorphInterpolator_<AUName>
-    We match on the AU name suffix so all mesh variants are updated.
+    Avatar-agnostic naming convention (matches the live preview driver in
+    avatar_preview() exactly, so an X3D exported here previews correctly):
+    for AU name '<AUName>', the displacer DEF is one of
+      '<AUName>_displacer'    — unilateral AU, one displacer
+      '<AUName>_l_displacer'  — bilateral AU, left-side displacer
+      '<AUName>_r_displacer'  — bilateral AU, right-side displacer
+    All three candidates are checked for every AU; a bilateral AU with both
+    l_/r_ displacers present gets both updated from the same weight value.
+    No mesh name, joint name, or avatar name appears anywhere in the match —
+    an avatar that has none of these three nodes for a given AU is simply
+    skipped, which is what lets the same expressions/AU data drive any
+    avatar that happens to implement that AU.
 
     Returns count of displacer nodes updated.
     """
@@ -1085,6 +756,12 @@ def _update_displacer_weights(scene_el, displacers: list) -> int:
     if not au_map:
         return 0
 
+    # Every candidate DEF name we might need to match, mapped back to weight.
+    def_to_weight = {}
+    for au_name, weight in au_map.items():
+        for suffix in ('_displacer', '_l_displacer', '_r_displacer'):
+            def_to_weight[au_name + suffix] = weight
+
     ns_prefix = '{https://www.web3d.org/specifications/x3d-namespaces}'
     updated = 0
 
@@ -1093,12 +770,9 @@ def _update_displacer_weights(scene_el, displacers: list) -> int:
         if tag != 'HAnimDisplacer':
             continue
         def_val = el.get('DEF') or ''
-        # Match suffix: _<AUName>
-        for au_name, weight in au_map.items():
-            if def_val.endswith('_' + au_name):
-                el.set('weight', str(round(weight, 6)))
-                updated += 1
-                break  # one AU per displacer node
+        if def_val in def_to_weight:
+            el.set('weight', str(round(def_to_weight[def_val], 6)))
+            updated += 1
 
     return updated
 
@@ -1515,87 +1189,369 @@ def _write_camera_rig_manifest(hanim_src: str, camera_rig: dict, written_rig_typ
     os.replace(tmp, path)
 
 
+# ---------------------------------------------------------------------------
+# Clip export — timer index + safe writer  (Day 95 rewrite; closes S1/S2/S4)
+#
+# The contract this block enforces, in one place:
+#   1. A TimeSensor that has ROUTEs out of fraction_changed is REAL. Export
+#      never strips, rewrites, renames or re-parents it. (Old code deleted
+#      Anna's routed Timer6 this way and left 51 dangling ROUTEs.)
+#   2. A clip is AUTHORED only if some keyframe actually holds joints. The
+#      editor seeds every clip with two empty default keyframes, so "has a
+#      keyframes list" says nothing (old `if not keyframes` was never true).
+#   3. A clip's own timerDEF is honoured as-is when it resolves (by DEF or by
+#      EXPORT alias, e.g. BowTimer -> Timer8) to a real timer. It is never
+#      swapped for a description-matched neighbour — that is what pointed the
+#      cultivar at Timer8/Timer13 while the scene imports BowTimer.
+#   4. Only nodes this writer created (and that no author-supplied ROUTE
+#      touches beyond its own interpolators) are ever removed on re-export.
+# ---------------------------------------------------------------------------
+
+def _tag_local(el) -> str:
+    """Element tag without its namespace; '' for comments/PIs."""
+    t = el.tag
+    return t.rsplit('}', 1)[-1] if isinstance(t, str) else ''
+
+
+def _safe_def(name: str) -> str:
+    """Valid X3D DEF for names WE create (timers, interpolators): [A-Za-z0-9_] only."""
+    return _re.sub(r'[^A-Za-z0-9_]', '_', name or '')
+
+
+def _build_timer_index(scene_el, existing_routes: list):
+    """
+    Facts about every clip-candidate TimeSensor (WireTimer_* pose plumbing is excluded).
+
+    Returns (timers, alias):
+      timers: { DEF: {def, el, routes, exports, description, loop} } in document order,
+              routes = number of fraction_changed ROUTEs leaving it (0 = hollow)
+      alias:  { EXPORT AS name: DEF }  so a clip can reference a timer by the name the
+              scene IMPORTs (BowTimer) as well as by its DEF (Timer8).
+    """
+    routed = {}
+    for r in existing_routes:
+        if r.get('fromField') == 'fraction_changed':
+            routed[r.get('fromNode')] = routed.get(r.get('fromNode'), 0) + 1
+    exports = {}
+    for el in scene_el.iter():
+        if _tag_local(el) == 'EXPORT' and el.get('localDEF'):
+            exports.setdefault(el.get('localDEF'), []).append(el.get('AS') or el.get('localDEF'))
+    timers = {}
+    for el in scene_el.iter():
+        if _tag_local(el) != 'TimeSensor':
+            continue
+        d = el.get('DEF', '')
+        if not d or d.startswith('WireTimer_') or d in timers:
+            continue
+        timers[d] = {'def': d, 'el': el, 'routes': routed.get(d, 0),
+                     'exports': exports.get(d, []),
+                     'description': el.get('description', ''), 'loop': el.get('loop')}
+    alias = {}
+    for d, info in timers.items():
+        for a in info['exports']:
+            alias.setdefault(a, d)
+    return timers, alias
+
+
+def _resolve_timer_ref(ref: str, timers: dict, alias: dict):
+    """Timer info for a clip's timerDEF, whether it is a DEF or an EXPORT alias."""
+    if ref in timers:
+        return timers[ref]
+    return timers.get(alias.get(ref, ''))
+
+
+def _reachable_name(info: dict) -> str:
+    """The name a scene can IMPORT this timer under: its own DEF if exported under
+    that name, else its first EXPORT alias, else the DEF (exists but unreachable)."""
+    if info['def'] in info['exports']:
+        return info['def']
+    return info['exports'][0] if info['exports'] else info['def']
+
+
+def _find_real_clips_by_label(timers: dict) -> dict:
+    """
+    Fallback only — used when a clip's own timerDEF resolves to nothing real.
+    { humanized label: [timer info, ...] } for ROUTED timers, most reachable first
+    (a timer with an EXPORT can be IMPORTed by a scene; one without cannot).
+    """
+    by_label = {}
+    for d, info in timers.items():
+        if info['routes'] <= 0:
+            continue
+        label = _humanize_gesture_label(info['description'], d)
+        by_label.setdefault(label, []).append(info)
+    for lst in by_label.values():
+        lst.sort(key=lambda i: 0 if i['exports'] else 1)   # stable: keeps document order
+    return by_label
+
+
+def _clip_is_authored(clip: dict) -> bool:
+    """True only if some keyframe really holds joint rotations."""
+    for kf in clip.get('keyframes') or []:
+        if isinstance(kf, dict) and kf.get('joints'):
+            return True
+    return False
+
+
+def _joint_lookup(scene_el):
+    """(by_def, by_name): HAnimJoint DEF set, and name -> DEF. The editor keys keyframes
+    by the joint's `name`, but a ROUTE must target its DEF — in Anna 38 of 96 joints
+    differ (DEF 'L-Thigh', name 'L_Thigh'), so name-targeted ROUTEs dangled."""
+    by_def, by_name = set(), {}
+    for el in scene_el.iter():
+        if _tag_local(el) != 'HAnimJoint' or el.get('USE'):
+            continue
+        d = el.get('DEF')
+        if d:
+            by_def.add(d)
+            if el.get('name'):
+                by_name.setdefault(el.get('name'), d)
+    return by_def, by_name
+
+
+def _authored_interp_prefixes(timer_def: str, clip_name: str) -> tuple:
+    """DEF prefixes this writer has used for a clip's interpolators: current
+    '<timer>_Interp_' and the legacy '<clipname>Interp_'."""
+    pfx = [f'{timer_def}_Interp_']
+    if clip_name:
+        pfx.append(f'{clip_name}Interp_')
+    return tuple(pfx)
+
+
+def _is_own_authored(timer_def: str, clip_name: str, routes: list) -> bool:
+    """True if every fraction_changed ROUTE out of this timer feeds an interpolator
+    carrying this writer's own naming — i.e. it is our previous output, safe to replace.
+    A timer wired to anything else (Blender/Mixamo/Sunrize animation) is never ours."""
+    pfx = _authored_interp_prefixes(timer_def, clip_name)
+    outs = [r for r in routes if r.get('fromNode') == timer_def
+            and r.get('fromField') == 'fraction_changed']
+    return all(r.get('toNode', '').startswith(pfx) for r in outs)
+
+
+def _remove_authored_clip(scene_el, timer_def: str, clip_name: str) -> set:
+    """
+    Remove a previous version of a clip THIS WRITER authored: the TimeSensor, its EXPORT
+    and its own-named OrientationInterpolators. Callers must have checked
+    _is_own_authored first. Every removal is on the direct-child list it lives in
+    (nested nodes are handled too). Returns the set of removed DEFs so the caller can
+    drop the ROUTEs that touched them (no dangling endpoints).
+    """
+    pfx = _authored_interp_prefixes(timer_def, clip_name)
+    removed = set()
+    for parent in list(scene_el.iter()):
+        for child in list(parent):
+            t = _tag_local(child)
+            if t == 'TimeSensor' and child.get('DEF') == timer_def:
+                removed.add(timer_def); parent.remove(child)
+            elif t == 'EXPORT' and child.get('localDEF') == timer_def:
+                parent.remove(child)
+            elif t == 'OrientationInterpolator' and child.get('DEF', '').startswith(pfx):
+                removed.add(child.get('DEF')); parent.remove(child)
+    return removed
+
+
 def _write_clip_nodes(scene_el, clips: list, existing_routes: list) -> tuple:
     """
-    Append TimeSensor + OrientationInterpolator nodes for each clip, then
-    re-append all ROUTEs (existing + new clip ROUTEs) as the last nodes in
-    the Scene element.  Enforces ROUTE-last invariant regardless of clips[].
+    Resolve every clip in the export payload against the file, write nodes only for
+    genuinely authored clips, and re-append all ROUTEs last (ROUTE-last invariant).
 
-    In Phase 1, clips is [] — only existing_routes are re-appended last.
-    In Phase 2, clips[] is populated from the editor's keyframe state.
+    Per clip, in order:
+      1. clip.timerDEF resolves (DEF or EXPORT alias) to a timer that has ROUTEs
+         -> REAL. Nothing in the file is touched, resolved name = the timerDEF as sent.
+         Exceptions: (a) clip.loop_edited -> ONLY that timer's loop attribute is set;
+         (b) the clip also carries authored keyframes AND the timer is this writer's own
+         earlier output -> falls through to a clean rewrite (step 3).
+         Authored keyframes on someone else's routed timer are ignored, with a warning.
+      2. Not authored (no keyframe holds joints) and no real timer of that ref ->
+         label fallback (description match, only timers that have an EXPORT); else skipped.
+         Never writes and never strips anything.
+      3. Authored -> (re)write TimeSensor(enabled=false)+EXPORT+OrientationInterpolators
+         with sanitised DEFs, joints mapped name->DEF; refuse (warning) rather than
+         overwrite anything that isn't our own earlier output.
 
-    Returns (clips_written: int, routes_written: int).
+    Returns (clips_written, routes_written, resolved_defs, report) where report =
+    {'warnings': [str], 'loop_updated': [str], 'skipped': [str]}. resolved_defs maps clip
+    name -> the timerDEF the cultivar should store.
     """
     ns = _X3D_NS
     clips_written = 0
     new_routes    = list(existing_routes)
+    resolved_defs = {}
+    report        = {'warnings': [], 'loop_updated': [], 'skipped': []}
+
+    timers, alias   = _build_timer_index(scene_el, existing_routes)
+    by_label        = _find_real_clips_by_label(timers)
+    joint_defs, joint_names = _joint_lookup(scene_el)
+    used_defs = {el.get('DEF') for el in scene_el.iter() if el.get('DEF')}
 
     for clip in clips:
-        name     = clip.get('name', 'Default')
-        timer_def = clip.get('timerDEF', f'{name}Timer')
-        cycle    = float(clip.get('cycleInterval', 6.0))
-        loop     = 'true' if clip.get('loop', True) else 'false'
-        keyframes = clip.get('keyframes', [])
+        name     = clip.get('name') or 'Default'
+        ref      = (clip.get('timerDEF') or '').strip()
+        authored = _clip_is_authored(clip)
+        info     = _resolve_timer_ref(ref, timers, alias) if ref else None
+        real     = info is not None and info['routes'] > 0
 
-        # TimeSensor — enabled="false" invariant
+        # ── 1. The clip's own timer is real and wired ───────────────────
+        if real:
+            own = _is_own_authored(info['def'], name, existing_routes)
+            if not (authored and own):
+                if authored:
+                    report['warnings'].append(
+                        f"clip '{name}': keyframes ignored — timer '{ref}' already animates "
+                        f"{info['routes']} joints and was not authored by this editor; "
+                        f"add a NEW clip to author a new animation")
+                if clip.get('loop_edited'):
+                    want = 'true' if clip.get('loop', True) else 'false'
+                    if (info['el'].get('loop') or 'false') != want:
+                        info['el'].set('loop', want)
+                        report['loop_updated'].append(f"{info['def']} loop={want}")
+                resolved_defs[name] = ref
+                clips_written += 1
+                continue
+            # else: our own earlier authored output being re-authored — rewrite below,
+            # under the timer's real DEF even if the clip referenced it by EXPORT alias
+            ref = info['def']
+
+        # ── 2. Nothing authored: resolve by label, never write/strip ───
+        if not authored:
+            # Only a timer a scene can IMPORT (has an EXPORT) is a usable target; resolving to
+            # an unexported one (Anna's Timer13) would point the cultivar somewhere unreachable.
+            cands = [i for i in (by_label.get(name) or []) if i['exports']]
+            if cands:
+                resolved_defs[name] = _reachable_name(cands[0])
+                clips_written += 1
+            else:
+                report['skipped'].append(f"clip '{name}' (timerDEF '{ref}'): no real animation, "
+                                         f"no authored keyframes — nothing written")
+            continue
+
+        # ── 3. Genuinely authored clip: (re)write it ────────────────────
+        timer_def = _safe_def(ref or (name + 'Timer'))
+        if timer_def != ref and ref:
+            report['warnings'].append(f"clip '{name}': timerDEF '{ref}' is not a valid DEF; "
+                                      f"written as '{timer_def}'")
+        clash = timers.get(timer_def)
+        if clash is not None and clash['routes'] > 0 and not _is_own_authored(timer_def, name, existing_routes):
+            report['warnings'].append(f"clip '{name}': '{timer_def}' is a routed timer this editor "
+                                      f"did not author — clip not written")
+            continue
+
+        joint_kfs = {}   # joint DEF -> [(t, rot)]
+        for kf in sorted(clip.get('keyframes') or [], key=lambda k: k.get('t', 0.0)):
+            for jkey, rot in (kf.get('joints') or {}).items():
+                jdef = jkey if jkey in joint_defs else joint_names.get(jkey)
+                if jdef is None:
+                    report['warnings'].append(f"clip '{name}': joint '{jkey}' not in this file — skipped")
+                    continue
+                if rot and len(rot) == 4:
+                    joint_kfs.setdefault(jdef, []).append((kf.get('t', 0.0), rot))
+        if not joint_kfs:
+            report['skipped'].append(f"clip '{name}': no keyframe joints match this file — nothing written")
+            continue
+
+        removed = _remove_authored_clip(scene_el, timer_def, name)
+        if removed:
+            used_defs -= removed
+            new_routes = [r for r in new_routes
+                          if r.get('fromNode') not in removed and r.get('toNode') not in removed]
+
+        cycle = float(clip.get('cycleInterval', 6.0))
+        loop  = 'true' if clip.get('loop', True) else 'false'
+
         ts = _ET_hanim.SubElement(scene_el, f'{{{ns}}}TimeSensor')
         ts.set('DEF',           timer_def)
         ts.set('cycleInterval', str(cycle))
         ts.set('loop',          loop)
-        ts.set('enabled',       'false')
+        ts.set('enabled',       'false')          # invariant: never starts on its own
+        used_defs.add(timer_def)
 
-        # EXPORT so the loader can reach this timer via getImportedNode
-        # after the scene's <IMPORT> statement registers it.
-        # Identity export: localDEF and AS are the same bare name.
-        # The agent-suffix (e.g. WalkTimer_Cindy) is applied by the
-        # Scene Composer's IMPORT AS= attribute, not here.
+        # Identity EXPORT so the loader can reach it via getImportedNode once the
+        # scene's <IMPORT> registers it (agent suffix is added by Composer's AS=).
         ex = _ET_hanim.SubElement(scene_el, f'{{{ns}}}EXPORT')
         ex.set('localDEF', timer_def)
         ex.set('AS',       timer_def)
 
-        # OrientationInterpolators per joint
-        joint_names = set()
-        for kf in keyframes:
-            joint_names.update(kf.get('joints', {}).keys())
-
-        for joint in sorted(joint_names):
-            interp_def = f'{name}Interp_{joint}'
-            keys, key_vals = [], []
-            for kf in sorted(keyframes, key=lambda k: k.get('t', 0.0)):
-                rot = kf['joints'].get(joint)
-                if rot and len(rot) == 4:
-                    keys.append(str(round(kf.get('t', 0.0), 4)))
-                    key_vals.append(' '.join(str(round(v, 6)) for v in rot))
-            if not keys:
-                continue
+        for jdef in sorted(joint_kfs):
+            base = f'{timer_def}_Interp_{_safe_def(jdef)}'
+            interp_def, n = base, 2
+            while interp_def in used_defs:
+                interp_def, n = f'{base}_{n}', n + 1
+            used_defs.add(interp_def)
+            pts = joint_kfs[jdef]
             interp = _ET_hanim.SubElement(scene_el, f'{{{ns}}}OrientationInterpolator')
             interp.set('DEF',      interp_def)
-            interp.set('key',      ' '.join(keys))
-            interp.set('keyValue', ' '.join(key_vals))
-            # ROUTEs for this interpolator
+            interp.set('key',      ' '.join(str(round(t, 4)) for t, _ in pts))
+            interp.set('keyValue', ' '.join(' '.join(str(round(v, 6)) for v in rot) for _, rot in pts))
             new_routes.append({'fromNode': timer_def,  'fromField': 'fraction_changed',
-                                'toNode':   interp_def, 'toField':   'set_fraction'})
+                               'toNode':   interp_def, 'toField':   'set_fraction'})
             new_routes.append({'fromNode': interp_def, 'fromField': 'value_changed',
-                                'toNode':   joint,      'toField':   'rotation'})
+                               'toNode':   jdef,       'toField':   'set_rotation'})
 
+        resolved_defs[name] = timer_def
         clips_written += 1
 
     # Deduplicate and append all ROUTEs last — INVARIANT
-    seen_r   = set()
-    unique_r = []
+    seen_r, unique_r = set(), []
     for r in new_routes:
-        key = (r.get('fromNode',''), r.get('fromField',''),
-               r.get('toNode',''),  r.get('toField',''))
+        key = (r.get('fromNode', ''), r.get('fromField', ''), r.get('toNode', ''), r.get('toField', ''))
         if key not in seen_r:
             seen_r.add(key)
             unique_r.append(r)
-
     for r_attrib in unique_r:
         re_el = _ET_hanim.SubElement(scene_el, f'{{{ns}}}ROUTE')
         for k, v in r_attrib.items():
             re_el.set(k, v)
 
-    return clips_written, len(unique_r)
+    return clips_written, len(unique_r), resolved_defs, report
+
+
+def _x3d_integrity(root) -> dict:
+    """
+    Structural problems in an X3D tree, as {category: sorted [names]} — used to compare a
+    file BEFORE and AFTER an export mutates it. Categories: dangling_route (ROUTE endpoint
+    not defined), export_undefined (EXPORT localDEF not defined), export_duplicate_as,
+    def_duplicate, def_whitespace (invalid X3D name).
+    """
+    defs, imported = {}, set()
+    routes, exports = [], []
+    for el in root.iter():
+        t = _tag_local(el)
+        d = el.get('DEF')
+        if d:
+            defs[d] = defs.get(d, 0) + 1
+        if t == 'ROUTE':
+            routes.append(el)
+        elif t == 'EXPORT':
+            exports.append(el)
+        elif t == 'IMPORT':
+            imported.add(el.get('AS') or el.get('importedDEF') or '')
+    known = set(defs) | imported
+    endpoints = set()
+    for r in routes:
+        endpoints.add(r.get('fromNode', '')); endpoints.add(r.get('toNode', ''))
+    as_count = {}
+    for e in exports:
+        n = e.get('AS') or e.get('localDEF') or ''
+        as_count[n] = as_count.get(n, 0) + 1
+    return {
+        'dangling_route':      sorted(n for n in endpoints if n not in known),
+        'export_undefined':    sorted({e.get('localDEF', '') for e in exports if e.get('localDEF') not in defs}),
+        'export_duplicate_as': sorted(n for n, c in as_count.items() if c > 1),
+        'def_duplicate':       sorted(n for n, c in defs.items() if c > 1),
+        'def_whitespace':      sorted(n for n in defs if _re.search(r'\s', n)),
+    }
+
+
+def _integrity_regressions(before: dict, after: dict) -> list:
+    """Problems present AFTER but not BEFORE, as human-readable strings. Problems the file
+    already had (e.g. Anna's five whitespace-DEF stubs) do not block an export."""
+    out = []
+    for cat, names in after.items():
+        new = sorted(set(names) - set(before.get(cat, [])))
+        if new:
+            out.append(f"{cat}: {', '.join(new[:8])}" + (f" (+{len(new) - 8} more)" if len(new) > 8 else ''))
+    return out
+
 
 
 @hanim_bp.route('/hanim/skin_upload', methods=['POST'])
@@ -1656,11 +1612,29 @@ def hanim_export():
       clips:       [ { name, timerDEF, cycleInterval, loop, priority,
                         keyframes: [{t, joints:{jointName:[ax,ay,az,angle]}}],
                         cv_conditions } ],
-      displacers:  [ { def, weight } ]
+      displacers:  [ { au, weight } ]   # au: AU name; see _update_displacer_weights
     }
 
     Phase 1: skin URL + cultivar XML (HAnimFigure/Receptivity/Behaviors) only.
     Phase 2: clips[] populated — TimeSensor + OrientationInterpolator nodes written.
+
+    Day 95 contract (see _write_clip_nodes):
+      * A clip is written only if some keyframe holds joints; a routed TimeSensor is never
+        stripped/rewritten; clip.timerDEF (DEF or EXPORT alias) is honoured as sent.
+      * clip.loop_edited=true (set by the editor only when the author changed Loop) is the
+        ONLY thing that lets export touch the loop attribute of an existing real timer.
+      * cameraRig absent/null = leave the avatar's CAM_* rig nodes untouched; an explicit
+        object (even all-disabled) replaces them.
+      * The result is integrity-checked against the file as it arrived; an export that would
+        add a dangling ROUTE / undefined EXPORT / duplicate or whitespace DEF is refused with
+        HTTP 409 and NOTHING is written.
+      * removed_clips: [name] / renamed_clips: [{from, to}] delete or rename cultivar entries
+        (the avatar's timer nodes are left in place -- a deleted gesture becomes an orphan timer).
+      * The running server's in-memory cultivar registry is refreshed after the write, so the
+        Composer / Events editor see new clips WITHOUT a Flask restart.
+      * Refuses (HTTP 409, nothing written) if the cultivar record would not be valid XML.
+      * Response adds: warnings, loop_updated, skipped, preexisting_problems, clips_removed,
+        registry_refreshed.
 
     Atomic triple-write via .tmp + os.replace().  All three files backed up first.
     No file is modified if any write fails.
@@ -1743,9 +1717,14 @@ def hanim_export():
     if scene_el is None:
         return jsonify({'status': 'error',
                         'error': 'No <Scene> element found in X3D file'}), 500
+    # Snapshot the file's structural problems BEFORE anything mutates it, so the gate
+    # below refuses only problems this export would introduce (Anna already carries five
+    # whitespace-DEF stubs; those must not block every future export).
+    integrity_before = _x3d_integrity(x3d_root)
     _remove_routes(scene_el)
 
-    clips_written, routes_written = _write_clip_nodes(scene_el, clips, existing_routes)
+    clips_written, routes_written, resolved_timer_defs, clip_report = \
+        _write_clip_nodes(scene_el, clips, existing_routes)
 
     # ── Write camera rig nodes (Day 77) ────────────────────────────────────
     # camera_rig: { agent_eye: {enabled}, agent_side: {enabled},
@@ -1756,8 +1735,11 @@ def hanim_export():
     # Written into the avatar's OWN Scene (this file), not the calling scene —
     # per the Avatar Camera Rig Manifest doc's decision that rigs are authored once
     # per avatar file, not injected generically at Composer export time.
-    camera_rig = body.get('cameraRig') or {}
-    camera_rig_written = _write_camera_rig_nodes(scene_el, camera_rig)
+    # cameraRig ABSENT/null = "editor did not load the rig state" -> leave the rig nodes
+    # exactly as they are. Only an explicit object (even all-disabled) replaces the rig.
+    # (An empty {} used to wipe CAM_Eye/Side/Orbit/Track and their EXPORTs.)
+    camera_rig = body.get('cameraRig')
+    camera_rig_written = [] if camera_rig is None else _write_camera_rig_nodes(scene_el, camera_rig)
 
     # ── Write AU displacer weights ────────────────────────────────────────
     displacers      = body.get('displacers') or []
@@ -1779,6 +1761,18 @@ def hanim_export():
         for ch in ('E', 'B', 'P', 'S')
     }
 
+    # Day 95: clips the author DELETED or RENAMED in the editor. Export used to merge only
+    # what it was sent and preserve every existing cultivar entry, so a deleted clip could
+    # never leave the cultivar and a rename left the old name behind as a duplicate (a
+    # renamed Bow became a second entry, 'BowHead', still firing the Bow timer).
+    existing_by_name = {c.get('name'): c for c in cultivar_def.behavior_clips}
+    clips_removed = []
+    _payload_names = {c.get('name', 'Default') for c in clips}
+    for _n in (body.get('removed_clips') or []):
+        if _n in existing_by_name and _n not in _payload_names:
+            del existing_by_name[_n]
+            clips_removed.append(_n)
+
     if clips:
         # Day 83: real bug fix, confirmed by direct user test (playback panel
         # showed several real, working clips; cultivar still only had Default
@@ -1795,23 +1789,35 @@ def hanim_export():
         #
         # Fixed to merge by name instead of replacing: existing entries not
         # present in this export's clips[] are preserved untouched; entries
-        # that ARE present get added or updated. Deliberately does NOT touch
-        # _write_clip_nodes above — that still only ever writes X3D
-        # TimeSensor/Interpolator nodes for what's actually in clips[], so
-        # pre-existing real TimeSensors are never duplicated by this change
-        # (confirmed _write_clip_nodes has no existing-DEF check at all —
-        # feeding it already-real clips would create duplicate TimeSensor
-        # DEFs, invalid X3D. Only the cultivar's own clip-selection table is
-        # affected here.)
-        existing_by_name = {c.get('name'): c for c in cultivar_def.behavior_clips}
+        # that ARE present get added or updated.
+        #
+        # Day 94: the gap this comment used to warn about (_write_clip_nodes
+        # having no existing-DEF check, so feeding it already-real clips
+        # would create duplicate TimeSensor DEFs) is now closed in that
+        # function itself. As part of that fix it also resolves, per clip,
+        # the timerDEF that's ACTUALLY real and ROUTE-wired — which is not
+        # always what the client sent (Character Creator can only know
+        # whatever timerDEF was last saved here, so a bad value keeps
+        # re-confirming itself across saves unless something checks against
+        # the real file). Using resolved_timer_defs here instead of trusting
+        # clip.get('timerDEF') directly is what breaks that loop.
         for clip in clips:
             name = clip.get('name', 'Default')
-            c = {
+            resolved_def = resolved_timer_defs.get(name)
+            if resolved_def is None:
+                # This clip had no real animation and no authored keyframes
+                # — _write_clip_nodes wrote nothing for it. Don't add a
+                # cultivar entry pointing at a timerDEF that doesn't exist.
+                continue
+            # Start from the existing entry so keys this merge doesn't own (e.g. cycleInterval)
+            # survive instead of being dropped by the wholesale replace.
+            c = dict(existing_by_name.get(name) or {})
+            c.update({
                 'name':     name,
-                'timerDEF': clip.get('timerDEF', f'{name}Timer'),
+                'timerDEF': resolved_def,
                 'loop':     bool(clip.get('loop', True)),
                 'priority': int(clip.get('priority', 0)),
-            }
+            })
             cv = clip.get('cv_conditions') or {}
             for ch in ('E', 'B', 'P', 'S'):
                 for bound in ('min', 'max'):
@@ -1823,11 +1829,51 @@ def hanim_export():
                         except (TypeError, ValueError):
                             pass
             existing_by_name[name] = c
+
+    # A rename is complete only once the NEW name is in the merged set (a clip the merge
+    # skipped must not take its old entry with it).
+    for _r in (body.get('renamed_clips') or []):
+        _a, _b = _r.get('from'), _r.get('to')
+        if _a and _b and _a != _b and _a in existing_by_name and _b in existing_by_name:
+            del existing_by_name[_a]
+            clips_removed.append(_a)
+
+    if clips or clips_removed:
         cultivar_def.behavior_clips = list(existing_by_name.values())
         p0 = [c for c in cultivar_def.behavior_clips if c.get('priority', 0) == 0]
         cultivar_def.behavior_default = (
-            p0[0]['name'] if p0 else cultivar_def.behavior_clips[0]['name']
+            p0[0]['name'] if p0 else
+            (cultivar_def.behavior_clips[0]['name'] if cultivar_def.behavior_clips else 'Default')
         )
+
+    # ── Integrity gate ───────────────────────────────────────────────────
+    # Refuse (writing NOTHING) if this export would leave the avatar with a structural
+    # problem it did not have on the way in: a ROUTE to a node that no longer exists, an
+    # EXPORT of an undefined DEF, a duplicate DEF/EXPORT name, or a whitespace DEF.
+    integrity_after = _x3d_integrity(x3d_root)
+    regressions = _integrity_regressions(integrity_before, integrity_after)
+    if regressions:
+        return jsonify({
+            'status':      'error',
+            'error':       'export refused — it would corrupt the avatar file (nothing was written): '
+                           + '; '.join(regressions),
+            'regressions': regressions,
+        }), 409
+
+    # -- Cultivar validity gate -------------------------------------------
+    # CultivarDefinition.to_xml() writes clip names into attributes WITHOUT escaping, so a
+    # gesture called  Tom & Jerry  (or containing < > or a double quote) would produce an
+    # unparseable cultivar file and the character would fail to load at the next startup.
+    # Serialise once, prove it parses, and refuse (writing nothing) if it does not.
+    new_cultivar_xml = cultivar_def.to_xml()
+    try:
+        _ET_hanim.fromstring(new_cultivar_xml.split('?>', 1)[1] if new_cultivar_xml.lstrip().startswith('<?xml') else new_cultivar_xml)
+    except _ET_hanim.ParseError as exc:
+        return jsonify({
+            'status': 'error',
+            'error':  'export refused -- the cultivar record would be invalid XML (nothing was written). '
+                      'A clip name containing & < > or a double quote is the usual cause: ' + str(exc),
+        }), 409
 
     # ── Atomic triple-write ──────────────────────────────────────────────
     # 1. Back up all three files (expressions XML may not exist yet — that is fine)
@@ -1836,7 +1882,6 @@ def hanim_export():
     _hanim_backup(expressions_filepath)
 
     new_x3d_xml      = _serialise_x3d(xml_decl, x3d_root)
-    new_cultivar_xml = cultivar_def.to_xml()
 
     tmp_x3d      = x3d_filepath      + '.tmp'
     tmp_cultivar = cultivar_filepath + '.tmp'
@@ -1880,6 +1925,21 @@ def hanim_export():
         return jsonify({'status': 'error',
                         'error': f'atomic rename failed (backups preserved): {exc}'}), 500
 
+    # Day 95: the running server serves cultivars from an IN-MEMORY registry that is loaded
+    # from disk once, at startup. Writing the file alone left the Composer/Events editor
+    # (GET /cultivars/xml) on the old clip list until Flask was restarted. Refresh the
+    # registry entry with the definition we just wrote (memory only; the file is already
+    # written atomically above). Best effort: a failure here never fails the export.
+    registry_refreshed = False
+    try:
+        from mccf_cultivar_lambda import cultivar_bp as _cbp
+        _live = getattr(_cbp, 'registry', None)
+        if _live is not None:
+            _live._cultivars[cultivar_def.name] = cultivar_def
+            registry_refreshed = True
+    except Exception:
+        registry_refreshed = False
+
     _expr_basename = os.path.basename(expressions_filepath)
 
     # Manifest write happens AFTER the atomic X3D rename succeeds — a manifest
@@ -1892,7 +1952,8 @@ def hanim_export():
     # a phantom rig claim is not) but still best-effort try/except so a manifest
     # write failure doesn't turn a successful export into a 500.
     try:
-        _write_camera_rig_manifest(hanim_src, camera_rig, camera_rig_written)
+        if camera_rig is not None:
+            _write_camera_rig_manifest(hanim_src, camera_rig, camera_rig_written)
     except OSError as exc:
         return jsonify({
             'status': 'ok',
@@ -1905,6 +1966,9 @@ def hanim_export():
             'expressions_written': expressions_written,
             'camera_rig_written': camera_rig_written,
             'camera_rig_manifest_warning': f'manifest write failed: {exc}',
+            'warnings': clip_report['warnings'], 'loop_updated': clip_report['loop_updated'],
+            'skipped': clip_report['skipped'],
+            'clips_removed': clips_removed, 'registry_refreshed': registry_refreshed,
         })
 
     return jsonify({
@@ -1918,6 +1982,13 @@ def hanim_export():
         'camera_rig_written':   camera_rig_written,
         'displacers_updated':   displacers_updated,
         'expressions_written':  expressions_written,
+        # Day 95: what the export did NOT do, and what it noticed
+        'warnings':             clip_report['warnings'],
+        'loop_updated':         clip_report['loop_updated'],
+        'skipped':              clip_report['skipped'],
+        'preexisting_problems': {k: len(v) for k, v in integrity_before.items() if v},
+        'clips_removed':        clips_removed,        # cultivar entries deleted/renamed away
+        'registry_refreshed':   registry_refreshed,   # running server's cultivar list updated (no restart)
     })
 
 
@@ -2033,6 +2104,17 @@ def _parse_center(center_str: str) -> list:
     return [0.0, 0.0, 0.0]
 
 
+def _parse_rotation(rot_str: str) -> list:
+    """Parse an X3D SFRotation string to [ax, ay, az, angle_radians]; identity if absent/invalid."""
+    try:
+        parts = (rot_str or '').strip().split()
+        if len(parts) == 4:
+            return [round(float(p), 6) for p in parts]
+    except (ValueError, AttributeError):
+        pass
+    return [0.0, 0.0, 1.0, 0.0]
+
+
 def _walk_joints(el, parent_name, joints: list) -> None:
     """
     Recursively walk the X3D element tree collecting HAnimJoint nodes
@@ -2078,6 +2160,10 @@ def _walk_joints(el, parent_name, joints: list) -> None:
         'name':   display_name,          # human-readable / name= attr
         'def':    def_val,               # exact DEF value — joint map key
         'center': _parse_center(el.get('center', '0 0 0')),
+        # Day 95: the joint's REST rotation as authored in the file. Blender/Tripo rigs bake
+        # bone orientation into it (Anna: 30 of 48 joints are non-zero, e.g. thighs 173 deg),
+        # so the editor cannot assume "rest == [0,0,1,0]" the way an H-Anim-native rig allows.
+        'rest':   _parse_rotation(el.get('rotation', '')),
         'parent': parent_name,
         'region': _joint_region(display_name),
     })
@@ -2157,6 +2243,21 @@ def hanim_joints():
 
     # ── Scan for TimeSensor nodes — playable clips ──────────────────────────
     # Skip WireTimer_ nodes — those are pose infrastructure, not animation clips
+    #
+    # Day 95 (S3): every entry now says whether it is REAL. `routes` = number of
+    # fraction_changed ROUTEs leaving the timer; `hollow` = routes == 0 (a stub that
+    # animates nothing — duplicates and leftovers of old exports; Anna has ~82 of them).
+    # `exported_as` = the names a scene can IMPORT it under. The full list is still returned
+    # (the wiring/ingest detection below relies on it); the editor filters on `hollow`.
+    _routes_all = _collect_routes(root)
+    _routed = {}
+    for _r in _routes_all:
+        if _r.get('fromField') == 'fraction_changed':
+            _routed[_r.get('fromNode')] = _routed.get(_r.get('fromNode'), 0) + 1
+    _exported = {}
+    for _el in root.iter():
+        if _tag_local(_el) == 'EXPORT' and _el.get('localDEF'):
+            _exported.setdefault(_el.get('localDEF'), []).append(_el.get('AS') or _el.get('localDEF'))
     clips = []
     seen_defs = set()
     for tag in (f'{{{ns}}}TimeSensor', 'TimeSensor'):
@@ -2167,16 +2268,29 @@ def hanim_joints():
             if def_val.startswith('WireTimer_'):
                 continue
             seen_defs.add(def_val)
-            # Derive a human-readable name:
-            # Use description attr if present, else strip 'Timer' suffix,
-            # else use the DEF as-is. 'Timer1' → 'mixamo clip 1'.
+            # Derive a human-readable name via the SAME normalization
+            # _write_clip_nodes/hanim_ingest_mixamo already use
+            # (_humanize_gesture_label), not a second, looser one —
+            # this used to just use the raw description as-is
+            # ('Armature|preset:biped:look around'), which meant a
+            # clip discovered here and a clip already saved into a
+            # cultivar's behavior_clips (always humanized, e.g.
+            # 'Look Around') never matched as the same clip. That
+            # mismatch is exactly what let _write_clip_nodes' new
+            # real-animation match silently miss a clip whenever
+            # Character Creator seeded _heClips straight from this
+            # route instead of from a previously-saved cultivar.
             desc = el.get('description', '').strip()
-            if desc:
-                name = desc
-            else:
-                name = def_val.replace('Timer', '').strip()
-                if not name or name.isdigit():
-                    name = f'clip {name}' if name.isdigit() else def_val
+            name = _humanize_gesture_label(desc, def_val)
+            if not desc:
+                # No description at all — _humanize_gesture_label
+                # already falls back to def_val here; keep the old
+                # 'clip N' cosmetic for a bare numeric suffix
+                # ('Timer1' -> '1' -> 'clip 1') rather than showing
+                # the raw DEF, same behavior as before this change.
+                bare = def_val.replace('Timer', '').strip()
+                if bare.isdigit():
+                    name = f'clip {bare}'
             try:
                 cycle = float(el.get('cycleInterval', 6.0))
             except (TypeError, ValueError):
@@ -2185,8 +2299,14 @@ def hanim_joints():
                 'name':          name,
                 'timerDEF':      def_val,
                 'cycleInterval': cycle,
-                'loop':          el.get('loop', 'true').lower() == 'true',
+                # X3D's default for TimeSensor.loop is FALSE. This used to default to
+                # 'true', so every timer with no loop attribute (Anna's Bow, Idle, Wait)
+                # was reported — and shown in the editor — as looping when it isn't.
+                'loop':          el.get('loop', 'false').lower() == 'true',
                 'enabled':       el.get('enabled', 'false').lower() == 'true',
+                'routes':        _routed.get(def_val, 0),
+                'hollow':        _routed.get(def_val, 0) == 0,
+                'exported_as':   _exported.get(def_val, []),
             })
 
     # ── Load joint map from cultivar if one is linked ────────────────────
@@ -2893,363 +3013,277 @@ def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
     os.replace(tmp, cultivar_path)
 
 
-@hanim_bp.route('/hanim/fix-face-coords', methods=['POST'])
-def hanim_fix_face_coords():
+# The old avatar-specific facial-morph pipeline (fix-face-coords,
+# save-face-morph, inject-face-aus, get-face-morph-status) lived here.
+# It hand-wrote per-region Coordinate nodes and CoordinateInterpolator
+# ("AnimationAdapter_<region>") ROUTEs to fake displacement, because at
+# the time nobody had confirmed HAnimDisplacer.weight could be driven
+# directly and sparsely against HAnimHumanoid.skinCoord. That's now
+# confirmed (see SEED_facial_displacer_breakthrough.md) and real AU
+# vertex deltas are extracted straight from Blender's shape keys via
+# glTF export, so this endpoint group is removed rather than kept as
+# dead weight. _update_displacer_weights() above and the live preview
+# driver in avatar_preview() are the spec-compliant replacement.
+
+
+# ---------------------------------------------------------------------------
+# /hanim/build-displacers — the general-purpose version of the one-off
+# script that built Anna's first 9 real HAnimDisplacer nodes. That build
+# required a conversation because the joint mapping (which AU attaches to
+# which joint, split by side or single) was worked out by hand, against
+# Anna's specific rig, in-session. The mapping logic itself was never
+# avatar-specific reasoning, though — it's a small set of naming rules
+# ("brow AUs want an eyebrow joint if one exists", "otherwise fall back to
+# Head") that apply to any avatar's real joint list. This endpoint makes
+# that rule set a permanent, reusable part of the pipeline, so building or
+# rebuilding an avatar's displacers after a Blender pass doesn't require a
+# session with Claude every time — same self-service spirit as the
+# Dialogue Editor's "Generate improv lines" / "Run Arc" split.
+# ---------------------------------------------------------------------------
+
+# (au_name_substring, joint_hint) — first match wins, checked top to bottom.
+# joint_hint of 'eyebrow'/'eyelid'/'eyeball' means "split by side if both
+# l_<hint>_joint and r_<hint>_joint exist on this avatar; otherwise fall
+# through to the Head default below." joint_hint of a literal joint name
+# (e.g. 'temporomandibular') means "single displacer on that joint if it
+# exists; otherwise fall through."
+_AU_JOINT_RULES = [
+    ('InnerBrowRaiser',   'eyebrow'),
+    ('OuterBrowRaiser',   'eyebrow'),
+    ('BrowLowerer',       'eyebrow'),
+    ('UpperLidRaiser',    'eyelid'),
+    ('LidTightener',      'eyelid'),
+    ('LidDroop',          'eyelid'),
+    ('Squint',            'eyelid'),
+    ('Slit',              'eyelid'),
+    ('Blink',             'eyelid'),
+    ('Wink',              'eyelid'),
+    ('EyesClosed',        'eyelid'),
+    ('JawDrop',           'temporomandibular'),
+    ('MouthStretch',      'temporomandibular'),
+]
+_AU_JOINT_FALLBACK = 'Head'
+
+
+def _hanim_discover_joints(content: str) -> dict:
     """
-    POST /hanim/fix-face-coords
-    Body: { hanim_src: str }
-
-    Fix Blender X3D export bug: named Coordinate nodes used as morph-target
-    data holders (e.g. JackCoord_skull) sit inside a Group and have no
-    containerField attribute.  X_ITE infers containerField='coord' by default,
-    then rejects them because Group has no coord field.
-
-    Fix: scan every <Coordinate .../> tag across its FULL extent (point data
-    can be thousands of chars before the DEF attribute appears).  For any tag
-    that has a DEF attribute but lacks containerField, inject
-    containerField="point" right after <Coordinate.
-
-    Anonymous geometry Coordinate nodes (no DEF attribute) are left strictly
-    alone — they live inside IndexedTriangleSets where the default 'coord'
-    containerField is correct.  skinCoord nodes already have containerField
-    and are skipped by the 'already has containerField' check.
-
-    containerField="point" is harmless for SAI DEF lookup — the morph driver
-    reads these nodes by name, not via the scene graph hierarchy.
-
-    Safe to run on any avatar; returns fixed=0 if no changes needed.
-    Atomic write: .tmp + os.replace(). .bak created first.
-
-    Returns: { status, fixed, hanim_path }
+    Scan an X3D file's text for every real HAnimJoint's name and X
+    translation. Returns {joint_name: x_translation_or_None}. Used to (a)
+    know which joints this specific avatar actually has, and (b) derive
+    the left/right sign convention from the avatar's own rig rather than
+    assuming it matches any other avatar's (confirmed for Anna: l_ joints
+    sit at negative X, r_ joints at positive X — but that's a fact about
+    her rig, not a rule to hardcode for everyone).
     """
-    import re as _re_ffc
+    joints = {}
+    import re as _re2
+    # Two-step, not one combined regex: a single regex with an optional
+    # group preceded by a lazy quantifier will happily skip the optional
+    # group even when it's present later in the string (confirmed by
+    # testing against a real joint tag — this is exactly that trap, not
+    # hypothetical). Capture each full opening tag first, then search
+    # for translation within that known-bounded substring.
+    for m in _re2.finditer(r'<HAnimJoint\b[^>]*?/?>', content, _re2.DOTALL):
+        tag = m.group(0)
+        name_m = _re2.search(r'name="([^"]+)"', tag)
+        if not name_m:
+            continue
+        name = name_m.group(1)
+        trans_m = _re2.search(r'translation="([^"]*)"', tag)
+        x = None
+        if trans_m:
+            parts = trans_m.group(1).split()
+            if parts:
+                try: x = float(parts[0])
+                except ValueError: x = None
+        joints[name] = x
+    return joints
 
-    body      = request.get_json(silent=True) or {}
-    hanim_src = (body.get('hanim_src') or '').strip()
+
+def _hanim_resolve_au_joint(au_name: str, available_joints: dict) -> dict:
+    """
+    Decide where a given AU's displacer(s) should attach on THIS avatar's
+    actual rig. Returns one of:
+      {'mode': 'split', 'l_joint': ..., 'r_joint': ...}
+      {'mode': 'single', 'joint': ...}
+      {'mode': 'unavailable'}  — no suitable joint exists at all, not even
+                                  the Head fallback (shouldn't normally
+                                  happen, but not assumed impossible)
+    """
+    hint = None
+    for substr, h in _AU_JOINT_RULES:
+        if substr in au_name:
+            hint = h
+            break
+
+    if hint in ('eyebrow', 'eyelid', 'eyeball'):
+        l_name, r_name = f'l_{hint}_joint', f'r_{hint}_joint'
+        if l_name in available_joints and r_name in available_joints:
+            return {'mode': 'split', 'l_joint': l_name, 'r_joint': r_name}
+        # fall through to Head if this avatar doesn't have the pair
+    elif hint and hint in available_joints:
+        return {'mode': 'single', 'joint': hint}
+        # (temporomandibular case — falls through to Head if absent)
+
+    if _AU_JOINT_FALLBACK in available_joints:
+        return {'mode': 'single', 'joint': _AU_JOINT_FALLBACK}
+    return {'mode': 'unavailable'}
+
+
+def _hanim_build_displacer_xml(def_name: str, indices: list, deltas_by_idx: dict) -> str:
+    coord_index = ' '.join(str(i) for i in indices)
+    disp_parts = []
+    for i in indices:
+        dx, dy, dz = deltas_by_idx[i]
+        disp_parts.append(f'{dx!r} {dy!r} {dz!r}')
+    displacements = ' '.join(disp_parts)
+    return (f'<HAnimDisplacer DEF="{def_name}" name="{def_name}" '
+            f'coordIndex="{coord_index}" displacements="{displacements}" weight="0" />')
+
+
+def _hanim_remove_existing_displacer(content: str, def_name: str) -> str:
+    """Idempotency: strip any prior displacer with this exact DEF before
+    inserting a fresh one, so rebuilding an AU (e.g. after a Blender
+    smoothing pass) never leaves a stale duplicate behind."""
+    import re as _re2
+    pattern = r'\s*<HAnimDisplacer DEF="' + _re2.escape(def_name) + r'"[^>]*?/>'
+    return _re2.sub(pattern, '', content, count=1, flags=_re2.DOTALL)
+
+
+def _hanim_insert_into_joint(content: str, joint_name: str, children_xml: str) -> str:
+    """Insert children_xml as the first child of the named HAnimJoint,
+    whether it's currently self-closing or already has children. Raises
+    ValueError if the joint isn't found (caller decides how to report it,
+    rather than this failing silently)."""
+    import re as _re2
+    m = _re2.search(r'<HAnimJoint[^>]*name="' + _re2.escape(joint_name) + r'"[^>]*?(/?)>',
+                     content, _re2.DOTALL)
+    if not m:
+        raise ValueError(f'joint not found: {joint_name}')
+    matched_text = m.group(0)
+    self_closing = m.group(1) == '/'
+    indent = '\n      '
+    if self_closing:
+        new_text = matched_text[:-2] + '>' + indent + children_xml + '\n    </HAnimJoint>'
+    else:
+        new_text = matched_text + indent + children_xml
+    if content.count(matched_text) != 1:
+        raise ValueError(f'joint tag for {joint_name!r} is not uniquely matchable — refusing to guess')
+    return content.replace(matched_text, new_text, 1)
+
+
+@hanim_bp.route('/hanim/build-displacers', methods=['POST'])
+def hanim_build_displacers():
+    """
+    POST /hanim/build-displacers
+
+    General-purpose version of the script that built Anna's first 9 real
+    displacers — same convention (<AUName>_displacer /
+    <AUName>_l_displacer / <AUName>_r_displacer), same joint-mapping
+    rules, but auto-detecting which joints THIS avatar actually has
+    rather than assuming any specific rig. Idempotent: rebuilding an AU
+    that already exists replaces it cleanly rather than duplicating it,
+    so this is also the right call after a Blender smoothing pass on an
+    existing AU, not just for building new ones.
+
+    Request body:
+    {
+      "hanim_src":   "Anna_displacer_test2.x3d",   // resolved under static/avatars/
+      "au_deltas":   { "AU12_LipCornerPuller": {"1570": [dx,dy,dz], ...}, ... },
+      "base_mesh":   [[x,y,z], ...]                 // rest-pose points, same
+                                                      // vertex numbering as
+                                                      // au_deltas' keys
+    }
+
+    Only the AUs present in "au_deltas" are touched — an existing avatar
+    with 9 displacers, given just an updated AU12 entry, gets exactly
+    AU12 rebuilt and everything else left alone.
+
+    Response:
+    {
+      "status": "ok",
+      "built": [ {"au": "AU12_LipCornerPuller", "mode": "single",
+                  "joint": "Head", "vertex_count": 443}, ... ],
+      "skipped": [ {"au": "...", "reason": "no suitable joint found"} ]
+    }
+    """
+    data = request.get_json() or {}
+    hanim_src = data.get('hanim_src', '')
+    au_deltas = data.get('au_deltas') or {}
+    base_mesh = data.get('base_mesh') or []
+
     if not hanim_src:
-        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
+        return jsonify({'error': 'hanim_src required'}), 400
+    if not au_deltas:
+        return jsonify({'error': 'au_deltas required (at least one AU)'}), 400
+    if not base_mesh:
+        return jsonify({'error': 'base_mesh required — needed for left/right splitting'}), 400
 
     filepath = _hanim_x3d_path(hanim_src)
     if not os.path.exists(filepath):
-        return jsonify({'status': 'error',
-                        'error': f'HAnim X3D not found: {os.path.basename(hanim_src)}'}), 404
+        return jsonify({'error': f'avatar file not found: {hanim_src}'}), 404
 
-    with open(filepath, 'r', encoding='utf-8') as fh:
-        content = fh.read()
+    with open(filepath, encoding='utf-8') as f:
+        content = f.read()
 
-    # Scan every <Coordinate .../> across its FULL tag extent.
-    # A regex that stops at '>' would miss DEF attributes buried after
-    # thousands of chars of point data, so we find the closing '/>' explicitly.
-    inserts = []  # list of (char_position, text_to_insert)
+    available_joints = _hanim_discover_joints(content)
+    built, skipped = [], []
 
-    for m in _re_ffc.finditer(r'<Coordinate ', content):
-        tag_start = m.start()
-        tag_end   = content.find('/>', tag_start)
-        if tag_end == -1:
-            continue
-        full_tag = content[tag_start:tag_end + 2]
+    for au_name, verts in au_deltas.items():
+        placement = _hanim_resolve_au_joint(au_name, available_joints)
+        deltas_by_idx = {int(k): v for k, v in verts.items()}
 
-        # Skip if already has containerField (includes skinCoord nodes)
-        if 'containerField' in full_tag:
+        if placement['mode'] == 'unavailable':
+            skipped.append({'au': au_name, 'reason': 'no suitable joint found on this avatar, not even Head'})
             continue
 
-        # Skip anonymous geometry nodes — only fix named (DEF) nodes
-        if not _re_ffc.search(r'DEF=["\']', full_tag):
-            continue
+        try:
+            if placement['mode'] == 'split':
+                # Derive which side of x=0 is actually "left" from this
+                # avatar's own l_<hint>_joint translation, rather than
+                # assuming negative-x=left holds for every rig. True for
+                # Anna (confirmed: l_eyebrow_joint sits at x=-0.017) but
+                # that's a fact about her rig, not a rule to hardcode.
+                l_joint_x = available_joints.get(placement['l_joint'])
+                left_is_negative = (l_joint_x is None) or (l_joint_x < 0)
+                left_idx, right_idx = [], []
+                for k in verts:
+                    idx = int(k)
+                    x = base_mesh[idx][0] if idx < len(base_mesh) else 0.0
+                    is_left = (x < 0) if left_is_negative else (x >= 0)
+                    (left_idx if is_left else right_idx).append(idx)
 
-        # Named Coordinate without containerField — inject "point"
-        inserts.append((tag_start + len('<Coordinate '), 'containerField="point" '))
+                l_def = f'{au_name}_l_displacer'
+                r_def = f'{au_name}_r_displacer'
+                content = _hanim_remove_existing_displacer(content, l_def)
+                content = _hanim_remove_existing_displacer(content, r_def)
+                content = _hanim_insert_into_joint(
+                    content, placement['l_joint'],
+                    _hanim_build_displacer_xml(l_def, left_idx, deltas_by_idx))
+                content = _hanim_insert_into_joint(
+                    content, placement['r_joint'],
+                    _hanim_build_displacer_xml(r_def, right_idx, deltas_by_idx))
+                built.append({'au': au_name, 'mode': 'split',
+                              'l_joint': placement['l_joint'], 'r_joint': placement['r_joint'],
+                              'l_vertex_count': len(left_idx), 'r_vertex_count': len(right_idx)})
+            else:
+                def_name = f'{au_name}_displacer'
+                idx_list = [int(k) for k in verts]
+                content = _hanim_remove_existing_displacer(content, def_name)
+                content = _hanim_insert_into_joint(
+                    content, placement['joint'],
+                    _hanim_build_displacer_xml(def_name, idx_list, deltas_by_idx))
+                built.append({'au': au_name, 'mode': 'single',
+                              'joint': placement['joint'], 'vertex_count': len(idx_list)})
+        except ValueError as e:
+            skipped.append({'au': au_name, 'reason': str(e)})
 
-    if not inserts:
-        return jsonify({'status': 'ok', 'fixed': 0,
-                        'hanim_path': os.path.basename(filepath),
-                        'note': 'No named Coordinate nodes without containerField found'})
-
-    # Apply in reverse order so earlier positions stay valid
-    for pos, text in sorted(inserts, reverse=True):
-        content = content[:pos] + text + content[pos:]
-
-    try:
+    if built:
         _hanim_backup(filepath)
-        tmp = filepath + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            fh.write(content)
-        os.replace(tmp, filepath)
-    except Exception as exc:
-        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
 
-    return jsonify({
-        'status':     'ok',
-        'fixed':      len(inserts),
-        'hanim_path': os.path.basename(filepath),
-    })
-
-
-@hanim_bp.route('/hanim/save-face-morph', methods=['POST'])
-def hanim_save_face_morph():
-    """
-    POST /hanim/save-face-morph
-    Body: { cultivar, region, pose, coord_def, points: [x,y,z,...] }
-
-    Store captured coordinate positions for one face region in the cultivar XML.
-    pose is either 'rest' or 'morph'.
-    coord_def is the DEF name of the Coordinate node (e.g. 'JackCoord_skull').
-
-    Cultivar XML structure added:
-      <FaceMorphs>
-        <Region name="skull" coord_def="JackCoord_skull">
-          <Pose name="rest"  points="x y z x y z ..." />
-          <Pose name="morph" points="x y z x y z ..." />
-        </Region>
-        ...
-      </FaceMorphs>
-
-    Returns: { status, cultivar, region, pose, point_count }
-    """
-    import xml.etree.ElementTree as _ET_fm
-
-    body      = request.get_json(silent=True) or {}
-    cultivar  = (body.get('cultivar')   or '').strip()
-    region    = (body.get('region')     or '').strip()
-    pose      = (body.get('pose')       or '').strip()   # 'rest' or 'morph'
-    coord_def = (body.get('coord_def')  or '').strip()
-    points    = body.get('points', [])
-
-    if not all([cultivar, region, pose, coord_def]):
-        return jsonify({'status': 'error',
-                        'error': 'cultivar, region, pose, coord_def required'}), 400
-    if pose not in ('rest', 'morph'):
-        return jsonify({'status': 'error',
-                        'error': 'pose must be "rest" or "morph"'}), 400
-    if not points or len(points) % 3 != 0:
-        return jsonify({'status': 'error',
-                        'error': f'points must be non-empty multiple of 3 (got {len(points)})'}), 400
-
-    cultivar_path = _cultivar_xml_path(cultivar)
-    if not os.path.exists(cultivar_path):
-        return jsonify({'status': 'error',
-                        'error': f'Cultivar not found: {cultivar}'}), 404
-
-    tree = _ET_fm.parse(cultivar_path)
-    root = tree.getroot()
-
-    # Get or create FaceMorphs element
-    fm_el = root.find('FaceMorphs')
-    if fm_el is None:
-        fm_el = _ET_fm.SubElement(root, 'FaceMorphs')
-
-    # Get or create Region element
-    reg_el = None
-    for r in fm_el.findall('Region'):
-        if r.get('name') == region:
-            reg_el = r
-            break
-    if reg_el is None:
-        reg_el = _ET_fm.SubElement(fm_el, 'Region')
-        reg_el.set('name', region)
-    reg_el.set('coord_def', coord_def)
-
-    # Remove existing Pose with same name
-    for p in reg_el.findall('Pose'):
-        if p.get('name') == pose:
-            reg_el.remove(p)
-
-    # Add new Pose
-    pose_el = _ET_fm.SubElement(reg_el, 'Pose')
-    pose_el.set('name', pose)
-    pose_el.set('points', ' '.join(f'{v:.6f}' for v in points))
-
-    # Write back
-    _ET_fm.indent(root, space='  ')
-    xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n' + \
-               _ET_fm.tostring(root, encoding='unicode')
-    tmp = cultivar_path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as fh:
-        fh.write(xml_text)
-    os.replace(tmp, cultivar_path)
-
-    return jsonify({
-        'status':      'ok',
-        'cultivar':    cultivar,
-        'region':      region,
-        'pose':        pose,
-        'point_count': len(points) // 3,
-    })
-
-
-@hanim_bp.route('/hanim/inject-face-aus', methods=['POST'])
-def hanim_inject_face_aus():
-    """
-    POST /hanim/inject-face-aus
-    Body: { hanim_src, cultivar }
-
-    Read FaceMorphs data from cultivar XML and inject AnimationAdapter
-    CoordinateInterpolator nodes into the target X3D file.
-
-    For each Region that has both 'rest' and 'morph' poses:
-      1. Inject <CoordinateInterpolator DEF="AnimationAdapter_{region}"
-                  key="0 1" keyValue="{rest_points} {morph_points}" />
-      2. Inject <ROUTE fromNode="AnimationAdapter_{region}"
-                        fromField="value_changed"
-                        toNode="{coord_def}" toField="point" />
-
-    Idempotent: strips existing AnimationAdapter_{region} nodes first.
-    FaceController Script already in X3D handles the au_name/au_weight
-    → set_fraction routing at runtime.
-
-    Returns: { status, injected, skipped, regions }
-    """
-    import re as _re_fau
-    import xml.etree.ElementTree as _ET_fau
-
-    body      = request.get_json(silent=True) or {}
-    hanim_src = (body.get('hanim_src') or '').strip()
-    cultivar  = (body.get('cultivar')  or '').strip()
-
-    if not hanim_src:
-        return jsonify({'status': 'error', 'error': 'hanim_src required'}), 400
-    if not cultivar:
-        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
-
-    target_path   = _hanim_x3d_path(hanim_src)
-    cultivar_path = _cultivar_xml_path(cultivar)
-
-    for path, label in [(target_path, 'Target X3D'), (cultivar_path, 'Cultivar XML')]:
-        if not os.path.exists(path):
-            return jsonify({'status': 'error',
-                            'error': f'{label} not found: {os.path.basename(path)}'}), 404
-
-    # Read FaceMorphs from cultivar
-    tree = _ET_fau.parse(cultivar_path)
-    root = tree.getroot()
-    fm_el = root.find('FaceMorphs')
-    if fm_el is None:
-        return jsonify({'status': 'error',
-                        'error': 'No FaceMorphs in cultivar — capture rest+morph poses first'}), 400
-
-    # Collect complete regions (must have both rest and morph)
-    regions = []
-    skipped = []
-    for reg in fm_el.findall('Region'):
-        name      = reg.get('name', '').strip()
-        coord_def = reg.get('coord_def', '').strip()
-        poses = {p.get('name'): p.get('points', '') for p in reg.findall('Pose')}
-        if 'rest' in poses and 'morph' in poses and name and coord_def:
-            regions.append({
-                'name':      name,
-                'coord_def': coord_def,
-                'rest':      poses['rest'],
-                'morph':     poses['morph'],
-            })
-        else:
-            skipped.append(name or '(unnamed)')
-
-    if not regions:
-        return jsonify({'status': 'error',
-                        'error': 'No complete regions (need both rest and morph captured)',
-                        'skipped': skipped}), 400
-
-    # Read target X3D
-    with open(target_path, 'r', encoding='utf-8') as fh:
-        target_text = fh.read()
-
-    # Strip existing AnimationAdapter nodes (idempotent)
-    region_names = [r['name'] for r in regions]
-    for name in region_names:
-        # CoordinateInterpolator
-        target_text = _re_fau.sub(
-            rf'<CoordinateInterpolator\s+DEF="AnimationAdapter_{re.escape(name)}"[^/]*/>\s*',
-            '', target_text)
-        # ROUTE from AnimationAdapter
-        target_text = _re_fau.sub(
-            rf'<ROUTE\s+fromNode="AnimationAdapter_{re.escape(name)}"[^/]*/>\s*',
-            '', target_text)
-
-    # Build injection XML
-    parts = []
-    for r in regions:
-        interp_def = f'AnimationAdapter_{r["name"]}'
-        key_value  = r['rest'] + ' ' + r['morph']
-        parts.append(
-            f'<CoordinateInterpolator DEF="{interp_def}" key="0 1" keyValue="{key_value}" />'
-        )
-        parts.append(
-            f'<ROUTE fromNode="{interp_def}" fromField="value_changed" '
-            f'toNode="{r["coord_def"]}" toField="point" />'
-        )
-
-    if '</Scene>' not in target_text:
-        return jsonify({'status': 'error',
-                        'error': 'No </Scene> tag in target X3D'}), 500
-
-    target_text = target_text.replace(
-        '</Scene>',
-        '\n'.join(parts) + '\n</Scene>',
-        1
-    )
-
-    try:
-        _hanim_backup(target_path)
-        tmp = target_path + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            fh.write(target_text)
-        os.replace(tmp, target_path)
-    except Exception as exc:
-        return jsonify({'status': 'error', 'error': f'Write failed: {exc}'}), 500
-
-    return jsonify({
-        'status':   'ok',
-        'injected': len(regions),
-        'skipped':  skipped,
-        'regions':  [r['name'] for r in regions],
-        'hanim_path': os.path.basename(target_path),
-    })
-
-
-@hanim_bp.route('/hanim/get-face-morph-status', methods=['POST'])
-def hanim_get_face_morph_status():
-    """
-    POST /hanim/get-face-morph-status
-    Body: { cultivar }
-
-    Returns which regions have rest/morph poses captured in the cultivar.
-    Used by the editor to show capture progress.
-
-    Returns: { status, regions: { skull: {rest:bool, morph:bool, coord_def:str}, ... } }
-    """
-    import xml.etree.ElementTree as _ET_gfm
-
-    body     = request.get_json(silent=True) or {}
-    cultivar = (body.get('cultivar') or '').strip()
-    if not cultivar:
-        return jsonify({'status': 'error', 'error': 'cultivar required'}), 400
-
-    cultivar_path = _cultivar_xml_path(cultivar)
-    if not os.path.exists(cultivar_path):
-        return jsonify({'status': 'error',
-                        'error': f'Cultivar not found: {cultivar}'}), 404
-
-    try:
-        tree = _ET_gfm.parse(cultivar_path)
-        root = tree.getroot()
-        fm_el = root.find('FaceMorphs')
-    except Exception:
-        fm_el = None
-
-    result = {}
-    if fm_el is not None:
-        for reg in fm_el.findall('Region'):
-            name      = reg.get('name', '').strip()
-            coord_def = reg.get('coord_def', '').strip()
-            poses     = {p.get('name') for p in reg.findall('Pose')}
-            if name:
-                result[name] = {
-                    'rest':      'rest'  in poses,
-                    'morph':     'morph' in poses,
-                    'coord_def': coord_def,
-                }
-
-    return jsonify({'status': 'ok', 'regions': result})
+    return jsonify({'status': 'ok', 'built': built, 'skipped': skipped})
 
 
 @hanim_bp.route('/hanim/ingest', methods=['POST'])

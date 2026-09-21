@@ -57,6 +57,19 @@
     <field accessType="inputOutput" type="SFFloat"  name="ambientIntensity" value="0"/>
     <field accessType="inputOutput" type="SFVec3f"  name="attenuation"      value="1 0 0"/>
     <field accessType="inputOutput" type="SFFloat"  name="radius"           value="100"/>
+    <!-- PointLight.global defaults to false per X3D spec — a light with no
+         explicit global setting only illuminates its own local subtree,
+         never anything reached through a separate Inline. Every asset in
+         this project that loads via Inline (temple, pool, jar, ladies,
+         movie screen, all of it) was therefore never actually lit by this
+         PROTO, regardless of scene placement — confirmed live: the temple
+         renders as a black silhouette in the real runtime while rendering
+         correctly in the editor, since editors commonly ignore strict
+         light-scoping for preview convenience. Defaulting true here since
+         that's what every real use of this shared library actually wants;
+         still exposed and overridable for the rare case a scene genuinely
+         wants a light scoped to just its own local subtree. -->
+    <field accessType="inputOutput" type="SFBool"   name="global"           value="true"/>
   </ProtoInterface>
   <ProtoBody>
     <Transform DEF="LightXform">
@@ -72,6 +85,7 @@
           <connect nodeField="ambientIntensity"  protoField="ambientIntensity"/>
           <connect nodeField="attenuation"       protoField="attenuation"/>
           <connect nodeField="radius"            protoField="radius"/>
+          <connect nodeField="global"            protoField="global"/>
         </IS>
       </PointLight>
     </Transform>
@@ -96,6 +110,9 @@
     <field accessType="inputOutput" type="SFFloat"    name="radius"           value="100"/>
     <field accessType="inputOutput" type="SFFloat"    name="cutOffAngle"      value="0.785398"/>
     <field accessType="inputOutput" type="SFFloat"    name="beamWidth"        value="0.785398"/>
+    <!-- Same fix, same reasoning as BasicPointLight — see its field
+         comment above. SpotLight.global also defaults to false per spec. -->
+    <field accessType="inputOutput" type="SFBool"     name="global"           value="true"/>
   </ProtoInterface>
   <ProtoBody>
     <Transform DEF="LightXform">
@@ -116,6 +133,7 @@
           <connect nodeField="radius"            protoField="radius"/>
           <connect nodeField="cutOffAngle"       protoField="cutOffAngle"/>
           <connect nodeField="beamWidth"         protoField="beamWidth"/>
+          <connect nodeField="global"            protoField="global"/>
         </IS>
       </SpotLight>
     </Transform>
@@ -138,6 +156,10 @@
     <field accessType="inputOutput" type="SFColor"    name="color"            value="1 1 1"/>
     <field accessType="inputOutput" type="SFFloat"    name="intensity"        value="1"/>
     <field accessType="inputOutput" type="SFFloat"    name="ambientIntensity" value="0"/>
+    <!-- Same fix, same reasoning as BasicPointLight — see its field
+         comment above. DirectionalLight.global also defaults to false
+         per spec. -->
+    <field accessType="inputOutput" type="SFBool"     name="global"           value="true"/>
   </ProtoInterface>
   <ProtoBody>
     <Transform DEF="LightXform">
@@ -151,6 +173,7 @@
           <connect nodeField="color"             protoField="color"/>
           <connect nodeField="intensity"         protoField="intensity"/>
           <connect nodeField="ambientIntensity"  protoField="ambientIntensity"/>
+          <connect nodeField="global"            protoField="global"/>
         </IS>
       </DirectionalLight>
     </Transform>
