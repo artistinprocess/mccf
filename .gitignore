@@ -83,3 +83,9 @@ backup_*/
 static_copy_*.html
 LIVE_*.html
 node_modules/
+
+*bak.html
+*Bak.html
+*Backup.xml
+Oldcultivar_*.xml
+tests/hanim_test.zip
