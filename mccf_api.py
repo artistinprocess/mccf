@@ -137,6 +137,8 @@ def upload_x3d_scene():
     content = request.get_data(as_text=True)
     if not content:
         return jsonify({'status': 'error', 'error': 'no content'}), 400
+    try: _versions_store.before_write(safe_name)       # keep what is about to be overwritten (history)
+    except Exception as _ve: print('[versions] snapshot skipped:', _ve)
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
     return jsonify({'status': 'ok', 'output': f'static/x3d/{filename}', 'filename': filename})
@@ -166,6 +168,8 @@ def list_x3d_scenes():
     files = []
     for fname in os.listdir(x3d_dir):
         if fname.endswith('.x3d'):
+            if '__draft__' in fname and request.args.get('drafts') != '1':
+                continue      # drafts are not live: the Loader's list leaves them out
             fpath = os.path.join(x3d_dir, fname)
             mtime = os.path.getmtime(fpath)
             files.append({'filename': fname, 'mtime': mtime})
@@ -388,6 +392,8 @@ def save_scene_xml():
     scene_dir = os.path.join(scenes_root, scene_name)
     os.makedirs(scene_dir, exist_ok=True)
     filepath = os.path.join(scene_dir, filename)
+    try: _versions_store.before_write(scene_name)      # keep what is about to be overwritten (history)
+    except Exception as _ve: print('[versions] snapshot skipped:', _ve)
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
     return jsonify({'status': 'ok', 'path': f'scenes/{scene_name}/{filename}'})
@@ -1305,6 +1311,8 @@ ambient_bp.registry = AdapterRegistry
 app.register_blueprint(voice_bp)
 app.register_blueprint(zone_bp)
 app.register_blueprint(ambient_bp)
+from mccf_versions_api import register_versions_api as _register_versions_api   # scene history + drafts
+_versions_store = _register_versions_api(app, os.path.dirname(os.path.abspath(__file__)))
 
 # v2.0 — Register collapse blueprint
 # make_collapse_api returns (blueprint, pipeline) tuple

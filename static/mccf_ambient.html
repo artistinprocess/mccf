@@ -35,7 +35,7 @@ body {
   height: 100vh;
   display: grid;
   grid-template-rows: 44px 1fr 180px;
-  grid-template-columns: 240px 1fr 240px;
+  grid-template-columns: 240px 1fr 340px;
   grid-template-areas:
     "hdr  hdr  hdr"
     "left viz  right"
@@ -226,6 +226,45 @@ input[type=number], select {
   opacity:0; transition:all 0.18s; pointer-events:none; z-index:999;
 }
 #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+/* Theme Workshop mode: a wider right column for the voices table, and a narrower left column (spec decision 4) */
+body.ws-wide { grid-template-columns: 170px 1fr 460px; }
+/* ── Grid view ── */
+#view-tabs { position:absolute; top:8px; right:12px; z-index:6; gap:0; }
+.vtab { background:var(--s2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:12px; padding:4px 12px; cursor:pointer; }
+.vtab:first-child { border-radius:4px 0 0 4px; } .vtab:last-child { border-radius:0 4px 4px 0; border-left:none; }
+.vtab.on { background:var(--purple); border-color:var(--purple); color:#fff; }
+#grid-panel { position:absolute; inset:0; display:flex; flex-direction:column; background:var(--bg); z-index:5; }
+#grid-toolbar { display:flex; align-items:center; gap:10px; padding:8px 190px 6px 10px; flex-wrap:wrap; }
+#grid-legend { display:flex; gap:6px; padding:2px 10px 6px; flex-wrap:wrap; min-height:22px; }
+.gchip { display:inline-flex; align-items:center; gap:5px; font-size:12px; border:1px solid var(--border); border-radius:12px; padding:2px 9px 2px 6px; cursor:pointer; background:var(--s2); }
+.gchip.sel { border-color:#fff; } .gchip.off { opacity:0.45; } .gchip input { margin:0; }
+#grid-canvas-wrap { flex:1; min-height:0; position:relative; } #grid-canvas { display:block; cursor:grab; }
+#grid-scroll { width:calc(100% - 20px); margin:4px 10px; }
+.btn.on { border-color:var(--warm); color:var(--warm); }
+.btn:disabled { opacity:0.35; cursor:default; }
+/* ── Notation view ── */
+#notation-panel { position:absolute; inset:0; display:flex; flex-direction:column; background:var(--bg); z-index:5; }
+#nt-toolbar { display:flex; align-items:center; gap:10px; padding:8px 270px 6px 10px; flex-wrap:wrap; }
+#nt-scroll { flex:1; min-height:0; overflow:auto; background:#efe9d8; margin:0 10px 10px; border-radius:4px; }
+#nt-stage { position:relative; padding:6px 12px; } #nt-svg svg { display:block; }
+#nt-cursor { position:absolute; width:2px; background:#1fbf86; opacity:0.85; display:none; pointer-events:none; box-shadow:0 0 6px rgba(31,191,134,0.7); }
+/* ── Theme Workshop ── */
+.ws-voice { border:1px solid var(--border); border-radius:4px; padding:6px; margin:6px 0; background:var(--s2); }
+.ws-voice.off { opacity:0.5; }
+.ws-row  { display:flex; gap:5px; align-items:center; margin:4px 0; flex-wrap:wrap; }
+.ws-step { display:flex; gap:4px; align-items:center; margin:3px 0 3px 12px; flex-wrap:wrap; padding:3px 4px; border-left:2px solid var(--purple); }
+.ws-l    { display:inline-flex; align-items:center; gap:4px; margin:0; font-size:12px; color:#aab0be; }
+.ws-sel  { width:auto; padding:3px 4px; font-size:12px; }
+.ws-n    { width:52px; padding:3px 4px; font-size:12px; }
+.ws-t    { flex:1; min-width:0; background:var(--s2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:var(--mono); font-size:13px; padding:3px 6px; }
+.ws-b    { padding:1px 6px; font-size:12px; }
+.ws-mv   { margin-left:auto; display:inline-flex; gap:2px; }
+.ws-dot  { flex:none; width:9px; height:9px; border-radius:50%; }
+.ws-fp   { font-size:11px; color:var(--dim); margin-top:3px; line-height:1.5; }
+.ws-note { font-size:12px; color:#aab0be; line-height:1.6; margin-bottom:8px; }
+.ws-warn { font-size:12px; color:var(--warm); line-height:1.5; margin:5px 0; }
+.ws-chk  { display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; margin:4px 0; }
+.arc-t { width:100%; border-collapse:collapse; font-size:12px; margin:4px 0; } .arc-t th { text-align:left; font-weight:600; color:var(--dim, #99a); padding:2px 4px; } .arc-t td { padding:2px 4px; vertical-align:middle; } .arc-dim { color:var(--dim, #99a); } .arc-spark { display:block; }
 </style>
 </head>
 <body>
@@ -279,11 +318,126 @@ input[type=number], select {
       <div class="viz-key-item"><div class="viz-dot" style="background:var(--S)"></div><span>S social</span></div>
     </div>
   </div>
+  <div id="view-tabs" style="display:none">
+    <button class="vtab on" id="vtab-anim" onclick="gridUI.setView('anim')">Animation</button>
+    <button class="vtab" id="vtab-grid" onclick="gridUI.setView('grid')">Grid</button>
+    <button class="vtab" id="vtab-notation" onclick="gridUI.setView('notation')">Notation</button>
+  </div>
+  <div id="notation-panel" style="display:none">
+    <div id="nt-toolbar">
+      <button class="btn ws-b" onclick="notationUI.step(-1)" title="previous window">◀</button>
+      <label class="ws-l">bar <input type="number" id="nt-from" class="ws-n" min="1" value="1" onchange="notationUI.setFrom(this.value)"> <span id="nt-of"></span></label>
+      <button class="btn ws-b" onclick="notationUI.step(1)" title="next window">▶</button>
+      <label class="ws-l">key <select id="nt-tonic" class="ws-sel" onchange="notationUI.setKey()" title="auto = the recipe's key in Workshop mode, else estimated from the music"></select><select id="nt-mode" class="ws-sel" onchange="notationUI.setKey()"></select></label>
+      <label class="ws-l"><input type="checkbox" id="nt-follow" checked onchange="notationUI.setFollow(this.checked)">follow</label>
+      <label class="ws-l" title="wide-ranging tracks (chords, piano) get a treble and a bass staff">grand staff<select id="nt-grand" class="ws-sel" onchange="notationUI.setGrand()"><option value="auto" selected>auto</option><option value="off">off</option></select></label>
+    </div>
+    <div id="nt-status" class="ws-fp" style="padding:0 12px 6px"></div>
+    <div id="nt-scroll"><div id="nt-stage"><div id="nt-svg"></div><div id="nt-cursor"></div></div></div>
+  </div>
+  <div id="grid-panel" style="display:none">
+    <div id="grid-toolbar">
+      <label class="ws-l">snap<select id="grid-snap" class="ws-sel" onchange="gridUI.setSnap(this.value)">
+        <option value="1/32">1/32</option><option value="1/16" selected>1/16</option><option value="1/8">1/8</option><option value="1/4">1/4</option><option value="1/2">1/2</option>
+        <option value="1/8T">1/8 triplet</option><option value="1/16T">1/16 triplet</option><option value="off">off</option></select></label>
+      <label class="ws-l">zoom<input type="range" id="grid-zoom" min="0" max="100" value="50" style="width:110px" oninput="gridUI.setZoomPct(this.value)"></label>
+      <button class="btn ws-b" onclick="gridUI.fit()" title="fit the whole piece and all its notes">fit</button>
+      <label class="ws-l"><input type="checkbox" id="grid-ghost" checked onchange="gridUI.setGhost(this.checked)">ghost original</label>
+      <label class="ws-l"><input type="checkbox" id="grid-follow" checked onchange="gridUI.setFollow(this.checked)">follow</label>
+      <span id="grid-edit-group" style="display:none;align-items:center;gap:6px">
+        <button class="btn ws-b" id="grid-edit" onclick="gridUI.toggleEdit()" title="draw, move and resize the notes of a hand-edited voice">✎ edit</button>
+        <button class="btn ws-b" id="grid-freeze" onclick="gridUI.freeze()" title="turn the selected voice into notes you can edit (what you hear does not change)">freeze to edit</button>
+        <button class="btn ws-b" onclick="gridUI.newHand()" title="a new empty voice to draw into">+ hand voice</button>
+        <button class="btn ws-b" id="grid-undo" onclick="Workshop.undo()" title="undo (Ctrl+Z)">↶</button>
+        <button class="btn ws-b" id="grid-redo" onclick="Workshop.redo()" title="redo (Ctrl+Shift+Z)">↷</button>
+      </span>
+      <span id="grid-tools" style="display:none;align-items:center;gap:6px">
+        <button class="btn ws-b" id="grid-tool-draw" onclick="gridUI.setTool('draw')" title="draw tool (D): click or drag to add notes">draw</button>
+        <button class="btn ws-b" id="grid-tool-select" onclick="gridUI.setTool('select')" title="select tool (S): drag a box around notes">select</button>
+        <button class="btn ws-b" id="grid-tool-chord" onclick="gridUI.setTool('chord')" title="chord tool (C): type or choose a chord, then click to stamp it as notes">chord</button>
+        <label class="ws-l">vel<input type="range" id="grid-vel" min="1" max="127" value="90" style="width:96px" oninput="gridUI.setVelLabel(this.value)" onchange="gridUI.setVel(this.value)"><span id="grid-vel-v" class="param-val" style="width:46px">90</span></label>
+        <button class="btn ws-b" id="grid-copy" onclick="gridUI.copy()" title="copy the selected notes (Ctrl+C)">copy</button>
+        <button class="btn ws-b" id="grid-cut" onclick="gridUI.cut()" title="cut (Ctrl+X)">cut</button>
+        <button class="btn ws-b" id="grid-paste" onclick="gridUI.paste()" title="paste at the pointer, or at the left edge of the view (Ctrl+V)">paste</button>
+        <button class="btn ws-b" id="grid-dup" onclick="gridUI.dup()" title="duplicate right after the selection; repeat to tile a phrase (Ctrl+D)">dup</button>
+      </span>
+      <span id="grid-groove" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="ws-fp" style="margin:0">groove</span>
+        <button class="btn ws-b" id="grid-xform" onclick="gridUI.transformSelection()" title="apply the Workshop panel's \"Transform selection\" chain to the selected notes and add the result to this line">transform ↪</button>
+        <button class="btn ws-b" onclick="gridUI.quantize()" title="snap the notes' starts to the current snap grid (selected notes, or all if none are selected)">quantize</button>
+        <label class="ws-l" title="swing at the current snap: 1/8 swings eighths, 1/16 swings sixteenths. 50% is straight, 67% is triplet swing."><input type="range" id="grid-swing" min="50" max="75" value="67" style="width:70px" oninput="document.getElementById('grid-swing-v').textContent=this.value+'%'"><span id="grid-swing-v" class="param-val" style="width:34px">67%</span></label>
+        <button class="btn ws-b" onclick="gridUI.swing()" title="delay the off-beat notes">swing</button>
+        <label class="ws-l" title="random loudness (±) and timing (± ticks)">±vel<input type="number" id="grid-hum-vel" class="ws-n" min="0" max="60" value="8" style="width:44px"></label>
+        <label class="ws-l">±ticks<input type="number" id="grid-hum-time" class="ws-n" min="0" max="60" value="6" style="width:44px"></label>
+        <button class="btn ws-b" onclick="gridUI.humanize()" title="humanize: random loudness and timing; press again for a different feel">humanize</button>
+      </span>
+      <div id="grid-chordbar" style="display:none;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0;width:100%">
+        <span class="ws-fp" style="margin:0">chord</span>
+        <input id="grid-chord-sym" class="ws-t" style="width:140px" list="grid-chord-list" placeholder="Am7  F#m7b5  Bb/D  m7  V7" oninput="gridUI.chordChanged()" title="a chord symbol (Am7, F#m7b5, C7#9, Bb/D), a quality alone (m7: the root is the row you click), or a roman numeral in the recipe's key (V7, ii65, vii°7, bVII)">
+        <datalist id="grid-chord-list"></datalist>
+        <select id="grid-chord-inv" class="ws-sel" onchange="gridUI.chordChanged()" title="inversion"><option value="0">root position</option><option value="1">1st inversion</option><option value="2">2nd inversion</option><option value="3">3rd inversion</option></select>
+        <select id="grid-chord-sp" class="ws-sel" onchange="gridUI.chordChanged()" title="spacing"><option value="close">close</option><option value="open">open</option><option value="drop2">drop 2</option></select>
+        <label class="ws-chk" style="margin:0"><input type="checkbox" id="grid-chord-bass" onchange="gridUI.chordChanged()"> bass note</label>
+        <select id="grid-chord-len" class="ws-sel" onchange="gridUI.chordChanged()" title="how long the chord lasts"><option value="beat">a beat</option><option value="cell">a grid cell</option><option value="half">half a bar</option><option value="bar">a bar</option></select>
+        <button class="btn ws-b" onclick="gridUI.identifySelection()" title="name the chord formed by the selected notes">what chord?</button>
+        <span id="grid-chord-info" class="ws-fp" style="margin:0;flex-basis:100%"></span>
+        <span id="grid-chord-chips" style="display:flex;gap:3px;flex-wrap:wrap;flex-basis:100%;align-items:center"></span>
+        <details style="flex-basis:100%"><summary class="ws-fp" style="cursor:pointer;margin:0">chord dictionary: press a type to use it (hover for its notes and other spellings)</summary><div id="grid-chord-dict" style="padding:4px 0"></div></details>
+      </div>
+      <span id="grid-readout" class="ws-fp" style="margin:0 0 0 auto"></span>
+    </div>
+    <div id="grid-hint" class="ws-fp" style="padding:0 12px 2px;min-height:14px;color:var(--warm)"></div>
+    <div id="grid-legend"></div>
+    <div id="grid-canvas-wrap"><canvas id="grid-canvas"></canvas></div>
+    <input type="range" id="grid-scroll" min="0" max="1" value="0" step="1" oninput="gridUI.setScroll(this.value)" title="scroll in time (also: mouse wheel; Shift+wheel up/down; Ctrl+wheel zoom; drag to pan; click a note to select its voice)">
+  </div>
 </div>
 
 <!-- RIGHT: music controls -->
 <div class="panel" id="right-panel">
   <div class="sh" style="margin-top:0">Engine</div>
+  <div class="param-row">
+    <span class="param-name">mode</span>
+    <select id="engine-mode" onchange="setEngineMode(this.value)" style="flex:1">
+      <option value="generative">Generative (4-layer field-driven)</option>
+      <option value="theme">MIDI Theme Player</option>
+      <option value="workshop">Theme Workshop (compose &amp; export)</option>
+    </select>
+  </div>
+
+  <button class="btn full" style="margin-top:0;margin-bottom:6px" onclick="midiPanic()"
+          title="Sends All Sound Off + All Notes Off on all 16 channels of the selected MIDI output. Use if the synth ever hangs on a note.">All notes off (panic)</button>
+
+  <div id="theme-player-panel" style="display:none">
+    <input type="file" id="midi-theme-file" accept=".mid,.midi,audio/midi" style="display:none" onchange="loadMidiTheme(this.files[0])">
+    <div style="text-align:center;margin:2px 0 6px;padding:8px 4px;border:1px solid var(--border);border-radius:4px;background:var(--s2)">
+      <span id="theme-clock" style="font-family:var(--mono);font-size:38px;letter-spacing:2px;color:var(--accent);font-variant-numeric:tabular-nums">00:00.0</span>
+      <span id="theme-clock-total" style="font-family:var(--mono);font-size:15px;color:var(--dim);margin-left:8px"></span>
+    </div>
+    <button class="btn full" onclick="document.getElementById('midi-theme-file').click()">Load MIDI file…</button>
+    <div id="theme-file-info" style="font-size:12px;color:var(--dim);margin:4px 0"></div>
+    <div id="workshop-panel" style="display:none"></div>
+    <div id="theme-track-list" style="max-height:calc(100vh - 470px);min-height:160px;overflow-y:auto;margin-bottom:6px"></div>
+    <button class="btn full" style="margin-top:0;margin-bottom:6px" onclick="resetThemeChannels()">Reset channels to file</button>
+    <div class="param-row">
+      <span class="param-name">tempo scale</span>
+      <input type="range" id="theme-tempo-scale" min="0.25" max="2" step="0.05" value="1"
+             oninput="setThemeTempoScale(this.value)">
+      <span class="param-val" id="theme-tempo-scale-v">1.00×</span>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;margin-top:4px">
+      <input type="checkbox" id="theme-loop" checked onchange="themePlayer.loop = this.checked"> Loop
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;margin-top:4px"
+           title="Sends MIDI Poly Mode On (CC127) on each channel in use before playback. A mitigation for mono lead patches; a patch hard-wired to mono at the synth won't change.">
+      <input type="checkbox" id="theme-poly" checked onchange="setThemePolyOn(this.checked)"> Send Poly Mode On (MIDI out)
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;margin-top:4px"
+           title="Before playback, sends each track's Bank Select, Program Change, Pan, Reverb and Chorus from the file to its output channel. Without this the synth plays its power-on defaults (piano, drum kit on ch10).">
+      <input type="checkbox" id="theme-setup" checked onchange="setThemeSendSetup(this.checked)"> Send file patches &amp; pan/FX (MIDI out)
+    </label>
+  </div>
+
 
   <div class="param-row">
     <span class="param-name">master volume</span>
@@ -308,6 +462,35 @@ input[type=number], select {
     <input type="range" id="p-reverb" min="0" max="1" step="0.01" value="0.4"
            oninput="setParam('reverb', this.value)">
     <span class="param-val" id="pv-reverb">0.40</span>
+  </div>
+
+  <div class="sh">Output</div>
+  <!-- Day 90: MIDI-out, toggled against the existing Web Audio path, not
+       combined — same fieldToMusic()/applyMusicState() computation drives
+       either backend, branching only at the point sound actually gets
+       produced. Mapping (channel + CC per layer) is importable/exportable
+       JSON, not hardcoded, so a musician can swap it per synth/patch
+       without touching code. -->
+  <div class="param-row">
+    <span class="param-name">output</span>
+    <select id="output-mode" onchange="setOutputMode(this.value)" style="flex:1">
+      <option value="audio">Web Audio (browser)</option>
+      <option value="midi">MIDI Out</option>
+    </select>
+  </div>
+  <div class="param-row" id="midi-device-row" style="display:none">
+    <span class="param-name">device</span>
+    <select id="midi-device" onchange="setMidiOutputDevice(this.value)" style="flex:1">
+      <option value="">— none —</option>
+    </select>
+  </div>
+  <div id="midi-mapping-row" style="display:none;margin-top:6px">
+    <div id="midi-mapping-summary" style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:6px"></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" style="flex:1" onclick="document.getElementById('midi-mapping-file').click()">Import mapping</button>
+      <button class="btn" style="flex:1" onclick="exportMidiMapping()">Export mapping</button>
+    </div>
+    <input type="file" id="midi-mapping-file" accept="application/json" style="display:none" onchange="importMidiMapping(this.files[0])">
   </div>
 
   <div class="sh">Scale</div>
@@ -366,22 +549,22 @@ input[type=number], select {
 <!-- FOOTER: score display -->
 <div id="foot-panel">
   <div class="score-section">
-    <div class="score-title">Key / Mode</div>
+    <div class="score-title" id="ft-key">Key / Mode</div>
     <div class="score-val" id="score-key">C4</div>
     <div class="score-sub" id="score-mode">pentatonic</div>
   </div>
   <div class="score-section">
-    <div class="score-title">Tempo</div>
+    <div class="score-title" id="ft-tempo">Tempo</div>
     <div class="score-val" id="score-tempo">♩ 72</div>
     <div class="score-sub" id="score-meter">4/4 stable</div>
   </div>
   <div class="score-section">
-    <div class="score-title">Tension</div>
+    <div class="score-title" id="ft-tension">Tension</div>
     <div class="score-val" id="score-tension">0.32</div>
-    <div class="score-sub">harmonic dissonance</div>
+    <div class="score-sub" id="score-tension-sub">harmonic dissonance</div>
   </div>
   <div class="score-section">
-    <div class="score-title">Texture</div>
+    <div class="score-title" id="ft-texture">Texture</div>
     <div class="score-val" id="score-texture">sparse</div>
     <div class="score-sub" id="score-voices">2 voices</div>
   </div>
@@ -394,7 +577,7 @@ input[type=number], select {
     <canvas id="harmonic-canvas" width="80" height="80"></canvas>
   </div>
   <div class="score-section">
-    <div class="score-title">Scene</div>
+    <div class="score-title" id="ft-scene">Scene</div>
     <div class="score-val" id="score-zone">—</div>
     <div class="score-sub" id="score-agents">0 agents</div>
   </div>
@@ -402,6 +585,15 @@ input[type=number], select {
 
 <div id="toast"></div>
 
+<script src="js/mccf_midi.js"></script>
+<script src="js/mccf_arc.js"></script>
+<script src="js/mccf_theory.js"></script>
+<script src="js/mccf_harmony.js"></script>
+<script src="js/mccf_chords.js"></script>
+<script src="js/mccf_smf_writer.js"></script>
+<script src="js/mccf_grid.js"></script>
+<script src="js/vexflow-4.2.5.js"></script>
+<script src="js/mccf_notation.js"></script>
 <script>
 // ================================================================
 // MCCF Ambient Music Engine
@@ -459,6 +651,40 @@ let layers = {
 };
 let layerGainNodes = {};
 let scheduledNotes = [];
+
+// ================================================================
+// MIDI output (Day 90) — toggled against Web Audio, not combined.
+// Same musicState/applyMusicState computation drives either backend.
+// ================================================================
+let outputMode   = 'audio';   // 'audio' | 'midi'
+// ================================================================
+// MIDI file parsing + theme playback live in the shared script
+// static/js/mccf_midi.js (window.MccfMidi). The SMF parser, GM tables and the
+// multi-track Player were moved there verbatim in behaviour so the X3D loader
+// can play MIDI cues with the same code. Aliases keep older references working.
+// ================================================================
+const parseMidiFile      = MccfMidi.parseMidiFile;
+const makeTickToSeconds  = MccfMidi.makeTickToSeconds;
+
+let midiAccess   = null;
+let midiOutput   = null;      // currently selected MIDIOutput, or null
+// Default mapping — channel (1-16) + CC number per continuous param, per
+// layer. Fully overridable via Import mapping; this is just the shipped
+// default, not a fixed scheme. CC choices lean on loosely-conventional
+// numbers (1=mod wheel, 11=expression, 71=resonance/timbre, 74=brightness/
+// cutoff) since most synths have *something* patched to those, but every
+// patch is different — that's the whole reason this is importable.
+let midiMapping = {
+  drone:   { label: 'Drone',   channel: 1, cc: { tension: 1,  regulation: 74 } },
+  pad:     { label: 'Pad',     channel: 2, cc: { textureDensity: 11, valence: 1 } },
+  pulse:   { label: 'Pulse',   channel: 3, cc: { rhythmStability: 71 } },
+  texture: { label: 'Texture', channel: 4, cc: { textureDensity: 74, tension: 1 } }
+};
+// Currently-sounding note numbers per layer, per channel — so a rebuild
+// (drone/pad, every poll tick) or a stop can send accurate note-offs
+// instead of guessing or blindly hammering All Notes Off, which some
+// synths handle poorly mid-phrase.
+let midiHeldNotes = { drone: [], pad: [], pulse: [], texture: [] };
 
 // Canvas
 let mainCanvas, mainCtx;
@@ -884,8 +1110,289 @@ function stopAllLayers() {
 }
 
 // ================================================================
+// MIDI output (Day 90)
+// ================================================================
+
+function freqToMidiNote(freq) {
+  // Standard 12-TET, A4=440=note 69. Same frequencies fieldToMusic/
+  // scaleFreqs already compute for the Web Audio path — this just rounds
+  // them onto the nearest real MIDI note instead of playing them exactly,
+  // which is the whole difference between the two backends.
+  const n = Math.round(69 + 12 * Math.log2(freq / 440));
+  return Math.max(0, Math.min(127, n));
+}
+
+function clamp127(v) { return Math.max(0, Math.min(127, Math.round(v))); }
+
+function sendNoteOn(layer, note, velocity) {
+  if (!midiOutput) return;
+  const ch = (midiMapping[layer].channel - 1) & 0x0f;
+  try { midiOutput.send([0x90 | ch, clamp127(note), clamp127(velocity)]); } catch {}
+}
+function sendNoteOff(layer, note) {
+  if (!midiOutput) return;
+  const ch = (midiMapping[layer].channel - 1) & 0x0f;
+  try { midiOutput.send([0x80 | ch, clamp127(note), 0]); } catch {}
+}
+function sendCC(layer, param, value01) {
+  // value01 expected roughly 0..1 — callers pass whatever the underlying
+  // field parameter's natural range is, which isn't always exactly 0..1
+  // (e.g. tension can exceed 1 briefly); clamp127 below handles that.
+  if (!midiOutput) return;
+  const ccNum = midiMapping[layer].cc && midiMapping[layer].cc[param];
+  if (ccNum === undefined) return;
+  const ch = (midiMapping[layer].channel - 1) & 0x0f;
+  try { midiOutput.send([0xB0 | ch, clamp127(ccNum), clamp127(value01 * 127)]); } catch {}
+}
+
+function stopLayerMidi(name) {
+  midiHeldNotes[name].forEach(note => sendNoteOff(name, note));
+  midiHeldNotes[name] = [];
+}
+function midiAllNotesOff() {
+  // Belt-and-suspenders beyond the per-layer note-offs below: sent on every
+  // full stop / output-mode switch so nothing can be left stuck sounding on
+  // real hardware even if a held-note record ever falls out of sync.
+  scheduledNotes.forEach(ref => clearTimeout(ref));
+  scheduledNotes = [];
+  ['drone','pad','pulse','texture'].forEach(name => {
+    stopLayerMidi(name);
+    if (midiOutput) {
+      const ch = (midiMapping[name].channel - 1) & 0x0f;
+      try { midiOutput.send([0xB0 | ch, 123, 0]); } catch {} // CC 123 = All Notes Off
+    }
+  });
+}
+
+function buildDroneLayerMidi(root, tension, regulation) {
+  stopLayerMidi('drone');
+  const interval = tensionInterval(tension);
+  const freqs = [root / 2, noteFreq(root / 2, interval)];
+  const notes = freqs.map(freqToMidiNote);
+  notes.forEach((n, i) => sendNoteOn('drone', n, i === 0 ? 90 : 70));
+  midiHeldNotes.drone = notes;
+  sendCC('drone', 'tension', tension);
+  sendCC('drone', 'regulation', regulation);
+}
+
+function buildPadLayerMidi(root, mode, textureDensity, valence) {
+  stopLayerMidi('pad');
+  const freqs = scaleFreqs(root, mode, 1);
+  const numNotes = 2 + Math.round(textureDensity * 3);
+  const selected = selectHarmonicNotes(freqs, numNotes, valence);
+  const notes = selected.map(freqToMidiNote);
+  notes.forEach(n => sendNoteOn('pad', n, 64));
+  midiHeldNotes.pad = notes;
+  sendCC('pad', 'textureDensity', textureDensity);
+  sendCC('pad', 'valence', (valence + 1) / 2); // valence is roughly -1..1 — CC needs 0..1
+}
+
+function buildPulseLayerMidi(root, mode, tempo, rhythmStability) {
+  // Mirrors buildPulseLayer's own self-scheduling recursion exactly (same
+  // beatDur, same jitter, same step-through-scale note selection) — only
+  // the "sound" step differs: note-on now + a timed note-off instead of a
+  // Web Audio gain envelope.
+  if (rhythmStability < 0.15) return; // same threshold as the audio path
+  const beatDur = 60 / tempo;
+  const freqs   = scaleFreqs(root * 2, mode, 1);
+  sendCC('pulse', 'rhythmStability', rhythmStability);
+
+  const schedulePulse = (idx) => {
+    if (!isPlaying || outputMode !== 'midi') return;
+    const note = freqToMidiNote(freqs[idx % freqs.length]);
+    sendNoteOn('pulse', note, 80);
+    const offRef = setTimeout(() => sendNoteOff('pulse', note), beatDur * 0.8 * 1000);
+    scheduledNotes.push(offRef);
+
+    const jitter = (1 - rhythmStability) * beatDur * 0.3;
+    const nextRef = setTimeout(() => schedulePulse(idx + 1),
+      Math.max(10, (beatDur + (Math.random() - 0.5) * jitter) * 1000));
+    scheduledNotes.push(nextRef);
+  };
+  schedulePulse(0);
+}
+
+function buildTextureLayerMidi(root, mode, tension, textureDensity) {
+  // Mirrors buildTextureLayer's own grain-scheduling recursion exactly —
+  // same density-driven interval, same random note pick from scale.
+  if (textureDensity < 0.2) return;
+  const freqs = scaleFreqs(root * 2, mode, 2);
+  sendCC('texture', 'textureDensity', textureDensity);
+  sendCC('texture', 'tension', tension);
+
+  const scheduleGrain = () => {
+    if (!isPlaying || outputMode !== 'midi') return;
+    const note = freqToMidiNote(freqs[Math.floor(Math.random() * freqs.length)]);
+    const dur  = 0.08 + Math.random() * 0.25;
+    sendNoteOn('texture', note, clamp127(40 + textureDensity * 40));
+    const offRef = setTimeout(() => sendNoteOff('texture', note), dur * 1000);
+    scheduledNotes.push(offRef);
+
+    const interval = 200 + (1 - textureDensity) * 1200 + Math.random() * 400;
+    const nextRef = setTimeout(scheduleGrain, interval);
+    scheduledNotes.push(nextRef);
+  };
+  scheduleGrain();
+}
+
+function applyMidiState(m, root) {
+  if (!isPlaying) return;
+  buildDroneLayerMidi(root, m.tension, m.regulation);
+  buildPadLayerMidi(root, m.mode, m.textureDensity, m.valence);
+  buildPulseLayerMidi(root, m.mode, m.tempo, m.rhythmStability);
+  buildTextureLayerMidi(root, m.mode, m.tension, m.textureDensity);
+}
+
+// ── Device access + selection ───────────────────────────────────────────
+async function initMidi() {
+  if (midiAccess) return true;
+  if (!navigator.requestMIDIAccess) {
+    toast('Web MIDI not available in this browser', true);
+    return false;
+  }
+  try {
+    midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    populateMidiDeviceList();
+    midiAccess.onstatechange = populateMidiDeviceList; // hot-plug
+    return true;
+  } catch (e) {
+    toast('MIDI access denied: ' + e.message, true);
+    return false;
+  }
+}
+
+function populateMidiDeviceList() {
+  const sel = document.getElementById('midi-device');
+  if (!sel) return;
+  const prevValue = sel.value;
+  const outputs = midiAccess ? Array.from(midiAccess.outputs.values()) : [];
+  sel.innerHTML = '<option value="">— none —</option>' +
+    outputs.map(o => `<option value="${o.id}">${o.name || o.id}</option>`).join('');
+  // Keep the previous selection if that device is still present; otherwise
+  // fall back to none rather than silently sending to a device the user
+  // didn't choose (e.g. after a hot-plug list refresh).
+  if (outputs.some(o => o.id === prevValue)) {
+    sel.value = prevValue;
+  } else if (midiOutput) {
+    midiAllNotesOff();
+    midiOutput = null;
+  }
+}
+
+function setMidiOutputDevice(id) {
+  if (midiOutput) midiAllNotesOff(); // don't leave notes stuck on the device we're leaving
+  midiOutput = (midiAccess && id) ? midiAccess.outputs.get(id) : null;
+}
+
+async function setOutputMode(mode) {
+  const prevMode = outputMode;
+  if (mode === prevMode) return;
+
+  if (prevMode === 'audio') {
+    stopAllLayers();
+  } else {
+    midiAllNotesOff();
+  }
+
+  if (mode === 'midi') {
+    const ok = await initMidi();
+    if (!ok) {
+      document.getElementById('output-mode').value = 'audio';
+      return;
+    }
+  }
+
+  outputMode = mode;
+  document.getElementById('midi-device-row').style.display   = mode === 'midi' ? 'flex' : 'none';
+  document.getElementById('midi-mapping-row').style.display  = mode === 'midi' ? 'block' : 'none';
+  renderMidiMappingSummary();
+
+  // Rebuild whatever should be sounding right now under the new backend,
+  // so switching mid-play doesn't leave silence until the next poll tick.
+  if (isPlaying) applyMusicState(musicState, musicState.key);
+}
+
+// ── Mapping import / export ─────────────────────────────────────────────
+function renderMidiMappingSummary() {
+  const el = document.getElementById('midi-mapping-summary');
+  if (!el) return;
+  el.innerHTML = Object.entries(midiMapping).map(([key, m]) =>
+    `${m.label} → ch ${m.channel}` +
+    (m.cc ? ' (CC: ' + Object.entries(m.cc).map(([p, n]) => p + '=' + n).join(', ') + ')' : '')
+  ).join('<br>');
+}
+
+function _validMidiMapping(obj) {
+  // Partial files are the whole point of "merge, not replace" above — a
+  // musician customizing just one layer's CCs shouldn't need to retype all
+  // four. Accept any subset of recognized layer keys, reject only if a
+  // PRESENT layer has no valid channel, or if nothing recognizable is
+  // present at all (an empty object, or a file with none of these keys).
+  if (!obj || typeof obj !== 'object') return false;
+  const keys = ['drone', 'pad', 'pulse', 'texture'].filter(k => k in obj);
+  if (!keys.length) return false;
+  return keys.every(k =>
+    obj[k] && typeof obj[k].channel === 'number' &&
+    obj[k].channel >= 1 && obj[k].channel <= 16
+  );
+}
+
+function importMidiMapping(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let parsed;
+    try { parsed = JSON.parse(e.target.result); }
+    catch { toast('Mapping file is not valid JSON', true); return; }
+    if (!_validMidiMapping(parsed)) {
+      toast('Mapping file missing a valid drone/pad/pulse/texture channel (1-16)', true);
+      return;
+    }
+    // Merge rather than replace wholesale — an imported file that only
+    // customises e.g. drone's CCs shouldn't silently drop pad/pulse/
+    // texture back to nothing.
+    ['drone', 'pad', 'pulse', 'texture'].forEach(k => {
+      if (!parsed[k]) return; // not in the imported file — leave this layer untouched entirely
+      midiMapping[k] = Object.assign({}, midiMapping[k], parsed[k], {
+        cc: Object.assign({}, midiMapping[k].cc, parsed[k].cc)
+      });
+    });
+    renderMidiMappingSummary();
+    toast('MIDI mapping imported');
+  };
+  reader.readAsText(file);
+}
+
+function exportMidiMapping() {
+  const blob = new Blob([JSON.stringify(midiMapping, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'mccf_midi_mapping.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ================================================================
 // Engine control
 // ================================================================
+
+// Panic: All Sound Off (CC120) + All Notes Off (CC123) + Reset All Controllers
+// (CC121) on all 16 channels. Independent of any bookkeeping of what is
+// "supposed" to be sounding, so it clears hung notes whatever state we are in.
+// Also runs when the page closes or reloads: closing this window mid-song used
+// to leave the synth holding a note (Web MIDI has no auto-release).
+function midiPanic() {
+  if (!midiOutput) return;
+  for (let ch = 0; ch < 16; ch++) {
+    try {
+      midiOutput.send([0xB0 | ch, 120, 0]);
+      midiOutput.send([0xB0 | ch, 123, 0]);
+      midiOutput.send([0xB0 | ch, 121, 0]);
+    } catch {}
+  }
+}
+window.addEventListener('pagehide', midiPanic);
+window.addEventListener('beforeunload', midiPanic);
 
 function toggleEngine() {
   if (isPlaying) stopEngine();
@@ -901,6 +1408,12 @@ async function startEngine() {
   document.getElementById('engine-status').textContent = 'playing';
   document.getElementById('viz-panel').classList.add('playing');
 
+  if (engineMode === 'theme') {
+    startThemePlayback();
+    toast('MIDI theme playback started');
+    return;
+  }
+
   await refreshAndUpdate();
   updateInterval = setInterval(refreshAndUpdate, P.rate * 1000);
   toast('Ambient engine started');
@@ -909,11 +1422,239 @@ async function startEngine() {
 function stopEngine() {
   isPlaying = false;
   if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
-  stopAllLayers();
+  if (engineMode === 'theme') { stopThemePlayback(); _themeClockStop(); themeEnergy = 0; _themeFooterRender(); }
+  if (outputMode === 'midi') midiAllNotesOff(); else stopAllLayers();
   document.getElementById('play-btn').textContent = '▶ Start';
   document.getElementById('engine-status').textContent = 'stopped';
   document.getElementById('viz-panel').classList.remove('playing');
   toast('Ambient engine stopped');
+}
+
+// Embedded in the Scene Composer's tab set: the Composer posts {type:'mccf_tab_hidden'} when its Ambient tab is left, so the music stops.
+// (The frame is KEPT, not reloaded, so the recipe and hand edits survive a tab switch.)  Only the parent window may send it.
+window.addEventListener('message', function (e) {
+  if (!e || e.source !== window.parent || !e.data || e.data.type !== 'mccf_tab_hidden') return;
+  try { if (isPlaying) stopEngine(); } catch (x) {}
+  try { stopThemePlayback(); } catch (x) {}
+});
+
+// ================================================================
+// MIDI Theme Player (Day 90) — plays an imported .mid file's tracks
+// directly, independent of the generative field-driven engine. Field-state
+// modulation of this playback is deliberately NOT built yet — that's the
+// first real "transformation rule," a separate design pass.
+// ================================================================
+let engineMode        = 'generative'; // 'generative' | 'theme'
+let themeEnergy       = 0;            // 0..1, set by drawThemeNotes (footer "Energy")
+let _themeClockTimer  = null;
+let _themeFooterLast  = 0;
+
+// The player itself is in js/mccf_midi.js; this page only supplies the outputs
+// and owns the UI around it.
+const themePlayer = new MccfMidi.Player({
+  getMidiOutput:       () => midiOutput,
+  getOutputMode:       () => outputMode,      // 'audio' | 'midi'
+  getAudioContext:     () => audioCtx,
+  getAudioDestination: () => layerGainNodes.pad || masterGain,
+  onEnd:               () => { if (isPlaying && engineMode === 'theme') stopEngine(); }
+});
+const _themeTrackColor = MccfMidi.trackColor;
+const _fmtClock        = MccfMidi.fmtClock;
+const _PC_NAMES        = MccfMidi.PC_NAMES;
+
+let workshopOn = false;   // Theme Workshop is a sub-mode of 'theme': same Player, clock and animation
+function setEngineMode(mode) {
+  const ws = (mode === 'workshop'); if (ws) mode = 'theme';
+  if (mode === engineMode && ws === workshopOn) return;
+  if (isPlaying) stopEngine(); // never leave the previous mode's notes/timers running underneath a mode switch
+  engineMode = mode; workshopOn = ws;
+  _setFooterMode(mode === 'theme');
+  if (mode === 'theme') _themeFooterRender();
+  document.getElementById('theme-player-panel').style.display = (mode === 'theme') ? 'block' : 'none';
+  const wp = document.getElementById('workshop-panel'); if (wp) wp.style.display = ws ? 'block' : 'none';
+  document.body.classList.toggle('ws-wide', ws);
+  if (window.Workshop) Workshop.onModeChange(ws);
+  if (window.gridUI) { gridUI.showTabs(mode === 'theme'); gridUI.reset(); }
+  if (window.notationUI) notationUI.refresh();
+}
+
+function loadMidiTheme(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (isPlaying && engineMode === 'theme') stopEngine();
+    let parsed;
+    try { parsed = themePlayer.load(e.target.result); }
+    catch (err) { toast('MIDI file: ' + err.message, true); return; }
+    document.getElementById('theme-file-info').textContent =
+      file.name + ' — format ' + parsed.format + ', ' + parsed.ntrks + ' track(s), ' + parsed.ppq + ' ppq';
+    if (workshopOn && window.Workshop) Workshop.setSource(file.name, e.target.result);   // replaces the Player's data with the arrangement
+    else { renderThemeTrackList(); _themeClockRender(); _themeFooterRender(); }
+    if (window.gridUI) gridUI.reset();   // a different file: fit the whole piece again
+    if (window.notationUI) notationUI.reset();
+    toast('Loaded ' + file.name);
+  };
+  reader.onerror = () => toast('Could not read MIDI file', true);
+  reader.readAsArrayBuffer(file);
+}
+
+function _esc(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+function renderThemeTrackList() {
+  const el = document.getElementById('theme-track-list');
+  if (!el || !themePlayer.data) return;
+  el.innerHTML = themePlayer.data.tracks.map(tr => {
+    const progTxt = tr.program !== null ? (' · prog ' + tr.program) : '';
+    const resolved = themePlayer.resolvedChannel(tr) + 1;
+    const opts = [];
+    for (let c = 1; c <= 16; c++) opts.push('<option value="' + c + '"' + (c === resolved ? ' selected' : '') + '>' + c + '</option>');
+    const vol = themePlayer.volume[tr.index] !== undefined ? themePlayer.volume[tr.index] : 100;
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--border)">' +
+      '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;min-width:0">' +
+        '<input type="checkbox" style="flex:none" ' + (themePlayer.enabled[tr.index] ? 'checked' : '') +
+        ' onchange="toggleThemeTrack(' + tr.index + ', this.checked)">' +
+        '<span style="flex:none;width:9px;height:9px;border-radius:50%;background:' + _themeTrackColor(tr.index) + '"></span>' +
+        '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _esc(tr.name) + '</span>' +
+      '</label>' +
+      '<div style="font-size:13px;color:var(--accent);padding-left:22px">' + _esc(themePlayer.instrumentName(tr)) + '</div>' +
+      '<div style="font-size:11px;color:var(--dim);padding-left:22px">file ch' + (tr.channel + 1) + progTxt + ' · ' + tr.noteCount + ' notes</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px;padding-left:22px;padding-right:10px">' +
+        '<span style="color:#aab0be;flex:none">out ch</span>' +
+        '<select style="width:54px;flex:none;padding:3px 4px" onchange="setThemeTrackChannel(' + tr.index + ', this.value)">' + opts.join('') + '</select>' +
+        '<input type="range" min="0" max="127" step="1" value="' + vol + '" title="volume (CC7)" style="flex:1;min-width:60px;width:auto" ' +
+          'oninput="setThemeTrackVolume(' + tr.index + ', this.value)">' +
+        '<span class="param-val" id="theme-vol-v-' + tr.index + '" style="width:34px;flex:none">' + vol + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join('') || '<span style="color:var(--dim);font-size:12px">No tracks in this file</span>';
+  if (window.gridUI) gridUI.refresh();
+  if (window.notationUI) notationUI.refresh();
+}
+
+function resetThemeChannels()            { themePlayer.resetChannels(); renderThemeTrackList(); }
+function toggleThemeTrack(index, enabled){ themePlayer.setEnabled(index, enabled); _themeClockRender(); if (window.gridUI) gridUI.refresh(); if (window.notationUI) notationUI.refresh(); }
+function setThemeTrackChannel(index, ch) { themePlayer.setChannel(index, ch); renderThemeTrackList(); }
+function setThemeTrackVolume(index, value) {
+  themePlayer.setVolume(index, value);
+  const lbl = document.getElementById('theme-vol-v-' + index);
+  if (lbl) lbl.textContent = themePlayer.volume[index];
+}
+function setThemePolyOn(on)      { themePlayer.polyOn = !!on; }
+function setThemeSendSetup(on)   { themePlayer.sendSetup = !!on; }
+
+function startThemePlayback() {
+  if (workshopOn && window.Workshop && !Workshop.prepareForPlay()) { stopEngine(); return; }
+  if (!themePlayer.data) { toast('Load a MIDI file first', true); stopEngine(); return; }
+  themePlayer.loop = document.getElementById('theme-loop').checked;
+  _themeClockStart();
+  themePlayer.start(0);
+}
+function stopThemePlayback() { themePlayer.stop(); }
+
+// ---- Footer panels in theme mode --------------------------------------
+// The footer normally shows the generative engine's state. During theme
+// playback it shows the file's: estimated key, live tempo, note energy,
+// voices sounding, a 12-pitch-class meter, and the chord ring.
+function _setFooterMode(theme) {
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  if (theme) {
+    set('ft-key', 'Key (est.)'); set('ft-tension', 'Energy'); set('ft-texture', 'Texture'); set('ft-scene', 'Theme');
+    set('score-tension-sub', 'note activity');
+    const ng = document.getElementById('note-grid');
+    if (ng) { ng.style.height = '56px'; ng.style.gap = '4px'; ng.innerHTML = ''; }
+  } else {
+    set('ft-key', 'Key / Mode'); set('ft-tension', 'Tension'); set('ft-texture', 'Texture'); set('ft-scene', 'Scene');
+    set('score-tension-sub', 'harmonic dissonance');
+    const ng = document.getElementById('note-grid');
+    if (ng) { ng.style.height = ''; ng.style.gap = ''; ng.innerHTML = ''; }
+  }
+}
+
+function _themeFooterRender() {
+  if (engineMode !== 'theme') return;
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  const playing = themePlayer.playing;
+  const now = performance.now();
+
+  // What is sounding right now, from the same records the animation uses.
+  const snd = themePlayer.sounding();
+  const pcVel = snd.pcVel, pcTrack = snd.pcTrack, voices = snd.voices;
+
+  const key = themePlayer.data ? themePlayer.estimateKey() : null;
+  set('score-key', key ? _PC_NAMES[key.pc] : '—');
+  set('score-mode', key ? key.mode : (themePlayer.data ? '' : 'load a file'));
+  if (themePlayer.data) {
+    set('score-tempo', '♩ ' + Math.round(themePlayer.currentBpm()));
+    set('score-meter', 'scale ×' + themePlayer.tempoScale.toFixed(2));
+    const enabled = themePlayer.data.tracks.filter(t => themePlayer.enabled[t.index] && t.noteCount).length;
+    set('score-zone', 'MIDI theme');
+    set('score-agents', enabled + ' of ' + themePlayer.data.tracks.filter(t => t.noteCount).length + ' tracks on');
+  }
+  set('score-tension', (playing ? themeEnergy : 0).toFixed(2));
+  set('score-texture', voices > 6 ? 'dense' : voices > 2 ? 'moderate' : 'sparse');
+  set('score-voices', voices + ' voice' + (voices === 1 ? '' : 's'));
+
+  // 12-pitch-class meter
+  const ng = document.getElementById('note-grid');
+  if (ng) {
+    if (ng.children.length !== 12) {
+      ng.innerHTML = _PC_NAMES.map(n =>
+        '<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:56px;width:16px">' +
+        '<div class="note-bar" style="width:12px;height:2px;transition:height .08s linear"></div>' +
+        '<span style="font-size:9px;color:#aab0be;margin-top:2px">' + n + '</span></div>').join('');
+    }
+    for (let k = 0; k < 12; k++) {
+      const bar = ng.children[k].firstChild;
+      bar.style.height = (2 + pcVel[k] * 36) + 'px';
+      bar.style.background = pcTrack[k] >= 0 ? _themeTrackColor(pcTrack[k]) : 'var(--purple)';
+    }
+  }
+
+  // Chord ring: the 12 pitch classes on a circle, sounding ones lit in their
+  // track colour and joined into the chord's shape; key tonic ringed.
+  const canvas = document.getElementById('harmonic-canvas');
+  if (canvas) {
+    const c = canvas.getContext('2d'), cx = 40, cy = 40, r = 30;
+    c.clearRect(0, 0, 80, 80);
+    c.strokeStyle = 'rgba(160,96,240,0.3)'; c.lineWidth = 1;
+    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
+    const pos = k => { const a = (k / 12) * Math.PI * 2 - Math.PI / 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+    const lit = []; for (let k = 0; k < 12; k++) if (pcVel[k] > 0) lit.push(k);
+    if (lit.length > 1) {
+      c.strokeStyle = 'rgba(74,240,168,0.55)'; c.lineWidth = 1.2; c.beginPath();
+      lit.forEach((k, i) => { const [x, y] = pos(k); if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); });
+      c.closePath(); c.stroke();
+    }
+    for (let k = 0; k < 12; k++) {
+      const [x, y] = pos(k), on = pcVel[k] > 0;
+      c.fillStyle = on ? _themeTrackColor(pcTrack[k]) : 'rgba(160,96,240,0.3)';
+      c.beginPath(); c.arc(x, y, on ? 4 : 2, 0, Math.PI * 2); c.fill();
+      if (key && k === key.pc) { c.strokeStyle = '#4af0a8'; c.lineWidth = 1; c.beginPath(); c.arc(x, y, 6, 0, Math.PI * 2); c.stroke(); }
+    }
+  }
+}
+
+function _themeClockRender() {
+  const el = document.getElementById('theme-clock');
+  if (!el) return;
+  const playing = isPlaying && engineMode === 'theme';
+  el.textContent = _fmtClock(playing ? themePlayer.elapsed() : 0);
+  const tot = document.getElementById('theme-clock-total');
+  if (tot) tot.textContent = themePlayer.data ? '/ ' + _fmtClock(themePlayer.totalSeconds()) : '';
+}
+function _themeClockStart() {
+  if (_themeClockTimer) return;
+  _themeClockTimer = setInterval(_themeClockRender, 100);
+}
+function _themeClockStop() {
+  if (_themeClockTimer) { clearInterval(_themeClockTimer); _themeClockTimer = null; }
+  _themeClockRender();
+}
+
+function setThemeTempoScale(value) {
+  themePlayer.setTempoScale(value);
+  document.getElementById('theme-tempo-scale-v').textContent = themePlayer.tempoScale.toFixed(2) + '×';
+  _themeClockRender();
 }
 
 async function refreshAndUpdate() {
@@ -941,7 +1682,9 @@ async function refreshAndUpdate() {
 }
 
 function applyMusicState(m, root) {
-  if (!isPlaying || !audioCtx) return;
+  if (!isPlaying) return;
+  if (outputMode === 'midi') { applyMidiState(m, root); return; }
+  if (!audioCtx) return;
 
   buildDroneLayer(root, m.tension, m.regulation);
   buildPadLayer(root, m.mode, m.textureDensity, m.valence);
@@ -1083,7 +1826,14 @@ function startViz() {
     mainCtx.fillStyle = grad;
     mainCtx.fillRect(0, 0, W, H);
 
-    if (analyserNode && isPlaying) {
+    if (engineMode === 'theme' && isPlaying) {
+      // Web Audio output has a live analyser; MIDI output doesn't (it's silent),
+      // so the note-driven layer below is what animates MIDI playback.
+      if (outputMode !== 'midi' && analyserNode) { drawWaveform(W, H); drawFrequencyField(W, H); }
+      drawThemeNotes(W, H);
+      const tnow = performance.now();
+      if (tnow - _themeFooterLast > 50) { _themeFooterLast = tnow; _themeFooterRender(); }
+    } else if (analyserNode && isPlaying) {
       drawWaveform(W, H);
       drawFrequencyField(W, H);
     } else {
@@ -1148,6 +1898,82 @@ function drawFrequencyField(W, H) {
   mainCtx.beginPath();
   mainCtx.arc(cx, cy, pulse, 0, Math.PI * 2);
   mainCtx.fill();
+}
+
+// Note-driven visualization for theme playback. Pitch class = angle on a
+// 12-position chromatic circle, octave = distance from centre, colour = track,
+// size = velocity. Each note-on throws an expanding ripple; notes glow while
+// held and fade over ~0.4 s after release. Drums (channel 10) flash at the rim.
+function drawThemeNotes(W, H) {
+  const now = performance.now();
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.42;
+  const ctx = mainCtx;
+  themePlayer.viz = themePlayer.viz.filter(n => (n.endMs === null ? true : now < n.endMs + 1500) && now < n.startMs + 60000);
+
+  // guide circle + 12 pitch-class ticks
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(160,96,240,0.12)';
+  [0.25, 0.5, 0.75, 1].forEach(f => { ctx.beginPath(); ctx.arc(cx, cy, R * f, 0, Math.PI * 2); ctx.stroke(); });
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2 - Math.PI / 2;
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * R * 0.2, cy + Math.sin(a) * R * 0.2);
+    ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke();
+  }
+
+  let energy = 0;
+  const prevMode = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'lighter';
+  themePlayer.viz.forEach(n => {
+    const age = now - n.startMs;
+    if (age < 0) return; // queued a few ms ahead, not sounding yet
+    const held = n.endMs === null || now < n.endMs;
+    const relAge = held ? 0 : now - n.endMs;
+    const alive = held ? 1 : Math.max(0, 1 - relAge / 400);
+    const col = _themeTrackColor(n.track);
+
+    if (n.drum) {
+      if (age > 350) return;
+      const f = 1 - age / 350;
+      const a = ((n.pitch % 12) / 12) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(a) * R * 1.02, y = cy + Math.sin(a) * R * 1.02;
+      ctx.globalAlpha = 0.85 * f;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(x, y, 3 + n.vel * 9 * f, 0, Math.PI * 2); ctx.fill();
+      energy += n.vel * f * 0.5;
+      return;
+    }
+
+    const ang = ((n.pitch % 12) / 12) * Math.PI * 2 - Math.PI / 2;
+    const rad = R * (0.2 + 0.8 * Math.min(1, Math.max(0, (n.pitch - 24) / 84)));
+    const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+
+    if (age < 700) { // ripple from the note-on
+      ctx.globalAlpha = 0.35 * (1 - age / 700) * n.vel;
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 6 + (age / 700) * R * 0.18, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (alive > 0) {
+      const size = 3 + n.vel * 7;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, size * 3);
+      g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.9 * alive;
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, size * 3, 0, Math.PI * 2); ctx.fill();
+      // line to centre, faint: shows the harmonic "spokes" the chord makes
+      ctx.globalAlpha = 0.12 * alive; ctx.strokeStyle = col; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+      energy += n.vel * alive * 0.15;
+    }
+  });
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = prevMode;
+
+  // centre pulse follows overall note energy
+  themeEnergy = Math.min(1, energy);
+  const pulse = 14 + Math.min(1, energy) * 46;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulse);
+  g.addColorStop(0, 'rgba(160,96,240,0.55)'); g.addColorStop(1, 'rgba(160,96,240,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, pulse, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawIdleField(W, H) {
@@ -1263,6 +2089,1179 @@ function toast(msg) {
 // Init
 ping();
 startViz();
+</script>
+<script>
+// ================================================================
+// THEME WORKSHOP (checkpoint 1a) — authoring UI over the browser-free engine.
+//   mccf_theory.js      scales, transforms, voices, recipe, build()
+//   mccf_smf_writer.js  canonical MIDI-file writer
+// Preview = the exported bytes loaded into the same Player, so what you hear is
+// exactly what Export gives you.  Edits stop playback (the Player is reloaded).
+// ================================================================
+const Workshop = (function () {
+  'use strict';
+  const T = MccfTheory, W = MccfSmfWriter, MM = MccfMidi;
+  const S = { fileName: '', buffer: null, sha: '', parsed: null, recipe: null, listen: 'arrangement',
+              build: null, error: '', notes: [], pending: null, stale: false, lastExport: null, hist: [], hi: -1, solo: null, pinned: null, selChain: null, selPlace: 'after', selJoinOn: false, selJoinSteps: 1, saveName: '', alsoRecipe: true, lastSave: null, saving: false, arc: null, arcErr: '', arcPosted: false };
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const TONICS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+  const SCALE_NAMES = Object.keys(T.SCALES);
+  const TYPES = ['transpose', 'invert', 'retrograde', 'retrogradeInversion', 'augment', 'diminish', 'sequence', 'fragment', 'rotate', 'octaveShift'];
+  const LABEL = { transpose: 'Transpose', invert: 'Invert', retrograde: 'Retrograde', retrogradeInversion: 'Retrograde-inversion',
+                  augment: 'Augment', diminish: 'Diminish', sequence: 'Sequence', fragment: 'Fragment', rotate: 'Rotate', octaveShift: 'Octave shift' };
+  // which parameters the UI offers for each transform ('n' number, 'mode', 'axis', 'range' = bar pair)
+  const PARAMS = {
+    transpose: [['steps', 'n', 'steps']], invert: [['axis', 'axis', 'axis'], ['mode', 'mode', '']],
+    retrograde: [], retrogradeInversion: [['axis', 'axis', 'axis'], ['mode', 'mode', '']],
+    augment: [['p', 'n', 'p'], ['q', 'n', 'q']], diminish: [['p', 'n', 'p'], ['q', 'n', 'q']],
+    sequence: [['copies', 'n', 'copies'], ['step', 'n', 'step'], ['mode', 'mode', '']],
+    fragment: [['bars', 'range', 'bars']], rotate: [['k', 'n', 'note k']], octaveShift: [['octaves', 'n', 'octaves']]
+  };
+  const PRESETS = [
+    ['retroinv', 'Retrograde-inversion'], ['canon3', 'Canon: third below, 2 bars later'],
+    ['canon8', 'Canon: octave below, 4 bars later'], ['canon5', 'Canon at the fifth (diatonic), 2 bars later'],
+    ['dimseq', 'Diminution 2:1 + sequence x2']
+  ];
+
+  // ---------- helpers ----------
+  function isDrum(tr) { return tr.channelsSeen.indexOf(9) >= 0; }
+  function trackProgram(tr) {
+    const p = tr.programs && tr.programs[tr.channel];
+    return p !== undefined ? p : (tr.program === null || tr.program === undefined ? 0 : tr.program);
+  }
+  function firstCC(tr, cc, ch) {
+    const l = tr.controllers && tr.controllers[cc]; if (!l) return undefined;
+    const e = l.filter((x) => x.channel === ch).sort((a, b) => a.tick - b.tick)[0];
+    return e ? e.value : undefined;
+  }
+  function plainVoice(tr, id, name) {   // the theme track's own sound, so a voice starts out sounding like the song
+    const ch = tr.channel;
+    const v = { id: id, name: name, source: 'theme', chain: [], entryBar: 1, program: trackProgram(tr), channel: ch + 1,
+                volume: firstCC(tr, 7, ch) !== undefined ? firstCC(tr, 7, ch) : 100 };
+    [['pan', 10], ['reverb', 91], ['chorus', 93]].forEach((k) => { const x = firstCC(tr, k[1], ch); if (x !== undefined) v[k[0]] = x; });
+    return v;
+  }
+  function totalBars(p) {
+    const sig = (p.timeSigEvents && p.timeSigEvents[0]) || { num: 4, den: 4 }, bt = T.barTicksFor(p.ppq, sig);
+    return Math.max(1, Math.ceil(p.tracks.reduce((m, t) => Math.max(m, t.lengthTicks), 0) / bt));
+  }
+  function defaultRecipe() {
+    const p = S.parsed, melodic = p.tracks.filter((t) => t.noteCount && !isDrum(t)), tr = melodic[0] || p.tracks.find((t) => t.noteCount);
+    const bars = [1, Math.min(8, totalBars(p))];
+    // Default key: estimated from every pitched note in the whole file. A short theme window is a poor basis
+    // (the first 8 bars of a modal line can read as the wrong key); the est. button re-estimates from the theme.
+    let key = { tonic: 'C', scale: 'major' };
+    try { const all = [].concat.apply([], p.tracks.filter((t) => !isDrum(t)).map((t) => t.notes)), k = all.length ? T.estimateKey(all) : null;
+          if (k) key = { tonic: k.tonic, scale: k.scale === 'minor' ? 'minor' : 'major' }; } catch (e) { /* keep C major */ }
+    return T.normalizeRecipe({ source: { file: S.fileName, sha256: S.sha, tracks: [tr.index], bars: bars }, key: key, ruleSet: 'chorale-strict', seed: 1729,
+                               voices: [plainVoice(tr, 'v1', 'Theme')] });
+  }
+  function themeTrack() { return S.parsed.tracks[S.recipe.source.tracks[0]]; }
+  function nextId() { let n = 0; S.recipe.voices.forEach((v) => { const m = /^v(\d+)$/.exec(v.id); if (m) n = Math.max(n, +m[1]); }); return 'v' + (n + 1); }
+  function freeChannel() {
+    const used = {}; S.recipe.voices.forEach((v) => { used[v.channel] = true; });
+    const src = {}; S.parsed.tracks.forEach((t) => { if (S.recipe.source.tracks.indexOf(t.index) < 0) t.channelsSeen.forEach((c) => { src[c + 1] = true; }); });
+    for (let c = 1; c <= 16; c++) if (c !== 10 && !used[c] && !src[c]) return c;
+    for (let c = 1; c <= 16; c++) if (c !== 10 && !used[c]) return c;
+    return 1;
+  }
+  function dependsOn(voice, id) {   // does `voice` (transitively) derive from voice `id`?
+    const by = {}; S.recipe.voices.forEach((v) => { by[v.id] = v; });
+    let cur = voice, guard = 0;
+    while (cur && cur.source !== 'theme' && guard++ < 64) { if (cur.source === id) return true; cur = by[cur.source]; }
+    return false;
+  }
+  function baseName() { return (S.fileName || 'theme').replace(/\.(mid|midi)$/i, ''); }
+  function exportName() {
+    const s = S.recipe.source;
+    return baseName() + '_t' + s.tracks.join('+') + '_b' + s.bars[0] + '-' + s.bars[1] + '_' + T.recipeDigest(S.recipe).slice(0, 8);
+  }
+  function stamp(b) { return 'MCCF ' + T.ENGINE.name + ' ' + T.ENGINE.version + ' recipe ' + T.recipeDigest(b.recipe) + ' source ' + (b.recipe.source.sha256 || '').slice(0, 12); }
+  function download(bytesOrText, name, type) {
+    const blob = new Blob([bytesOrText], { type: type }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  // ---------- solo and pin ----------
+  const baseId = (id) => (id || '').replace(/~bass$/, '');
+  function soloApply() {   // with a voice soloed only its tracks sound (a harmony voice's chords and bass together); everything else, source tracks included, is muted
+    const b = S.listen === 'arrangement' ? S.build : null; if (!b || !themePlayer.data) return;
+    b.arrangement.tracks.forEach((t, k) => { const idx = k + 1, tr = themePlayer.data.tracks[idx]; if (tr && tr.noteCount) themePlayer.setEnabled(idx, S.solo ? baseId(t.voiceId) === S.solo : true); });
+    themePlayer.data.tracks.forEach((tr, idx) => { if (idx > b.arrangement.tracks.length && tr.noteCount) themePlayer.setEnabled(idx, !S.solo); });
+  }
+  function solo(i) {
+    const v = V()[i]; if (!v) return; S.solo = S.solo === v.id ? null : v.id;
+    soloApply(); renderThemeTrackList(); _themeClockRender(); _themeFooterRender(); render();
+    toast(S.solo ? 'Solo: ' + v.name + ' (press solo again to hear everything)' : 'Solo off');
+  }
+  function pin() { if (!S.recipe) return; S.pinned = JSON.stringify(S.recipe); render(); toast('Pinned this version. Change things, then choose "listen to: pinned version" to compare.'); }
+  function clearPin() { S.pinned = null; if (S.listen === 'pinned') { S.listen = 'arrangement'; loadIntoPlayer(); } render(); }
+
+  // ---------- build / player ----------
+  function rebuild() {
+    try { S.build = T.build(S.recipe, S.parsed, arcOpts()); S.error = ''; } catch (e) { S.build = null; S.error = e.message; }
+  }
+  function currentBuild() {          // what the Player should hold: the arrangement, the original theme, or the pinned version (A/B)
+    if (S.listen === 'pinned' && S.pinned) { try { return T.build(JSON.parse(S.pinned), S.parsed, arcOpts()); } catch (e) { return null; } }
+    if (S.listen === 'original') {
+      try {
+        const r = JSON.parse(JSON.stringify(S.recipe)); r.voices = [plainVoice(themeTrack(), 'orig', 'Original theme')]; delete r.arc;   // the original theme is heard plain
+        return T.build(r, S.parsed);
+      } catch (e) { return null; }
+    }
+    return S.build;
+  }
+  function loadIntoPlayer() {
+    const b = currentBuild(); if (!b) return false;
+    const o = W.writeSMF(b.arrangement, { name: 'Conductor', comment: stamp(b) });
+    themePlayer.load(o.bytes.buffer.slice(o.bytes.byteOffset, o.bytes.byteOffset + o.bytes.byteLength));
+    if (themePlayer.setLanes) themePlayer.setLanes(S.listen === 'original' ? {} : laneMap(b));   // the arc's controller lanes play in time with the notes
+    S.stale = false; soloApply(); arcPost();
+    const n = b.arrangement.tracks.filter((t) => t.noteCount).length;
+    $('theme-file-info').textContent = (S.listen === 'original' ? 'Original theme' : 'Arrangement') + ' from ' + S.fileName + ' — ' + n + ' track(s), ' + b.arrangement.ppq + ' ppq';
+    renderThemeTrackList(); _themeClockRender(); _themeFooterRender();
+    return true;
+  }
+  // Undo/redo covers the WHOLE recipe: every change (a transform, a drag on the grid, a key change) is one step.
+  function pushHist() {
+    const j = JSON.stringify(S.recipe); if (S.hist[S.hi] === j) return;
+    S.hist = S.hist.slice(0, S.hi + 1); S.hist.push(j); if (S.hist.length > 200) S.hist.shift(); S.hi = S.hist.length - 1;
+  }
+  function undo() { if (!S.recipe || S.hi <= 0) { toast('Nothing to undo'); return; } S.hi--; S.recipe = JSON.parse(S.hist[S.hi]); changed({ noHistory: true }); toast('Undo'); }
+  function redo() { if (!S.recipe || S.hi >= S.hist.length - 1) { toast('Nothing to redo'); return; } S.hi++; S.recipe = JSON.parse(S.hist[S.hi]); changed({ noHistory: true }); toast('Redo'); }
+  function changed(opts) {
+    if (isPlaying) { stopEngine(); toast('Playback stopped — recipe changed'); }
+    if (!(opts && opts.noHistory)) pushHist();
+    rebuild(); if (S.build) loadIntoPlayer(); else S.stale = true;
+    render();
+  }
+
+  // ---------- source ----------
+  function setSource(name, buffer) {
+    let parsed;
+    try { parsed = MM.parseMidiFile(buffer); } catch (e) { toast('MIDI file: ' + e.message, true); return; }
+    S.fileName = name; S.buffer = buffer; S.parsed = parsed; S.sha = T.sha256Hex(new Uint8Array(buffer)); S.notes = [];
+    if (S.pending) {
+      S.recipe = S.pending; S.pending = null; checkSource();
+    } else { S.recipe = defaultRecipe(); }
+    S.listen = 'arrangement'; S.hist = []; S.hi = -1; changed();
+  }
+  function checkSource() {   // a recipe is only reproducible against the exact file it was made from
+    S.notes = []; const s = S.recipe.source;
+    if (s.file && s.file !== S.fileName) S.notes.push('Recipe was made from "' + s.file + '", but "' + S.fileName + '" is loaded.');
+    if (s.sha256 && s.sha256 !== S.sha) S.notes.push('Source file differs from the one this recipe was made with (SHA-256 mismatch) — the result may not match the original.');
+    if (S.recipe.engine && S.recipe.engine.version !== T.ENGINE.version) S.notes.push('Recipe was made with engine ' + S.recipe.engine.version + '; this is ' + T.ENGINE.version + '.');
+  }
+  function adoptSource() { S.recipe.source.sha256 = S.sha; S.recipe.source.file = S.fileName; checkSource(); changed(); }
+
+  // ---------- recipe in / out ----------
+  function saveRecipe() {
+    if (!S.recipe) return;
+    download(JSON.stringify(T.normalizeRecipe(S.recipe), null, 2) + '\n', outBase() + '.recipe.json', 'application/json');
+    toast('Recipe saved');
+  }
+  function applyRecipe(obj) {
+    const errs = T.validateRecipe(obj);
+    if (errs.length) { toast('Recipe: ' + errs[0], true); return false; }
+    const r = T.normalizeRecipe(obj);
+    if (!S.parsed) { S.pending = r; toast('Recipe loaded — now load ' + r.source.file); render(); return true; }
+    S.recipe = r; checkSource(); changed(); return true;
+  }
+  function loadRecipe(file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => { let obj; try { obj = JSON.parse(rd.result); } catch (e) { toast('Recipe is not valid JSON', true); return; } applyRecipe(obj); };
+    rd.onerror = () => toast('Could not read recipe file', true);
+    rd.readAsText(file);
+  }
+  // ---------- names, export, and saving into the scene media folder ----------
+  // A name the server will accept: letters, digits, . _ - ; starts with a letter or digit; ends in .mid
+  function safeMidName(raw) {
+    let n = String(raw || '').trim().replace(/\.(mid|midi)$/i, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[^A-Za-z0-9]+/, '').replace(/_{2,}/g, '_').slice(0, 74);
+    return (n || 'workshop') + '.mid';
+  }
+  function outBase() { return S.saveName ? safeMidName(S.saveName).replace(/\.mid$/, '') : exportName(); }   // what you typed, cleaned up; else the automatic name
+  function setAlsoRecipe(on) { S.alsoRecipe = !!on; }
+  function setSaveName(v) { S.saveName = String(v || '').trim(); render(); }
+  function exportBytes() { const b = S.build; if (!b) return null; return W.writeSMF(b.arrangement, { name: 'Conductor', comment: stamp(b) }); }
+  async function post(path, body, type) {
+    const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': type }, body: body });
+    let j = {}; try { j = await r.json(); } catch (e) { /* not JSON */ }
+    return { status: r.status, ok: r.ok && j.ok, json: j };
+  }
+  // save the .mid (and, if ticked, its recipe) into <static>/x3d/X3DAssets/media/music/ through the server
+  async function saveToMedia() {
+    if (S.saving) return; const o = exportBytes(); if (!o) { toast('Nothing to save: ' + (S.error || 'no source loaded'), true); return; }
+    const name = safeMidName(S.saveName || exportName()), base = name.replace(/\.mid$/, ''), q = '/ambient/save_midi?name=' + encodeURIComponent(name);
+    S.saving = true; let status = '';
+    try {
+      let r = await post(q, o.bytes, 'application/octet-stream'), replaced = false;
+      if (r.status === 409) {
+        if (!window.confirm(name + ' is already in the scene media folder.\n\nReplace it with this version?')) { toast('Not saved: kept the existing ' + name); S.saving = false; return; }
+        r = await post(q + '&overwrite=1', o.bytes, 'application/octet-stream'); replaced = true;
+      }
+      if (!r.ok) throw new Error(r.json.error || ('the server answered ' + r.status));
+      S.lastExport = { name: name, bytes: o.bytes, warnings: o.warnings };
+      status = (replaced ? 'Replaced ' : 'Saved ') + r.json.url + ' (' + r.json.bytes + ' bytes)';
+      if (S.alsoRecipe) {
+        const rn = base + '.recipe.json', rq = '/ambient/save_recipe?name=' + encodeURIComponent(rn) + (replaced ? '&overwrite=1' : '');
+        const rr = await post(rq, JSON.stringify(T.normalizeRecipe(S.recipe), null, 2) + '\n', 'application/json');
+        status += rr.ok ? ' and its recipe' : (rr.status === 409 ? '; the recipe ' + rn + ' already exists and was kept' : '; the recipe was not saved (' + (rr.json.error || rr.status) + ')');
+      }
+      S.lastSave = { name: name, url: r.json.url, text: status };
+      toast(status + '. In the Scene Composer: Place → MIDI → choose it from the media list.');
+    } catch (e) {
+      S.lastSave = { name: name, text: 'Not saved: ' + e.message };
+      toast('Could not save to the scene media folder (' + e.message + '). Use Export .mid and copy the file by hand.', true);
+    }
+    S.saving = false; render();
+  }
+  function exportMid() {
+    const b = S.build; if (!b) { toast('Nothing to export: ' + (S.error || 'no source loaded'), true); return; }
+    const o = W.writeSMF(b.arrangement, { name: 'Conductor', comment: stamp(b) }), name = S.saveName ? safeMidName(S.saveName) : exportName() + '.mid';
+    S.lastExport = { name: name, bytes: o.bytes, warnings: o.warnings };
+    download(o.bytes, name, 'audio/midi'); toast('Exported ' + name);
+  }
+
+  // ---------- edits ----------
+  const V = () => S.recipe.voices;
+  function num(v, lo, hi, fallback) { let x = parseFloat(v); if (!isFinite(x)) x = fallback; return Math.max(lo, Math.min(hi, x)); }
+  function setTrack(idx) {
+    S.recipe.source.tracks = [parseInt(idx, 10)];
+    const tr = themeTrack();
+    // a plain theme voice (no transforms) follows the new track's own sound: instrument, channel, volume, pan and effects
+    V().forEach((v) => {
+      if (v.source !== 'theme' || v.chain.length) return;
+      const pv = plainVoice(tr, v.id, v.name);
+      ['pan', 'reverb', 'chorus'].forEach((k) => { delete v[k]; if (pv[k] !== undefined) v[k] = pv[k]; });
+      v.program = pv.program; v.channel = pv.channel; v.volume = pv.volume;
+    });
+    changed();
+  }
+  function setBars(i, val) {
+    const b = S.recipe.source.bars.slice(), n = Math.round(num(val, 1, totalBars(S.parsed), b[i]));
+    b[i] = n; if (i === 0 && b[1] < n) b[1] = n; if (i === 1 && b[0] > n) b[0] = n; S.recipe.source.bars = b; changed();
+  }
+  function setKey(which, val) { S.recipe.key[which] = val; changed(); }
+  function estimateKey() {
+    const th = T.extractTheme(S.parsed, S.recipe.source), k = th.notes.length ? T.estimateKey(th.notes) : null;
+    if (!k) { toast('No notes to estimate from', true); return; }
+    S.recipe.key = { tonic: k.tonic, scale: k.scale === 'minor' ? 'minor' : 'major' }; toast('Estimated ' + k.tonic + ' ' + k.scale); changed();
+  }
+  // ---- Start from: a character's (or a zone's) modal scale as the starting suggestion for the recipe's key -----------------------------------
+  // Order of preference is character, then zone, then nothing (the author's own choice). Only the SCALE is taken; the tonic is the music's.
+  // The zone dropdown calls the minor mode "aeolian" and the whole-tone scale "whole_tone"; this engine calls them minor / hexatonic.
+  const SF_ALIAS = { aeolian: 'minor', whole_tone: 'hexatonic', 'whole-tone': 'hexatonic' };
+  const SF = { items: null, busy: false, err: '', picked: null };
+  function sfScale(s) { s = String(s || '').trim().toLowerCase(); s = SF_ALIAS[s] || s; return T.SCALES[s] ? s : ''; }
+  async function sfLoad() {
+    if (SF.busy) return; SF.busy = true; SF.err = ''; const items = [];
+    try {
+      const r = await fetch(API + '/cultivars/xml', { signal: AbortSignal.timeout(4000) }), d = await r.json();
+      (d.cultivars || []).forEach((c) => { const at = c.ambient_theme || {}, sc = sfScale(at.scale); if (sc) items.push({ id: 'c:' + c.agentname, kind: 'character', name: c.agentname, scale: sc, tempo: at.tempo || '' }); });
+    } catch (e) { SF.err = 'characters not reachable (' + (e.message || e) + ')'; }
+    try {
+      const r = await fetch(API + '/scene', { signal: AbortSignal.timeout(4000) }), d = await r.json();
+      (d.zones || []).forEach((z) => { const at = z.ambient_theme || {}, sc = sfScale(at.scale), nm = z.name || z.id || z.type; if (sc && nm) items.push({ id: 'z:' + nm, kind: 'zone', name: nm, scale: sc, tempo: at.tempo || '' }); });
+    } catch (e) { SF.err += (SF.err ? '; ' : '') + 'zones not reachable'; }
+    SF.items = items; SF.busy = false; render();
+  }
+  function sfPick(id) {
+    const it = (SF.items || []).find((x) => x.id === id); if (!it) { SF.picked = null; render(); return; }
+    SF.picked = it; S.recipe.key.scale = it.scale; toast('Key scale ' + it.scale + ', suggested by ' + it.kind + ' ' + it.name + (it.tempo ? ' (tempo feel ' + it.tempo + ')' : '') + '. Change it freely.'); changed();
+  }
+  function sfRow() {
+    if (!SF.items && !SF.busy) setTimeout(sfLoad, 0);
+    const items = SF.items || [], ch = items.filter((x) => x.kind === 'character'), zn = items.filter((x) => x.kind === 'zone');
+    const live = SF.picked && SF.picked.scale === S.recipe.key.scale ? SF.picked : null;     // the note disappears the moment the scale is changed by hand
+    const grp = (lab, l) => l.length ? '<optgroup label="' + lab + '">' + selOpts(l.map((x) => [x.id, x.name + ' · ' + x.scale]), live ? live.id : '') + '</optgroup>' : '';
+    return '<div class="ws-row"><label class="ws-l" style="flex:1">start from<select class="ws-sel" style="width:100%" id="ws-startfrom" title="take the key scale from a character or a zone (a suggestion, change it freely)" onchange="Workshop.sfPick(this.value)">' +
+        '<option value=""' + (live ? '' : ' selected') + '>— a character or a zone —</option>' + grp('characters', ch) + grp('zones', zn) + '</select></label>' +
+        '<button class="btn ws-b" title="reload the list of characters and zones" onclick="Workshop.sfLoad()">↻</button></div>' +
+      (live ? '<div class="ws-fp" id="ws-sf-note">key scale suggested by ' + esc(live.kind) + ' ' + esc(live.name) + ': ' + esc(live.scale) + (live.tempo ? ', tempo feel ' + esc(live.tempo) : '') + '. Change it freely.</div>'
+        : SF.items && !items.length ? '<div class="ws-fp" id="ws-sf-note">no character or zone has a mode yet. Set one in the Character Creator (Music) or a zone’s Ambient Scale.' + (SF.err ? ' (' + esc(SF.err) + ')' : '') + '</div>'
+        : SF.err ? '<div class="ws-fp" id="ws-sf-note">' + esc(SF.err) + '</div>' : '');
+  }
+  function setRule(val) { S.recipe.ruleSet = val; changed(); }
+  function setSeed(val) { S.recipe.seed = Math.round(num(val, 0, 4294967295, 1)); changed(); }
+  function setBacking(field, val) {
+    const b = S.recipe.backing;
+    if (field === 'enabled') b.enabled = !!val;
+    else if (field === 'mode') { if (val === 'whole') b.mode = 'whole'; else delete b.mode; }
+    else b[field] = Math.round(num(val, 0, 64, b[field]));
+    changed();
+  }
+  function setOmit(idx, include) {   // include/leave out one of the source file's tracks (when playing or exporting over the source)
+    const b = S.recipe.backing, set = new Set(b.omit || []); if (include) set.delete(idx); else set.add(idx);
+    if (set.size) b.omit = Array.from(set).sort((x, y) => x - y); else delete b.omit; changed();
+  }
+  function setListen(val) { S.listen = val; if (isPlaying) { stopEngine(); } loadIntoPlayer(); render(); }
+
+  function vf(i, field, val) {
+    const v = V()[i]; if (!v) return;
+    if (field === 'enabled') v.enabled = !!val;
+    else if (field === 'name') v.name = String(val).slice(0, 60) || ('Voice ' + (i + 1));
+    else if (field === 'source') v.source = val;
+    else if (field === 'entryBar') v.entryBar = num(val, 1, 999, v.entryBar);
+    else if (field === 'program') v.program = Math.round(num(val, 0, 127, v.program || 0));
+    else if (field === 'channel') v.channel = Math.round(num(val, 1, 16, v.channel));
+    else if (field === 'volume') v.volume = Math.round(num(val, 0, 127, v.volume));
+    changed();
+  }
+  function vvolLabel(i, val) { const el = $('ws-vol-' + i); if (el) el.textContent = val; }
+  function addVoiceSpec(spec) { V().push(Object.assign(T.normalizeRecipe({ source: S.recipe.source, key: S.recipe.key, voices: [spec] }).voices[0])); }
+  function baseVoice(name) {
+    const lead = V()[0] || plainVoice(themeTrack(), 'x', 'x');
+    const v = { id: nextId(), name: name, source: 'theme', chain: [], entryBar: 1, program: lead.program, channel: freeChannel(), volume: lead.volume };
+    ['pan', 'reverb', 'chorus'].forEach((k) => { if (lead[k] !== undefined) v[k] = lead[k]; });
+    return v;
+  }
+  function addVoice() { addVoiceSpec(baseVoice('Voice ' + (V().length + 1))); changed(); }
+  function addDrums() {
+    const th = S.build ? S.build.theme : null, waltz = th && th.timeSig.num === 3 && th.timeSig.den === 4;
+    addVoiceSpec({ id: nextId(), name: waltz ? 'Jazz waltz drums' : 'Jazz drums', kind: 'drums', style: waltz ? 'jazz-waltz' : 'jazz-swing', entryBar: 1, volume: 100 });
+    changed();
+  }
+  function df(i, field, val) {
+    const v = V()[i]; if (!v || v.kind !== 'drums') return;
+    if (field === 'style' || field === 'ending') v[field] = val;
+    else if (field === 'program') v.program = Math.round(num(val, 0, 127, v.program));
+    else if (field === 'intensity' || field === 'humanize') v[field] = Math.round(num(val, 0, 1, v[field]) * 100) / 100;
+    else if (field === 'swing') v.swing = Math.round(num(val, 0.5, 0.8, v.swing) * 100) / 100;
+    else if (field === 'fillEvery') v.fillEvery = Math.round(num(val, 0, 64, v.fillEvery));
+    else if (field === 'bars') v.bars = (val === '' || val === null) ? 'auto' : Math.max(1, Math.round(num(val, 1, 999, 8)));
+    else if (field === 'seed') v.seed = (val === '' || val === null) ? null : Math.max(0, Math.round(num(val, 0, 4294967295, 0)));
+    changed();
+  }
+  function reroll(i) { const v = V()[i]; if (!v || v.kind !== 'drums') return; v.seed = Math.floor(Math.random() * 1000000); changed(); }
+  function dlabel(field, i, val) { const el = $('ws-d-' + field + i); if (el) el.textContent = (+val).toFixed(2); }
+  function addPreset(name) {
+    if (!name) return;
+    const tr = (steps) => ({ type: 'transpose', params: { steps: steps, mode: 'diatonic' } });
+    let v;
+    if (name === 'retroinv') { v = baseVoice('Retrograde-inversion'); v.chain = [{ type: 'retrogradeInversion', params: { axis: 'first', mode: 'diatonic' } }]; }
+    else if (name === 'canon3') { v = baseVoice('Canon: third below'); v.chain = [tr(-2)]; v.entryBar = 3; }
+    else if (name === 'canon8') { v = baseVoice('Canon: octave below'); v.chain = [tr(-7)]; v.entryBar = 5; }
+    else if (name === 'canon5') { v = baseVoice('Canon: fifth below'); v.chain = [tr(-4)]; v.entryBar = 3; }
+    else if (name === 'dimseq') { v = baseVoice('Diminution + sequence'); v.chain = [{ type: 'diminish', params: { p: 2, q: 1 } }, { type: 'sequence', params: { copies: 2, step: 1, mode: 'diatonic' } }]; }
+    else return;
+    addVoiceSpec(v); changed();
+  }
+  function delVoice(i) {
+    const d = V()[i]; if (!d) return;
+    V().forEach((v) => { if (v.source === d.id) v.source = d.source; });   // children inherit the removed voice's source
+    if (S.solo === d.id) S.solo = null;
+    V().splice(i, 1); changed();
+  }
+  // index -1 = the chain of the "Transform selection" tool: a tool setting, kept out of the recipe (its RESULT is notes, which are)
+  const chainOf = (i) => (i === -1 ? selChain() : V()[i].chain), edited = (i) => { if (i === -1) render(); else changed(); };
+  function selChain() { if (!S.selChain) S.selChain = [T.normalizeStep({ type: 'retrograde', params: {} })]; return S.selChain; }
+  function stepAdd(i, type) {
+    if (!type) return;
+    const params = type === 'fragment' ? { bars: [1, 1] } : {};
+    chainOf(i).push(T.normalizeStep({ type: type, params: params })); edited(i);
+  }
+  function stepDel(i, k) { chainOf(i).splice(k, 1); edited(i); }
+  function stepMove(i, k, d) {
+    const c = chainOf(i), j = k + d; if (j < 0 || j >= c.length) return;
+    const t = c[k]; c[k] = c[j]; c[j] = t; edited(i);
+  }
+  function stepType(i, k, type) { chainOf(i)[k] = T.normalizeStep({ type: type, params: type === 'fragment' ? { bars: [1, 1] } : {} }); edited(i); }
+  function stepParam(i, k, key, val, sub) {
+    const p = chainOf(i)[k].params;
+    if (key === 'mode' || key === 'axis') p[key] = val;
+    else if (key === 'bars') { const b = (p.bars || [1, 1]).slice(); b[sub] = Math.max(1, Math.round(num(val, 1, 999, b[sub]))); if (b[1] < b[0]) b[1] = b[0]; p.bars = b; p.notes = null; }
+    else {
+      const x = Math.round(num(val, -999, 999, p[key] || 0));
+      p[key] = (key === 'p' || key === 'q' || key === 'copies') ? Math.max(1, x) : x;
+    }
+    edited(i);
+  }
+
+  // ---------- transform selection ----------
+  const XFORM_PRESETS = [['retrograde', 'Retrograde', [{ type: 'retrograde' }]], ['invert', 'Invert', [{ type: 'invert', params: { axis: 'first', mode: 'diatonic' } }]],
+    ['retroinv', 'Retro-inversion', [{ type: 'retrogradeInversion' }]], ['up3', 'Up a 3rd', [{ type: 'transpose', params: { steps: 2, mode: 'diatonic' } }]],
+    ['down3', 'Down a 3rd', [{ type: 'transpose', params: { steps: -2, mode: 'diatonic' } }]], ['up5', 'Up a 5th', [{ type: 'transpose', params: { steps: 4, mode: 'diatonic' } }]],
+    ['aug', 'Augment 2:1', [{ type: 'augment', params: { p: 2, q: 1 } }]], ['dim', 'Diminish 2:1', [{ type: 'diminish', params: { p: 2, q: 1 } }]],
+    ['seq', 'Sequence ×3', [{ type: 'sequence', params: { copies: 2, step: 1, mode: 'diatonic' } }]]];
+  function xformPreset(name, add) {
+    const pr = XFORM_PRESETS.find((x) => x[0] === name); if (!pr) return;
+    const steps = pr[2].map((st) => T.normalizeStep({ type: st.type, params: st.params || {} }));
+    S.selChain = add ? selChain().concat(steps) : steps; render();
+  }
+  function xformClear() { S.selChain = []; render(); }
+  function setSelPlace(v) { S.selPlace = ['after', 'end', 'replace', 'at'].indexOf(v) >= 0 ? v : 'after'; render(); }
+  function setSelJoin(on, steps) { if (on !== null && on !== undefined) S.selJoinOn = !!on; if (steps !== null && steps !== undefined) S.selJoinSteps = Math.max(-12, Math.min(12, Math.round(+steps || 0))); render(); }
+  function selSettings() { return { chain: selChain().map((st) => JSON.parse(JSON.stringify(st))), place: S.selPlace, join: S.selJoinOn ? { steps: S.selJoinSteps } : null }; }
+  function xformHtml() {
+    const hasHand = V().some((v) => v.kind === 'notes'), chain = selChain();
+    let h = '<div class="sh">Transform selection</div><div class="ws-fp" style="margin:0 0 4px;line-height:1.5">Select notes on the grid (select tool, or Ctrl+drag a box), choose what to do to them, and press the button. The result joins the same line as ordinary notes you can keep editing. Nothing is linked: change the original and the copy stays.</div>';
+    h += '<div class="ws-row" style="gap:3px;flex-wrap:wrap">' + XFORM_PRESETS.map((x) => '<button class="btn ws-b" onclick="Workshop.xformPreset(\'' + x[0] + '\',false)" title="replace the chain below with: ' + esc(x[1]) + '">' + esc(x[1]) + '</button>').join('') + '</div>';
+    h += '<div id="ws-xform-chain">' + (chain.length ? chain.map((st, k) => stepHtml(-1, k, st)).join('') : '<div class="ws-fp" style="margin:3px 0">no steps: the selection is simply copied</div>') + '</div>';
+    h += '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.stepAdd(-1,this.value);this.value=\'\'"><option value="">+ add a transform…</option>' + selOpts(TYPES.map((t) => [t, LABEL[t]]), '') + '</select>' +
+      '<button class="btn ws-b" onclick="Workshop.xformClear()" title="remove every step">clear</button></div>';
+    h += '<div class="ws-row"><label class="ws-l">put it<select class="ws-sel" id="ws-xform-place" onchange="Workshop.setSelPlace(this.value)">' + selOpts([['after', 'right after the selection'], ['end', 'at the end of the line'], ['replace', 'in place of the selection'], ['at', 'at the pointer']], S.selPlace) + '</select></label></div>';
+    h += '<div class="ws-row"><label class="ws-chk" style="margin:0" title="move the new phrase by whole scale steps so its first note lands that many steps from the last note before it: 0 = the same note, 1 = the next step up, -1 = a step down"><input type="checkbox" id="ws-xform-join" ' + (S.selJoinOn ? 'checked' : '') + ' onchange="Workshop.setSelJoin(this.checked,null)"> join smoothly: first note</label>' +
+      '<input type="number" class="ws-n" id="ws-xform-steps" min="-12" max="12" value="' + S.selJoinSteps + '" ' + (S.selJoinOn ? '' : 'disabled') + ' onchange="Workshop.setSelJoin(null,this.value)"><span class="ws-fp" style="margin:0">scale steps from the last note</span></div>';
+    h += '<div class="ws-row"><button class="btn full" id="ws-xform-go" onclick="gridUI.transformSelection()"' + (hasHand ? '' : ' disabled') + ' title="apply the chain to the notes selected on the grid">Transform selection ↪</button></div>' +
+      (hasHand ? '' : '<div class="ws-fp">First make a voice you can edit: “+ Hand”, or “freeze to edit” on a generated voice.</div>');
+    return h;
+  }
+
+  // ---------- render ----------
+  function selOpts(list, cur) { return list.map((o) => '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join(''); }
+  function stepHtml(i, k, s) {
+    let h = '<div class="ws-step"><select class="ws-sel" onchange="Workshop.stepType(' + i + ',' + k + ',this.value)">' +
+            selOpts(TYPES.map((t) => [t, LABEL[t]]), s.type) + '</select>';
+    PARAMS[s.type].forEach((q) => {
+      const key = q[0], kind = q[1], lab = q[2], val = s.params[key];
+      if (kind === 'n') h += '<label class="ws-l">' + lab + '<input type="number" class="ws-n" value="' + esc(val) + '" onchange="Workshop.stepParam(' + i + ',' + k + ',\'' + key + '\',this.value)"></label>';
+      else if (kind === 'mode') h += '<select class="ws-sel" onchange="Workshop.stepParam(' + i + ',' + k + ',\'mode\',this.value)">' + selOpts([['diatonic', 'diatonic'], ['chromatic', 'chromatic']], val) + '</select>';
+      else if (kind === 'axis') h += '<label class="ws-l">axis<select class="ws-sel" onchange="Workshop.stepParam(' + i + ',' + k + ',\'axis\',this.value)">' + selOpts([['first', 'first note'], ['tonic', 'tonic']], typeof val === 'string' ? val : 'first') + '</select></label>';
+      else if (kind === 'range') { const b = val || [1, 1];
+        h += '<label class="ws-l">bars<input type="number" class="ws-n" value="' + b[0] + '" onchange="Workshop.stepParam(' + i + ',' + k + ',\'bars\',this.value,0)">–<input type="number" class="ws-n" value="' + b[1] + '" onchange="Workshop.stepParam(' + i + ',' + k + ',\'bars\',this.value,1)"></label>'; }
+    });
+    return h + '<span class="ws-mv"><button class="btn ws-b" title="move up" onclick="Workshop.stepMove(' + i + ',' + k + ',-1)">↑</button><button class="btn ws-b" title="move down" onclick="Workshop.stepMove(' + i + ',' + k + ',1)">↓</button><button class="btn ws-b" title="remove" onclick="Workshop.stepDel(' + i + ',' + k + ')">×</button></span></div>';
+  }
+  const DRUM_LABEL = { 'jazz-swing': 'Jazz swing (4/4)', 'jazz-waltz': 'Jazz waltz (3/4)', 'straight-rock': 'Straight rock (4/4)' };
+  const soloBtn = (i, id) => '<button class="btn ws-b' + (S.solo === id ? ' on' : '') + '" title="hear only this voice" onclick="Workshop.solo(' + i + ')">solo</button>';
+  function drumHtml(v, i) {
+    const fp = S.build && S.build.voices.find((x) => x.id === v.id), kits = MM.GM_DRUM_KITS || {};
+    const kitOpts = Object.keys(kits).map((k) => [+k, kits[k]]);
+    if (!kitOpts.some((k) => k[0] === v.program)) kitOpts.push([v.program, 'Drum kit ' + v.program]);
+    const slider = (field, lab, min, max, step, show) => '<label class="ws-l" style="flex:1">' + lab + '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + v[field] +
+      '" style="flex:1;min-width:50px;width:auto" oninput="Workshop.dlabel(\'' + field + '\',' + i + ',this.value)" onchange="Workshop.df(' + i + ',\'' + field + '\',this.value)">' +
+      '<span class="param-val" id="ws-d-' + field + i + '" style="width:34px">' + show + '</span></label>';
+    return '<div class="ws-voice' + (v.enabled ? '' : ' off') + '" style="border-left:2px solid var(--warm)">' +
+      '<div class="ws-row"><input type="checkbox" ' + (v.enabled ? 'checked' : '') + ' onchange="Workshop.vf(' + i + ',\'enabled\',this.checked)">' +
+        '<span class="ws-dot" style="background:var(--warm)"></span>' +
+        '<input type="text" class="ws-t" value="' + esc(v.name) + '" onchange="Workshop.vf(' + i + ',\'name\',this.value)">' +
+        soloBtn(i, v.id) + '<button class="btn ws-b" title="turn these generated drums into hits you can edit on the grid (what you hear does not change)" onclick="Workshop.freeze(' + i + ')">freeze to edit</button>' +
+        '<button class="btn ws-b" title="remove drums" onclick="Workshop.delVoice(' + i + ')">×</button></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.df(' + i + ',\'style\',this.value)">' + selOpts(T.DRUM_STYLES.map((x) => [x, DRUM_LABEL[x] || x]), v.style) + '</select></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" title="General MIDI drum kit (Program Change on channel 10)" onchange="Workshop.df(' + i + ',\'program\',this.value)">' + selOpts(kitOpts, v.program) + '</select></div>' +
+      '<div class="ws-row">' + slider('intensity', 'intensity', 0, 1, 0.05, v.intensity.toFixed(2)) + '</div>' +
+      (v.style !== 'straight-rock' ? '<div class="ws-row">' + slider('swing', 'swing', 0.5, 0.75, 0.01, v.swing.toFixed(2)) + '</div>' : '') +
+      '<div class="ws-row">' + slider('humanize', 'humanize', 0, 1, 0.05, v.humanize.toFixed(2)) + '</div>' +
+      '<div class="ws-row"><label class="ws-l">fill every<select class="ws-sel" onchange="Workshop.df(' + i + ',\'fillEvery\',this.value)">' +
+        selOpts([[0, 'never'], [2, '2 bars'], [4, '4 bars'], [8, '8 bars'], [16, '16 bars']], v.fillEvery) + '</select></label>' +
+        '<label class="ws-l">end<select class="ws-sel" onchange="Workshop.df(' + i + ',\'ending\',this.value)">' + selOpts([['hit', 'with a hit'], ['none', 'just stop']], v.ending) + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-l">enters bar<input type="number" class="ws-n" step="1" min="1" value="' + v.entryBar + '" onchange="Workshop.vf(' + i + ',\'entryBar\',this.value)"></label>' +
+        '<label class="ws-l">bars<input type="number" class="ws-n" min="1" placeholder="auto" value="' + (v.bars === 'auto' ? '' : v.bars) + '" title="blank = follow the music" onchange="Workshop.df(' + i + ',\'bars\',this.value)"></label></div>' +
+      '<div class="ws-row"><label class="ws-l">seed<input type="number" class="ws-n" style="width:76px" min="0" placeholder="recipe" value="' + (v.seed === null ? '' : v.seed) + '" title="blank = use the recipe seed" onchange="Workshop.df(' + i + ',\'seed\',this.value)"></label>' +
+        '<button class="btn ws-b" title="new random pattern" onclick="Workshop.reroll(' + i + ')">re-roll</button>' +
+        '<input type="range" min="0" max="127" value="' + v.volume + '" style="flex:1;min-width:50px;width:auto" title="volume (CC7)" oninput="Workshop.vvolLabel(' + i + ',this.value)" onchange="Workshop.vf(' + i + ',\'volume\',this.value)">' +
+        '<span class="param-val" id="ws-vol-' + i + '" style="width:30px">' + v.volume + '</span></div>' +
+      (fp ? '<div class="ws-fp">' + fp.hits + ' hits · ends in bar ' + fp.endBar + ' · channel 10</div>' : '') +
+    '</div>';
+  }
+  function handHtml(v, i) {
+    const fp = S.build && S.build.voices.find((x) => x.id === v.id), prog = MM.GM_PROGRAMS || [], chOpts = []; for (let c = 1; c <= 16; c++) chOpts.push([c, c]);
+    const from = v.frozenFrom ? (v.frozenFrom.kind === 'harmony' ? 'frozen from generated ' + v.frozenFrom.style + ' harmony' : v.frozenFrom.kind === 'drums' ? 'frozen from generated ' + v.frozenFrom.style + ' drums' : 'frozen from ' + (v.frozenFrom.source === 'theme' ? 'the theme' : 'another voice') + (v.frozenFrom.chain.length ? ' + ' + v.frozenFrom.chain.map((x) => LABEL[x.type] || x.type).join(', ') : '')) : (v.channel === 10 ? 'drum hits drawn by hand' : 'drawn by hand');
+    return '<div class="ws-voice' + (v.enabled ? '' : ' off') + '" style="border-left:2px solid var(--cool)">' +
+      '<div class="ws-row"><input type="checkbox" ' + (v.enabled ? 'checked' : '') + ' onchange="Workshop.vf(' + i + ',\'enabled\',this.checked)">' +
+        '<span class="ws-dot" style="background:' + MM.trackColor(i) + '"></span>' +
+        '<input type="text" class="ws-t" value="' + esc(v.name) + '" onchange="Workshop.vf(' + i + ',\'name\',this.value)">' +
+        soloBtn(i, v.id) + '<button class="btn ws-b" title="remove voice" onclick="Workshop.delVoice(' + i + ')">×</button></div>' +
+      '<div class="ws-row"><span class="ws-fp" style="margin:0;flex:1">hand-edited · ' + v.notes.length + ' notes · ' + esc(from) + '</span>' +
+        '<button class="btn ws-b" onclick="gridUI.editVoice(\'' + v.id + '\')" title="open the Grid with this voice ready to edit">edit on grid</button></div>' +
+      '<div class="ws-row"><label class="ws-l">enters bar<input type="number" class="ws-n" step="0.5" min="1" value="' + v.entryBar + '" onchange="Workshop.vf(' + i + ',\'entryBar\',this.value)"></label></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.vf(' + i + ',\'program\',this.value)">' + selOpts(prog.map((n, p) => [p, p + ' · ' + n]), v.program === null ? 0 : v.program) + '</select></div>' +
+      '<div class="ws-row"><label class="ws-l">ch<select class="ws-sel" onchange="Workshop.vf(' + i + ',\'channel\',this.value)">' + selOpts(chOpts, v.channel) + '</select></label>' +
+        '<input type="range" min="0" max="127" value="' + v.volume + '" style="flex:1;min-width:50px;width:auto" title="volume (CC7)" oninput="Workshop.vvolLabel(' + i + ',this.value)" onchange="Workshop.vf(' + i + ',\'volume\',this.value)">' +
+        '<span class="param-val" id="ws-vol-' + i + '" style="width:30px">' + v.volume + '</span></div>' +
+      (fp && fp.fingerprint && fp.fingerprint.noteCount ? '<div class="ws-fp">' + esc(T.describeFingerprint(fp.fingerprint)) + '</div>' : '') +
+    '</div>';
+  }
+  function voiceHtml(v, i) {
+    if (v.kind === 'drums') return drumHtml(v, i);
+    if (v.kind === 'notes') return handHtml(v, i);
+    if (v.kind === 'harmony') return harmonyHtml(v, i);
+    const fp = S.build && S.build.voices.find((x) => x.id === v.id);
+    const srcList = [['theme', 'Theme']].concat(V().filter((c) => c.id !== v.id && c.kind !== 'drums' && c.kind !== 'harmony' && !dependsOn(c, v.id)).map((c) => [c.id, c.name]));
+    const prog = MM.GM_PROGRAMS || [], chOpts = []; for (let c = 1; c <= 16; c++) chOpts.push([c, c]);
+    return '<div class="ws-voice' + (v.enabled ? '' : ' off') + '">' +
+      '<div class="ws-row"><input type="checkbox" ' + (v.enabled ? 'checked' : '') + ' onchange="Workshop.vf(' + i + ',\'enabled\',this.checked)">' +
+        '<span class="ws-dot" style="background:' + MM.trackColor(i) + '"></span>' +
+        '<input type="text" class="ws-t" value="' + esc(v.name) + '" onchange="Workshop.vf(' + i + ',\'name\',this.value)">' +
+        soloBtn(i, v.id) + '<button class="btn ws-b" title="remove voice" onclick="Workshop.delVoice(' + i + ')">×</button></div>' +
+      '<div class="ws-row"><label class="ws-l">from<select class="ws-sel" onchange="Workshop.vf(' + i + ',\'source\',this.value)">' + selOpts(srcList, v.source) + '</select></label>' +
+        '<label class="ws-l">enters bar<input type="number" class="ws-n" step="0.5" min="1" value="' + v.entryBar + '" onchange="Workshop.vf(' + i + ',\'entryBar\',this.value)"></label></div>' +
+      v.chain.map((s, k) => stepHtml(i, k, s)).join('') +
+      '<div class="ws-row"><select class="ws-sel" onchange="Workshop.stepAdd(' + i + ',this.value)"><option value="">+ transform…</option>' + selOpts(TYPES.map((t) => [t, LABEL[t]]), '') + '</select>' +
+        '<button class="btn ws-b" title="turn this voice into notes you can edit on the grid (nothing you hear changes)" onclick="Workshop.freeze(' + i + ')">freeze to edit</button></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.vf(' + i + ',\'program\',this.value)">' + selOpts(prog.map((n, p) => [p, p + ' · ' + n]), v.program === null ? 0 : v.program) + '</select></div>' +
+      '<div class="ws-row"><label class="ws-l">ch<select class="ws-sel" onchange="Workshop.vf(' + i + ',\'channel\',this.value)">' + selOpts(chOpts, v.channel) + '</select></label>' +
+        '<input type="range" min="0" max="127" value="' + v.volume + '" style="flex:1;min-width:50px;width:auto" title="volume (CC7)" oninput="Workshop.vvolLabel(' + i + ',this.value)" onchange="Workshop.vf(' + i + ',\'volume\',this.value)">' +
+        '<span class="param-val" id="ws-vol-' + i + '" style="width:30px">' + v.volume + '</span></div>' +
+      (fp ? '<div class="ws-fp">' + esc(T.describeFingerprint(fp.fingerprint)) + '</div>' : '') +
+    '</div>';
+  }
+  function render() {
+    const el = $('workshop-panel'); if (!el) return;
+    if (!S.parsed) {
+      el.innerHTML = '<div class="sh">Theme Workshop</div><div class="ws-note">Load a MIDI file (button below) and choose a theme: a track and a bar range. ' +
+        'Add voices, give each a chain of transforms, then Play to hear it and Export .mid to keep it.' +
+        (S.pending ? '<br><br><b>Recipe loaded</b> — load <b>' + esc(S.pending.source.file) + '</b> to apply it.' : '') + '</div>' +
+        '<button class="btn full" onclick="document.getElementById(\'ws-recipe-file\').click()">Load recipe…</button>' +
+        '<input type="file" id="ws-recipe-file" accept=".json,application/json" style="display:none" onchange="Workshop.loadRecipe(this.files[0])">';
+      return;
+    }
+    const r = S.recipe, p = S.parsed, nBars = totalBars(p);
+    const trOpts = p.tracks.filter((t) => t.noteCount).map((t) => [t.index, t.index + ' · ' + t.name + ' · ' + (isDrum(t) ? 'Drums' : ((MM.GM_PROGRAMS || [])[trackProgram(t)] || '')) + ' · ' + t.noteCount]);
+    let h = '<div class="sh">Theme Workshop</div>';
+    h += S.notes.map((n) => '<div class="ws-warn">' + esc(n) + '</div>').join('');
+    if (S.notes.some((n) => /SHA-256/.test(n))) h += '<button class="btn full" style="margin-top:0" onclick="Workshop.adoptSource()">Use this file for the recipe from now on</button>';
+    h += '<div class="sh">Source and key</div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">theme track<select class="ws-sel" style="width:100%" onchange="Workshop.setTrack(this.value)">' + selOpts(trOpts, r.source.tracks[0]) + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-l">bars<input type="number" class="ws-n" min="1" max="' + nBars + '" value="' + r.source.bars[0] + '" onchange="Workshop.setBars(0,this.value)">–' +
+        '<input type="number" class="ws-n" min="1" max="' + nBars + '" value="' + r.source.bars[1] + '" onchange="Workshop.setBars(1,this.value)"> of ' + nBars + '</label></div>' +
+      '<div class="ws-row"><label class="ws-l">key<select class="ws-sel" onchange="Workshop.setKey(\'tonic\',this.value)">' + selOpts(TONICS.map((t) => [t, t]), r.key.tonic) + '</select>' +
+        '<select class="ws-sel" onchange="Workshop.setKey(\'scale\',this.value)">' + selOpts(SCALE_NAMES.map((t) => [t, t]), r.key.scale) + '</select></label>' +
+        '<button class="btn ws-b" title="estimate the key from the theme" onclick="Workshop.estimateKey()">est.</button></div>' + sfRow() +
+      '<div class="ws-row"><label class="ws-l">rules<select class="ws-sel" title="used by harmony (checkpoint 1c); stored in the recipe" onchange="Workshop.setRule(this.value)">' + selOpts(T.RULE_SETS.map((t) => [t, t]), r.ruleSet) + '</select></label>' +
+        '<label class="ws-l">seed<input type="number" class="ws-n" style="width:70px" value="' + r.seed + '" onchange="Workshop.setSeed(this.value)"></label></div>';
+    h += '<div class="sh">Voices</div>' + V().map(voiceHtml).join('') +
+      '<div class="ws-row"><button class="btn" onclick="Workshop.addVoice()">+ Voice</button><button class="btn" onclick="Workshop.addDrums()">+ Drums</button><button class="btn" onclick="Workshop.addHandVoice()" title="an empty voice to draw into on the grid">+ Hand</button><button class="btn" onclick="Workshop.addHarmony()" title="chords and a bass chosen to fit the melody">+ Harmony</button>' +
+      '<select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.addPreset(this.value);this.value=\'\'"><option value="">+ preset…</option>' + selOpts(PRESETS, '') + '</select></div>';
+    h += '<div class="ws-row" style="margin-top:6px"><span class="ws-fp" style="margin:0">parallel</span>' +
+      '<select id="ws-par-dist" class="ws-sel" title="distance in steps of the scale: 3rd = 2 steps" onchange="Workshop.parNote()">' + selOpts([[2, '3rd'], [3, '4th'], [4, '5th'], [5, '6th'], [6, '7th'], [7, 'octave']], 2) + '</select>' +
+      '<select id="ws-par-n" class="ws-sel">' + selOpts([[1, '1 voice'], [2, '2 voices'], [3, '3 voices']], 1) + '</select>' +
+      '<select id="ws-par-dir" class="ws-sel">' + selOpts([['below', 'below'], ['above', 'above']], 'below') + '</select>' +
+      '<label class="ws-chk" style="margin:0"><input type="checkbox" id="ws-par-dbl"> octave</label>' +
+      '<button class="btn ws-b" onclick="Workshop.addParallel()" title="add voices that follow the melody at a fixed distance in scale steps (Kubik\'s span process)">add</button></div>' +
+      '<div class="ws-warn" id="ws-par-note" style="margin-top:0">' + esc(parallelNote()) + '</div>';
+    h += xformHtml();
+    h += arcHtml();
+    h += '<div class="sh">Playback</div>' +
+      '<div class="ws-row"><label class="ws-l">listen to<select class="ws-sel" onchange="Workshop.setListen(this.value)">' + selOpts([['arrangement', 'Arrangement'], ['original', 'Original theme']].concat(S.pinned ? [['pinned', 'Pinned version']] : []), S.listen) + '</select></label></div>' +
+      '<div class="ws-row"><button class="btn ws-b" onclick="Workshop.pin()" title="remember this version so you can switch back to it and compare by ear">pin this version</button>' + (S.pinned ? '<button class="btn ws-b" onclick="Workshop.clearPin()">clear pin</button><span class="ws-fp" style="margin:0">pinned</span>' : '') + '</div>' +
+      '<label class="ws-chk"><input type="checkbox" ' + (r.backing.enabled ? 'checked' : '') + ' onchange="Workshop.setBacking(\'enabled\',this.checked)"> Play over the source file\'s other tracks</label>' +
+      (r.backing.enabled ? (function () {
+        const whole = r.backing.mode === 'whole', omit = r.backing.omit || [];
+        let x = '<div class="ws-row"><label class="ws-l" title="around the theme: a few bars before and after it. The whole song: the entire source file, with your voices dropped in where the theme was.">range<select class="ws-sel" onchange="Workshop.setBacking(\'mode\',this.value)">' +
+          selOpts([['window', 'around the theme'], ['whole', 'the whole song']], whole ? 'whole' : 'window') + '</select></label></div>';
+        if (!whole) x += '<div class="ws-row"><label class="ws-l">lead-in bars<input type="number" class="ws-n" min="0" value="' + r.backing.leadInBars + '" onchange="Workshop.setBacking(\'leadInBars\',this.value)"></label>' +
+          '<label class="ws-l">tail bars<input type="number" class="ws-n" min="0" value="' + r.backing.tailBars + '" onchange="Workshop.setBacking(\'tailBars\',this.value)"></label></div>';
+        const bm = T.makeBarMap(S.parsed.ppq, S.parsed.timeSigEvents), g0 = bm.tickOfBar(r.source.bars[0]), g1 = bm.tickOfBar(r.source.bars[1] + 1);
+        // a theme track is offered only if some of it plays outside the theme (otherwise it is replaced completely and there is nothing to choose)
+        const list = S.parsed.tracks.filter((t) => t.noteCount && (r.source.tracks.indexOf(t.index) < 0 || (whole && t.notes.some((n) => n.startTick < g0 || n.startTick >= g1))));
+        x += '<div class="ws-fp" style="margin:4px 0 2px">source tracks to include' + (whole ? ' (the theme track plays before and after the theme; your voices replace it inside it)' : '') + ':</div><div class="ws-row" id="ws-omit" style="gap:4px 10px">' +
+          list.map((t) => '<label class="ws-l" title="untick to leave this track out of the playback and the exported file"><input type="checkbox" ' + (omit.indexOf(t.index) < 0 ? 'checked' : '') + ' onchange="Workshop.setOmit(' + t.index + ',this.checked)">' + esc(t.name) + (r.source.tracks.indexOf(t.index) >= 0 ? ' <span style="color:var(--dim)">(theme)</span>' : '') + '</label>').join('') + '</div>';
+        return x;
+      })() : '');
+    if (S.error) h += '<div class="ws-warn">' + esc(S.error) + '</div>';
+    if (S.build) {
+      const a = S.build.arrangement, bars = (a.lengthTicks / S.build.theme.barTicks).toFixed(1);
+      h += '<div class="ws-fp" id="ws-summary">' + a.tracks.filter((t) => t.noteCount).length + ' tracks · ' + bars + ' bars · recipe ' + T.recipeDigest(S.recipe).slice(0, 8) + '</div>';
+      h += S.build.warnings.map((w) => '<div class="ws-warn">' + esc(w) + '</div>').join('');
+    }
+    h += '<div class="ws-row" style="margin-top:8px"><button class="btn" style="flex:1" onclick="Workshop.undo()"' + (S.hi > 0 ? '' : ' disabled') + ' title="Ctrl+Z">↶ undo</button>' +
+      '<button class="btn" style="flex:1" onclick="Workshop.redo()"' + (S.hi < S.hist.length - 1 ? '' : ' disabled') + ' title="Ctrl+Shift+Z">↷ redo</button></div>';
+    const autoName = safeMidName(exportName()), fileName = S.saveName ? safeMidName(S.saveName) : exportName() + '.mid';
+    h += '<div class="sh">Save</div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">file name<input type="text" id="ws-save-name" class="ws-t" placeholder="' + esc(autoName.replace(/\.mid$/, '')) + '" value="' + esc(S.saveName) + '" title="leave empty for an automatic name (source, track, bars, recipe code). Letters, digits, . _ - only; anything else becomes _." onchange="Workshop.setSaveName(this.value)"></label></div>' +
+      '<div class="ws-fp" id="ws-save-preview" style="margin:0 0 4px">saves as <b>' + esc(fileName) + '</b></div>' +
+      '<div class="ws-row"><button class="btn" style="flex:1" onclick="Workshop.exportMid()"' + (S.build ? '' : ' disabled') + ' title="download the file to your computer">Export .mid</button>' +
+        '<button class="btn" style="flex:1" id="ws-save-media" onclick="Workshop.saveToMedia()"' + (S.build ? '' : ' disabled') + ' title="save the file straight into the scene media folder (x3d/X3DAssets/media/music) so the Scene Composer can use it">Save to scene media</button></div>' +
+      '<label class="ws-chk"><input type="checkbox" id="ws-save-recipe" ' + (S.alsoRecipe ? 'checked' : '') + ' onchange="Workshop.setAlsoRecipe(this.checked)"> also save the recipe next to it</label>' +
+      (S.lastSave ? '<div class="ws-fp" id="ws-save-status" style="color:' + (/^Not saved/.test(S.lastSave.text) ? 'var(--warm)' : '#8ee6b0') + '">' + esc(S.lastSave.text) + '</div>' : '') +
+      '<div class="ws-row" style="margin-top:4px"><button class="btn" style="flex:1" onclick="Workshop.saveRecipe()" title="download the recipe (the settings, not the music)">Save recipe</button>' +
+      '<button class="btn" style="flex:1" onclick="document.getElementById(\'ws-recipe-file\').click()">Load recipe…</button></div>' +
+      '<input type="file" id="ws-recipe-file" accept=".json,application/json" style="display:none" onchange="Workshop.loadRecipe(this.files[0])">' +
+      '<div class="sh">Arrangement tracks</div>';
+    el.innerHTML = h;
+  }
+
+  // ---------- emotional arc -> MIDI controllers ----------
+  // The arc (an .xml from the emotion-arc tool) is loaded here like the MIDI file; what is mapped lives in the recipe (recipe.arc), so undo, save and load all cover it.
+  const ARC = window.MccfArc, ARC_NAMES = { E: 'Emotion', B: 'Behavior', P: 'Perception', S: 'Social', Coherence: 'Coherence' };
+  const CC_NAMES = { 1: 'modulation', 7: 'volume', 10: 'pan', 11: 'expression', 71: 'resonance', 72: 'release', 73: 'attack', 74: 'brightness', 91: 'reverb', 93: 'chorus' };
+  function arcIndex() {
+    if (!S.arc) return 0; const want = S.recipe && S.recipe.arc && S.recipe.arc.agent, i = S.arc.data.cultivars.findIndex((c) => c.agent === want);
+    return i < 0 ? 0 : i;
+  }
+  function arcOpts() {
+    if (!S.arc || !S.recipe || !S.recipe.arc) return undefined;
+    const c = S.arc.data.cultivars[arcIndex()]; return { arc: { points: c.points, sha256: S.arc.sha } };
+  }
+  function laneMap(b) {            // Player track number (arrangement index + 1) -> the controllers that are arc lanes
+    const m = {}; b.arrangement.tracks.forEach((t, i) => {
+      const c = Object.keys(t.controllers || {}).filter((k) => t.controllers[k].some((e) => e.lane)).map(Number); if (c.length) m[i + 1] = c;
+    }); return m;
+  }
+  let arcPostTimer = null;
+  function arcPost() {             // tell the server what is in use (the dashboard reads it); never blocks or complains
+    clearTimeout(arcPostTimer);
+    arcPostTimer = setTimeout(() => {
+      let body;
+      if (S.arc && S.recipe && S.recipe.arc) {
+        const b = S.build, lanes = b && b.arcLanes ? b.arcLanes.map((l) => ({ curve: l.curve, cc: l.cc, events: l.events, tracks: l.tracks })) : [];
+        body = ARC.summary(S.arc.data, arcIndex(), S.recipe.arc, { file: S.arc.name, sha256: S.arc.sha, source: S.fileName, recipe: S.recipe ? T.recipeDigest(S.recipe).slice(0, 8) : '',
+          lanes: lanes, warnings: b ? b.warnings.filter((w) => /arc/i.test(w)) : [], updated: new Date().toISOString() });
+      } else if (S.arcPosted) body = { clear: true }; else return;   // nothing was ever sent: nothing to take back
+      S.arcPosted = !!(S.arc && S.recipe && S.recipe.arc);
+      try { fetch(API + '/ambient/arc/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {}); } catch (e) { /* offline is fine */ }
+    }, 400);
+  }
+  function readBuf(file) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('could not read the file')); fr.readAsArrayBuffer(file); }); }
+  function utf8(buf) { const u = new Uint8Array(buf); if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(u); let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); try { return decodeURIComponent(escape(s)); } catch (e) { return s; } }
+  async function arcLoad(file) {
+    if (!file) return;
+    if (!S.recipe) { toast('Load a MIDI file first, then the arc.', true); return; }
+    try {
+      const buf = await readBuf(file), data = ARC.parseArc(utf8(buf));
+      S.arc = { name: file.name, sha: T.sha256Hex(new Uint8Array(buf)), data: data }; S.arcErr = '';
+      const prev = S.recipe.arc, idx = prev ? Math.max(0, data.cultivars.findIndex((c) => c.agent === prev.agent)) : 0;
+      const spec = prev ? JSON.parse(JSON.stringify(prev)) : ARC.defaultSpec();
+      spec.file = file.name; spec.sha256 = S.arc.sha; spec.agent = data.cultivars[idx].agent; if (!prev) spec.enabled = true;
+      S.recipe.arc = spec; toast('Arc loaded: ' + data.cultivars.map((c) => c.agent).join(', ') + '. Its curves now ride MIDI controllers; change the mapping freely.');
+      changed();
+    } catch (e) { S.arcErr = e.message; toast('Not an arc: ' + e.message, true); render(); }
+  }
+  function arcSet(k, v) {
+    const a = S.recipe && S.recipe.arc; if (!a) return;
+    if (k === 'agent') { a.agent = v; } else if (k === 'enabled') { a.enabled = !!v; } else if (k === 'interp') { a.interp = v === 'step' ? 'step' : 'linear'; } else return;
+    changed();
+  }
+  function arcLane(i, k, v) {
+    const a = S.recipe && S.recipe.arc, l = a && a.lanes[i]; if (!l) return;
+    if (k === 'on') l.on = !!v;
+    else if (k === 'curve') l.curve = v;
+    else if (k === 'cc') { v = Math.round(Number(v)); if (!ARC.ccAllowed(v)) { toast('Controller ' + v + ' is not available for the arc (bank select, data entry and the channel-mode messages are kept free).', true); render(); return; } l.cc = v; }
+    else if (k === 'lo' || k === 'hi') l[k] = Math.max(0, Math.min(127, Math.round(Number(v) || 0)));
+    else return;
+    changed();
+  }
+  function arcLaneAdd() { const a = S.recipe && S.recipe.arc; if (!a) return; const used = a.lanes.map((l) => l.cc); let cc = [1, 11, 74, 91, 71, 72, 73, 93, 10].find((c) => used.indexOf(c) < 0) || 20; a.lanes.push({ curve: 'S', cc: cc, lo: 0, hi: 127, on: true }); changed(); }
+  function arcLaneDel(i) { const a = S.recipe && S.recipe.arc; if (!a) return; a.lanes.splice(i, 1); changed(); }
+  function arcReset() { const a = S.recipe && S.recipe.arc; if (!a) return; a.lanes = ARC.defaultSpec().lanes; a.interp = 'linear'; changed(); toast('Mapping reset to the standard lanes (CC11, 91, 74, 1).'); }
+  function arcRemove() { if (!S.recipe || !S.recipe.arc) return; delete S.recipe.arc; S.arc = null; S.arcErr = ''; changed(); toast('Arc removed from this recipe.'); }
+  function spark(norm, lo, hi, on) {
+    const W = 120, H = 26, n = norm.length, step = Math.max(1, Math.ceil(n / 100)), pts = [];
+    for (let i = 0; i < n; i += step) pts.push((n === 1 ? 0 : i / (n - 1) * W).toFixed(1) + ',' + (H - 2 - norm[i] * (H - 4)).toFixed(1));
+    if ((n - 1) % step) pts.push(W + ',' + (H - 2 - norm[n - 1] * (H - 4)).toFixed(1));
+    return '<svg class="arc-spark" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="curve shape, ' + lo + ' to ' + hi + '"><polyline fill="none" stroke="' + (on ? '#8ee6b0' : '#667') + '" stroke-width="1.5" points="' + pts.join(' ') + '"/></svg>';
+  }
+  function arcHtml() {
+    const a = S.recipe.arc, file = '<input type="file" id="ws-arc-file" accept=".xml,text/xml,application/xml" style="display:none" onchange="Workshop.arcLoad(this.files[0]);this.value=\'\'">';
+    let h = '<div class="sh">Emotional arc → MIDI</div>';
+    if (!a) {
+      return h + '<div class="ws-fp">Load an arc from the emotion-arc tool and its curves (emotion, coherence, perception, behavior) will ride MIDI controllers — expression, reverb, brightness, modulation — through the whole piece.</div>' +
+        '<div class="ws-row"><button class="btn" style="flex:1" id="ws-arc-load" onclick="document.getElementById(\'ws-arc-file\').click()">Load arc…</button></div>' + file +
+        (S.arcErr ? '<div class="ws-warn">' + esc(S.arcErr) + '</div>' : '');
+    }
+    h += '<div class="ws-row"><label class="ws-chk"><input type="checkbox" id="ws-arc-on" ' + (a.enabled ? 'checked' : '') + ' onchange="Workshop.arcSet(\'enabled\',this.checked)"> Use the arc</label>' +
+      '<button class="btn ws-b" onclick="document.getElementById(\'ws-arc-file\').click()" title="load a different arc file">change…</button>' +
+      '<button class="btn ws-b" onclick="Workshop.arcRemove()" title="take the arc out of this recipe">remove</button></div>' + file;
+    h += '<div class="ws-fp" id="ws-arc-file-info">' + esc(a.file || '(arc)') + (S.arc ? '' : ' — not loaded in this session: load <b>' + esc(a.file || 'the arc') + '</b> to apply it') + '</div>';
+    if (S.arc) {
+      const cs = S.arc.data.cultivars, idx = arcIndex(), pts = cs[idx].points;
+      h += '<div class="ws-row"><label class="ws-l" style="flex:1">character<select class="ws-sel" style="width:100%" id="ws-arc-agent" onchange="Workshop.arcSet(\'agent\',this.value)">' + selOpts(cs.map((c) => [c.agent, c.agent + ' · ' + c.points.length + ' waypoints']), cs[idx].agent) + '</select></label></div>';
+      h += '<table class="arc-t" id="ws-arc-curves"><tr><th>curve</th><th>shape</th><th>range</th></tr>' + ARC.CURVES.map((k) => {
+        const st = ARC.curveStats(pts, k); if (!st.n) return '<tr><td>' + ARC_NAMES[k] + '</td><td colspan="2" class="arc-dim">no values</td></tr>';
+        return '<tr><td>' + ARC_NAMES[k] + '</td><td>' + spark(ARC.normalized(pts, k), st.min, st.max, true) + '</td><td class="arc-dim">' + st.min.toFixed(2) + '–' + st.max.toFixed(2) + (st.distinct <= 2 ? ' · flat' : '') + '</td></tr>';
+      }).join('') + '</table><div class="ws-fp" style="margin-top:0">each curve is stretched over its own range, so a quiet curve still moves.</div>';
+    }
+    const curveOpts = ARC.CURVES.map((k) => [k, ARC_NAMES[k]]);
+    h += '<div class="ws-fp" style="margin:6px 0 2px">lanes (curve → controller, output range 0–127):</div>' + a.lanes.map((l, i) =>
+      '<div class="ws-row arc-lane" data-lane="' + i + '" style="gap:3px"><input type="checkbox" ' + (l.on ? 'checked' : '') + ' title="lane on/off" onchange="Workshop.arcLane(' + i + ',\'on\',this.checked)">' +
+      '<select class="ws-sel" style="width:92px" onchange="Workshop.arcLane(' + i + ',\'curve\',this.value)">' + selOpts(curveOpts, l.curve) + '</select>→' +
+      '<label class="ws-l" title="MIDI controller number">CC<input type="number" class="ws-n" style="width:46px" min="1" max="119" value="' + (l.cc === null ? '' : l.cc) + '" onchange="Workshop.arcLane(' + i + ',\'cc\',this.value)"></label>' +
+      '<input type="number" class="ws-n" style="width:42px" min="0" max="127" value="' + l.lo + '" title="output when the curve is at its lowest" onchange="Workshop.arcLane(' + i + ',\'lo\',this.value)">–' +
+      '<input type="number" class="ws-n" style="width:42px" min="0" max="127" value="' + l.hi + '" title="output when the curve is at its highest" onchange="Workshop.arcLane(' + i + ',\'hi\',this.value)">' +
+      '<button class="btn ws-b" title="remove this lane" onclick="Workshop.arcLaneDel(' + i + ')">×</button></div>' +
+      (CC_NAMES[l.cc] ? '<div class="ws-fp arc-dim" style="margin:0 0 2px 22px">CC' + l.cc + ' = ' + CC_NAMES[l.cc] + '</div>' : '')).join('');
+    h += '<div class="ws-row"><button class="btn ws-b" onclick="Workshop.arcLaneAdd()">+ lane</button><button class="btn ws-b" onclick="Workshop.arcReset()" title="back to the standard lanes">standard lanes</button>' +
+      '<label class="ws-l">between waypoints<select class="ws-sel" onchange="Workshop.arcSet(\'interp\',this.value)">' + selOpts([['linear', 'glide'], ['step', 'hold']], a.interp) + '</select></label></div>';
+    const b = S.build; if (b && b.arcLanes && b.arcLanes.length) h += '<div class="ws-fp" id="ws-arc-built">' + b.arcLanes.map((l) => 'CC' + l.cc + ' ← ' + ARC_NAMES[l.curve] + ': ' + l.events + ' changes on ' + l.tracks + ' voice' + (l.tracks === 1 ? '' : 's')).join(' · ') + '. Drums and the source file’s own tracks are left alone.</div>';
+    if (S.arcErr) h += '<div class="ws-warn">' + esc(S.arcErr) + '</div>';
+    return h;
+  }
+
+  // ---------- hand-edited voices ----------
+  function voiceIdOfTrack(ti) { const b = liveBuild(); const t = b && b.arrangement.tracks[ti - 1]; return t && t.voiceId ? t.voiceId : null; }
+  function trackOfVoice(id) { const b = liveBuild(); if (!b) return null; const k = b.arrangement.tracks.findIndex((t) => t.voiceId === id); return k < 0 ? null : k + 1; }
+  function freeze(i) {
+    const v = V()[i]; if (!v) return;
+    if (v.kind === 'notes') { if (window.gridUI) gridUI.editVoice(v.id); return; }
+    try { S.recipe = T.freezeVoice(S.recipe, v.id, S.parsed); } catch (e) { toast(e.message, true); return; }
+    changed(); if (window.gridUI) gridUI.editVoice(v.id);
+    toast('"' + v.name + '" is now hand-edited: its ' + (v.kind === 'harmony' ? 'chords and bass are two voices of plain notes' : S.recipe.voices[i].channel === 10 ? 'drum hits are' : 'notes are') + ' stored in the recipe. Drag on the grid to change them.');
+  }
+  function freezeTrack(ti) { const id = (voiceIdOfTrack(ti) || '').replace(/~bass$/, ''), i = V().findIndex((v) => v.id === id); if (i >= 0) freeze(i); }
+  function addHandVoice() {
+    const spec = baseVoice('Hand voice ' + (V().length + 1)); spec.kind = 'notes'; spec.notes = []; delete spec.chain; addVoiceSpec(spec); changed();
+    if (window.gridUI) gridUI.editVoice(spec.id); toast('A new empty voice: click on the grid to add notes.');
+  }
+  // what the grid needs to edit the voice shown on Player track `ti`, or null if that voice is not hand-edited
+  function getEdit(ti) {
+    const b = liveBuild(); if (!b) return null;
+    const t = b.arrangement.tracks[ti - 1]; if (!t || !t.voiceId) return null;
+    const v = S.recipe.voices.find((x) => x.id === t.voiceId); if (!v || v.kind !== 'notes') return null;
+    const off = Math.round((v.entryBar - 1) * b.theme.barTicks) + (b.shiftTicks || 0);
+    return { trackIndex: ti, voiceId: v.id, name: v.name, drums: v.channel === 10, minStart: b.shiftTicks || 0, notes: v.notes.map((n, i) => ({ id: i, pitch: n.p, start: n.s + off, dur: n.d, vel: n.v })) };
+  }
+  function applyEdit(ev) {
+    const b = liveBuild(); if (!b) return null;
+    const t = b.arrangement.tracks[ev.track - 1], vi = t ? V().findIndex((x) => x.id === t.voiceId) : -1; if (vi < 0 || V()[vi].kind !== 'notes') return null;
+    let r; try { r = T.editHandNotes(V()[vi], ev, { barTicks: b.theme.barTicks, shiftTicks: b.shiftTicks || 0, key: S.recipe.key, ppq: b.theme.ppq }); } catch (e) { toast(e.message, true); return null; }
+    S.recipe.voices[vi] = r.voice; changed(); return { select: r.select };
+  }
+
+  // ---------- harmony ----------
+  const HNAMES = { functional: 'Functional', plagal: 'Plagal-leaning' };
+  function harmonyInfo(id) { const b = S.build; return b ? b.voices.find((x) => x.id === id) : null; }
+  function addHarmony() {
+    const lead = baseVoice('Chords'), bass = freeChannel(); lead.kind = 'harmony'; lead.source = 'theme'; delete lead.chain; lead.name = 'Chordal harmony'; lead.program = 19; lead.volume = 90;
+    lead.bassChannel = (() => { const used = {}; V().forEach((v) => { used[v.channel] = true; if (v.bassChannel) used[v.bassChannel] = true; }); used[lead.channel] = true; for (let c = 1; c <= 16; c++) if (c !== 10 && !used[c]) return c; return bass; })();
+    delete lead.pan; delete lead.reverb; delete lead.chorus; addVoiceSpec(lead); changed(); toast('Chordal harmony added: chords and a bass, chosen to fit the melody. Step through alternatives with ◀ ▶.');
+  }
+  function hf(i, field, val) {
+    const v = V()[i]; if (!v || v.kind !== 'harmony') return;
+    if (['style', 'rhythm', 'vocab', 'inversions', 'spacing', 'source'].includes(field)) v[field] = val;
+    else if (field === 'bass') v.bass = !!val;
+    else if (field === 'inner') v.inner = Math.round(num(val, 1, 4, v.inner));
+    else if (field === 'k') { v.k = Math.round(num(val, 1, 8, v.k)); if (v.path >= v.k) v.path = v.k - 1; }
+    else if (field === 'seed') v.seed = (val === '' || val === null) ? null : Math.max(0, Math.round(num(val, 0, 4294967295, 0)));
+    else if (['program', 'bassProgram'].includes(field)) v[field] = Math.round(num(val, 0, 127, v[field]));
+    else if (['channel', 'bassChannel'].includes(field)) v[field] = Math.round(num(val, 1, 16, v[field]));
+    else if (['volume', 'bassVolume'].includes(field)) v[field] = Math.round(num(val, 0, 127, v[field]));
+    changed();
+  }
+  function harmonyPath(i, d) { const v = V()[i]; if (!v || v.kind !== 'harmony') return; v.path = Math.max(0, Math.min(v.k - 1, v.path + d)); changed(); }
+  function harmonyReroll(i) { const v = V()[i]; if (!v || v.kind !== 'harmony') return; v.seed = Math.floor(Math.random() * 1000000); v.path = 0; changed(); }
+  function addParallel() {
+    const dist = +$('ws-par-dist').value, n = +$('ws-par-n').value, dir = $('ws-par-dir').value, dbl = $('ws-par-dbl').checked, lead = V().find((v) => v.source === 'theme' && !v.kind) || V()[0];
+    const specs = T.makeParallel({ key: S.recipe.key, source: 'theme', distance: dist, voices: n, direction: dir, doubling: dbl, program: lead ? lead.program : null, volume: lead ? lead.volume : 100, firstChannel: 1 });
+    specs.forEach((sp) => { sp.id = nextId(); sp.channel = freeChannel(); if (lead) ['pan', 'reverb', 'chorus'].forEach((k) => { if (lead[k] !== undefined) sp[k] = lead[k]; }); addVoiceSpec(sp); });
+    changed(); toast(specs.length + ' parallel voice' + (specs.length > 1 ? 's' : '') + ' added, counted in steps of the ' + S.recipe.key.scale + ' scale.');
+  }
+  function parallelNote() { const k = T.keyInfo(S.recipe.key), d = +($('ws-par-dist') ? $('ws-par-dist').value : 2); return T.parallelInfo(d, k.N, S.recipe.ruleSet, T.SCALES[S.recipe.key.scale]).note; }
+  function parallelNoteUpdate() { const el = $('ws-par-note'); if (el) el.textContent = parallelNote(); }
+  // the chord windows of the first generated harmony, in ARRANGEMENT ticks, for the grid's chord strip and the notation's chord symbols
+  function getChords() {
+    const b = liveBuild(); if (!b) return null; const hv = b.voices.find((x) => x.harmony); if (!hv || !hv.harmony.windows.length) return null;
+    const off = Math.round((hv.harmony.entryBar - 1) * b.theme.barTicks) + (b.shiftTicks || 0);
+    return hv.harmony.windows.map((w) => ({ start: w.t0 + off, end: w.t1 + off, symbol: w.symbol, roman: w.roman, func: w.func, why: w.why ? w.why.text : '' }));
+  }
+  function harmonyHtml(v, i) {
+    const hi = harmonyInfo(v.id), an = hi && hi.harmony, prog = MM.GM_PROGRAMS || [], chOpts = []; for (let c = 1; c <= 16; c++) chOpts.push([c, c]);
+    const srcs = [['theme', 'Theme']].concat(V().filter((c) => c.id !== v.id && c.kind !== 'drums' && c.kind !== 'harmony').map((c) => [c.id, c.name]));
+    const seq = an ? an.windows.map((w) => w.roman).join(' ') : '', cad = an && an.cadences.length ? an.cadences.map((c) => c.type + ' cadence, bar ' + c.bar).join(' · ') : '';
+    return '<div class="ws-voice' + (v.enabled ? '' : ' off') + '" style="border-left:2px solid var(--S)">' +
+      '<div class="ws-row"><input type="checkbox" ' + (v.enabled ? 'checked' : '') + ' onchange="Workshop.vf(' + i + ',\'enabled\',this.checked)"><span class="ws-dot" style="background:var(--S)"></span>' +
+        '<input type="text" class="ws-t" value="' + esc(v.name) + '" onchange="Workshop.vf(' + i + ',\'name\',this.value)">' +
+        soloBtn(i, v.id) + '<button class="btn ws-b" title="turn the chords and bass into two voices of plain notes you can edit (what you hear does not change)" onclick="Workshop.freeze(' + i + ')">freeze to edit</button>' +
+        '<button class="btn ws-b" title="remove" onclick="Workshop.delVoice(' + i + ')">×</button></div>' +
+      '<div class="ws-row"><label class="ws-l">harmonize<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'source\',this.value)">' + selOpts(srcs, v.source) + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-l">style<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'style\',this.value)">' + selOpts(Object.keys(HNAMES).map((k) => [k, HNAMES[k]]), v.style) + '</select></label>' +
+        '<label class="ws-l">chord every<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'rhythm\',this.value)">' + selOpts([['beat', 'beat'], ['half', 'half bar'], ['bar', 'bar'], ['phrase', 'phrase']], v.rhythm) + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-l">chords<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'vocab\',this.value)">' + selOpts([['triads', 'triads'], ['sevenths', 'sevenths']], v.vocab) + '</select></label>' +
+        '<label class="ws-l">inner voices<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'inner\',this.value)">' + selOpts([1, 2, 3, 4].map((n) => [n, n]), v.inner) + '</select></label>' +
+        '<label class="ws-chk" style="margin:0"><input type="checkbox" ' + (v.bass ? 'checked' : '') + ' onchange="Workshop.hf(' + i + ',\'bass\',this.checked)"> bass</label></div>' +
+      '<div class="ws-row"><label class="ws-l">inversions<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'inversions\',this.value)">' + selOpts([['root', 'root position'], ['first', 'first when it helps'], ['smooth', 'smooth bass']], v.inversions) + '</select></label>' +
+        '<label class="ws-l">spacing<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'spacing\',this.value)">' + selOpts([['closed', 'closed'], ['open', 'open']], v.spacing) + '</select></label></div>' +
+      '<div class="ws-row"><button class="btn ws-b" title="previous alternative" onclick="Workshop.harmonyPath(' + i + ',-1)"' + (v.path > 0 ? '' : ' disabled') + '>◀</button><span class="ws-fp" style="margin:0;min-width:84px;text-align:center">path ' + (v.path + 1) + ' of ' +
+        '<select class="ws-sel" style="width:42px" onchange="Workshop.hf(' + i + ',\'k\',this.value)">' + selOpts([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, n]), v.k) + '</select></span>' +
+        '<button class="btn ws-b" title="next alternative reading of the melody" onclick="Workshop.harmonyPath(' + i + ',1)"' + (v.path < v.k - 1 ? '' : ' disabled') + '>▶</button>' +
+        '<label class="ws-l" style="margin-left:auto">seed<input type="number" class="ws-n" style="width:64px" min="0" placeholder="recipe" value="' + (v.seed === null ? '' : v.seed) + '" onchange="Workshop.hf(' + i + ',\'seed\',this.value)"></label>' +
+        '<button class="btn ws-b" title="a different reading" onclick="Workshop.harmonyReroll(' + i + ')">re-roll</button></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" title="chords instrument" onchange="Workshop.hf(' + i + ',\'program\',this.value)">' + selOpts(prog.map((n, p) => [p, p + ' · ' + n]), v.program) + '</select>' +
+        '<label class="ws-l">ch<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'channel\',this.value)">' + selOpts(chOpts, v.channel) + '</select></label>' +
+        '<input type="range" min="0" max="127" value="' + v.volume + '" style="width:60px" title="chords volume" onchange="Workshop.hf(' + i + ',\'volume\',this.value)"></div>' +
+      (v.bass ? '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" title="bass instrument" onchange="Workshop.hf(' + i + ',\'bassProgram\',this.value)">' + selOpts(prog.map((n, p) => [p, p + ' · ' + n]), v.bassProgram) + '</select>' +
+        '<label class="ws-l">ch<select class="ws-sel" onchange="Workshop.hf(' + i + ',\'bassChannel\',this.value)">' + selOpts(chOpts, v.bassChannel) + '</select></label>' +
+        '<input type="range" min="0" max="127" value="' + v.bassVolume + '" style="width:60px" title="bass volume" onchange="Workshop.hf(' + i + ',\'bassVolume\',this.value)"></div>' : '') +
+      (an ? '<div class="ws-fp" style="color:#c8cfe0;word-break:break-word">' + esc(seq) + '</div>' + (cad ? '<div class="ws-fp">' + esc(cad) + '</div>' : '') +
+        '<details class="ws-why"><summary class="ws-fp" style="cursor:pointer;margin:2px 0">why these chords?</summary><div class="ws-fp" style="line-height:1.55">' +
+          'Each chord\'s cost = melody fit + progression + cadence + style, each with its own weight (Source and key → the recipe\'s harmony weights). Lower wins. Bars are numbered as in the grid.<br>' +
+          an.windows.slice(0, 48).map((x) => '<b>bar ' + (Math.floor(x.t0 / S.build.theme.barTicks) + Math.floor(an.entryBar - 1) + 1) + '</b> ' + esc(x.why ? x.why.text : x.symbol)).join('<br>') + (an.windows.length > 48 ? '<br>… and ' + (an.windows.length - 48) + ' more' : '') + '</div></details>' +
+        (an.violations.length ? '<div class="ws-warn">' + an.violations.length + ' rule violation' + (an.violations.length > 1 ? 's' : '') + ' under ' + esc(an.ruleSet) + ': ' + esc(an.violations.slice(0, 2).map((x) => x.message + ' (bar ' + x.bar + ')').join('; ')) + '</div>' : '<div class="ws-fp">no rule violations under ' + esc(an.ruleSet) + '</div>') : '') +
+    '</div>';
+  }
+
+  // ---------- grid view support ----------
+  // While the Player holds the arrangement, Player track i (i >= 1; track 0 is the conductor) is arrangement track i-1.
+  function liveBuild() { return (S.build && !S.stale && S.listen === 'arrangement') ? S.build : null; }
+  function ghostFor(ti) {
+    const b = liveBuild(); if (!b) return null;
+    const t = b.arrangement.tracks[ti - 1]; if (!t || !t.voiceId) return null;
+    const v = b.recipe.voices.find((x) => x.id === t.voiceId); if (!v || v.kind === 'drums' || v.kind === 'harmony' || (v.kind === 'notes' && (!v.frozenFrom || v.frozenFrom.kind === 'drums' || v.frozenFrom.kind === 'harmony'))) return null;
+    const off = Math.round((v.entryBar - 1) * b.theme.barTicks) + (b.shiftTicks || 0);   // the original, laid where this voice sits
+    return { label: 'original theme', notes: b.theme.notes.map((n) => ({ pitch: n.pitch, startTick: n.startTick + off, durTicks: n.durTicks })) };
+  }
+  function suggestTrack() {   // the first transformed voice: that is the one you want to compare with the original
+    const b = liveBuild(); if (!b) return null;
+    const v = b.recipe.voices.find((x) => x.kind !== 'drums' && x.enabled && x.chain.length);
+    const k = v ? b.arrangement.tracks.findIndex((t) => t.voiceId === v.id) : -1;
+    return k < 0 ? null : k + 1;
+  }
+
+  // ---------- mode hooks ----------
+  function onModeChange(on) {
+    if (on) { render(); if (S.parsed && S.stale) { rebuild(); loadIntoPlayer(); render(); } }
+    else if (S.buffer) {   // back to the plain Theme Player: hand it the source file again
+      themePlayer.load(S.buffer.slice(0)); S.stale = true;
+      $('theme-file-info').textContent = S.fileName + ' — format ' + themePlayer.data.format + ', ' + themePlayer.data.ntrks + ' track(s), ' + themePlayer.data.ppq + ' ppq';
+      renderThemeTrackList(); _themeClockRender(); _themeFooterRender();
+    }
+  }
+  function prepareForPlay() {
+    if (!S.parsed) { toast('Load a MIDI file first', true); return false; }
+    if (S.stale || !themePlayer.data) { rebuild(); if (!loadIntoPlayer()) { toast('Cannot play: ' + (S.error || 'nothing to play'), true); return false; } }
+    return true;
+  }
+
+  return {
+    _S: S, render: render, setSource: setSource, onModeChange: onModeChange, prepareForPlay: prepareForPlay,
+    setTrack: setTrack, setBars: setBars, setKey: setKey, estimateKey: estimateKey, sfPick: sfPick, sfLoad: sfLoad, _SF: SF, setRule: setRule, setSeed: setSeed,
+    setBacking: setBacking, arcLoad: arcLoad, arcSet: arcSet, arcLane: arcLane, arcLaneAdd: arcLaneAdd, arcLaneDel: arcLaneDel, arcReset: arcReset, arcRemove: arcRemove, setListen: setListen, vf: vf, vvolLabel: vvolLabel, addVoice: addVoice, addDrums: addDrums, df: df, reroll: reroll, dlabel: dlabel, addPreset: addPreset, delVoice: delVoice,
+    stepAdd: stepAdd, stepDel: stepDel, stepMove: stepMove, stepType: stepType, stepParam: stepParam,
+    ghostFor: ghostFor, suggestTrack: suggestTrack, addHarmony: addHarmony, hf: hf, harmonyPath: harmonyPath, harmonyReroll: harmonyReroll, addParallel: addParallel, parNote: parallelNoteUpdate, getChords: getChords, solo: solo, pin: pin, clearPin: clearPin, exportMid: exportMid, xformPreset: xformPreset, xformClear: xformClear, setSelPlace: setSelPlace, setSelJoin: setSelJoin, selSettings: selSettings, saveToMedia: saveToMedia, setSaveName: setSaveName, setAlsoRecipe: setAlsoRecipe, setOmit: setOmit, safeMidName: safeMidName, saveRecipe: saveRecipe, undo: undo, redo: redo, canUndo: () => S.hi > 0, canRedo: () => S.hi < S.hist.length - 1, freeze: freeze, freezeTrack: freezeTrack, addHandVoice: addHandVoice, getEdit: getEdit, applyEdit: applyEdit, voiceIdOfTrack: voiceIdOfTrack, trackOfVoice: trackOfVoice, loadRecipe: loadRecipe, applyRecipe: applyRecipe, adoptSource: adoptSource
+  };
+})();
+window.Workshop = Workshop;
+Workshop.render();
+</script>
+<script>
+// ================================================================
+// GRID VIEW (checkpoint 1b-i) — piano roll of whatever the Player holds.
+// In Workshop mode that is the arrangement; in Theme Player mode, the loaded file.
+// Drawing and layout live in js/mccf_grid.js (tested in Node); this block is the DOM glue.
+// ================================================================
+const gridUI = (function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  let view = null, lastData = null, visible = false, current = 'anim', selVoice = null, hintOverride = null;
+  const dpr = () => window.devicePixelRatio || 1;
+  const WS = () => (typeof workshopOn !== 'undefined' && workshopOn && window.Workshop) ? window.Workshop : null;
+
+  function ensure() {
+    if (view) return view;
+    view = new MccfGrid.GridView($('grid-canvas'), {
+      getData:   () => themePlayer.data,
+      isEnabled: (i) => themePlayer.enabled[i],
+      color:     (i) => MccfMidi.trackColor(i),
+      getClock:  () => (isPlaying && engineMode === 'theme' && themePlayer.playing) ? themePlayer.elapsed() * themePlayer.playScale : null,
+      getGhost:  (i) => { const w = WS(); return w ? w.ghostFor(i) : null; },
+      getEdit:   (i) => { const w = WS(); return w ? w.getEdit(i) : null; },
+      getChords: () => { const w = WS(); return w ? w.getChords() : null; },
+      onEdit:    (ev) => { const w = WS(); return w ? w.applyEdit(ev) : null; },
+      onAudition: (pitch, ti, vel) => audition(pitch, ti, vel),
+      onEditChange: () => { syncEdit(); },
+      onSelect:  (i) => { const w = WS(); selVoice = (w && i !== null) ? w.voiceIdOfTrack(i) : null; renderLegend(); syncEdit(); },
+      onChordHover: (why) => { hintOverride = why; syncEdit(); },
+      chordNotes: (spec, anchor) => chordNotes(spec, anchor),
+      onAuditionChord: (ps, vel, ti) => ps.forEach((p) => audition(p, ti, vel)),
+      onChordError: (m) => chordInfo(m, true),
+      onHover:   (txt) => { const el = $('grid-readout'); if (el) el.textContent = txt; },
+      onView:    () => { syncControls(); syncEdit(); }
+    });
+    view.attach(); return view;
+  }
+  function size() {
+    const wrap = $('grid-canvas-wrap'), c = $('grid-canvas'); if (!wrap || !view) return;
+    const w = wrap.clientWidth || 800, h = wrap.clientHeight || 360, r = dpr();
+    c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.width = w + 'px'; c.style.height = h + 'px';
+    view.dpr = r; view.resize(w, h);
+  }
+  function syncControls() {
+    if (!view) return;
+    const z = $('grid-zoom'); if (z) z.value = Math.round(100 * Math.log(view.view.ppb / 0.5) / Math.log(600));
+    const i = view.info(), sc = $('grid-scroll');
+    if (sc && i) { sc.max = Math.max(1, i.total); sc.value = Math.max(0, view.view.tick0); }
+  }
+  function renderLegend() {
+    const el = $('grid-legend'); if (!el) return;
+    const d = themePlayer.data; if (!d) { el.innerHTML = ''; return; }
+    el.innerHTML = d.tracks.filter((t) => t.noteCount).map((t) => {
+      const on = themePlayer.enabled[t.index], sel = view && view.selected === t.index;
+      return '<span class="gchip' + (sel ? ' sel' : '') + (on ? '' : ' off') + '" onclick="gridUI.select(' + t.index + ')" title="click to select (the ghost is drawn behind the selected voice); tick to hear it">' +
+        '<input type="checkbox" ' + (on ? 'checked' : '') + ' onclick="event.stopPropagation()" onchange="gridUI.toggle(' + t.index + ',this.checked)">' +
+        '<span class="ws-dot" style="background:' + MccfMidi.trackColor(t.index) + '"></span>' + _esc(t.name) +
+        '<span style="color:var(--dim)"> ' + t.noteCount + '</span></span>';
+    }).join('');
+  }
+  function defaultSelection() {
+    const w = WS(); const s = w && w.suggestTrack ? w.suggestTrack() : null;
+    return s === undefined ? null : s;
+  }
+  // called whenever the Player's data or mixer state may have changed
+  function refresh(force) {
+    if (!view && !visible) return;
+    ensure();
+    const d = themePlayer.data;
+    if (d !== lastData) {
+      const first = lastData === null;
+      lastData = d;
+      const sel = view.selected, w = WS(), keep = (w && selVoice) ? w.trackOfVoice(selVoice) : null;
+      if (keep !== null) view.selected = keep;               // the same voice stays selected (and keeps its note selection) through an edit
+      else if (sel === null || !d || !d.tracks[sel] || !d.tracks[sel].noteCount || w) { view.selected = defaultSelection(); selVoice = (w && view.selected !== null) ? w.voiceIdOfTrack(view.selected) : null; }
+      if (visible) { size(); if (first || force || view.autoFit) view.fit(); else view.fitPitch(); }   // follow the piece while the view is still auto-fitted
+    }
+    renderLegend(); syncControls(); view.dirty = true; syncEdit();
+  }
+  function reset() { lastData = null; selVoice = null; if (view) { view.selected = null; view.sel = {}; } refresh(true); }   // a different file: fit everything again
+  function setView(v) {
+    current = v; visible = (v === 'grid'); const nt = (v === 'notation');
+    $('grid-panel').style.display = visible ? 'flex' : 'none';
+    const np = $('notation-panel'); if (np) np.style.display = nt ? 'flex' : 'none';
+    $('main-canvas').style.visibility = (visible || nt) ? 'hidden' : 'visible';
+    const ov = document.querySelector('.viz-overlay'); if (ov) ov.style.visibility = (visible || nt) ? 'hidden' : 'visible';
+    $('vtab-anim').classList.toggle('on', v === 'anim'); $('vtab-grid').classList.toggle('on', visible); const vn = $('vtab-notation'); if (vn) vn.classList.toggle('on', nt);
+    if (visible) { ensure(); size(); lastData = null; refresh(true); view.start(); }
+    else if (view) view.stop();
+    if (window.notationUI) notationUI.show(nt);
+  }
+  function showTabs(on) { $('view-tabs').style.display = on ? 'flex' : 'none'; if (!on && current !== 'anim') setView('anim'); }
+  function select(i) { ensure(); view.select(i); }
+  // ---- editing ----
+  function audition(pitch, ti, vel) {
+    try { if (outputMode !== 'midi') { if (!audioCtx) initAudio(); if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); } } catch (e) { /* no audio yet */ }
+    themePlayer.audition(pitch, vel || 90, ti);
+  }
+  function selectedKind() {   // what the selected track is, for the hint and the freeze button
+    const w = WS(); if (!w || !view || view.selected === null) return null;
+    const id = (w.voiceIdOfTrack(view.selected) || '').replace(/~bass$/, ''); if (!id) return 'source';
+    const v = w._S.recipe.voices.find((x) => x.id === id); return v ? (v.kind || 'voice') : null;
+  }
+  function syncEdit() {
+    const grp = $('grid-edit-group'); if (!grp) return;
+    const w = WS(); grp.style.display = w ? 'inline-flex' : 'none';
+    if (!w) { const h0 = $('grid-hint'); if (h0) h0.textContent = ''; return; }
+    const on = !!(view && view.editOn), kind = selectedKind(), name = (() => { const id = view && view.selected !== null ? (w.voiceIdOfTrack(view.selected) || '').replace(/~bass$/, '') : null, v = id && w._S.recipe.voices.find((x) => x.id === id); return v ? v.name : ''; })();
+    $('grid-edit').classList.toggle('on', on);
+    $('grid-freeze').disabled = !(kind === 'voice' || kind === 'drums' || kind === 'harmony');
+    $('grid-undo').disabled = !w.canUndo(); $('grid-redo').disabled = !w.canRedo();
+    const editing = on && kind === 'notes', n = view ? view.selectedIds().length : 0;
+    const tools = $('grid-tools'); if (tools) tools.style.display = editing ? 'inline-flex' : 'none';
+    const gr0 = $('grid-groove'); if (gr0 && !editing) gr0.style.display = 'none';
+    const cb = $('grid-chordbar'); if (cb) { const show = editing && view.tool === 'chord'; if (show && cb.style.display === 'none') { buildChordUI(); chordChanged(); } cb.style.display = show ? 'flex' : 'none'; }
+    if (editing) {
+      $('grid-tool-draw').classList.toggle('on', view.tool === 'draw'); $('grid-tool-select').classList.toggle('on', view.tool === 'select'); $('grid-tool-chord').classList.toggle('on', view.tool === 'chord');
+      const gr = $('grid-groove'); if (gr) gr.style.display = 'inline-flex';
+      const sv = view.selectionVelocity(), slider = $('grid-vel'), lab = $('grid-vel-v');
+      slider.value = sv ? sv.mean : view.newVel; lab.textContent = sv ? (sv.min === sv.max ? String(sv.min) : sv.min + '–' + sv.max) : String(view.newVel);
+      slider.title = sv ? 'velocity of the ' + sv.count + ' selected note' + (sv.count > 1 ? 's' : '') + ' (drag the bars in the lane below the grid for fine control)' : 'velocity for NEW notes (select notes to change theirs)';
+      $('grid-cut').disabled = $('grid-copy').disabled = $('grid-dup').disabled = !n; $('grid-paste').disabled = !view.clip;
+    }
+    let hint = '';
+    if (on) {
+      if (kind === 'notes') hint = 'Editing “' + name + '”. ' + (view.tool === 'chord' ? 'Chord tool: type a chord (Am7, F#m7b5, Bb/D, or a numeral in the recipe\'s key such as V7 or ii65) or press a button, then click where it should start. The row you click is the chord\'s root, or its lowest note for a named chord. Press D, S or C to change tools. ' : view.tool === 'draw' ? 'Draw tool: click adds a note (one grid cell), drag across cells for a longer one; Ctrl+drag boxes notes. ' : 'Select tool: drag a box to select notes (Shift adds). ') +
+        (view.layout && view.layout().drumEdit ? 'The rows are the drum sounds. ' : '') + 'Drag a note to move it, its right edge to resize; drag a bar in the velocity lane below to change loudness, or Alt+drag there to draw a ramp. Ctrl+C / X / V copy, cut, paste at the pointer; Ctrl+D duplicates after the selection; + / − change velocity; Delete removes; Alt+drag in the grid pans; D / S switch tools. The groove buttons act on the selection (or every note if nothing is selected).' + (n ? '  (' + n + ' selected)' : '');
+      else if (kind === 'voice') hint = '“' + name + '” is generated from the theme. Press “freeze to edit” to turn it into notes you can change (what you hear stays the same).';
+      else if (kind === 'harmony') hint = '“' + name + '” is generated harmony (chords and bass). Press “freeze to edit” to turn it into two voices of notes you can change (what you hear stays the same).';
+      else if (kind === 'drums') hint = '“' + name + '” is generated. Press “freeze to edit” to turn the pattern into hits you can change (what you hear stays the same).';
+      else if (kind === 'source') hint = 'This track comes from the source file and is not part of the recipe.';
+      else hint = 'Select a voice: click one of its notes or its name chip.';
+    }
+    if (on && kind === 'notes' && view && view.snapPx() < 6) hint += '  The ' + view.snap + ' grid is too small to see at this zoom (it still snaps): zoom in to place small notes accurately.';
+    const h = $('grid-hint'); if (h) h.textContent = hintOverride ? ('♪ ' + hintOverride) : hint;
+  }
+  function setTool(t) { ensure(); view.setTool(t); syncEdit(); }
+  // ---------- chords ----------
+  const CH = () => window.MccfChords, chordKey = () => { const w = WS(); return w && w._S && w._S.recipe ? w._S.recipe.key : null; };
+  function chordSpec() {
+    const v = (id) => { const e = $(id); return e ? e.value : ''; };
+    return { symbol: v('grid-chord-sym'), inversion: +v('grid-chord-inv') || 0, spacing: v('grid-chord-sp') || 'close', bass: !!($('grid-chord-bass') && $('grid-chord-bass').checked), length: v('grid-chord-len') || 'beat' };
+  }
+  function chordNotes(spec, anchor) {
+    const C = CH(); if (!C) return { error: 'the chord dictionary is not loaded' };
+    const c = C.parse(spec.symbol, chordKey()); if (!c.ok) return { error: c.error };
+    return { pitches: C.voice(c, { anchor: anchor, rootPc: ((anchor % 12) + 12) % 12, inversion: spec.inversion > 0 ? spec.inversion : undefined, spacing: spec.spacing, bass: !!spec.bass, range: [21, 108] }), symbol: c.symbol };
+  }
+  function chordInfo(msg, bad) { const el = $('grid-chord-info'); if (!el) return; el.textContent = msg; el.style.color = bad ? 'var(--warm)' : ''; }
+  const FORMULA = { 0: '1', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4', 6: '♭5', 7: '5', 8: '♯5', 9: '6', 10: '♭7', 11: '7', 13: '♭9', 14: '9', 15: '♯9', 17: '11', 18: '♯11', 20: '♭13', 21: '13' };
+  function chordChanged() {
+    ensure(); const spec = chordSpec(); view.setChord(spec); const C = CH(); if (!C) return;
+    if (!spec.symbol.trim()) { chordInfo('Type a chord, or press one of the buttons below.', false); return; }
+    const key = chordKey(), c = C.parse(spec.symbol, key);
+    if (!c.ok) { chordInfo(c.error, true); return; }
+    const typed = (spec.symbol.trim().match(/^[A-Ga-g]([#b♯♭])?/) || [])[1], flats = typed === 'b' || typed === '♭' ? true : typed === '#' || typed === '♯' ? false : (c.fromRoman ? /b/.test(c.symbol) : (key ? C.keyPrefersFlats(key) : false));   // the root you typed decides sharps or flats
+    if (!c.hasRoot) chordInfo(c.symbol + ' (' + c.name + '): no root named, so the row you click is the root', false);
+    else chordInfo(c.symbol + ' = ' + c.intervals.map((i) => C.rootName((c.root + i) % 12, flats)).join(' ') + (c.bass !== null && c.bass !== undefined && c.bass !== c.root ? ' over ' + C.rootName(c.bass, flats) : '') + '  ·  ' + c.name + (c.fromRoman ? '  ·  numeral ' + c.roman : ''), false);
+  }
+  function pickChord(sym) { ensure(); const e = $('grid-chord-sym'); if (e) e.value = sym; if (view.tool !== 'chord') view.setTool('chord'); chordChanged(); syncEdit(); }
+  function dictPick(suffix) {   // keep the root you already typed; otherwise a quality alone (the root is where you click)
+    const cur = ($('grid-chord-sym').value || '').match(/^[A-Ga-g][#b♯♭]?/);
+    pickChord((cur ? cur[0] : '') + suffix);
+  }
+  let chordUiKey = null;
+  function buildChordUI() {
+    const C = CH(), H = window.MccfHarmony, key = chordKey(); if (!C) return;
+    const sig = key ? key.tonic + ' ' + key.scale : '-', chips = $('grid-chord-chips'), dict = $('grid-chord-dict'), dl = $('grid-chord-list');
+    if (chordUiKey === sig && chips && chips.children.length) return; chordUiKey = sig;
+    if (chips && key && H) {
+      const row = (vocab) => H.buildChords(key, vocab).map((c) => '<button class="btn ws-b" onclick="gridUI.pickChord(\'' + c.symbol + '\')" title="' + c.roman + ' (' + c.func + ')">' + c.symbol + '</button>').join('');
+      chips.innerHTML = '<span class="ws-fp" style="margin:0 4px 0 0">' + key.tonic + ' ' + key.scale + ':</span>' + row('triads') + '<span class="ws-fp" style="margin:0 4px">·</span>' + row('sevenths');
+    }
+    if (dict) dict.innerHTML = C.list().map((f) => '<div class="ws-row" style="gap:3px;flex-wrap:wrap;margin:2px 0"><span class="ws-fp" style="margin:0;width:62px">' + f.family + '</span>' + f.items.map((it) =>
+      '<button class="btn ws-b" onclick="gridUI.dictPick(\'' + it.suffix + '\')" title="' + it.name + '  ·  ' + it.intervals.map((i) => FORMULA[i] || i).join(' ') + (it.aliases.length ? '  ·  also written ' + it.aliases.join(' ') : '') + '">' + (it.suffix || 'maj') + '</button>').join('') + '</div>').join('');
+    if (dl) dl.innerHTML = ['', 'm', '7', 'm7', 'maj7', 'dim', 'sus4', 'add9', '9', 'm7b5'].map((x) => '<option value="' + x + '">').join('');
+  }
+  function identifySelection() {
+    ensure(); const C = CH(), ps = view.selectionPitches(); if (!ps.length) { chordInfo('Select some notes first (select tool, or Ctrl+drag a box).', true); return; }
+    const key = chordKey(), res = C.identify(ps, { flats: key ? C.keyPrefersFlats(key) : false });
+    chordInfo(res.length ? 'These ' + ps.length + ' notes form: ' + res.slice(0, 4).map((x) => x.symbol).join('  ·  ') + (res.length > 4 ? '  ·  …' : '') : 'No chord in the dictionary matches these notes.', !res.length);
+    if (res.length) { const e = $('grid-chord-sym'); if (e && !e.value.trim()) { e.value = res[0].symbol; chordChanged(); } }
+  }
+  function transformSelection() {
+    ensure(); const w = WS(); if (!w) return; const sp = w.selSettings(), before = view.selectedIds().length;
+    if (!view.editOn || !before) { toast('Select some notes first: use the select tool (S), or Ctrl+drag a box around them.', true); return; }
+    const n = view.transformSelection(sp); if (n) toast('Transformed ' + n + ' note' + (n > 1 ? 's' : '') + ' and added the result to the line (' + (sp.chain.length ? sp.chain.map((x) => x.type).join(' + ') : 'a plain copy') + (sp.join ? ', joined ' + sp.join.steps + ' step' + (Math.abs(sp.join.steps) === 1 ? '' : 's') : '') + '). Ctrl+Z undoes it.');
+    syncEdit();
+  }
+  function setVelLabel(v) { const l = $('grid-vel-v'); if (l) l.textContent = String(v); }
+  function setVel(v) { ensure(); view.setVelocity(+v); syncEdit(); }
+  function copy() { ensure(); const n = view.copy(); if (n) toast(n + ' note' + (n > 1 ? 's' : '') + ' copied'); syncEdit(); }
+  function cut() { ensure(); view.cut(); syncEdit(); }
+  function paste() { ensure(); if (!view.paste()) toast('Nothing to paste: select notes and press Ctrl+C first', true); syncEdit(); }
+  function dup() { ensure(); view.duplicate(); syncEdit(); }
+  function groove(fn, what) {
+    ensure(); const n = fn(); const all = view.lastGroove && view.lastGroove.all;
+    if (!n) toast('Nothing to ' + what + ': this voice has no notes', true); else toast(what + ': ' + (all ? 'all ' + n + ' notes (none were selected)' : n + ' selected note' + (n > 1 ? 's' : '')) + '. Ctrl+Z undoes it.');
+    syncEdit();
+  }
+  function quantize() { groove(() => view.quantize(1, false), 'quantized to the ' + view.snap + ' grid'); }
+  function swing() { const r = +$('grid-swing').value / 100; groove(() => view.swing(r), 'swung ' + view.snap + ' notes ' + Math.round(r * 100) + '%'); }
+  function humanize() { const v = +$('grid-hum-vel').value || 0, t = +$('grid-hum-time').value || 0; groove(() => view.humanize(v, t), 'humanized (±' + v + ' velocity, ±' + t + ' ticks)'); }
+  function toggleEdit() { ensure(); view.setEditMode(!view.editOn); syncEdit(); }
+  function editVoice(id) {   // open the grid on a hand-edited voice, ready to draw
+    const w = WS(); if (!w) return;
+    setView('grid'); ensure();
+    const ti = w.trackOfVoice(id); if (ti !== null) view.select(ti);
+    view.setEditMode(true); syncEdit();
+  }
+  function freeze() { const w = WS(); if (w && view && view.selected !== null) w.freezeTrack(view.selected); }
+  function newHand() { const w = WS(); if (w) w.addHandVoice(); }
+  document.addEventListener('keydown', (e) => {
+    const w = WS(); if (!w) return;
+    const tag = (e.target && e.target.tagName) || ''; if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) && e.key !== 'Escape') return;
+    const mod = e.ctrlKey || e.metaKey, k = e.key;
+    if (mod && (k === 'z' || k === 'Z')) { e.preventDefault(); if (e.shiftKey) w.redo(); else w.undo(); return; }
+    if (mod && (k === 'y' || k === 'Y')) { e.preventDefault(); w.redo(); return; }
+    if (visible && view && view.editOn && view.keyDown(k, { shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey })) e.preventDefault();
+  });
+  function toggle(i, on) { toggleThemeTrack(i, on); renderThemeTrackList(); }
+  function setSnap(v) { ensure(); view.snap = v; view.dirty = true; syncEdit(); }
+  function setZoomPct(p) { ensure(); view.setZoom(0.5 * Math.pow(600, p / 100)); syncEdit(); }
+  function setScroll(t) { ensure(); view.scrollToTick(+t); }
+  function setGhost(on) { ensure(); view.showGhost = !!on; view.dirty = true; }
+  function setFollow(on) { ensure(); view.follow = !!on; }
+  function fit() { ensure(); size(); view.fit(); syncControls(); }
+  window.addEventListener('resize', () => { if (visible && view) { size(); view.dirty = true; } });
+  return { setView, showTabs, refresh, reset, select, toggleEdit, editVoice, freeze, newHand, syncEdit, audition, setTool, chordChanged, pickChord, dictPick, identifySelection, transformSelection, chordNotes, buildChordUI, setVel, setVelLabel, copy, cut, paste, dup, quantize, swing, humanize, toggle, setSnap, setZoomPct, setScroll, setGhost, setFollow, fit, _view: () => view };
+})();
+window.gridUI = gridUI;
+</script>
+<script>
+// ================================================================
+// NOTATION VIEW (checkpoint 1b-ii) — read-only staves of whatever the Player holds.
+// Conversion + drawing live in js/mccf_notation.js (VexFlow 4.2.5, vendored); this block is the DOM glue.
+// ================================================================
+const notationUI = (function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const TONICS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+  const MODES = ['major', 'minor', 'dorian', 'mixolydian', 'lydian', 'phrygian', 'locrian'];
+  const MAJOR_SHARP = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'], MAJOR_FLAT = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+  let shown = false, from = 1, winBars = 8, layout = null, score = null, dirty = true, follow = true, raf = null, lastKey = '', secToTick = null, secToTickFor = null, userKey = { tonic: 'auto', mode: 'major' };
+
+  function ready() { return typeof Vex !== 'undefined' && Vex.Flow && typeof MccfNotation !== 'undefined'; }
+  // the key to spell in: your choice, else the Workshop recipe, else an estimate from the music, else the file's own signature
+  function detectKey() {
+    if (userKey.tonic !== 'auto') return { tonic: userKey.tonic, scale: userKey.mode, how: 'set by you' };
+    if (typeof workshopOn !== 'undefined' && workshopOn && window.Workshop && Workshop._S.recipe) { const k = Workshop._S.recipe.key; return { tonic: k.tonic, scale: k.scale, how: 'from the recipe' }; }
+    const d = themePlayer.data;
+    try { const e = d && themePlayer.estimateKey(); if (e) return { tonic: MccfMidi.PC_NAMES[e.pc], scale: e.mode === 'minor' ? 'minor' : 'major', how: 'estimated' }; } catch (err) { /* fall through */ }
+    const ks = d && d.keySigEvents && d.keySigEvents[0];
+    if (ks) { const maj = ks.sharps >= 0 ? MAJOR_SHARP[ks.sharps] : MAJOR_FLAT[-ks.sharps], minor = ks.minor; return { tonic: minor ? TONICS[(TONICS.indexOf(maj) + 9) % 12] || maj : maj, scale: minor ? 'minor' : 'major', how: 'from the file' }; }
+    return { tonic: 'C', scale: 'major', how: 'assumed' };
+  }
+  function shownTracks() {
+    const d = themePlayer.data; if (!d) return [];
+    return d.tracks.filter((t) => t.noteCount && themePlayer.enabled[t.index]).map((t) => t.index);
+  }
+  function width() { const s = $('nt-scroll'); return Math.max(360, (s && s.clientWidth ? s.clientWidth : 900) - 24); }
+  function layoutParams(nTracks) {
+    const w = width(), per = Math.max(1, Math.min(6, Math.floor(w / 230))), systems = nTracks <= 3 ? 2 : 1;
+    return { w, per, bars: per * systems };
+  }
+  function statusText(k) {
+    if (!score) return '';
+    const st = score.stats, bits = ['bars ' + score.fromBar + '–' + score.toBar + ' of ' + score.totalBars, 'key ' + k.tonic + ' ' + k.scale + ' (' + k.how + ')'];
+    if (st.moved) bits.push(st.moved + ' of ' + st.notes + ' notes snapped to the 16th grid');
+    if (st.straightened) bits.push('swing shown as straight eighths');
+    else if (st.tripletFeel) bits.push('swing feel not notated');
+    if (st.dropped) bits.push(st.dropped + ' notes left out (more than 4 voices)');
+    return bits.join(' · ');
+  }
+  function render() {
+    dirty = false;
+    const stage = $('nt-svg'), d = themePlayer.data; if (!stage) return;
+    if (!ready()) { stage.textContent = 'The notation library did not load (js/vexflow-4.2.5.js).'; return; }
+    if (!d) { stage.innerHTML = '<div class="ws-note" style="padding:20px;color:#555">Load a MIDI file to see its notation here.</div>'; layout = null; score = null; $('nt-status').textContent = ''; return; }
+    const tracks = shownTracks().slice(0, 8), p = layoutParams(tracks.length), k = detectKey();
+    winBars = p.bars;
+    const total = MccfNotation.totalBarsOf(d); from = Math.max(1, Math.min(from, total));
+    if (!tracks.length) { stage.innerHTML = '<div class="ws-note" style="padding:20px;color:#555">No tracks are switched on.</div>'; layout = null; score = null; return; }
+    try {
+      const cl = (typeof workshopOn !== 'undefined' && workshopOn && window.Workshop) ? Workshop.getChords() : null;
+      score = MccfNotation.buildScore(d, { fromBar: from, bars: p.bars, key: { tonic: k.tonic, scale: k.scale }, tracks: tracks, chords: cl, grand: ($('nt-grand') && $('nt-grand').value) || 'auto' });
+      layout = MccfNotation.draw(Vex.Flow, stage, score, { width: p.w, perSystem: p.per });
+    } catch (err) { stage.textContent = 'Could not draw this window: ' + err.message; layout = null; return; }
+    $('nt-from').value = from; $('nt-of').textContent = 'of ' + total;
+    $('nt-status').textContent = statusText(k) + (shownTracks().length > 8 ? ' · first 8 of ' + shownTracks().length + ' tracks' : '');
+    const t = $('nt-tonic'); if (t && userKey.tonic === 'auto') $('nt-tonic').title = 'detected: ' + k.tonic + ' ' + k.scale;
+    $('nt-cursor').style.display = 'none';
+  }
+  function invalidate() { dirty = true; if (shown && !raf) loop(); }
+  function songSeconds() { return (isPlaying && engineMode === 'theme' && themePlayer.playing) ? themePlayer.elapsed() * themePlayer.playScale : null; }
+  function tickOf(sec) {
+    const d = themePlayer.data; if (!d || !window.MccfGrid) return 0;
+    if (secToTickFor !== d) { secToTick = MccfGrid.makeSecToTick(d.ppq, d.tempoEvents); secToTickFor = d; }
+    return secToTick(sec);
+  }
+  // put the cursor where the clock is; turn the page when it leaves the window (only while following)
+  function syncClock(sec) {
+    const cur = $('nt-cursor'); if (!cur) return null;
+    if (sec === null || sec === undefined || !themePlayer.data) { cur.style.display = 'none'; return null; }
+    const meter = MccfNotation.meterOf(themePlayer.data), tick = tickOf(sec), bar = Math.floor(tick / meter.barTicks) + 1;
+    if (follow && (bar < from || bar >= from + winBars)) { from = Math.floor((bar - 1) / winBars) * winBars + 1; render(); }
+    const c = layout && MccfNotation.cursorAt(layout, tick);
+    if (!c) { cur.style.display = 'none'; return null; }
+    cur.style.display = 'block'; cur.style.left = Math.round(c.x) + 'px'; cur.style.top = Math.round(c.y0) + 'px'; cur.style.height = Math.round(c.y1 - c.y0) + 'px';
+    return c;
+  }
+  function loop() {
+    raf = null; if (!shown) return;
+    if (dirty) render();
+    syncClock(songSeconds());
+    raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(loop) : null;
+  }
+  function fillKeyControls() {
+    const t = $('nt-tonic'), m = $('nt-mode'); if (!t || t.options.length) return;
+    t.innerHTML = '<option value="auto">auto</option>' + TONICS.map((x) => '<option>' + x + '</option>').join('');
+    m.innerHTML = MODES.map((x) => '<option>' + x + '</option>').join('');
+  }
+  function show(on) {
+    shown = !!on; if (!on) { if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf); raf = null; return; }
+    fillKeyControls(); dirty = true; loop();
+  }
+  function refresh() { if (shown) invalidate(); }
+  function reset() { from = 1; dirty = true; if (shown) invalidate(); }
+  function step(dir) { from = Math.max(1, from + dir * winBars); if (shown) render(); }   // your own actions redraw at once; passive refreshes wait for the next frame
+  function setFrom(v) { from = Math.max(1, parseInt(v, 10) || 1); if (shown) render(); }
+  function setKey() { userKey = { tonic: $('nt-tonic').value, mode: $('nt-mode').value }; if (shown) render(); }
+  function setFollow(on) { follow = !!on; }
+  function setGrand() { if (shown) render(); }
+  window.addEventListener('resize', () => { if (shown) invalidate(); });
+  return { show, refresh, reset, step, setFrom, setKey, setFollow, setGrand, render, syncClock, detectKey, _state: () => ({ from, winBars, layout, score, follow }) };
+})();
+window.notationUI = notationUI;
 </script>
 </body>
 </html>

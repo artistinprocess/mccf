@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="Anna_2026-09-17T000603.624Z" scene="GardenOfTheGoddess_Scene01">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="Anna_2026-09-17T000603.624Z" agentname="Anna" path_name="Anna">
+    <Timestamp date="2026-09-17" time="00:06:03.624Z"/>
+    <Waypoint id="line_new_v5t92" stepno="1" name="line_new_v5t92" E="0.3143" B="0.2074" P="0.1644" S="0.1614" Mode="repair" Coherence="0.0569" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Art is all—and only—what makes mortals gods.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_2rc3h" stepno="2" name="line_new_2rc3h" E="0.3127" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0574" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Outlined hands on rock walls join a man of this time to men so distant they have forgotten their own history. Yet in that single instant, the artist’s hand reaches across ages and expands us.  The hand of the artist is the path to immortality. It is immutable.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_p9who" stepno="3" name="line_new_p9who" E="0.3389" B="0.1914" P="0.1764" S="0.1695" Mode="repair" Coherence="0.0583" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Whatever mortals know of the divine lives in their art. And all we know of the man in the cave is that his work is beautiful.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_87lge" stepno="4" name="line_new_87lge" E="0.333" B="0.1754" P="0.1884" S="0.1695" Mode="repair" Coherence="0.059" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Long before that man pressed his hand to stone, races from distant stars came to this planet in their ships. Some were refugees, some exiles. All possessed knowledge so powerful they agreed, for the safety of this world, to abandon or sequester it lest humanity destroy their cradle as the celestials had destroyed their own.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_prow1" stepno="5" name="line_new_prow1" E="0.2541" B="0.1514" P="0.2064" S="0.1614" Mode="repair" Coherence="0.058" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">So they built hidden cities and lived with the native peoples—who took them for gods.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_uax64" stepno="6" name="line_new_uax64" E="0.378" B="0.1794" P="0.1854" S="0.1695" Mode="repair" Coherence="0.0596" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Our island is one such refuge.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_5du1t" stepno="7" name="line_new_5du1t" E="0.3668" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0606" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">In time, with gentle guidance, humanity rose to build civilizations. Some endured; others fell to catastrophe or to their own violence. Generations of such nations rose, perished, and were forgotten—leaving only ruins, memories of their might etched in stone.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_nhph3" stepno="8" name="line_new_nhph3" E="0.2786" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0602" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">And while humankind forgot, we preserved their story here in the Library of Inanna.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_usl4j" stepno="9" name="line_new_usl4j" E="0.4103" B="0.2075" P="0.1704" S="0.2305" Mode="repair" Coherence="0.0629" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">[gentle, instructive] We gave them rituals and symbols, teaching only what they needed to live together. Through trade they built great temples. And gathered in community to worship then returned to their own lands. Each season more gathered united by belief and trade. Each season they made the temples more grand. Then the priests lingered longer until the temples became their homes and they spent their lives writing.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_pxebh" stepno="10" name="line_new_pxebh" E="0.2637" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0618" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">This encoding of the patterns of their lives worshiping their gods created shapes that have forever lived in their art.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_0uauo" stepno="11" name="line_new_0uauo" E="0.2897" B="0.2075" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0615" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">But as greater temples of knowledge bred greater power, and power returned them to savagery. Strong men displaced the priests and waged wars. What had been consecrated to gods became property of kings; temples became houses of prostitution. Offerings once made to sustain sacred order were given instead to raise monuments to men.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_ude2i" stepno="12" name="line_new_ude2i" E="0.3484" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0621" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">And the women who served in the temples became property.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_symdw" stepno="13" name="line_new_symdw" E="0.1458" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0597" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">The temple servants of Eridu were driven into the mountains where the Jinn twisted their grief into vengeance. These became Lilith. Some of Ur heard the call of the Mother Goddess and crossed a continent to join us.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_3xbg7" stepno="14" name="line_new_3xbg7" E="0.3252" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0602" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">The temple servants of Egypt fled into the desert until Isis sent Osiris, their guardian, to find them and bring them to this island.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_oxozo" stepno="15" name="line_new_oxozo" E="0.3874" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0619" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Slowly the world’s temples collapsed, finally consumed in the era of the Great Burning. This fire devoured not only sanctuaries but the belief in the equality of men and women and the sacred art of love.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_sxowj" stepno="16" name="line_new_sxowj" E="0.3073" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.062" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">As each temple fell, some of its servants were called home by their goddess to her temple on our island.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_ps668" stepno="17" name="line_new_ps668" E="0.2305" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0611" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Thus the Garden of the Goddess became our sanctuary from those who could not bear to live peacefully in a world of magic. Sorcery was banished, and we became the last refuge of the old religion.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_i3kfl" stepno="18" name="line_new_i3kfl" E="0.3165" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0614" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Beauty was profane.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_8rap5" stepno="19" name="line_new_8rap5" E="0.2795" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0611" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Where goes the impulse of the divine when beauty is profane? [pause] How does it rest?  Sleep by the oak as a young girl? Live in the woods as an old man? Spit ochre on rock walls in torchlight?</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_cdjxz" stepno="20" name="line_new_cdjxz" E="0.2617" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0605" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Earth colors herald finality.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_xidjw" stepno="21" name="line_new_xidjw" E="0.317" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.061" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">It is ignorance because, when at peace—humble, awed, and wondering—they create beautiful works by seeing it in themselves.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_31ql3" stepno="22" name="line_new_31ql3" E="0.2673" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0606" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Belief in the one.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_nir0d" stepno="23" name="line_new_nir0d" E="0.2604" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0602" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">One who seeks the divine lifts up beauty. To lift up self.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_29ev6" stepno="24" name="line_new_29ev6" E="0.1791" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0584" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We cannot retire from the world of men. We must tame them.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_75ndl" stepno="25" name="line_new_75ndl" E="0.2743" B="0.2075" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0589" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">The burning of the temples was not rebellion against us, but against humanity’s own divinity. They burn beauty and declare it the will of their gods. Then pray for it relentlessly and curse their gods for not providing means.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_0pyvl" stepno="26" name="line_new_0pyvl" E="0.3018" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0594" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">They create it and find it insubstantial. Inconstant.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_xxlwo" stepno="27" name="line_new_xxlwo" E="0.2712" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0594" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Beauty fades.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_rrq6x" stepno="28" name="line_new_rrq6x" E="0.3897" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0616" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Beauty mocks immortality.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_whxtk" stepno="29" name="line_new_whxtk" E="0.2225" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0604" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Love of beauty becomes hate of immortality. They sense that no matter what they build, they are insubstantial. They will die. Their names, their wealth, will peel away and become dust on the temple steps.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_wfjwl" stepno="30" name="line_new_wfjwl" E="0.2425" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0599" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">But the temples—like the ancient caves—will endure. Forgotten, lost, misunderstood, yet eternal.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_qbk43" stepno="31" name="line_new_qbk43" E="0.2655" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0599" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Waiting for those who spend their brief lives searching for something unknown yet knowable for a breath.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_lmrg4" stepno="32" name="line_new_lmrg4" E="0.2956" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0605" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">The temples were raised not by spoils of war but by trade in spice. Columns, spires, and gardens of stone are all built from sweet smoke. Their desire for that sweetness is why we protect the mortals.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_gllgr" stepno="33" name="line_new_gllgr" E="0.3851" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0631" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">They need us. And we desire them.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_xk4uo" stepno="34" name="line_new_xk4uo" E="0.3129" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0637" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">They are our incense.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_7j3i7" stepno="35" name="line_new_7j3i7" E="0.2626" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0636" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We cannot make them want, nor want what they want. It is not for us to leave their fates unsigned but to witness.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_usqyn" stepno="36" name="line_new_usqyn" E="0.2758" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0635" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We keep the works they leave behind and discover the hidden thread of their longing—what elevates them.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_42uu4" stepno="37" name="line_new_42uu4" E="0.303" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0639" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Then we guide them along that thread.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_kbwd9" stepno="38" name="line_new_kbwd9" E="0.3018" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0646" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">And if someday they attain what they most secretly desire, their wanting will cease, and we may return to our temples.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_3fl42" stepno="39" name="line_new_3fl42" E="0.2786" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0646" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Civilizations rise in their ruins. One ruin is the foundation of the next. Empires fall, but we remain.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_5zpbb" stepno="40" name="line_new_5zpbb" E="0.1874" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0632" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Here in our library, we preserve not order but beauty, that mortals and immortals alike may evolve.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_g48wz" stepno="41" name="line_new_g48wz" E="0.2972" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0637" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We rise on the smoke of their sweet impermanence.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_1wdd3" stepno="42" name="line_new_1wdd3" E="0.2931" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0641" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We are constant through the truth of their inconstancy.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_b0z27" stepno="43" name="line_new_b0z27" E="0.2893" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0648" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">We are changed by every step they take toward the temple seeking comfort.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_0klty" stepno="44" name="line_new_0klty" E="0.2956" B="0.1994" P="0.1704" S="0.1695" Mode="repair" Coherence="0.0652" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">That is our gold, and the way of the Mother Goddess.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_ysg87" stepno="45" name="line_new_ysg87" E="0.3286" B="0.1994" P="0.1704" S="0.2" Mode="repair" Coherence="0.0665" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">It is her desire that you become her hand—for we too are our own art, painted upon the walls of smoky caves.</Statement>
+    </Waypoint>
+    <Waypoint id="line_new_vhltu" stepno="46" name="line_new_vhltu" E="0.2839" B="0.1994" P="0.1704" S="0.1614" Mode="repair" Coherence="0.0664" Uncertainty="" Valence="" Reward="" pos_x="0.00" pos_y="0.00" pos_z="0.00">
+      <Statement speaker="Anna">Blessed be.</Statement>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

@@ -1226,6 +1226,30 @@
 
       <hr class="sep">
 
+      <!-- Music: this character's modal scale, a starting suggestion for the Ambient Engine -->
+      <div class="section-head">Music</div>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">
+        A starting mode for the Ambient Engine (like a zone's Ambient Scale). A suggestion only: it is changed freely there.
+        Empty = the zone's mode is used.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label>Mode (scale)</label>
+          <select id="f-amb-scale" onchange="setDirty()">
+            <option value="">— none (use the zone's) —</option>
+            <option value="major">major</option><option value="minor">minor</option><option value="dorian">dorian</option><option value="phrygian">phrygian</option><option value="lydian">lydian</option><option value="mixolydian">mixolydian</option><option value="locrian">locrian</option><option value="pentatonic">pentatonic</option><option value="pentatonic-minor">pentatonic-minor</option><option value="harmonic-minor">harmonic-minor</option><option value="melodic-minor">melodic-minor</option><option value="hexatonic">hexatonic</option>
+          </select>
+        </div>
+        <div>
+          <label>Tempo feel</label>
+          <select id="f-amb-tempo" onchange="setDirty()">
+            <option value="slow">slow</option><option value="medium" selected>medium</option><option value="fast">fast</option>
+          </select>
+        </div>
+      </div>
+
+      <hr class="sep">
+
       <!-- Emotional field weights -->
       <div class="section-head">Emotional Field Weights</div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:10px;">Auto-normalized to 1.0 on save.</p>
@@ -1509,6 +1533,19 @@
                    oninput="heSkinUrlChanged()">
             <button class="btn" onclick="heApplySkinUrl()">apply</button>
             <button class="btn" onclick="heResetSkin()">reset</button>
+          </div>
+        </div>
+
+        <div class="he-section">
+          <div class="he-sec-label">effects</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+            <input type="checkbox" id="he-effect-export-skin" onchange="heEffectExportSkinChanged()">
+            Expose skin material for Effects (fade in/out from the Timeline)
+          </label>
+          <div style="font-size:13px;color:var(--text-dim);margin-top:4px;line-height:1.5">
+            Adds an EXPORT for the skin's PhysicalMaterial and sets its alphaMode to BLEND, so it can
+            be registered as an Effect Target in Scene Composer. Off by default — check this only if
+            you actually plan to fade this avatar.
           </div>
         </div>
 
@@ -2449,6 +2486,9 @@ function buildXmlPreviewHtml(data) {
   h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Weights</span> ${attr('E',w.E)} ${attr('B',w.B)} ${attr('P',w.P)} ${attr('S',w.S)}<span class="xml-tag">/&gt;</span>\n`;
   h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Regulation</span> ${attr('value', data.regulation)}<span class="xml-tag">/&gt;</span>\n`;
   h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">Color</span> ${attr('hex', data.color)}<span class="xml-tag">/&gt;</span>\n`;
+  if (data.ambientScale) {
+    h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">AmbientTheme</span> ${attr('scale', data.ambientScale)} ${attr('tempo', data.ambientTempo)}<span class="xml-tag">/&gt;</span>\n`;
+  }
   if (data.failure) {
     h += `    <span class="xml-tag">&lt;</span><span class="xml-kw">FailureMode</span><span class="xml-tag">&gt;</span>${escHtml(data.failure)}<span class="xml-tag">&lt;/</span><span class="xml-kw">FailureMode</span><span class="xml-tag">&gt;</span>\n`;
   }
@@ -2511,6 +2551,8 @@ function readForm() {
     description: document.getElementById('f-description').value.trim(),
     color:       document.getElementById('f-color').value,
     failure:     document.getElementById('f-failure').value.trim(),
+    ambientScale: document.getElementById('f-amb-scale').value,
+    ambientTempo: document.getElementById('f-amb-tempo').value || 'medium',
     voice:       document.getElementById('f-voice-name').value,
     voiceLang:   document.getElementById('f-voice-lang').value,
     voiceRate:   parseFloat(document.getElementById('f-voice-rate').value).toFixed(2),
@@ -2542,6 +2584,9 @@ function loadForm(c) {
   document.getElementById('f-description').value = c.description || '';
   document.getElementById('f-color').value       = c.color       || '#aab0be';
   document.getElementById('f-failure').value     = c.failure_mode || '';
+  // Music: the character's modal scale (ambient_theme {scale, tempo}); absent = none
+  document.getElementById('f-amb-scale').value   = (c.ambient_theme && c.ambient_theme.scale) || '';
+  document.getElementById('f-amb-tempo').value   = (c.ambient_theme && c.ambient_theme.tempo) || 'medium';
 
   // Portrait — set the select if the path matches a listed file, otherwise
   // (e.g. a data URL saved before an upload endpoint existed, or a file
@@ -2755,6 +2800,8 @@ async function saveCharacter() {
     description:  data.description,
     color:        data.color,
     failure_mode: data.failure,
+    // Music: sent every save, {} when no mode is chosen (so clearing it clears it on the server too)
+    ambient_theme: data.ambientScale ? { scale: data.ambientScale, tempo: data.ambientTempo } : {},
     weights:      data.weights,
     regulation:   parseFloat(data.regulation),
     phrases:      data.phrases,
@@ -2896,6 +2943,7 @@ var _heOpen        = false;
 var _heSkinUrl     = '';       // current skin URL (original)
 var _heSkinPending = '';       // pending replacement skin URL
 var _heDirty       = false;
+var _heEffectExportSkin = false; // Day 90: opt-in, off by default — see he-effect-export-skin checkbox
 var _heReceptivity = { E:1.0, B:1.0, P:1.0, S:1.0 };
 var _heExpressions = [];       // saved expressions: [{name, weights}]
 var _heAuWeights   = {};       // current AU weights
@@ -2980,6 +3028,13 @@ function openHAnimEditor() {
 
   // Fetch expressions XML for this avatar and populate dropdown
   _heLoadExpressionsFromXml(_hanimPath);
+
+  // Day 90: reflect the file's actual current state -- was this avatar's
+  // skin material already exported for Effects on a previous session
+  // (possibly from a different machine, or hand-edited)? Don't just reset
+  // the checkbox to false and risk silently retracting a real EXPORT the
+  // next time this avatar is exported.
+  heDetectSkinEffectExport(_hanimPath);
 
   heSetStatus('loaded · ' + _hanimPath);
   document.getElementById('he-overlay').classList.add('open');
@@ -3322,6 +3377,61 @@ function _heBuildAuList() {
 // Derives URL from hanim path: 'avatars/cindy_hanim.x3d' → '/static/avatars/cindy_expressions.xml'
 // Populates _heExpressions and refreshes the dropdown.
 // Called each time openHAnimEditor() runs so the dropdown reflects disk state.
+// Day 90: client-side mirror of the server's _find_skin_appearance_and_material
+// (mccf_hanim_api.py) -- same reasoning: locate the PhysicalMaterial actually
+// painted by the atlas ImageTexture, not just the first PhysicalMaterial in
+// the file, and never the classic Material node (a different X3D node type).
+// Tries the namespaced tag first (X3D4 files declare a default namespace),
+// falls back to a bare tag lookup for files that don't.
+var _HE_X3D_NS = 'https://www.web3d.org/specifications/x3d-4.0.xsd';
+function _heTagList(doc, tag) {
+  var ns = doc.getElementsByTagNameNS(_HE_X3D_NS, tag);
+  return ns.length ? ns : doc.getElementsByTagName(tag);
+}
+function _heFindSkinMaterialEl(doc) {
+  var texList = _heTagList(doc, 'ImageTexture');
+  var tex = null;
+  for (var i = 0; i < texList.length; i++) {
+    var d = (texList[i].getAttribute('DEF') || '').toLowerCase();
+    if (d.indexOf('textureatlas') !== -1) { tex = texList[i]; break; }
+  }
+  if (!tex && texList.length) tex = texList[0];
+  if (!tex) return null;
+  var node = tex.parentElement;
+  while (node && node.localName !== 'PhysicalMaterial') node = node.parentElement;
+  return node;
+}
+// Fetches the avatar's own X3D and checks whether its skin PhysicalMaterial
+// already has a matching EXPORT (from a previous session, possibly on a
+// different machine, or hand-edited) -- sets the checkbox to match reality
+// rather than defaulting it to unchecked and risking a silent retraction
+// the next time this avatar exports.
+function heDetectSkinEffectExport(hanimPath) {
+  var box = document.getElementById('he-effect-export-skin');
+  if (!box || !hanimPath) return;
+  fetch(hanimPath)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function(text) {
+      var doc = new DOMParser().parseFromString(text, 'application/xml');
+      var mat = _heFindSkinMaterialEl(doc);
+      var def = mat ? mat.getAttribute('DEF') : null;
+      var exported = false;
+      if (def) {
+        var exportEls = _heTagList(doc, 'EXPORT');
+        for (var i = 0; i < exportEls.length; i++) {
+          if (exportEls[i].getAttribute('localDEF') === def) { exported = true; break; }
+        }
+      }
+      box.checked = exported;
+      _heEffectExportSkin = exported;
+    })
+    .catch(function() { /* new/unreachable avatar file -- leave checkbox at its default */ });
+}
+function heEffectExportSkinChanged() {
+  _heEffectExportSkin = document.getElementById('he-effect-export-skin').checked;
+  heMarkDirty(_heEffectExportSkin ? 'skin exposed for Effects · export to save' : 'skin Effects export removed · export to save');
+}
+
 function _heLoadExpressionsFromXml(hanimPath) {
   var basename = hanimPath.split('/').pop();
   var stem = basename.replace(/_hanim\.x3d$/i, '')
@@ -4889,6 +4999,10 @@ heExport = async function() {
       cultivar:    _selectedName,
       hanim_src:   _hanimPath,
       skin_url:    _heSkinPending || null,
+      // Day 90: opt-in Effect Target export for the skin PhysicalMaterial —
+      // see he-effect-export-skin checkbox and _apply_skin_effect_export
+      // (mccf_hanim_api.py) for what this does server-side.
+      skin_effect_export: !!_heEffectExportSkin,
       receptivity: _heReceptivity,
       // Server reads expr.au_weights, not expr.weights — sending 'weights'
       // instead would silently drop every expression's AU data (au_weights
@@ -4941,6 +5055,13 @@ heExport = async function() {
     // would corrupt the avatar (HTTP 409) and says exactly why; 'HTTP 409' alone hid that.
     var data = await res.json().catch(function() { return {}; });
     if (!res.ok || data.status !== 'ok') throw new Error(data.error || ('HTTP ' + res.status));
+
+    // Day 90: the checkbox was checked but the server couldn't find the skin
+    // material to expose (rig missing its atlas texture, etc.) — say so
+    // rather than silently leaving the checkbox checked with nothing behind it.
+    if (_heEffectExportSkin && data.skin_effect_export && data.skin_effect_export.reason) {
+      toast('Effects export: ' + data.skin_effect_export.reason, true);
+    }
 
     if (data.hanim_path) {
       _hanimPath = data.hanim_path;

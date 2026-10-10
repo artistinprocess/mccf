@@ -1,0 +1,16 @@
+{
+  "name": "mccf-theme-workshop-tests",
+  "private": true,
+  "version": "0.8.0",
+  "scripts": {
+    "test": "node tests/test_theory.js && node tests/test_hand.js && node tests/test_drums.js && node tests/test_writer.js && node tests/test_grid.js && node tests/test_grid_edit.js && node tests/test_notation.js && node tests/test_notation_draw.js && node tests/test_harmony.js && node tests/test_harmony_voice.js && node tests/test_chords.js && node tests/test_export.js && node tests/test_page.js && node tests/test_page_drums.js && node tests/test_page_grid.js && node tests/test_page_notation.js && node tests/test_page_edit.js && node tests/test_page_harmony.js && node tests/test_page_workflow.js && node tests/test_page_export.js && node tests/test_page_chords.js && node tests/test_page_startfrom.js && node tests/test_arc.js && node tests/test_arc_build.js && node tests/test_page_arc.js",
+    "test:server": "python3 tests/test_server.py && python3 tests/test_arc_state.py"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0",
+    "vexflow": "4.2.5"
+  },
+  "optionalDependencies": {
+    "canvas": "^3.0.0"
+  }
+}

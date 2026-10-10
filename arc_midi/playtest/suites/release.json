@@ -1,0 +1,27 @@
+{
+  "name": "release",
+  "description": "The end-of-cycle gate: every module opens cleanly, edits reach the frames downstream, the Events timeline plays, character modes (Creator, server, Ambient) hang together, and the emotional arc reaches MIDI and the Dashboard. Add a scenario here for each module you finish.",
+  "scenarios": [
+    {
+      "scenario": "smoke_all_tabs"
+    },
+    {
+      "scenario": "character_modes"
+    },
+    {
+      "scenario": "arc_midi"
+    },
+    {
+      "scenario": "consistency_composer_events",
+      "opts": {
+        "scene": "Garden"
+      }
+    },
+    {
+      "scenario": "composer_events_play",
+      "opts": {
+        "play_seconds": 60
+      }
+    }
+  ]
+}

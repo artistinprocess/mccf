@@ -55,6 +55,12 @@ She is a scribe, the world's first author, poet and a warrior.  She is very old,
     <Clip name="Walk 2" timerDEF="Walk 2Timer" E_min="0.25" E_max="0.6" B_min="0.2" B_max="0.7" P_min="0.35" P_max="0.7" S_min="0.15" S_max="0.4" loop="false" priority="0"/>
     <Clip name="CTurnHead" timerDEF="CTurnHeadTimer" E_min="0.2" E_max="1.0" B_min="0.05" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.05" S_max="1.0" loop="false" priority="12"/>
     <Clip name="CHeadtilt" timerDEF="CHeadtiltTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="13"/>
+    <Clip name="CHeadTilt" timerDEF="CHeadTiltTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="14"/>
+    <Clip name="CHeadTurn" timerDEF="CHeadTurnTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="true" priority="15"/>
+    <Clip name="CHeadTwise" timerDEF="CHeadTwiseTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="16"/>
+    <Clip name="CRaiseArm" timerDEF="CRaiseArmTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="17"/>
+    <Clip name="CBlessedBe" timerDEF="CYesTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="19"/>
+    <Clip name="CYes" timerDEF="CNoTimer" E_min="0.0" E_max="1.0" B_min="0.0" B_max="1.0" P_min="0.0" P_max="1.0" S_min="0.0" S_max="1.0" loop="false" priority="18"/>
   </Behaviors>
 
 </CultivarDefinition>

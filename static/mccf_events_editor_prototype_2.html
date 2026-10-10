@@ -4,11 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MCCF Events Editor</title>
+<script>
+// Remember every media element that plays. X_ITE keeps a MovieTexture's <video> out of the document, so Stop could not find it to pause it.
+//   window._mccfMediaMuted : true while the Silent switch is on; each element is muted the moment it starts playing (a late-loading movie too)
+//   _mccfMediaStop()       : pause + mute them all (Stop, Rewind, leaving the page)      _mccfMediaMute(on) : mute / unmute without pausing (the Silent switch)
+(function () {
+  var seen = window._mccfMedia = new Set(), proto = window.HTMLMediaElement && HTMLMediaElement.prototype; if (!proto) return;
+  var play = proto.play;
+  proto.play = function () { try { seen.add(this); if (typeof window._mccfMediaMuted === 'boolean') this.muted = window._mccfMediaMuted; } catch (e) {} return play.apply(this, arguments); };
+  window._mccfMediaStop = function () { seen.forEach(function (el) { try { el.pause(); el.muted = true; } catch (e) {} }); };
+  window._mccfMediaMute = function (on) { window._mccfMediaMuted = !!on; seen.forEach(function (el) { try { el.muted = !!on; } catch (e) {} }); };
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
 <!-- Day 78, V5 Tasklist Phase 2: path-recorder.js's RDP decimation + the
      independent recorded-path data structure. Same /static/js/ absolute-path
      convention established in mccf_scene_composer.html (Phase 1 task 1). -->
 <script src="/static/js/path-recorder.js"></script>
+<script src="/static/js/mccf_midi.js"></script>
+<!-- Play/Stop/Rewind: the Loader's own cue executors, extracted verbatim by tools/extract_cue_runtime.js -->
+<script src="/static/js/mccf_cue_runtime.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -209,6 +224,47 @@ header {
   outline: none;
 }
 .x3d-cam-select:focus { border-color: var(--accent3); }
+/* ── Transport (Play / Stop / Rewind) ─────────────────────────────────── */
+.tp-group { display:inline-flex; align-items:center; flex-wrap:wrap; gap:4px; max-width:100%; }   /* wraps inside itself in a very narrow pane instead of being clipped */
+.tp-btn { font-family:'IBM Plex Mono',monospace; font-size:14px; padding:1px 8px; border:1px solid var(--border); border-radius:var(--radius);
+  background:transparent; color:var(--dim); cursor:pointer; letter-spacing:0.06em; text-transform:uppercase; transition:border-color 0.12s,color 0.12s; }
+.tp-btn:hover:not(:disabled) { border-color:var(--accent3); color:var(--accent3); }
+.tp-btn:disabled { opacity:0.35; cursor:default; }
+.tp-btn.on { border-color:var(--accent3); color:var(--accent3); }
+
+/* ---- export settings + versions dropdowns ---- */
+.vm-btn { margin-left:6px; font-family:'IBM Plex Mono',monospace; font-size:14px; padding:2px 8px; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--dim); cursor:pointer; letter-spacing:0.06em; text-transform:uppercase; }
+.vm-btn:hover, .vm-btn.on { border-color:var(--accent3); color:var(--accent3); }
+.vm-pop { position:fixed; z-index:9000; display:none; min-width:260px; max-width:420px; max-height:70vh; overflow:auto; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; box-shadow:0 6px 24px rgba(0,0,0,.55); font-size:13px; color:var(--text); }
+.vm-pop.open { display:block; }
+.vm-pop label { display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; }
+.vm-pop h4 { margin:8px 0 4px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:normal; }
+.vm-pop button.vm-act { font-family:inherit; font-size:12px; padding:2px 8px; margin:2px 4px 2px 0; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--text); cursor:pointer; }
+.vm-pop button.vm-act:hover { border-color:var(--accent); color:var(--accent); }
+.vm-pop button.vm-act.warn:hover { border-color:var(--accent2); color:var(--accent2); }
+.vm-pop .vm-row { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:3px 0; border-bottom:1px solid var(--border); }
+.vm-pop .vm-meta { color:var(--dim); font-size:11px; }
+.vm-pop .vm-note { color:var(--accent4); font-size:12px; margin:4px 0; }
+.vm-pop input[type=text] { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:2px 6px; font-family:inherit; font-size:12px; width:150px; }
+#vm-status { margin-left:8px; font-size:12px; color:var(--accent4); }
+
+.tp-btn.stop.live { border-color:var(--accent4); color:var(--accent4); }
+.tp-status { font-size:14px; color:var(--dim); letter-spacing:0.04em; white-space:nowrap; flex:0 0 auto; }
+.tp-note { font-size:13px; color:var(--accent4); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1 1 0; min-width:0; }   /* sits in the timeline header: a long note is cut with an ellipsis, never pushes "Save to Composer" away */
+/* ── Viewport top bar: WRAP instead of clipping ─────────────────────────────────────────────────────────────────────
+   The bar was one non-wrapping row of ~13 controls on a 28px strip.  In a pane narrower than the row (830px at a 1270px window) the engine
+   decided for itself: Chromium wrapped button text onto 2-3 lines and everything past the pane's edge was silently clipped.  Now every control is
+   nowrap and fixed in size, the bar grows by whole rows as needed, and a row break (below 1850px) keeps the capture/recording tools together
+   on a second row.  The 3D canvases stay full-pane underneath (the bar is translucent), only the corner labels follow the bar's real height. */
+.x3d-topbar { height:auto; min-height:28px; flex-wrap:wrap; align-content:flex-start; row-gap:4px; padding:3px 10px; }
+.x3d-topbar > * { flex:0 0 auto; white-space:nowrap; }
+.x3d-topbar > .x3d-cam-select { flex:0 1 auto; min-width:0; max-width:100%; }
+.x3d-topbar > .x3d-status { margin-left:4px; max-width:15em; overflow:hidden; text-overflow:ellipsis; }   /* was margin-left:auto, which pushed everything after it to the pane's right edge */
+.x3d-topbar > button, .x3d-topbar > .tp-group .tp-btn { margin-left:0 !important; font-size:13px !important; letter-spacing:0.03em !important; padding:2px 7px !important; }
+.x3d-topbar > label { gap:4px; }
+.tb-break { display:none; flex-basis:100%; height:0; }
+@media (max-width: 1850px) { .tb-break { display:block; } }
+.x3d-viewport .x3d-corner.tl, .x3d-viewport .x3d-corner.tr { top:calc(var(--vp-bar-h, 28px) + 8px); }   /* (the extra .x3d-viewport beats the original rule, which comes later in the sheet) */
 .x3d-status {
   margin-left: auto;
   font-size: 14px;
@@ -312,6 +368,32 @@ x3d-canvas {
 }
 .insp-body::-webkit-scrollbar { width: 3px; }
 .insp-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ---- right column tabs + TTY pane ---- */
+.insp-head.insp-tabs { display:flex; padding:0; }
+.insp-tab { flex:1; white-space:nowrap; font:inherit; font-size:12px; letter-spacing:.08em; text-transform:uppercase; padding:7px 4px; background:transparent; color:var(--dim); border:0; border-bottom:2px solid transparent; cursor:pointer; }
+.insp-tab:hover { color:var(--text); } .insp-tab.on { color:var(--accent); border-bottom-color:var(--accent); }
+.insp-panel[data-tab=props] #tty-box { display:none; }
+.insp-panel[data-tab=dlg] .insp-body { display:none; }
+#tty-box { flex:1; min-height:0; display:flex; flex-direction:column; background:var(--surface); }
+#tty-box .tty-head { white-space:nowrap; display:flex; align-items:center; gap:8px; padding:5px 10px; font-size:12px; color:var(--dim); flex-shrink:0; border-bottom:1px solid var(--border); }
+#tty-box .tty-head label { margin-left:auto; display:flex; align-items:center; gap:4px; cursor:pointer; }
+#tty-box .tty-state { color:var(--accent4); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
+#tty-log { flex:1; overflow-y:auto; padding:6px 10px; font-size:13px; line-height:1.45; }
+#tty-log::-webkit-scrollbar { width:3px; } #tty-log::-webkit-scrollbar-thumb { background:var(--border); }
+.tty-line { margin-bottom:5px; color:var(--dim); } .tty-line.cur { color:var(--text); }
+.tty-line .tty-t { color:var(--muted); font-size:11px; margin-right:4px; } .tty-line .tty-who { color:var(--accent); margin-right:4px; }
+.tty-cue { margin:0 0 4px 8px; font-size:12px; color:var(--accent3); } .tty-cue.face { color:var(--purple); } .tty-cue .tty-t { color:var(--muted); font-size:11px; margin-right:4px; }
+.tty-next { margin:8px 0 4px; padding:4px 6px; border-left:2px solid var(--accent4); color:var(--accent4); } .tty-next.later { border-left-color:var(--border); color:var(--muted); margin:2px 0; }
+.tty-next .tty-who { color:inherit; margin-right:4px; font-weight:bold; }
+.tty-hint { color:var(--muted); font-size:12px; }
+#tty-bar { display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:4px 10px; font-size:12px; color:var(--dim); border-bottom:1px solid var(--border); flex-shrink:0; }
+#tty-bar input[type=number] { width:56px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:1px 4px; font-family:inherit; font-size:12px; }
+#tty-bar button, #tty-tap button { font-family:inherit; font-size:12px; padding:1px 7px; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--text); cursor:pointer; }
+#tty-bar button:hover, #tty-tap button:hover { border-color:var(--accent); color:var(--accent); }
+#tty-tap { display:flex; gap:6px; padding:5px 10px; flex-shrink:0; border-bottom:1px solid var(--border); }
+#tty-tap button#tty-go { flex:1; font-size:14px; padding:6px 8px; border-color:var(--accent4); color:var(--accent4); }
+#tty-tap button#tty-go:disabled, #tty-tap button#tty-skip:disabled { opacity:.35; cursor:default; }
 
 .insp-cue-title {
   font-family: 'Syne', sans-serif;
@@ -546,7 +628,20 @@ x3d-canvas {
 .cue-face    { background: rgba(240,168,128,0.30); color: #f0a880; }   /* Day 95: facial gesture */
 .cue-path    { background: rgba(74,240,168,0.28); color: var(--accent); }
 .cue-audio   { background: rgba(240,120,200,0.28); color: var(--pink); }
+.cue-midi    { background: rgba(160,96,240,0.30); color: var(--purple); }   /* Day 96: MIDI source play/stop */
 .cue-block .cue-target { color: var(--text); font-weight: 600; }
+/* Day 90: keyframe editor for Effect cues — ported from the Route Graph
+   tool's own working, already-proven interpolator editor. Kept the same
+   class names deliberately, in case a future pass wants to share styling
+   between the two tools rather than let them drift apart. */
+.keyframe-row { border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.keyframe-row-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.keyframe-row input[type="color"] { border: 1px solid var(--border); border-radius: 3px; background: none; cursor: pointer; }
+.keyframes-list { display: flex; flex-direction: column; gap: 8px; }
+.keyframe-del { cursor: pointer; color: var(--dim); font-size: 14px; padding: 2px 6px; border-radius: 3px; }
+.keyframe-del:hover { color: var(--accent2); background: rgba(240,96,96,0.15); }
+.vec-row { display:flex; gap:4px; }
+.vec-row input { width: 0; flex: 1; }
 </style>
 </head>
 <body>
@@ -573,17 +668,21 @@ x3d-canvas {
     <div class="stage-canvas-wrap">
       <div id="stage-object-list" class="stage-object-list"></div>
     </div>
-    <div class="stage-footer">
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--dim);letter-spacing:0.04em;">
-        Add cameras/lights in Composer's Place tab — this list previews what's already placed.
-      </span>
-    </div>
   </div>
 
   <!-- X3D Viewport (center) -->
   <div class="x3d-viewport" id="x3d-viewport">
     <div class="x3d-topbar">
       <span class="x3d-label">viewport</span>
+      <!-- Transport: Play runs the scene from t=0 with the events as they are now (saving them to Composer and re-exporting first if
+           they changed); Stop freezes everything where it is and leaves the playhead there, so a new event lands at that moment;
+           Rewind reloads the scene at t=0.  Space toggles Play/Stop when no text field has focus. -->
+      <span class="tp-group" id="tp-group">
+        <button class="tp-btn" id="tp-play" onclick="tpPlay()" title="Play from the start with the events as they are now (Space)">&#9654; Play</button>
+        <button class="tp-btn stop" id="tp-stop" onclick="tpStop()" title="Stop: freeze the scene and silence the sound where they are. The playhead stays here, so a new event is added at this moment (Space)">&#9632; Stop</button>
+        <button class="tp-btn" id="tp-rewind" onclick="tpRewind()" title="Rewind: reload the scene at time 0, nothing playing">&#9198; Rewind</button>
+        <button class="tp-btn" id="tp-sound" onclick="tpToggleSound()" title="Silent preview (M)">&#128263; Silent</button>
+      </span>
       <select class="x3d-cam-select" id="vp-cam-select" onchange="switchViewpoint(this.value)">
         <option>VP_Overview</option>
         <option>VP_Origin</option>
@@ -593,11 +692,15 @@ x3d-canvas {
         <option>VP_Steward_Eye</option>
       </select>
       <span class="x3d-status" id="vp-status">— no scene loaded —</span>
+      <div class="tb-break"></div>
       <button id="vp-refresh-btn" onclick="refreshViewport()" title="Re-export X3D and reload viewport" style="
         margin-left:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;
         padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius);
         background:transparent;color:var(--dim);cursor:pointer;letter-spacing:0.06em;
         text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">↺ refresh</button>
+      <span id="vm-wrap"><button class="vm-btn" id="vm-export-btn" onclick="vmToggle('export')" title="Export settings (shared with the Composer)">&#9881; Export &#9662;</button><button class="vm-btn" id="vm-ver-btn" onclick="vmToggle('versions')" title="Save versions, drafts, restore">&#9095; Versions &#9662;</button><span id="vm-status"></span></span>
+      <div class="vm-pop" id="vm-pop-export"></div>
+      <div class="vm-pop" id="vm-pop-versions"></div>
       <!-- Day 78, V5 Tasklist Phase 2 tasks 2-4: fly-mode path recorder. Lives
            in this preview's existing (crash-fixed) viewport, per the author's
            own Day 78 call: "Let's take advantage of our existing code." -->
@@ -622,6 +725,14 @@ x3d-canvas {
         background:transparent;color:var(--purple);cursor:pointer;letter-spacing:0.06em;
         text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">&#9737; Capture Point</button>
       <span class="x3d-status" id="point-capture-status" style="display:none"></span>
+      <!-- Capture Camera: the same live viewer sensor as Capture Point, but position AND orientation.  With a placed camera selected in the Stage list it
+           updates that camera; otherwise it hands a new camera to Composer's Place form. -->
+      <button id="cam-capture-btn" onclick="captureCurrentCamera()" title="Read where the viewport camera is now (position and direction). With a placed camera selected it moves that camera there; otherwise it opens a new camera in Composer's Place tab" style="
+        margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;
+        padding:2px 8px;border:1px solid var(--accent);border-radius:var(--radius);
+        background:transparent;color:var(--accent);cursor:pointer;letter-spacing:0.06em;
+        text-transform:uppercase;transition:border-color 0.12s,color 0.12s;">&#127909; Capture Camera</button>
+      <span class="x3d-status" id="cam-capture-status" style="display:none"></span>
       <!-- Day 89: binds MCCF_TerrainCam (the ortho overhead camera baked
            into every export, same treatment as MCCF_PathRecorderProx),
            screenshots the rendered canvas, hands it to Composer as a
@@ -715,10 +826,16 @@ x3d-canvas {
        jump the live viewport to where it actually sits, adjust, save back to
        Composer's placedCameras — no subject-relative shot math, no cue/track
        concepts at all. -->
-  <div class="insp-panel">
-    <div class="insp-head">object properties</div>
+  <div class="insp-panel" data-tab="props">
+    <div class="insp-head insp-tabs"><button class="insp-tab on" id="insp-tab-props" onclick="inspTab('props')">properties</button><button class="insp-tab" id="insp-tab-dlg" onclick="inspTab('dlg')">dialogue</button></div>
     <div class="insp-body" id="insp-body">
       <div class="empty-insp">Select a camera from the Stage list to preview and tune its placement, or a cue from the Timeline below to edit it.</div>
+    </div>
+    <div id="tty-box">
+      <div class="tty-head"><span class="tty-state" id="tty-state"></span><label title="Also list gesture and face cues as they fire, to line dialogue up with gesture"><input type="checkbox" id="tty-cues" checked onchange="ttyRender()"> gestures</label></div>
+      <div id="tty-tap"><button id="tty-go" onclick="ttyTap()" title="Press as each line starts (or press Enter). The next line waits until you do." disabled>&#9654; line starts</button><button id="tty-skip" onclick="ttySkip()" title="Leave this line out of the take" disabled>skip</button></div>
+      <div id="tty-bar"><label title="Hold each line back until you tap it. Untick to follow the start time and estimates instead."><input type="checkbox" id="tty-taponly" checked onchange="ttyTapMode()"> tap each line</label><span>start</span><input type="number" id="tty-off" min="0" step="0.1" value="0" onchange="ttyOffChanged()" title="Where the speech starts on the scene timeline (used for lines you have not tapped when tapping is off)"><span>s</span><button onclick="ttySetNow()" title="Set the start to the scene time now (the playhead when stopped)">&#9201; now</button><button onclick="ttyOffReset()" title="Start back to 0">0</button><button id="tty-clear" onclick="ttyClearTimes()" title="Forget the line times you tapped">clear taps</button></div>
+      <div id="tty-log"></div>
     </div>
   </div>
 
@@ -731,6 +848,8 @@ x3d-canvas {
   <div class="timeline-head">
     <span class="timeline-title">Timeline</span>
     <span class="timeline-time-readout" id="tl-time-readout" onclick="_tlCopyPlayhead()" title="Click to copy this time — paste into a cue's start-time field">t = 0.00s</span>
+    <span class="tp-status" id="tp-status">no scene</span>
+    <span class="tp-note" id="tp-note" style="display:none"></span>
     <button class="timeline-head-btn" onclick="exportProductionCues()">Save to Composer</button>
   </div>
   <div class="timeline-body">
@@ -757,6 +876,7 @@ var AGENT_CLIPS = {}; // {agentName: [clipName,...]} — populated from Composer
 var CAMERAS  = []; // Day 64: placed free cameras, populated from Composer via mccf_scene_data
 var LIGHTS   = []; // Day 82: {name, type:'point'|'spot'|'directional', translation, rotation}[]
 var AUDIO_SOURCES = []; // Day 82: {name, url, loop, gain, translation}[]
+var MIDI_SOURCES  = []; // Day 96: {name, url, device, tempo, loop, tracks:[{index,enabled,channel,volume}]}[] — registered in Composer's Place > MIDI
 // Day 78: summary of paths already recorded+saved (this session or a
 // previous one, restored via Composer's own scene load) — {id, keyCount,
 // rawSampleCount, tolerance, createdAt}, not the actual key geometry.
@@ -872,6 +992,14 @@ function drawStage() {
       JSON.stringify(a.name).replace(/"/g, '&quot;') + ')">' +
       '<span class="stage-object-dot" style="background:var(--pink)"></span>' + a.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
   }).join('') : '<div class="empty-insp" style="padding:8px 4px">No audio sources placed yet — add one in Composer\'s Place tab.</div>';
+  // Day 96: registered MIDI sources — select one to mix its tracks and audition it.
+  html += '<div class="stage-object-section-label" style="margin-top:10px">MIDI</div>';
+  html += MIDI_SOURCES.length ? MIDI_SOURCES.map(function(m) {
+    var sel = (_selObj && _selObj.kind === 'midi' && _selObj.name === m.name);
+    return '<div class="stage-object-row' + (sel ? ' selected' : '') + '" onclick="selectObject(\'midi\',' +
+      JSON.stringify(m.name).replace(/"/g, '&quot;') + ')">' +
+      '<span class="stage-object-dot" style="background:var(--purple)"></span>' + m.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+  }).join('') : '<div class="empty-insp" style="padding:8px 4px">No MIDI sources registered yet — add one in Composer\'s Place &gt; MIDI tab.</div>';
   wrap.innerHTML = html;
 }
 
@@ -923,6 +1051,12 @@ function selectObject(kind, name) {
     renderObjectPanel();
     return; // no live-preview jump — same reasoning as lights
   }
+  if (kind === 'midi') {
+    _selObj = { kind: 'midi', name: name };
+    drawStage();
+    _openMidiInspector(name);   // fetches + parses the file, then renders the mixer
+    return;
+  }
   var c = CAMERAS.find(function(x) { return x.name === name; });
   if (!c) { _selObj = null; renderObjectPanel(); drawStage(); return; }
   _selObj = {
@@ -941,7 +1075,10 @@ function selectObject(kind, name) {
 function renderObjectPanel() {
   var body = document.getElementById('insp-body');
   if (!body) return;
+  // Day 96: leave a MIDI audition playing only while its own inspector is showing.
+  if (_midiPlayer && (_selCue || !_selObj || _selObj.kind !== 'midi')) _stopMidiAudition();
   if (_selCue) { renderCueEditor(); return; }
+  if (_selObj && _selObj.kind === 'midi') { body_midiRender(body); return; }
   if (!_selObj) { body.innerHTML = '<div class="empty-insp">Select a camera from the Stage list to preview and tune its placement, or a cue from the Timeline below to edit it.</div>'; return; }
   if (_selObj.kind === 'agent') {
     body.innerHTML = '<div style="font-size:16px;color:var(--accent3);margin-bottom:8px">' + _selObj.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
@@ -1044,6 +1181,155 @@ function setLightProp(key, idx, val) {
   // viewport to this light" equivalent; you'd want to SEE the light's
   // effect on the scene, which this simple slider panel doesn't render.
 }
+// ── Day 96: MIDI sources — mixer + audition ─────────────────────────────────
+// Registered in Composer (Place > MIDI): name, file, device hint, tempo, loop.
+// Here: which tracks play, on which output channel, at what volume — with an
+// Audition button so the mix is set by ear. "Save to Composer" writes it into
+// the scene (<MidiSources><Track .../>), and the Loader plays it on a 'midi' cue.
+// Same shared player as the Ambient page and the Loader (js/mccf_midi.js).
+var _midiPlayer = null, _midiAccessP = null, _midiAudCtx = null;
+var _midiAudOutput = null, _midiAudMode = 'audio';
+var _midiLoading = false, _midiLoadErr = '', _midiClockTimer = null;
+
+function _midiUrl(u) { return /^(https?:)?\//.test(u) ? u : '/static/x3d/' + u; }
+function _midiEsc(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function _edMidiAudioCtx() {
+  if (!_midiAudCtx) { try { _midiAudCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (_midiAudCtx && _midiAudCtx.state === 'suspended') { try { _midiAudCtx.resume(); } catch (e) {} }
+  return _midiAudCtx;
+}
+function _midiClockStart() {
+  if (_midiClockTimer) return;
+  _midiClockTimer = setInterval(function() {
+    var el = document.getElementById('midi-aud-clock');
+    if (el && _midiPlayer && _midiPlayer.data) el.textContent = MccfMidi.fmtClock(_midiPlayer.elapsed()) + ' / ' + MccfMidi.fmtClock(_midiPlayer.totalSeconds());
+  }, 200);
+}
+function _midiClockStop() { if (_midiClockTimer) { clearInterval(_midiClockTimer); _midiClockTimer = null; } }
+function _stopMidiAudition() {
+  if (_midiPlayer && _midiPlayer.playing) { _midiPlayer.stop(); if (_midiAudMode === 'midi') _midiPlayer.panic(); }
+  _midiClockStop();
+}
+
+function _openMidiInspector(name) {
+  _stopMidiAudition();
+  var ms = MIDI_SOURCES.find(function(x) { return x.name === name; });
+  if (_midiPlayer) { try { _midiPlayer.dispose(); } catch (e) {} _midiPlayer = null; }
+  _midiLoadErr = ''; _midiAudOutput = null; _midiAudMode = 'audio';
+  if (!ms || !ms.url) { _midiLoading = false; _midiLoadErr = ms ? 'This source has no file — set one in Composer (Place > MIDI).' : 'Unknown MIDI source.'; renderObjectPanel(); return; }
+  _midiLoading = true;
+  var player = new MccfMidi.Player({
+    getMidiOutput:   function() { return _midiAudOutput; },
+    getOutputMode:   function() { return _midiAudMode; },
+    getAudioContext: _edMidiAudioCtx,
+    onEnd: function() { _midiClockStop(); if (_selObj && _selObj.kind === 'midi') renderObjectPanel(); }
+  });
+  _midiPlayer = player;
+  player.tempoScale = ms.tempo > 0 ? ms.tempo : 1;
+  player.loop = !!ms.loop;
+  var fileP = fetch(_midiUrl(ms.url)).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + _midiUrl(ms.url));
+    return r.arrayBuffer();
+  });
+  var devP = !ms.device ? Promise.resolve() : (function() {
+    if (!_midiAccessP) _midiAccessP = navigator.requestMIDIAccess ? navigator.requestMIDIAccess() : Promise.reject(new Error('Web MIDI not available'));
+    return _midiAccessP.then(function(a) {
+      var outs = []; a.outputs.forEach(function(o) { outs.push(o); });
+      var h = ms.device.toLowerCase();
+      var f = outs.filter(function(o) { return (o.name || '').toLowerCase().indexOf(h) >= 0; })[0];
+      if (f) { _midiAudOutput = f; _midiAudMode = 'midi'; }
+    }).catch(function() {});
+  })();
+  Promise.all([fileP, devP]).then(function(res) {
+    if (_midiPlayer !== player) return;               // selection moved on
+    player.load(res[0]);
+    player.applyTrackSettings(ms.tracks);
+    _midiLoading = false;
+    if (_selObj && _selObj.kind === 'midi' && _selObj.name === name) renderObjectPanel();
+  }).catch(function(e) {
+    if (_midiPlayer !== player) return;
+    _midiLoading = false; _midiLoadErr = 'Could not load the file: ' + (e && e.message);
+    if (_selObj && _selObj.kind === 'midi' && _selObj.name === name) renderObjectPanel();
+  });
+  renderObjectPanel();
+}
+
+function body_midiRender(body) {
+  var ms = MIDI_SOURCES.find(function(x) { return x.name === _selObj.name; }) || { name: _selObj.name };
+  var h = '<div style="font-family:var(--mono,monospace);font-size:16px;color:var(--purple);margin-bottom:2px">' + _midiEsc(ms.name) + '</div>' +
+    '<div style="color:var(--dim);font-size:13px;word-break:break-all">' + _midiEsc(ms.url || '(no file)') + '</div>' +
+    '<div style="color:var(--dim);font-size:13px;margin-bottom:8px">device: ' + _midiEsc(ms.device || '(none — browser synth)') +
+    ' · tempo ×' + (ms.tempo > 0 ? ms.tempo : 1) + ' · loop ' + (ms.loop ? 'on' : 'off') + '</div>';
+  var p = _midiPlayer;
+  if (_midiLoading) h += '<div class="empty-insp">Loading MIDI file…</div>';
+  else if (_midiLoadErr || !p || !p.data) h += '<div class="empty-insp" style="color:#f08080">' + _midiEsc(_midiLoadErr || 'Not loaded.') + '</div>';
+  else {
+    h += '<div style="font-size:12px;color:var(--dim);margin-bottom:4px">output: ' +
+      (_midiAudMode === 'midi' ? _midiEsc(_midiAudOutput.name) : 'browser synth (device not found — audition is approximate)') + '</div>';
+    p.data.tracks.forEach(function(tr) {
+      if (!tr.noteCount) return;   // empty tracks (e.g. a tempo/conductor track) have nothing to mix
+      var ch = p.resolvedChannel(tr) + 1, vol = p.volume[tr.index] !== undefined ? p.volume[tr.index] : 100;
+      var opts = ''; for (var c = 1; c <= 16; c++) opts += '<option value="' + c + '"' + (c === ch ? ' selected' : '') + '>' + c + '</option>';
+      h += '<div style="padding:5px 0;border-bottom:1px solid var(--border,#2a3545)">' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">' +
+          '<input type="checkbox" style="width:auto" ' + (p.enabled[tr.index] ? 'checked' : '') + ' onchange="midiTrackSet(' + tr.index + ',\'enabled\',this.checked)">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + MccfMidi.trackColor(tr.index) + ';flex:none"></span>' +
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _midiEsc(tr.name) + '</span></label>' +
+        '<div style="font-size:13px;color:var(--accent);padding-left:22px">' + _midiEsc(p.instrumentName(tr)) + '</div>' +
+        '<div style="font-size:11px;color:var(--dim);padding-left:22px">file ch' + (tr.channel + 1) + (tr.program !== null ? ' · prog ' + tr.program : '') + ' · ' + tr.noteCount + ' notes</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px;padding-left:22px;padding-right:8px">' +
+          '<span style="flex:none">out ch</span>' +
+          '<select style="width:54px;flex:none" onchange="midiTrackSet(' + tr.index + ',\'channel\',this.value)">' + opts + '</select>' +
+          '<input type="range" min="0" max="127" step="1" value="' + vol + '" style="flex:1;min-width:60px" oninput="midiTrackSet(' + tr.index + ',\'volume\',this.value)">' +
+          '<span id="midi-vol-' + tr.index + '" style="width:30px;flex:none">' + vol + '</span></div></div>';
+    });
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' +
+      '<button class="tb-btn" onclick="midiAuditionToggle()">' + (p.playing ? '&#9632; Stop' : '&#9654; Audition') + '</button>' +
+      '<span id="midi-aud-clock" style="font-family:var(--mono,monospace);color:var(--accent)">' +
+      MccfMidi.fmtClock(p.elapsed()) + ' / ' + MccfMidi.fmtClock(p.totalSeconds()) + '</span></div>';
+  }
+  h += '<div class="empty-insp" style="margin-top:8px">File, device, tempo and loop are set in Composer (Place &gt; MIDI). Add a MIDI cue from the Timeline below to play this source at a time.</div>' +
+    '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button class="tb-btn accent" onclick="midiSaveToComposer()">Save to Composer</button>' +
+    '<button class="tb-btn" onclick="_openMidiInspector(' + JSON.stringify(ms.name).replace(/"/g, '&quot;') + ')">Revert</button></div>';
+  body.innerHTML = h;
+}
+
+function midiTrackSet(idx, key, val) {
+  var p = _midiPlayer; if (!p || !p.data) return;
+  if (key === 'enabled') p.setEnabled(idx, !!val);
+  else if (key === 'channel') { p.setChannel(idx, val); renderObjectPanel(); }   // re-render: instrument name follows the channel (ch10 = drum kit)
+  else if (key === 'volume') { p.setVolume(idx, val); var l = document.getElementById('midi-vol-' + idx); if (l) l.textContent = p.volume[idx]; }
+}
+function midiAuditionToggle() {
+  var p = _midiPlayer; if (!p || !p.data) return;
+  if (p.playing) { _stopMidiAudition(); }
+  else { _edMidiAudioCtx(); p.start(0); _midiClockStart(); }
+  renderObjectPanel();
+}
+function midiSaveToComposer() {
+  var p = _midiPlayer;
+  if (!p || !p.data || !_selObj || _selObj.kind !== 'midi') return;
+  var tracks = p.data.tracks.filter(function(t) { return t.noteCount > 0; }).map(function(t) {
+    return { index: t.index, enabled: !!p.enabled[t.index], channel: p.resolvedChannel(t) + 1, volume: p.volume[t.index] };
+  });
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_update_midi', data: { name: _selObj.name, tracks: tracks } }, '*');
+  else console.log('[Events Editor] standalone — would save MIDI mix:', _selObj.name, tracks);
+}
+// For a MIDI cue: set its Duration to the file's length (with the saved mix + tempo) so the
+// cue block spans the music on the Timeline. Edits the working copy; press Apply to commit.
+function midiFitCueDuration() {
+  if (!_selCue) return;
+  var ms = MIDI_SOURCES.find(function(x) { return x.name === _selCue.target; });
+  if (!ms || !ms.url) return;
+  fetch(_midiUrl(ms.url)).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }).then(function(buf) {
+    var q = new MccfMidi.Player({ quiet: true });
+    q.load(buf); q.applyTrackSettings(ms.tracks); q.tempoScale = ms.tempo > 0 ? ms.tempo : 1;
+    if (_selCue) { _selCue.duration = Math.ceil(q.totalSeconds() * 10) / 10; renderCueEditor(); }
+    q.dispose();
+  }).catch(function(e) { console.warn('[Events Editor] could not read MIDI length:', e && e.message); });
+}
+
 function setAudioProp(key, idx, val) {
   if (!_selObj || _selObj.kind !== 'audio') return;
   _selObj[key][idx] = val;
@@ -1225,7 +1511,7 @@ function _muteAllAudio(x3d) {
     var walk = function(node) {
       try {
         if (node.getTypeName && node.getTypeName() === 'AudioDestination') {
-          node.gain = 0;
+          if (typeof _tpRegisterDest === 'function') _tpRegisterDest(node); else node.gain = 0;   // transport: remembers the gain so the Sound switch can undo it
           muted++;
         }
         if (node.children) node.children.forEach(walk);
@@ -1322,6 +1608,8 @@ function loadX3DViewport(url, force) {
     // Mute all audio in this preview viewport — see _muteAllAudio below for
     // why this walks AudioDestination nodes, not the classic X3D Sound type.
     _muteAllAudio(x3d);
+    // transport: a fresh scene is ready.  Placed BEFORE the dropdown rebuild and guarded, so nothing after it can hide the load from Play.
+    try { if (typeof _tpSceneLoaded === 'function') _tpSceneLoaded(x3d, url); } catch (eTp) { console.warn('[Transport] load hook failed:', eTp); }
     // Viewpoint dropdown fix (Day 79 cleanup pass): the candidate list
     // (VIEWS, built from Composer's own guess) includes a VP_<name>_Eye/Side
     // pair for every placed agent unconditionally — but exportX3D only
@@ -1343,6 +1631,7 @@ function loadX3DViewport(url, force) {
     if (ph)     ph.style.display     = 'flex';
     status.textContent = '— scene not found —';
     console.warn('[Events Editor] X3D load failed:', url);
+    if (typeof _tpSceneFailed === 'function') _tpSceneFailed(url);
   }, { once: true });
 }
 
@@ -1489,6 +1778,49 @@ function captureCurrentPoint() {
     statusEl.textContent = 'captured ' + pos.map(function(n){ return n.toFixed(2); }).join(', ');
     setTimeout(function(){ statusEl.style.display = 'none'; }, 2500);
   }
+}
+
+// ── Capture Camera ───────────────────────────────────────────────────────────────────────────────
+// A placed camera is position + hAngle (yaw about Y) + vAngle (pitch about X) + roll (about Z), composed yaw · pitch · roll (see _placedCamOrientation).
+// The viewer's live pose comes from MCCF_PathRecorderProx (a Viewpoint's own fields do not follow navigation), and VP_Free sits at the origin of its
+// transform, so the sensor's position/orientation ARE the camera's.  This is the inverse of _placedCamOrientation.
+function _camAnglesFromOrientation(rot) {
+  var x = rot[0], y = rot[1], z = rot[2], a = rot[3], l = Math.sqrt(x * x + y * y + z * z) || 1; x /= l; y /= l; z /= l;
+  var c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+  var R = [[t * x * x + c, t * x * y - s * z, t * x * z + s * y], [t * x * y + s * z, t * y * y + c, t * y * z - s * x], [t * x * z - s * y, t * y * z + s * x, t * z * z + c]];
+  var sv = Math.max(-1, Math.min(1, -R[1][2])), v = Math.asin(sv), h, r;
+  if (Math.abs(sv) > 0.999999) { r = 0; h = Math.atan2(-R[2][0], R[0][0]); }          // looking straight up or down: roll and yaw are the same turn, keep it all in yaw
+  else { h = Math.atan2(R[0][2], R[2][2]); r = Math.atan2(R[1][0], R[1][1]); }
+  var d = 180 / Math.PI, rd = function(n) { var m = Math.round(n * d * 100) / 100; return m === 0 ? 0 : m; };
+  return { hAngle: rd(h), vAngle: rd(v), roll: rd(r) };
+}
+function captureCurrentCamera() {
+  var statusEl = document.getElementById('cam-capture-status');
+  var x3d = document.getElementById('vp-x3d');
+  if (!x3d || !x3d.browser) { alert('No scene loaded in viewport — export from Composer first.'); return; }
+  var sensorNode;
+  try { sensorNode = x3d.browser.currentScene.getNamedNode('MCCF_PathRecorderProx'); } catch (e) { sensorNode = null; }
+  if (!sensorNode) { alert('This scene doesn\'t have the viewer sensor (MCCF_PathRecorderProx) — re-export/refresh the scene from Composer, then try again.'); return; }
+  var pos, rot;
+  try {
+    var activeStr = sensorNode.getField('isActive').toString();
+    if (activeStr !== 'TRUE' && activeStr !== 'true') { alert('The camera is outside MCCF_PathRecorderProx\'s sensed region — fly back inside the scene, then capture again.'); return; }
+    pos = _parseFieldVec(sensorNode.getField('position_changed').toString(), 3);
+    rot = _parseFieldVec(sensorNode.getField('orientation_changed').toString(), 4);
+  } catch (e) { alert('Camera capture failed: ' + e.message); return; }
+  if (!pos || !rot) { alert('Could not read the camera this click — try again.'); return; }
+  pos = pos.map(function(n) { return Math.round(n * 1000) / 1000; });
+  var an = _camAnglesFromOrientation(rot), msg;
+  if (_selObj && _selObj.kind === 'camera') {
+    _selObj.position = pos; _selObj.hAngle = an.hAngle; _selObj.vAngle = an.vAngle; _selObj.roll = an.roll;
+    renderObjectPanel(); saveObjectPlacement();
+    msg = '"' + _selObj.name + '" set to ' + pos.map(function(n) { return n.toFixed(2); }).join(', ') + '  yaw ' + an.hAngle + '° pitch ' + an.vAngle + '°' + (an.roll ? ' roll ' + an.roll + '°' : '');
+  } else {
+    try { window.parent.postMessage({ type: 'mccf_captured_camera', position: pos, hAngle: an.hAngle, vAngle: an.vAngle, roll: an.roll }, '*'); } catch (e) { console.warn('[CameraCapture] could not post to parent:', e.message); }
+    msg = 'sent to Composer: name it and Place';
+  }
+  if (statusEl) { statusEl.style.display = ''; statusEl.textContent = msg; setTimeout(function() { statusEl.style.display = 'none'; }, 4000); }
+  return { position: pos, hAngle: an.hAngle, vAngle: an.vAngle, roll: an.roll };
 }
 
 // captureTerrainOverhead — binds MCCF_TerrainCam (the ortho overhead
@@ -1840,6 +2172,200 @@ function _pathFixReceiveKeys(id, path) {
   console.log('[PathFix] applied to "' + id + '":', opts, '(' + keys.length + ' keys)');
 }
 
+// ── Path keys: edit the recorded path's X / Y / Z (and time, facing) from the cue ──────────────────
+// The Composer owns the geometry.  The table below asks for one path's keys, lets the author change them, and sends the whole
+// path back (mccf_recorded_path, which the Composer validates and stores over the old one).  Times are seconds; the cue's own
+// Duration decides how long the walk really takes, the times only shape the pacing between keys.
+var _pk = { id: null, cue: null, path: null, keys: null, dirty: false, status: '', awaiting: null, verify: null };
+function _pkEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+function _pkYaw(k) { var o = k.orientation; return (o && o.length === 4 && Math.abs(o[0]) < 1e-6 && Math.abs(Math.abs(o[1]) - 1) < 1e-6 && Math.abs(o[2]) < 1e-6) ? o[1] * o[3] * 180 / Math.PI : null; }
+function _pkRound(v, n) { var m = Math.pow(10, n); return Math.round(v * m) / m; }
+function _pkRequest(id) {
+  _pk = { id: id, cue: _selCue && _selCue.id, path: null, keys: null, dirty: false, status: 'loading…', awaiting: id, verify: null };
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_request_path_keys', id: id }, '*');
+  else _pk.status = 'standalone — no Composer to ask';
+}
+function _pkReceive(id, path) {
+  if (_pk.awaiting !== id) return false;
+  _pk.awaiting = null;
+  if (!path || !path.keys || !path.keys.length) { _pk.status = 'the Composer has no keys for "' + id + '"'; _pk.keys = null; }
+  else if (_pk.verify) {                                           // reply to the re-read after a save: did the Composer take it?
+    var want = _pk.verify, got = path.keys, same = got.length === want.length && got.every(function(k, i) { return [0, 1, 2].every(function(j) { return Math.abs(k.position[j] - want[i].position[j]) < 1e-9; }) && Math.abs(k.t - want[i].t) < 1e-9; });
+    _pk.verify = null; _pk.dirty = !same;
+    _pk.status = same ? '✓ saved in the Composer — Export & reload to see it' : '✗ the Composer did not accept this path (see its message); your edits are still here';
+    if (same) { _pk.path = path; _pk.keys = path.keys.map(_pkClone); }
+  } else { _pk.path = path; _pk.keys = path.keys.map(_pkClone); _pk.status = ''; }
+  if (_selCue && _selCue.track === 'path' && _selCue.params.pathId === id) renderCueEditor();
+  return true;
+}
+function _pkClone(k) { return Object.assign({}, k, { position: k.position.slice(), orientation: k.orientation ? k.orientation.slice() : [0, 1, 0, 0] }); }
+function _pkStatus() { var el = document.getElementById('pk-status'); if (el) { el.textContent = _pk.dirty && !/\u2717/.test(_pk.status) ? 'edited — not saved yet' : _pk.status; el.style.color = /✗/.test(_pk.status) && !_pk.dirty ? 'var(--accent2)' : 'var(--dim)'; } }
+function _pkSet(i, f, v) {
+  var k = _pk.keys && _pk.keys[i]; if (!k) return; var n = parseFloat(v); if (!isFinite(n)) return;
+  if (f === 't') k.t = n; else if (f === 'x') k.position[0] = n; else if (f === 'y') k.position[1] = n; else if (f === 'z') k.position[2] = n;
+  else if (f === 'yaw') k.orientation = [0, 1, 0, n * Math.PI / 180];
+  _pk.dirty = true; if (/\u2717/.test(_pk.status)) _pk.status = ''; _pkStatus();
+}
+function _pkAdd(i) {
+  var ks = _pk.keys; if (!ks) return; var a = ks[i], b = ks[i + 1], n = _pkClone(a);
+  if (b) { n.t = (a.t + b.t) / 2; n.position = a.position.map(function(v, j) { return (v + b.position[j]) / 2; }); }
+  else { n.t = a.t + 1; }
+  ks.splice(i + 1, 0, n); _pk.dirty = true; renderCueEditor();
+}
+function _pkDel(i) { if (!_pk.keys || _pk.keys.length <= 2) return; _pk.keys.splice(i, 1); _pk.dirty = true; renderCueEditor(); }
+function _pkFit() { if (!_pk.keys || !_selCue) return; _selCue.duration = Math.max(0.1, Math.ceil(_pk.keys[_pk.keys.length - 1].t * 10) / 10); renderCueEditor(); }
+function _pkFace() { if (!_pk.keys) return; _pk.keys = _recomputeFacingFromTravel(_pk.keys, false); _pk.dirty = true; renderCueEditor(); }
+function _pkRevert() { if (_pk.id) _pkRequest(_pk.id), renderCueEditor(); }
+function _pkSave() {
+  var ks = _pk.keys, idEl = document.getElementById('pk-newid'), newId = ((idEl && idEl.value) || _pk.id).trim();
+  if (!ks || !newId) return;
+  for (var i = 0; i < ks.length; i++) {
+    var k = ks[i], nums = [k.t].concat(k.position).concat(k.orientation || []);
+    if (!nums.every(isFinite)) { _pk.status = '✗ row ' + (i + 1) + ' has a value that is not a number'; renderCueEditor(); return; }
+    if (i && !(k.t > ks[i - 1].t)) { _pk.status = '✗ times must increase: row ' + (i + 1) + ' (t=' + k.t + ') is not after row ' + i; renderCueEditor(); return; }
+  }
+  var out = Object.assign({}, _pk.path, { id: newId, keys: ks.map(_pkClone) });
+  if ('keyCount' in out) out.keyCount = ks.length;
+  if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_recorded_path', data: out }, '*');
+  var repoint = newId !== _pk.id;
+  if (repoint && _selCue) _selCue.params.pathId = newId;           // a copy: this cue now uses it (press Apply on the cue to keep that)
+  _pk.id = newId; _pk.path = out; _pk.dirty = false; _pk.status = 'sent' + (repoint ? ' as a new path — press Apply to point this cue at it' : '') + '…';
+  _pk.verify = out.keys; _pk.awaiting = newId;
+  setTimeout(function() { if (_pk.id === newId && window.parent && window.parent !== window) window.parent.postMessage({ type: 'mccf_request_path_keys', id: newId }, '*'); }, 700);
+  renderCueEditor();
+}
+function _pkHtml(c) {
+  var id = c.params && c.params.pathId; if (!id) return '';
+  if (_pk.id !== id || _pk.cue !== c.id) { var want = id, wcue = c.id; setTimeout(function() { if (_pk.id !== want || _pk.cue !== wcue) { _pkRequest(want); renderCueEditor(); } }, 0); return '<div class="obj-field"><label>Path keys</label><div style="color:var(--dim)">loading…</div></div>'; }
+  var h = '<div class="obj-field" id="pk-box"><label>Path keys — X / Y / Z (metres), time (s), facing (°)</label>';
+  if (!_pk.keys) return h + '<div id="pk-status" style="color:var(--dim)">' + _pkEsc(_pk.status) + '</div></div>';
+  var others = CUES.filter(function(x) { return x.track === 'path' && x.id !== c.id && x.params && x.params.pathId === id; }).length;
+  var last = _pk.keys[_pk.keys.length - 1].t;
+  var inp = 'style="width:100%;min-width:0;box-sizing:border-box;padding:2px 2px;font-size:12px"', lab = 'style="display:flex;gap:3px;align-items:center;font-size:12px;color:var(--dim);min-width:0"';
+  _pk.keys.forEach(function(k, i) {
+    var yaw = _pkYaw(k);
+    function cell(f, v, name) { return '<label ' + lab + '>' + name + '<input type="number" step="any" ' + inp + ' value="' + _pkRound(v, f === 'yaw' ? 1 : 4) + '" oninput="_pkSet(' + i + ",'" + f + "',this.value)\"></label>"; }
+    h += '<div class="pk-key" style="border-top:1px solid var(--border);padding:4px 0"><div style="font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#ddd;margin:0 0 2px">Point #' + (i + 1) + ' \u2014 where (metres)</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">' + cell('x', k.position[0], 'X') + cell('y', k.position[1], 'Y') + cell('z', k.position[2], 'Z') + '</div>' +
+      '<div style="font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#ddd;margin:4px 0 2px">when (seconds into the recording) \u00b7 which way it faces (\u00b0)</div><div style="display:grid;grid-template-columns:1fr 1fr auto;gap:4px;margin-top:3px;align-items:center">' + cell('t', k.t, 'time') +
+      (yaw === null ? '<span style="font-size:12px;color:var(--dim)" title="orientation is not a turn about Y; kept as recorded">face —</span>' : cell('yaw', yaw, '°')) +
+      '<span style="white-space:nowrap;font-size:12px;color:var(--dim)">#' + (i + 1) + ' <button title="add a point after this one" style="padding:0 5px" onclick="_pkAdd(' + i + ')">+</button><button title="delete this point" style="padding:0 5px"' + (_pk.keys.length <= 2 ? ' disabled' : '') + ' onclick="_pkDel(' + i + ')">×</button></span></div></div>';
+  });
+  var dur = +c.duration || 0, pace = dur > 0 ? last / dur : 0;
+  h += '<div style="font-size:12px;color:var(--dim);margin:4px 0"><b>Recorded over ' + _pkRound(last, 2) + ' s.</b> This cue plays it in ' + _pkRound(dur, 2) + ' s' + (dur > 0 && Math.abs(pace - 1) > 0.05 ? ' \u2014 <b>' + _pkRound(pace, 2) + '\u00d7 the recorded pace</b>' : ' (recorded pace)') + '. The times shape the pacing between points; the Duration sets the total.' +
+    (others ? ' <b>' + others + ' other path cue' + (others > 1 ? 's use' : ' uses') + ' this path</b> — change the name below to save a copy instead.' : '') + '</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:12px;color:var(--dim)">save as</span><input id="pk-newid" value="' + _pkEsc(_pk.id) + '" style="flex:1;min-width:90px;padding:2px 4px;font-size:13px">' +
+    '<button onclick="_pkSave()">Save path</button><button onclick="_pkFit()" title="set the cue Duration to the recorded span of the path, so it plays at the pace it was walked">Fit duration</button><button onclick="_pkFace()" title="turn every point toward the next one">Auto-face</button><button onclick="_pkRevert()">Revert</button></div>' +
+    '<div id="pk-status" style="font-size:12px;margin-top:4px;color:var(--dim)">' + (_pk.dirty && !/\u2717/.test(_pk.status) ? 'edited — not saved yet' : _pkEsc(_pk.status)) + '</div></div>';
+  return h;
+}
+
+// ── Speed curve: how fast the walk goes along the path, drawn like an automation lane ───────────────
+// params.pace = { points: [{u, v}], ebps: {channel, depth, neutral, smooth, min, max} | null }.  u = cue time 0..1, v = speed (1 = as recorded).
+// The Composer bakes the curve into the exported timing; the Loader applies ebps live on top of it (see the Composer/Loader patches).
+var _PC = { VMAX: 3, W: 300, H: 150, L: 16, R: 290, T: 10, B: 128, drag: -1, prev: null };
+var _PC_PRESETS = { flat: [[0, 1], [1, 1]], inout: [[0, 0.25], [0.5, 2], [1, 0.25]], slowstart: [[0, 0.25], [0.6, 1.3], [1, 1.6]], slowend: [[0, 1.6], [0.4, 1.3], [1, 0.25]], pause: [[0, 1], [0.4, 1], [0.5, 0.05], [0.6, 1], [1, 1]] };
+function _paceGet() {
+  var p = _selCue && _selCue.params && _selCue.params.pace, ok = p && p.points && p.points.length >= 2;
+  return { points: ok ? p.points.map(function(q) { return { u: +q.u, v: +q.v }; }) : [{ u: 0, v: 1 }, { u: 1, v: 1 }], ebps: p && p.ebps ? Object.assign({}, p.ebps) : null };
+}
+function _paceCommit(pace) {
+  if (!_selCue) return;
+  var pts = pace.points, isDefault = pts.length === 2 && pts[0].v === 1 && pts[1].v === 1 && !pace.ebps;
+  if (isDefault) delete _selCue.params.pace; else _selCue.params.pace = JSON.parse(JSON.stringify(pace));
+}
+function _paceCum(pts, u) { var s = 0; for (var i = 1; i < pts.length; i++) { var a = pts[i - 1], b = pts[i]; if (u <= a.u) break; var w = Math.min(u, b.u) - a.u; if (w <= 0) continue; var vb = (b.u - a.u) > 0 ? a.v + (b.v - a.v) * (w / (b.u - a.u)) : b.v; s += w * (a.v + vb) / 2; } return s; }
+function _paceR(pts, u) { var t = _paceCum(pts, 1); return t > 0 ? _paceCum(pts, u) / t : u; }
+function _paceV(pts, u) { for (var i = 1; i < pts.length; i++) { var a = pts[i - 1], b = pts[i]; if (u <= b.u) return (b.u - a.u) > 0 ? a.v + (b.v - a.v) * ((u - a.u) / (b.u - a.u)) : b.v; } return pts[pts.length - 1].v; }
+function _paceX(u) { return _PC.L + u * (_PC.R - _PC.L); }
+function _paceY(v) { return _PC.B - Math.min(v, _PC.VMAX) / _PC.VMAX * (_PC.B - _PC.T); }
+function _paceSvg(pace) {
+  var P = _PC, pts = pace.points, s = '<defs><linearGradient id="pace-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.5"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:.03"/></linearGradient></defs>';
+  s += '<rect x="' + P.L + '" y="' + P.T + '" width="' + (P.R - P.L) + '" height="' + (P.B - P.T) + '" class="pace-bg"/>';
+  [0.5, 1, 1.5, 2, 2.5].forEach(function(v) { s += '<line x1="' + P.L + '" x2="' + P.R + '" y1="' + _paceY(v) + '" y2="' + _paceY(v) + '" class="' + (v === 1 ? 'pace-one' : 'pace-grid') + '"/>'; });
+  [0.25, 0.5, 0.75].forEach(function(u) { s += '<line y1="' + P.T + '" y2="' + P.B + '" x1="' + _paceX(u) + '" x2="' + _paceX(u) + '" class="pace-grid"/>'; });
+  s += '<text x="' + (P.L - 3) + '" y="' + (_paceY(1) + 3) + '" class="pace-tx" text-anchor="end">1×</text><text x="' + (P.L - 3) + '" y="' + (_paceY(2) + 3) + '" class="pace-tx" text-anchor="end">2×</text><text x="' + (P.L - 3) + '" y="' + (_paceY(0) + 3) + '" class="pace-tx" text-anchor="end">0</text>';
+  var ghost = []; for (var i = 0; i <= 60; i++) { var u = i / 60; ghost.push(_paceX(u).toFixed(1) + ',' + (P.B - _paceR(pts, u) * (P.B - P.T)).toFixed(1)); }
+  s += '<polyline points="' + ghost.join(' ') + '" class="pace-ghost"/>';
+  var line = pts.map(function(q) { return _paceX(q.u).toFixed(1) + ',' + _paceY(q.v).toFixed(1); }).join(' ');
+  s += '<polygon points="' + _paceX(pts[0].u) + ',' + P.B + ' ' + line + ' ' + _paceX(pts[pts.length - 1].u) + ',' + P.B + '" fill="url(#pace-g)"/><polyline points="' + line + '" class="pace-line"/>';
+  pts.forEach(function(q, i) { s += '<circle cx="' + _paceX(q.u).toFixed(1) + '" cy="' + _paceY(q.v).toFixed(1) + '" r="5.5" data-i="' + i + '" class="pace-pt' + (i === P.drag ? ' on' : '') + '"/>'; });
+  if (P.prev != null) { var pu = P.prev; s += '<circle cx="' + _paceX(pu).toFixed(1) + '" cy="' + (P.B - _paceR(pts, pu) * (P.B - P.T)).toFixed(1) + '" r="4" class="pace-dot"/>'; }
+  s += '<text x="' + P.R + '" y="' + (P.B + 12) + '" class="pace-tx" text-anchor="end">cue time →</text><text x="' + (P.R - 2) + '" y="' + (P.T + 10) + '" class="pace-tx pace-gt" text-anchor="end">— distance covered</text>';
+  return s;
+}
+function _paceRead(pace, msg) {
+  var el = document.getElementById('pace-read'); if (!el) return;
+  var pts = pace.points; el.textContent = msg || ('A quarter of the time covers ' + Math.round(_paceR(pts, 0.25) * 100) + '% of the path, half covers ' + Math.round(_paceR(pts, 0.5) * 100) + '%, three quarters ' + Math.round(_paceR(pts, 0.75) * 100) + '%.');
+}
+function _paceRedraw(msg) { var svg = document.getElementById('pace-svg'); if (!svg) return; var pace = _paceGet(); svg.innerHTML = _paceSvg(pace); _paceRead(pace, msg); }
+function _paceEvt(ev) { var svg = document.getElementById('pace-svg'), r = svg.getBoundingClientRect(), P = _PC; var sx = (ev.clientX - r.left) / (r.width || 1) * P.W, sy = (ev.clientY - r.top) / (r.height || 1) * P.H; return { sx: sx, sy: sy, u: Math.min(1, Math.max(0, (sx - P.L) / (P.R - P.L))), v: Math.min(P.VMAX, Math.max(0.05, (P.B - sy) / (P.B - P.T) * P.VMAX)), inPlot: sx >= P.L - 4 && sx <= P.R + 4 && sy >= P.T - 4 && sy <= P.B + 4 }; }
+function _paceHit(ev) {   // the point under the mouse, by position (the graph is redrawn on every change, so event targets are not reliable)
+  var e = _paceEvt(ev), pts = _paceGet().points, best = -1, bd = 10;
+  pts.forEach(function(q, i) { var d = Math.hypot(_paceX(q.u) - e.sx, _paceY(q.v) - e.sy); if (d < bd) { bd = d; best = i; } }); return best;
+}
+function _paceMove(i, u, v, free) {
+  var pace = _paceGet(), pts = pace.points; if (!pts[i]) return;
+  v = Math.min(_PC.VMAX, Math.max(0.05, free ? v : Math.round(v / 0.05) * 0.05)); pts[i].v = +v.toFixed(3);
+  if (i > 0 && i < pts.length - 1) { u = free ? u : Math.round(u * 100) / 100; pts[i].u = +Math.min(pts[i + 1].u - 0.005, Math.max(pts[i - 1].u + 0.005, u)).toFixed(4); }
+  _paceCommit(pace); _paceRedraw('point ' + (i + 1) + ': at ' + Math.round(pts[i].u * 100) + '% of the cue, ' + pts[i].v.toFixed(2) + '× speed');
+}
+function _paceDown(ev) {
+  if (ev.button !== 0 || !_selCue) return; var e = _paceEvt(ev), pace = _paceGet(), i = _paceHit(ev);
+  if (i >= 0) { }
+  else if (e.inPlot) { var pts = pace.points; i = 1; while (i < pts.length && pts[i].u < e.u) i++; if (i >= pts.length) i = pts.length - 1; if (i === 0) i = 1; pts.splice(i, 0, { u: +e.u.toFixed(3), v: +_paceV(pts, e.u).toFixed(3) }); _paceCommit(pace); }
+  else return;
+  ev.preventDefault();
+  var now = Date.now(); if (i >= 0 && _PC.last && _PC.last.i === i && now - _PC.last.t < 400 && pace.points.length === _PC.last.n && _paceDelAt(i)) { _PC.last = null; return; }
+  _PC.last = { i: i, t: now, n: _paceGet().points.length }; _PC.drag = i; _paceRedraw();
+  var moved = false;
+  var mv = function(m) { var q = _paceEvt(m); if (Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) > 2) moved = true; _paceMove(_PC.drag, q.u, q.v, m.altKey); };
+  var up = function() { if (moved) _PC.last = null; window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); _PC.drag = -1; _paceRedraw(); };
+  window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+}
+function _paceDelAt(i) { var pace = _paceGet(); if (i <= 0 || i >= pace.points.length - 1) return false; pace.points.splice(i, 1); _paceCommit(pace); _paceRedraw(); return true; }
+function _paceDbl(ev) { var i = _paceHit(ev); if (i >= 0) _paceDelAt(i); }
+function _paceCtx(ev) { var i = _paceHit(ev); if (i >= 0) { _paceDelAt(i); ev.preventDefault(); return false; } return true; }
+function _pacePreset(name) { var p = _PC_PRESETS[name]; if (!p) return; var pace = _paceGet(); pace.points = p.map(function(a) { return { u: a[0], v: a[1] }; }); _paceCommit(pace); _paceRedraw(); }
+function _pacePreview() {
+  if (!_selCue) return; if (_PC.prevT) { clearInterval(_PC.prevT); _PC.prevT = null; }
+  var dur = Math.max(1.5, Math.min(8, +_selCue.duration || 4)), t0 = Date.now();
+  _PC.prevT = setInterval(function() { var u = (Date.now() - t0) / 1000 / dur; if (u >= 1) { clearInterval(_PC.prevT); _PC.prevT = null; _PC.prev = null; } else _PC.prev = u; _paceRedraw(); }, 33);
+}
+function _paceEbpsSet(f, v) {
+  var pace = _paceGet(), e = pace.ebps;
+  if (f === 'channel') { if (!v) pace.ebps = null; else pace.ebps = Object.assign({ channel: v, depth: 1, neutral: 0.5, smooth: 1.5, min: 0.3, max: 2 }, e || {}, { channel: v }); }
+  else if (e) { var n = parseFloat(v); if (isFinite(n)) e[f] = n; }
+  _paceCommit(pace); var ex = document.getElementById('pace-ebps-ex'); if (ex) ex.textContent = _paceEbpsExample(pace.ebps);
+  var rows = document.getElementById('pace-ebps-rows'); if (rows) rows.style.display = pace.ebps ? 'grid' : 'none';
+}
+function _paceEbpsExample(e) {
+  if (!e) return 'Off: the walk follows the drawn curve exactly.';
+  var f = function(c) { return Math.min(e.max, Math.max(e.min, 1 + e.depth * 2 * (c - e.neutral))); };
+  return 'Pace multiplier = 1 + effect × 2 × (' + e.channel + ' − neutral), kept between min and max. With these settings: ' + e.channel + ' at ' + e.neutral + ' → ×' + f(e.neutral).toFixed(2) + ', at 0.8 → ×' + f(0.8).toFixed(2) + ', at 0.1 → ×' + f(0.1).toFixed(2) + '.';
+}
+function _paceHtml(c) {
+  var pace = _paceGet(), e = pace.ebps || { channel: '', depth: 1, neutral: 0.5, smooth: 1.5, min: 0.3, max: 2 };
+  var css = '<style id="pace-css">#pace-box .pace-svg{width:100%;height:auto;display:block;background:#0c1018;border:1px solid var(--border);border-radius:6px;user-select:none;cursor:crosshair}' +
+    '#pace-box .pace-bg{fill:#0f141d}#pace-box .pace-grid{stroke:#1e2733;stroke-width:1}#pace-box .pace-one{stroke:#3a4a5c;stroke-width:1;stroke-dasharray:4 3}' +
+    '#pace-box .pace-line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;filter:drop-shadow(0 0 3px var(--accent))}' +
+    '#pace-box .pace-ghost{fill:none;stroke:var(--accent4);stroke-width:1.5;stroke-dasharray:3 2;opacity:.8}' +
+    '#pace-box .pace-pt{fill:#0c1018;stroke:var(--accent);stroke-width:2;cursor:grab;transition:r .12s,fill .12s}#pace-box .pace-pt:hover,#pace-box .pace-pt.on{fill:var(--accent);r:7;filter:drop-shadow(0 0 5px var(--accent))}' +
+    '#pace-box .pace-dot{fill:var(--accent4);filter:drop-shadow(0 0 4px var(--accent4))}#pace-box .pace-tx{fill:#6d7c90;font:9px var(--mono,monospace)}#pace-box .pace-gt{fill:var(--accent4)}' +
+    '#pace-box .pace-b{padding:1px 6px;font-size:11px}#pace-box input,#pace-box select{font-size:12px;padding:2px 3px}</style>';
+  var h = css + '<div class="obj-field" id="pace-box"><label>Speed curve — how fast the walk goes along the path</label>' +
+    '<svg id="pace-svg" class="pace-svg" viewBox="0 0 300 150" onmousedown="_paceDown(event)" ondblclick="_paceDbl(event)" oncontextmenu="return _paceCtx(event)">' + _paceSvg(pace) + '</svg>' +
+    '<div id="pace-read" style="font-size:12px;color:var(--dim);margin:3px 0"></div>' +
+    '<div style="font-size:11px;color:var(--dim);margin-bottom:4px">Drag a point. Click the curve to add one. Double-click (or right-click) a point to remove it. Hold Alt to move freely. Dashed line: 1× = the recorded pace.</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"><button class="pace-b" onclick="_pacePreset(\'flat\')">Flat</button><button class="pace-b" onclick="_pacePreset(\'inout\')">Slow–fast–slow</button><button class="pace-b" onclick="_pacePreset(\'slowstart\')">Slow start</button><button class="pace-b" onclick="_pacePreset(\'slowend\')">Slow finish</button><button class="pace-b" onclick="_pacePreset(\'pause\')">Pause mid-way</button><button class="pace-b" onclick="_pacePreview()" title="animate a dot along the distance curve">▶ Preview</button></div>' +
+    '<label style="font-size:12px;color:var(--dim);display:block">Live EBPS pace (the Loader changes the speed as this character’s field changes)</label>' +
+    '<select onchange="_paceEbpsSet(\'channel\',this.value);" style="width:100%"><option value=""' + (e.channel ? '' : ' selected') + '>— off —</option>' +
+    [['E', 'E — Eros'], ['B', 'B — Boundary'], ['P', 'P — Pathos'], ['S', 'S — Sophia']].map(function(o) { return '<option value="' + o[0] + '"' + (e.channel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+    '<div id="pace-ebps-rows" style="display:' + (e.channel ? 'grid' : 'none') + ';grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px">' +
+    [['depth', 'effect', -3, 3, 0.1], ['neutral', 'neutral', 0, 1, 0.05], ['smooth', 'smooth s', 0, 10, 0.5], ['min', 'min ×', 0.05, 1, 0.05], ['max', 'max ×', 1, 4, 0.1]].map(function(r) { return '<label style="font-size:11px;color:var(--dim)">' + r[1] + '<input type="number" data-pf="' + r[0] + '" min="' + r[2] + '" max="' + r[3] + '" step="' + r[4] + '" value="' + e[r[0]] + '" oninput="_paceEbpsSet(\'' + r[0] + '\',this.value)" style="width:100%;box-sizing:border-box"></label>'; }).join('') + '</div>' +
+    '<div id="pace-ebps-ex" style="font-size:11px;color:var(--dim);margin-top:3px">' + _paceEbpsExample(pace.ebps) + '</div></div>';
+  setTimeout(function() { _paceRead(_paceGet()); }, 0);
+  return h;
+}
 var _currentStageTab = 'stage';
 function setStageTab(tab, el) {
   document.querySelectorAll('.stage-tab').forEach(function(t){ t.classList.remove('active'); });
@@ -1889,6 +2415,7 @@ function drawAssetsTab() {
 (function() {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: 'mccf_ready' }, '*');
+    window.parent.postMessage({ type: 'mccf_get_export_options' }, '*');
   }
 })();
 
@@ -1908,6 +2435,7 @@ window.addEventListener('message', function(evt) {
   // data — see that var's own comment). _pathFixReceiveKeys is defined
   // further down, next to the fix tools themselves.
   if (evt.data.type === 'mccf_path_keys') {
+    if (typeof _pkReceive === 'function' && _pkReceive(evt.data.id, evt.data.path)) return;
     _pathFixReceiveKeys(evt.data.id, evt.data.path);
     return;
   }
@@ -1921,10 +2449,15 @@ window.addEventListener('message', function(evt) {
     if (d.cameras)                       CAMERAS  = d.cameras; // Day 79: now {name,position,hAngle,vAngle,roll}[], not bare names — see _buildSceneData
     if (d.lights)                        LIGHTS   = d.lights;
     if (d.audio)                         AUDIO_SOURCES = d.audio;
+    if (d.midi)                          MIDI_SOURCES = d.midi;
     if (d.wps      && d.wps.length)      WPS      = d.wps;
     if (d.views    && d.views.length)    VIEWS    = d.views;
     if (d.recordedPaths)                 { RECORDED_PATHS = d.recordedPaths; _renderRecordedPathsPanel(); }
     if (d.assets)                        { ASSETS = d.assets; ASSET_NAMES = ASSETS.map(function(a){return a.name;}); }
+    // Day 90: {name, field} only — kind/ownerName/exportedDEF stay Composer-
+    // side (export-time concerns this tool never needs), same split already
+    // applied to Assets above.
+    if (d.effectTargets)                 { EFFECT_TARGETS = d.effectTargets; EFFECT_TARGET_NAMES = EFFECT_TARGETS.map(function(t){return t.name;}); }
     // If the currently-selected CAMERA still exists in the fresh data, keep it
     // selected but refresh its working copy from Composer's own values —
     // otherwise a save-and-rebroadcast round trip would silently overwrite an
@@ -1960,9 +2493,34 @@ window.addEventListener('message', function(evt) {
     console.log('[Events Editor] scene data received — agents:', AGENTS.length, 'cameras:', CAMERAS.length, 'x3d:', d.x3dUrl||'none');
   }
 
+  // Composer pushes its export settings / the name of the scene being edited
+  if (evt.data.type === 'mccf_export_options') {
+    _vm.opts = evt.data.options || {};
+    if (evt.data.scene) _vm.current = evt.data.scene;
+    if (_vm.open === 'export') vmRenderExport();
+    if (_vm.awaitName) { _vm.awaitName = false; if (_vm.open === 'versions') vmLoad(); }
+    return;
+  }
+  // Composer finished opening a scene we asked for (restore / draft / promote)
+  if (evt.data.type === 'mccf_scene_opened') {
+    var ws = _vm.opened.splice(0); ws.forEach(function (w) { clearTimeout(w.timer); w.res(evt.data); });
+    return;
+  }
+  // Composer sends the scene's dialogue lines (for the Dialogue tab)
+  if (evt.data.type === 'mccf_dialogue_for_events') {
+    DLG = (evt.data.lines || []).filter(function (l) { return l && l.id; });
+    if (!_tty.running) ttyReset();
+    return;
+  }
   // Composer finished X3D export — load the confirmed URL immediately
   if (evt.data.type === 'mccf_x3d_ready') {
-    if (evt.data.url) loadX3DViewport(evt.data.url);
+    if (evt.data.warnings && evt.data.warnings.length) {          // the export went through, but something in it will not work as authored
+      console.warn('[Events Editor] export warnings:', evt.data.warnings);
+      if (typeof vmStatus === 'function') vmStatus('\u26a0 ' + evt.data.warnings[0] + (evt.data.warnings.length > 1 ? ' (+' + (evt.data.warnings.length - 1) + ' more)' : ''), true);
+    }
+    // transport: a Play that asked for this export is waiting for it and does its own (forced) reload
+    if (typeof _tpReadyMessage === 'function' && _tpReadyMessage(evt.data.url)) { /* consumed */ }
+    else if (evt.data.url) loadX3DViewport(evt.data.url);
     var btn = document.getElementById('vp-refresh-btn');
     if (btn) { btn.textContent = '↺ refresh'; btn.style.color = ''; }
     return;
@@ -1988,6 +2546,7 @@ window.addEventListener('message', function(evt) {
     });
     renderTimeline();
     renderObjectPanel();
+    if (typeof _tpCuesLoadedFromComposer === 'function') _tpCuesLoadedFromComposer();
     console.log('[Events Editor] mccf_load_cues received —', CUES.length, 'cue(s) restored from the scene file.');
   }
 });
@@ -2034,6 +2593,8 @@ var TRACKS = [
   { id:'path',      label:'Path',      multiLane:true  },
   { id:'turn',      label:'Turn',      multiLane:true  },
   { id:'audio',     label:'Audio',     multiLane:true  },
+  // Day 96: play/stop a registered MIDI source (Composer Place > MIDI). The Loader plays it on the scene clock.
+  { id:'midi',      label:'MIDI',      multiLane:true  },
   // Day 88: two new, separate track types — kept apart per the author's
   // own request ("easier to think about it that way"), and because Movie
   // is expected to grow more cue types later (start/stop playback, etc.)
@@ -2041,7 +2602,15 @@ var TRACKS = [
   // "start this TimeSensor" action, much like Gesture.
   { id:'movie',     label:'Movie',     multiLane:true  },
   { id:'animation', label:'Animation', multiLane:true  },
+  // Day 90: scalar (transparency) or color fade on a registered Effect
+  // Target, over a duration, from/to. Deliberately Timeline-scheduled (a
+  // real t0), not Route-Graph-wired -- see that tool's own "no clock,
+  // sensed events don't have an authored when" reasoning, which is exactly
+  // why this track exists instead of extending that one further.
+  { id:'effect',    label:'Effect',    multiLane:true  },
 ];
+var EFFECT_TARGETS = [];      // {name, field}[] -- populated from mccf_scene_data, Composer's effectTargets registry
+var EFFECT_TARGET_NAMES = [];
 var ASSETS = [];  // Day 88: {name,url} objects (upgraded from bare names once the raw-file viewer needed url too), for Movie/Animation cues' Target dropdown — populated from mccf_scene_data
 var ASSET_NAMES = [];  // convenience: just the names, for dropdowns/defaults that only ever needed the string
 var CUES = [];
@@ -2103,6 +2672,7 @@ function renderTimeline() {
 
   var wrap = document.getElementById('tl-tracks');
   if (!wrap) return;
+  var _keepTop = wrap.scrollTop;                       // the lanes keep their place across every edit
   wrap.innerHTML = TRACKS.map(function(tr) {
     var cues = CUES.filter(function(c) { return c.track === tr.id; });
 
@@ -2138,12 +2708,22 @@ function renderTimeline() {
     }).join('');
     return genericRow + laneRows;
   }).join('');
+  wrap.scrollTop = _keepTop;
+  _tlRestoreScroll();
+  if (window.requestAnimationFrame) requestAnimationFrame(_tlRestoreScroll);   // once more after layout settles
+}
+var _tlScrollX = 0, _tlGuardUntil = 0;
+function _tlRestoreScroll() {
+  _tlGuardUntil = Date.now() + 300;                    // scroll events that the rebuilt lanes fire on their own (position 0) are not the author scrolling
+  document.querySelectorAll('.timeline-scroll').forEach(function(el) { if (el.scrollLeft !== _tlScrollX) el.scrollLeft = _tlScrollX; });
 }
 
 // All lanes + the ruler scroll together — a cue has to line up with the
 // same ruler position regardless of which track it's in.
 function _tlSyncScroll(fromEl) {
   var x = fromEl.scrollLeft;
+  if (Date.now() < _tlGuardUntil && x !== _tlScrollX) { _tlRestoreScroll(); return; }
+  _tlScrollX = x;
   document.querySelectorAll('.timeline-scroll').forEach(function(el) { el.scrollLeft = x; });
 }
 
@@ -2184,18 +2764,49 @@ function addCueAtPlayhead(trackId, explicitTarget) {
   var selAgent = (_selObj && _selObj.kind === 'agent')  ? _selObj.name : null;
   var selLight = (_selObj && _selObj.kind === 'light')  ? _selObj.name : null;
   var selAudio = (_selObj && _selObj.kind === 'audio')  ? _selObj.name : null;
-  var assetTarget   = explicitTarget || ASSET_NAMES[0] || '';
+  var selMidi  = (_selObj && _selObj.kind === 'midi')   ? _selObj.name : null;
+  // Day 90: real bug caught in chat — every other kind here falls back to its
+  // Stage-panel selection before the generic [0]; asset never got that line,
+  // so selecting an asset in the Assets tab highlighted it and showed its
+  // name/path but had zero effect on anything — a new Movie/Animation/Path
+  // cue always defaulted to ASSET_NAMES[0] regardless of what was clicked.
+  var selAsset = (_selObj && _selObj.kind === 'asset')  ? _selObj.name : null;
+  // Day 90: real bug caught live — the Effect track's "+" always defaulted
+  // to EFFECT_TARGET_NAMES[0] regardless of Stage-panel selection, because
+  // nothing matched "which light/agent/asset is selected" to "which
+  // registered Effect Target belongs to it." Same selCam/selLight/selAsset
+  // pattern as every other track, just matched through ownerName since an
+  // Effect Target's own name is never the same string as what it's on.
+  var selEffectTarget = (function(){
+    var ownerName = selLight || (_selObj && _selObj.kind === 'agent' ? _selObj.name : null) || selAsset;
+    if (!ownerName) return null;
+    var match = EFFECT_TARGETS.find(function(t){ return t.ownerName === ownerName; });
+    return match ? match.name : null;
+  })();
+  var assetTarget   = explicitTarget || selAsset || ASSET_NAMES[0] || '';
   var gestureTarget = explicitTarget || selAgent || AGENTS[0] || '';
   var pathTarget    = explicitTarget || selAgent || AGENTS[0] || '';
   var lightTarget   = explicitTarget || selLight || (LIGHTS[0] && LIGHTS[0].name) || '';
   var audioTarget   = explicitTarget || selAudio || (AUDIO_SOURCES[0] && AUDIO_SOURCES[0].name) || '';
+  var midiTarget    = explicitTarget || selMidi  || (MIDI_SOURCES[0]  && MIDI_SOURCES[0].name)  || '';
   var defaults = {
     // Day 85: real shot defaults — see renderCameraCueFields for the full
     // field set this unlocks. shot='wide' is a sensible, always-available
     // static default (matches the Loader's own static-shot list); target
     // still means "which camera" (this tool's own lane-grouping), kept
     // exactly as it was.
-    camera:  { target: explicitTarget || selCam || (CAMERAS[0] && CAMERAS[0].name) || '', shot: 'wide', subject: (explicitTarget && AGENTS.indexOf(explicitTarget)!==-1 ? explicitTarget : selAgent) || AGENTS[0] || '', distance: 8, height: 3, hAngle: 0, vAngle: 0, transition: 'cut', label: '', duration: 3 },
+    // Day 90: a placed camera selected on the Stage panel when + is pressed now
+    // defaults straight to the baked free_camera path (matching that camera's own
+    // authored position) instead of the generic subject-relative 'wide' shot —
+    // picking a specific camera and getting a DIFFERENT camera's behavior was the
+    // root cause of the Wide_1/Anna_Cam1 mismatch this fix addresses. No placed
+    // camera selected: falls through to the previous 'wide' default, unchanged.
+    camera: (function(){
+      var camName = explicitTarget || selCam || '';
+      var isPlaced = camName && CAMERAS.some(function(c){ return c.name === camName; });
+      if (isPlaced) return { target: camName, shot: 'free_camera', camera: camName, transition: 'cut', label: '', duration: 3 };
+      return { target: camName || (CAMERAS[0] && CAMERAS[0].name) || '', shot: 'wide', subject: (explicitTarget && AGENTS.indexOf(explicitTarget)!==-1 ? explicitTarget : selAgent) || AGENTS[0] || '', distance: 8, height: 3, hAngle: 0, vAngle: 0, transition: 'cut', label: '', duration: 3 };
+    })(),
     light:   { target: lightTarget, label: 'fade', duration: 3 },
     gesture: { target: gestureTarget, label: (AGENT_CLIPS[gestureTarget] && AGENT_CLIPS[gestureTarget][0]) || 'Default', duration: 2 },
     // Day 95: face -- label = the expression name. duration = the whole cue (fade in + hold +
@@ -2210,6 +2821,7 @@ function addCueAtPlayhead(trackId, explicitTarget) {
     // reuses the field every other cue type already has.
     turn:    { target: pathTarget,    label: '', duration: 2, degrees: 90, invert: false },
     audio:   { target: audioTarget,   label: 'play', duration: 4 },
+    midi:    { target: midiTarget,    label: 'play', duration: 4 },
     // Day 88: real, new track types. Both need "internalDef" — the real
     // Shape/TimeSensor DEF name inside the target asset's own file,
     // exposed via that file's own <EXPORT> statement (same requirement
@@ -2219,6 +2831,21 @@ function addCueAtPlayhead(trackId, explicitTarget) {
     // both instantaneous actions at t0, not things with their own span.
     movie:     { target: assetTarget, internalDef: '', visible: true, label: '', duration: 0.1 },
     animation: { target: assetTarget, internalDef: '', label: '', duration: 0.1 },
+    // Day 90: from/to left unset here -- renderCueEditor fills in a
+    // sensible placeholder based on the target's actual field type
+    // (scalar vs color), which isn't knowable until a target is picked.
+    // Day 90: seed a real 2-key default here too -- renderCueEditor's own
+    // fallback (for a cue with no keyframes at all) would otherwise only
+    // kick in on first render, which is fine, but seeding it here means a
+    // freshly-added cue is never even briefly in a keyframes-less state.
+    effect:    (function(){
+      var _target = explicitTarget || selEffectTarget || EFFECT_TARGET_NAMES[0] || '';
+      var _et = EFFECT_TARGETS.find(function(t){ return t.name === _target; });
+      var _kfs = (_et && _et.field === 'color')
+        ? [{fraction:0, value:[1,1,1]}, {fraction:1, value:[0,0,0]}]
+        : [{fraction:0, value:1}, {fraction:1, value:0}];
+      return { target: _target, label: '', duration: 3, keyframes: _kfs };
+    })(),
   }[trackId] || { target: explicitTarget || '', label:'', duration: 2 };
   var cue = Object.assign({ id: 'cue_' + _cueSeq, track: trackId, t0: _playheadT, params: {} }, defaults);
   CUES.push(cue);
@@ -2229,7 +2856,14 @@ function addCueAtPlayhead(trackId, explicitTarget) {
 function selectCue(id) {
   var c = CUES.find(function(x) { return x.id === id; });
   if (!c) return;
-  _selCue = Object.assign({}, c, { params: Object.assign({}, c.params) });
+  // Day 90: keyframes is an array -- needs the same explicit clone params
+  // already gets, or editing this cue's keyframes (push/splice/mutate a
+  // value in place) would silently corrupt the same array object still
+  // referenced by CUES[idx] before Save/Apply ever runs.
+  _selCue = Object.assign({}, c, {
+    params: Object.assign({}, c.params),
+    keyframes: c.keyframes ? c.keyframes.map(function(kf){ return { fraction: kf.fraction, value: Array.isArray(kf.value) ? kf.value.slice() : kf.value }; }) : undefined
+  });
   _selObj = null; // stage-object selection and cue selection share the one Inspector — only one at a time
   _refreshStagePanel(); // Day 88: preserves whichever sub-tab (Stage/Assets) was actually showing
   renderTimeline();
@@ -2242,6 +2876,83 @@ function deleteCue() {
   _selCue = null;
   renderTimeline();
   renderObjectPanel();
+}
+
+// ── Effect cue keyframe editor (Day 90) ─────────────────────────────────
+// Ported from the Route Graph tool's own working interpolator editor --
+// same class names, same colour-conversion math, same row layout. That
+// version edits n.props[key] on a generic node; this one edits
+// _selCue.keyframes directly. Kept deliberately close to the original so a
+// future pass could still share styling/behaviour between the two tools.
+function _hexToFloatRgb(hex) {
+  var r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+  return [Math.round(r*10000)/10000, Math.round(g*10000)/10000, Math.round(b*10000)/10000];
+}
+function _floatRgbToHex(rgb) {
+  function toHex(v) { var h = Math.round(Math.max(0,Math.min(1,v||0))*255).toString(16); return h.length<2 ? '0'+h : h; }
+  return '#' + toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
+}
+function _renderCueKeyframesEditor(cue, valueType) {
+  var kfs = cue.keyframes;
+  var rows = kfs.map(function(kf, i) {
+    var valueHtml;
+    if (valueType === 'color') {
+      var hex = _floatRgbToHex(kf.value);
+      valueHtml =
+        '<div style="display:flex;gap:4px;align-items:center">' +
+        '<input type="color" value="' + hex + '" ' +
+          'onchange="setCueKeyframeColorFromPicker(' + i + ',this.value)" style="width:34px;padding:0;height:26px;flex-shrink:0">' +
+        '<div class="vec-row">' + ['R','G','B'].map(function(lab, ci) {
+          return '<input type="number" step="any" min="0" max="1" value="' + (kf.value[ci]!==undefined?kf.value[ci]:0) + '" title="' + lab + '" ' +
+            'onchange="setCueKeyframeVecComponent(' + i + ',' + ci + ',parseFloat(this.value)||0)">';
+        }).join('') + '</div>' +
+        '</div>';
+    } else {
+      valueHtml = '<input type="number" step="any" value="' + kf.value + '" ' +
+        'onchange="setCueKeyframeValue(' + i + ',parseFloat(this.value)||0)">';
+    }
+    return '<div class="keyframe-row">' +
+      '<div class="keyframe-row-top">' +
+        '<input type="number" step="any" min="0" max="1" value="' + kf.fraction + '" title="fraction (0\u20131)" ' +
+          'onchange="setCueKeyframeFraction(' + i + ',parseFloat(this.value)||0)" style="width:60px">' +
+        '<span class="keyframe-del" onclick="removeCueKeyframe(' + i + ')" title="Remove this keyframe">\u00D7</span>' +
+      '</div>' +
+      valueHtml +
+    '</div>';
+  }).join('');
+  return '<div class="keyframes-list">' + rows + '</div>' +
+    '<button class="btn full" style="margin-top:6px" onclick="addCueKeyframe(' + (valueType==='color'?"'color'":"'float'") + ')">+ Add keyframe</button>';
+}
+function addCueKeyframe(valueType) {
+  if (!_selCue) return;
+  var kfs = _selCue.keyframes;
+  var lastFraction = kfs.length ? kfs[kfs.length-1].fraction : 0;
+  var newVal = valueType === 'color' ? [0,0,0] : 0;
+  kfs.push({ fraction: Math.min(1, lastFraction + 0.1), value: newVal });
+  renderCueEditor();
+}
+function removeCueKeyframe(index) {
+  if (!_selCue) return;
+  if (_selCue.keyframes.length <= 2) { alert('An effect needs at least two keyframes to fade between anything.'); return; }
+  _selCue.keyframes.splice(index, 1);
+  renderCueEditor();
+}
+function setCueKeyframeFraction(index, value) {
+  if (!_selCue) return;
+  _selCue.keyframes[index].fraction = value;
+}
+function setCueKeyframeValue(index, value) {
+  if (!_selCue) return;
+  _selCue.keyframes[index].value = value;
+}
+function setCueKeyframeVecComponent(index, ci, value) {
+  if (!_selCue) return;
+  _selCue.keyframes[index].value[ci] = value;
+}
+function setCueKeyframeColorFromPicker(index, hex) {
+  if (!_selCue) return;
+  _selCue.keyframes[index].value = _hexToFloatRgb(hex);
+  renderCueEditor(); // refresh so the paired R/G/B number inputs reflect what the picker just set
 }
 
 function _cueField(label, key, val, type) {
@@ -2445,6 +3156,15 @@ function setCameraShot(val) {
     _selCue.shot = val;
     _selCue.viewpoint = '';
     if (!_selCue.subject) _selCue.subject = AGENTS[0] || '';
+    // Day 90: real bug caught live — the Placed Camera <select> only writes
+    // cue.camera on its own 'input' event, but a browser auto-highlighting
+    // an option when the <select> first renders does NOT fire one. Switch
+    // to Free Camera and cue.camera stayed undefined until you clicked into
+    // that second dropdown yourself, even with only one camera to pick —
+    // _fireCameraEventCue then silently skipped the cue (shot ok, camera
+    // missing). Default it here, same as subject just above, so choosing
+    // Free Camera alone is enough.
+    if (val === 'free_camera' && !_selCue.camera) _selCue.camera = CAMERAS[0] && CAMERAS[0].name || '';
   }
   renderCueEditor();
 }
@@ -2463,10 +3183,12 @@ function renderCueEditor() {
   // field set below (renderCameraCueFields), and having BOTH render was a
   // real bug: a camera cue was showing a redundant generic Target select
   // stacked directly above the real Shot/Subject/etc. panel.
-  if (c.track === 'gesture' || c.track === 'face' || c.track === 'path' || c.track === 'turn' || c.track === 'light' || c.track === 'audio' || c.track === 'movie' || c.track === 'animation') {
+  if (c.track === 'gesture' || c.track === 'face' || c.track === 'path' || c.track === 'turn' || c.track === 'light' || c.track === 'audio' || c.track === 'midi' || c.track === 'movie' || c.track === 'animation' || c.track === 'effect') {
     var opts = (c.track === 'light')  ? LIGHTS.map(function(x){return x.name;})
              : (c.track === 'audio')  ? AUDIO_SOURCES.map(function(x){return x.name;})
+             : (c.track === 'midi')   ? MIDI_SOURCES.map(function(x){return x.name;})
              : (c.track === 'movie' || c.track === 'animation') ? ASSET_NAMES
+             : (c.track === 'effect') ? EFFECT_TARGET_NAMES
              // Day 88: Path can target either — recorded-path playback
              // works identically for an agent's Avatar_ Transform or an
              // asset's PlacedAsset_ Transform (see buildRecordedPathInterpNodes'
@@ -2512,6 +3234,8 @@ function renderCueEditor() {
         walkClipOpts.map(function(n) { return '<option value="'+n+'"'+(n===(c.walkGesture||'')?' selected':'')+'>'+(n||'— none —')+'</option>'; }).join('') +
         '</select></div>';
     }
+    html += _pkHtml(c);                         // the recorded path's keys, editable
+    html += _paceHtml(c);                       // speed curve + live EBPS pace
   } else if (c.track === 'face') {
     // Day 95: expression dropdown, sourced from the target agent's expressions file (Composer
     // fetches it). An expression named in a loaded scene that the file no longer has is kept as
@@ -2573,6 +3297,35 @@ function renderCueEditor() {
     // requirement as Movie above).
     html += _cueField('Internal DEF (the TimeSensor name inside that asset\'s own file)', 'internalDef', c.internalDef);
     html += _assetFileViewerLink(c.target);
+  } else if (c.track === 'midi') {
+    // Day 96: 'play' starts the registered source at t0 (once, or looped if the source says so);
+    // 'stop' silences it. Duration doesn't change playback — it only sets how wide the block
+    // is on the Timeline, so 'Fit to file length' makes it span the music.
+    html += '<div class="obj-field"><label>Action</label><select oninput="setCueProp(\'label\',this.value,false)">' +
+      ['play','stop'].map(function(n) { return '<option value="'+n+'"'+(n===(c.label||'play')?' selected':'')+'>'+n+'</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="obj-field"><button class="tb-btn" onclick="midiFitCueDuration()">Fit duration to file length</button></div>';
+  } else if (c.track === 'effect') {
+    // Day 90: real keyframe list now, ported from the Route Graph tool's
+    // own already-working interpolator editor -- was a flat From/To pair,
+    // which can only ever express a straight two-point fade. Field type
+    // (scalar vs color) still lives on the Effect Target itself (Composer's
+    // registry), not the cue -- that part is unchanged.
+    var _etInfo = EFFECT_TARGETS.find(function(t){ return t.name === c.target; });
+    var _fieldType = _etInfo ? _etInfo.field : 'transparency';
+    var _isColor = _fieldType === 'color';
+    if (!c.keyframes || c.keyframes.length < 2) {
+      c.keyframes = _isColor
+        ? [{fraction:0, value:[1,1,1]}, {fraction:1, value:[0,0,0]}]
+        : [{fraction:0, value:1}, {fraction:1, value:0}];
+    }
+    html += '<div style="font-size:13px;color:var(--dim);margin-bottom:4px">' +
+      (_etInfo ? ('Field: ' + _etInfo.field) : 'This target is no longer registered in Composer\'s Assets tab -- pick a different one, or re-register it there.') + '</div>';
+    if (_etInfo && !_isColor) {
+      html += '<div style="font-size:13px;color:var(--dim);margin-bottom:6px">' +
+        (_fieldType === 'intensity' ? '0 = off, 1 = full brightness' : '0 = fully opaque, 1 = fully transparent') + '</div>';
+    }
+    html += _renderCueKeyframesEditor(c, _isColor ? 'color' : 'float');
   } else {
     html += _cueField('Label', 'label', c.label);
   }
@@ -2610,7 +3363,14 @@ function saveCue() {
   if (!_selCue) return;
   var idx = CUES.findIndex(function(c) { return c.id === _selCue.id; });
   if (idx === -1) return;
-  CUES[idx] = Object.assign({}, _selCue, { params: Object.assign({}, _selCue.params) });
+  CUES[idx] = Object.assign({}, _selCue, {
+    params: Object.assign({}, _selCue.params),
+    // Day 90: same clone requirement as selectCue's own comment -- without
+    // it, CUES[idx].keyframes and _selCue.keyframes stay the same array,
+    // so the NEXT edit (before this cue is ever re-selected) would mutate
+    // what was just saved.
+    keyframes: _selCue.keyframes ? _selCue.keyframes.map(function(kf){ return { fraction: kf.fraction, value: Array.isArray(kf.value) ? kf.value.slice() : kf.value }; }) : undefined
+  });
   if (_selCue.t0 + _selCue.duration > _tlMaxT) _tlMaxT = Math.ceil(_selCue.t0 + _selCue.duration + 4);
   console.log('[Events Editor] saveCue: committed', CUES[idx].track, 'cue', CUES[idx].id,
     CUES[idx].track === 'camera' ? ('— shot=' + CUES[idx].shot + ' subject=' + CUES[idx].subject + ' camera=' + CUES[idx].camera) : '');
@@ -2646,6 +3406,596 @@ function exportProductionCues() {
     console.log('[Events Editor] standalone — would send mccf_production_cues:', payload);
   }
 }
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// TRANSPORT — Play / Stop / Rewind for the viewport
+// ───────────────────────────────────────────────────────────────────────────
+// The exported scene is passive: its cue timers and clips start disabled and the Loader starts them on Play.  This viewport
+// used to be a still preview.  Play now runs the scene the way the Loader does, using the Loader's OWN cue code
+// (js/mccf_cue_runtime.js, extracted verbatim from mccf_x3d_loader.html by tools/extract_cue_runtime.js).
+//
+//   Play    always from t = 0, with the events as they are now.  If the timeline changed since the scene was last exported, the
+//           events are sent to Composer (mccf_production_cues), Composer is asked to re-export (mccf_export_x3d), and the reply
+//           (mccf_x3d_ready) is awaited -- a real signal, not a guess -- before the scene is reloaded.  The events themselves are
+//           read from the same _scene.xml the Loader reads, so they carry every field Composer derives at export.
+//   Stop    cancels the events not yet fired, silences audio and MIDI, and switches off every timer, sound clip and movie the scene file
+//           declares (plus the imported movie TheSceneMovie), so the picture stops where it is and nothing keeps sounding.  The playhead
+//           stays at that moment: a new event lands exactly there.
+//   Rewind  reloads the scene at t = 0 with nothing playing.
+//
+// Not previewed here (they need agent animation tables only the Loader's scene activation builds): gesture, face and behavior
+// cues, and light cues (the Loader's parser does not carry a light cue's target yet).  The status line says how many.
+// Edits made WHILE playing apply to the next Play, and the status line says so.
+// ═══════════════════════════════════════════════════════════════════════════
+var _tp = { state: 'idle', pristine: false, token: 0, busy: false, syncedHash: null, readyWaiters: [], loadWaiters: [], tick: null,
+            sceneUrl: '', cuesKey: null, exportCount: 0, stale: null, notes: [], errors: 0, loadId: 0, extra: '',
+            readyMs: 12000, loadMs: 30000,
+            sound: false, dests: [], destsPending: [], finished: false };   // the preview starts SILENT; the author switches sound on   // how long to wait for Composer's export reply, and for X_ITE to load a scene
+
+// ---- sound: silent by default (watching events start and stop does not need to be listened to).  One switch covers everything that can sound ----
+//   audio cues and MIDI cues  (the runtime skips them while silent)     movies and clips (their `gain` field, set to 0 and restored exactly)
+//   the scene's AudioDestination nodes (the editor's own mute, now remembered so it can be undone)
+try { _tp.sound = window.localStorage.getItem('mccf_editor_sound') === '1'; } catch (e) { _tp.sound = false; }
+try { _mccfMediaMute(!_tp.sound); } catch (e) {}      // the movie's <video> follows the same switch from the start
+function _tpRegisterDest(node) {                 // called by the editor's _muteAllAudio() for every AudioDestination, instead of zeroing it blindly
+  try { _tp.destsPending.push({ node: node, gain: node.gain }); if (!_tp.sound) node.gain = 0; } catch (e) {}
+}
+function _tpApplyDests() { _tp.dests.forEach(function (d) { try { d.node.gain = _tp.sound ? d.gain : 0; } catch (e) {} }); }
+function tpToggleSound() {
+  _tp.sound = !_tp.sound; try { window.localStorage.setItem('mccf_editor_sound', _tp.sound ? '1' : '0'); } catch (e) {}
+  var R = _tpRuntime(); if (R) R.setMuted(!_tp.sound); _tpApplyDests(); try { _mccfMediaMute(!_tp.sound); } catch (e) {} _tpUi();
+}
+function _tpEl(id) { return document.getElementById(id); }
+// Leaving the page, or the Composer switching to another tab: nothing may keep sounding (the movie's <video> would otherwise outlive the scene).
+window.addEventListener('pagehide', function () { try { _mccfMediaStop(); } catch (e) {} });
+window.addEventListener('message', function (ev) {
+  try { if (ev && ev.data && ev.data.type === 'mccf_tab_hidden') { if (_tp.state === 'playing' || _tp.state === 'syncing') tpStop(); _mccfMediaStop(); } } catch (e) {}
+});
+function _tpHosted() { return !!(window.parent && window.parent !== window); }       // inside Composer's iframe?
+function _tpPost(msg) { window.parent.postMessage(msg, '*'); }
+function _tpApi(path) { return (window.MCCF_API_BASE || '') + path; }                  // the page is normally served by the same Flask app
+function _tpCuesHash() { try { return JSON.stringify(CUES); } catch (e) { return 'unhashable:' + Math.random(); } }
+function _tpBust(url) { return String(url || '').split('?')[0] + '?t=' + Date.now(); }
+function _tpSceneName(url) { return String(url || '').split('?')[0].split('/').pop().replace(/\.x3d$/i, ''); }
+function _tpRuntime() { return window.MccfCueRuntime || null; }
+function _tpCurrentSrc() { var x = _tpEl('vp-x3d'); return (x && x.getAttribute('src')) || ''; }
+
+// ---- what the buttons and the status line show ----
+function _tpStatus(text, note, tip) {
+  var s = _tpEl('tp-status'), n = _tpEl('tp-note');
+  if (s) s.textContent = text;
+  if (n) { n.textContent = note || ''; n.title = tip || note || ''; n.style.display = note ? 'inline' : 'none'; }
+}
+function _tpUi() {
+  var st = _tp.state, play = _tpEl('tp-play'), stop = _tpEl('tp-stop'), rew = _tpEl('tp-rewind');
+  if (play) { play.disabled = (st === 'syncing' || st === 'idle' && !_tpCurrentSrc()); play.classList.toggle('on', st === 'playing'); }
+  if (stop) { stop.disabled = !(st === 'playing' || st === 'syncing'); stop.classList.toggle('live', st === 'playing'); }
+  if (rew) rew.disabled = !_tpCurrentSrc();
+  var snd = _tpEl('tp-sound'); if (snd) { snd.textContent = _tp.sound ? '\uD83D\uDD0A Sound' : '\uD83D\uDD07 Silent'; snd.classList.toggle('on', _tp.sound); snd.title = _tp.sound ? 'Sound is ON: audio cues, MIDI and the movie are heard. Click (or press M) for silent' : 'Silent preview: audio cues, MIDI and the movie are not played. Click (or press M) to hear them'; }
+  var R = _tpRuntime(), t = R && R.elapsed();
+  var label = { idle: _tpCurrentSrc() ? 'ready' : 'no scene', ready: 'ready  t = 0', syncing: _tp.extra || 'preparing…', stopped: 'stopped at t = ' + _fmtT(_playheadT), playing: _tp.finished ? 'finished  t = ' + _fmtT(_playheadT) + '  (Stop to silence)' : 'playing  t = ' + _fmtT(t === null || t === undefined ? _playheadT : t) }[st] || st;
+  var note = '', tip = '';
+  var ev = function (n) { return n + ' event' + (n === 1 ? '' : 's'); };
+  if (_tp.stale) { note = 'the scene file lists ' + ev(_tp.stale.file) + ', the timeline ' + _tp.stale.timeline + ': press Export scene in Composer, then Play'; tip = note; }
+  else if (st === 'playing' && _tpHosted() && _tp.syncedHash !== null && _tpCuesHash() !== _tp.syncedHash) { note = 'timeline edited since this run began: Play again to include it'; }
+  else if (!_tp.sound && R && R.silenced() > 0 && (st === 'playing' || st === 'stopped')) { var q = R.silenced(); note = q + ' sound cue' + (q > 1 ? 's' : '') + ' not played (silent): press Sound or M'; }
+  else if (_tp.errors) { note = _tp.errors + ' event' + (_tp.errors > 1 ? 's' : '') + ' could not run (see the console)'; }
+  else if (_tp.notes.length && (st === 'playing' || st === 'stopped' || st === 'ready')) {
+    var n = _tp.notes.reduce(function (a, x) { var m = /^(\d+)/.exec(x); return a + (m ? +m[1] : 0); }, 0);
+    note = n + ' event' + (n > 1 ? 's' : '') + ' play only in the Loader'; tip = _tp.notes.join('\n');
+  }
+  _tpStatus(label, note, tip);
+}
+function _tpSetState(st, extra) { _tp.state = st; _tp.extra = extra || ''; _tpUi(); }
+
+// ---- the playhead: move only its marker and readouts (renderTimeline() would rebuild the whole panel under the author's hands) ----
+function _tpSetPlayhead(t, grow) {
+  _playheadT = Math.round(t * 20) / 20;
+  var readout = _tpEl('tl-time-readout'); if (readout) readout.textContent = 't = ' + _fmtT(_playheadT);
+  var badge = _tpEl('vp-t-badge'); if (badge) badge.textContent = 'T ' + _playheadT.toFixed(1) + 's';
+  if (grow && _playheadT > _tlMaxT - 2) { _tlMaxT = Math.ceil(_playheadT + 10); renderTimeline(); return; }
+  var ph = document.querySelector('#tl-ruler .timeline-playhead'); if (ph) ph.style.left = (_playheadT * _tlPxPerSec) + 'px';
+  var sc = _tpEl('tl-ruler-scroll');
+  if (sc) { var x = _playheadT * _tlPxPerSec; if (x > sc.scrollLeft + sc.clientWidth - 50 || x < sc.scrollLeft) { sc.scrollLeft = Math.max(0, x - 60); _tlSyncScroll(sc); } }
+}
+function _tpTick() {
+  var R = _tpRuntime(), t = R ? R.elapsed() : null;
+  if (t === null || _tp.finished) return;
+  _tpSetPlayhead(Math.min(t, R.endAt() + 0.25), true); _tpUi();     // never past the end of the scene: a run left playing must not stretch the timeline
+}
+// loadX3DViewport() discards a path recording in progress (no save prompt).  Play and Rewind reload the scene, so they must not run over one.
+function _tpRecording() { return typeof _pathRec !== 'undefined' && !!_pathRec && !!_pathRec.active; }
+function _tpRefuseWhileRecording() { _tpUi(); _tpStatus('recording a path', 'Stop the path recording first: Play and Rewind reload the scene and would discard it', 'Stop the path recording first: Play and Rewind reload the scene and would discard it'); }
+function _tpStopTick() { if (_tp.tick) { clearInterval(_tp.tick); _tp.tick = null; } }
+
+// ---- waiting for the Composer, and for X_ITE ----
+function _tpWaitReady(ms) {
+  return new Promise(function (res, rej) {
+    var w = { res: res, rej: rej, timer: setTimeout(function () { _tp.readyWaiters = _tp.readyWaiters.filter(function (x) { return x !== w; }); rej(new Error('Composer did not confirm the export within ' + Math.round(ms / 1000) + ' s')); }, ms) };
+    _tp.readyWaiters.push(w);
+  });
+}
+function _tpReadyMessage(url) {                       // called from the mccf_x3d_ready handler; true = a Play was waiting for it
+  if (!_tp.readyWaiters.length) return false;
+  var ws = _tp.readyWaiters.splice(0); ws.forEach(function (w) { clearTimeout(w.timer); w.res(url); }); return true;
+}
+function _tpLoadScene(url) {                          // a FORCED reload, resolved when X_ITE reports the scene loaded
+  return new Promise(function (res, rej) {
+    var w = { res: res, rej: rej, timer: setTimeout(function () { _tp.loadWaiters = _tp.loadWaiters.filter(function (x) { return x !== w; }); rej(new Error('the viewport did not finish loading the scene')); }, _tp.loadMs) };
+    _tp.loadWaiters.push(w); loadX3DViewport(url, true);
+  });
+}
+function _tpSceneLoaded(x3d, url) {                   // hook: called by loadX3DViewport when X_ITE has loaded a scene
+  var R = _tpRuntime();
+  _tp.dests = _tp.destsPending; _tp.destsPending = [];     // the AudioDestinations _muteAllAudio() found in THIS scene
+  if (R) { R.stop({ noFreeze: true }); R.setCanvas(x3d); R.setApiBase(window.MCCF_API_BASE || ''); R.setTimerNames([]); R.setSoundNames([]); R.setMuted(!_tp.sound); }
+  _tp.finished = false;
+  _tpStopTick(); _tp.pristine = true; _tp.sceneUrl = url; _tp.loadId++;
+  if (_tp.state !== 'syncing') _tp.state = 'ready';
+  // the scene file's timers, for Stop (read from the file: the SAI cannot be relied on to enumerate nodes)
+  var base = String(url || '').split('?')[0], myId = _tp.loadId;
+  try { fetch(base + '?t=' + Date.now()).then(function (r) { return r.ok ? r.text() : ''; }).then(function (txt) { if (R && myId === _tp.loadId) { R.setTimerNames(R.timerNamesFromX3D(txt)); R.setSoundNames(R.soundNamesFromX3D(txt)); R.applyGain(); } }).catch(function () {}); } catch (e) {}
+  var ws = _tp.loadWaiters.splice(0); ws.forEach(function (w) { clearTimeout(w.timer); w.res(url); });
+  _tpGainRetry(_tp.loadId, 0);
+  _tpUi();
+}
+// The movie is an Inline'd file (tens of MB) that can finish loading after the scene does; keep applying the sound switch until it exists.
+function _tpGainRetry(id, n) {
+  var R = _tpRuntime(); if (!R || id !== _tp.loadId || n > 60) return;
+  R.applyGain(); if (R.movieFound()) return;
+  setTimeout(function () { _tpGainRetry(id, n + 1); }, 400);
+}
+function _tpSceneFailed(url) {
+  var ws = _tp.loadWaiters.splice(0); ws.forEach(function (w) { clearTimeout(w.timer); w.rej(new Error('the scene could not be loaded: ' + String(url).split('/').pop())); });
+  _tp.pristine = false; if (_tp.state !== 'syncing') _tp.state = 'idle'; _tpUi();
+}
+function _tpCuesLoadedFromComposer() { _tp.syncedHash = _tpCuesHash(); _tp.cuesKey = null; _tp.stale = null; }
+
+// ---- the events: from the same _scene.xml the Loader reads ----
+function _tpSig(c) { return [c.track, Math.round((+c.t0 || 0) * 100) / 100, c.target || '', c.label || '', Math.round((+(c.duration !== undefined ? c.duration : c.dur) || 0) * 100) / 100].join('|'); }
+function _tpCompare() {
+  var R = _tpRuntime(), ed = (CUES || []).map(_tpSig).sort(), fl = R.cues().map(_tpSig).sort();
+  _tp.stale = JSON.stringify(ed) === JSON.stringify(fl) ? null : { timeline: ed.length, file: fl.length };
+}
+async function _tpLoadCues() {
+  var R = _tpRuntime(), name = _tpSceneName(_tp.sceneUrl || _tpCurrentSrc());
+  if (!R) throw new Error('js/mccf_cue_runtime.js is not loaded');
+  if (!name) throw new Error('no scene is loaded in the viewport');
+  var key = name + '|' + _tp.exportCount;
+  if (_tp.cuesKey === key) { _tpCompare(); return; }              // already read for this scene and export
+  var file = name + '_scene.xml', url = _tpApi('/scene/load/scene/raw?filename=' + encodeURIComponent(file)), r;
+  try { r = await fetch(url); } catch (e) { throw new Error('could not reach the server for ' + file); }
+  if (!r.ok) throw new Error('the server has no ' + file + ' (HTTP ' + r.status + '): export the scene from Composer first');
+  var d = R.load(await r.text());
+  _tp.cuesKey = key; _tp.notes = d.notes; _tp.errors = 0; _tpCompare();
+}
+
+// ---- Play: get a fresh scene carrying the current events, then run it ----
+async function _tpSync(token) {
+  var src = _tpCurrentSrc(), hash = _tpCuesHash();
+  if (_tpHosted() && hash !== _tp.syncedHash) {
+    _tp.extra = 'saving events and re-exporting…'; _tpUi();
+    var waiting = _tpWaitReady(_tp.readyMs);
+    exportProductionCues();                                      // existing: posts mccf_production_cues to Composer
+    _tpPost({ type: 'mccf_export_x3d' });
+    var url = null;
+    try { url = await waiting; } catch (e) { _tp.extra = 'Composer did not confirm; playing the last saved scene'; _tpUi(); }
+    if (token !== _tp.token) return false;
+    if (!src && !url) throw new Error('no scene is loaded in the viewport');
+    _tp.extra = 'loading the scene…'; _tpUi();
+    await _tpLoadScene(_tpBust(url || src));
+    _tp.exportCount++; if (url) _tp.syncedHash = hash;
+  } else {
+    if (!src) throw new Error('no scene is loaded in the viewport');
+    if (!_tp.pristine) { _tp.extra = 'rewinding…'; _tpUi(); await _tpLoadScene(_tpBust(src)); }
+  }
+  if (token !== _tp.token) return false;
+  _tp.extra = 'reading the events…'; _tpUi();
+  await _tpLoadCues();
+  return token === _tp.token;
+}
+async function tpPlay() {
+  if (_tp.busy || _tp.state === 'syncing') return;
+  var R = _tpRuntime(); if (!R) { _tpStatus('no runtime', 'js/mccf_cue_runtime.js did not load'); return; }
+  if (_tpRecording()) { _tpRefuseWhileRecording(); return; }
+  var token = ++_tp.token; _tp.busy = true; _tpStopTick(); R.stop({ noFreeze: true });
+  _tpSetState('syncing', 'preparing…');
+  try {
+    if (!(await _tpSync(token))) { _tp.busy = false; return; }                // Stop or Rewind pressed while preparing
+    _tpSetPlayhead(0, false); _tp.errors = 0; _tp.finished = false;
+    var info = R.start({
+      onFire: function () {},
+      onError: function () { _tp.errors++; _tpUi(); },
+      onEnd: function () { _tp.finished = true; _tpStopTick(); _tpSetPlayhead(R.endAt(), false); _tpUi(); }     // the last event has finished; sound and loops carry on until Stop
+    });
+    _tp.pristine = false; _tp.state = 'playing'; _tp.extra = '';
+    _tp.tick = setInterval(_tpTick, 100); _tpUi();
+    console.log('[Transport] playing:', info.scheduled, 'event(s) scheduled,', info.skipped, 'not previewed here; ends at', info.endAt.toFixed(2) + 's');
+  } catch (e) {
+    console.warn('[Transport] Play failed:', e);
+    _tp.state = _tp.pristine ? 'ready' : 'stopped'; _tp.extra = ''; _tp.busy = false;
+    _tpUi(); _tpStatus('Play failed', e.message, e.message);              // refresh the buttons FIRST (Play must be usable again), then show why
+  } finally { _tp.busy = false; }
+}
+function tpStop() {
+  _tp.token++;                                                                  // cancels a Play that is still preparing
+  var R = _tpRuntime(), t = R ? R.elapsed() : null; _tpStopTick();
+  if (R && t !== null) t = _tp.finished ? R.endAt() : Math.min(t, R.endAt() + 0.25);     // Stop after the scene has ended keeps the playhead at its end
+  var was = _tp.state; _tp.finished = false;
+  if (R) R.stop();
+  try { _mccfMediaStop(); } catch (e) {}                                        // the movie's sound: its <video> is not a node Stop can reach
+  if (t !== null) _tpSetPlayhead(t, true);
+  _tp.busy = false; _tp.extra = '';
+  _tp.state = (was === 'playing') ? 'stopped' : (_tp.pristine ? 'ready' : (was === 'syncing' ? 'stopped' : was));
+  _tpUi();
+}
+async function tpRewind() {
+  if (_tpRecording()) { _tpRefuseWhileRecording(); return; }
+  _tp.token++; var R = _tpRuntime(); _tpStopTick(); if (R) R.stop({ noFreeze: true });
+  try { _mccfMediaStop(); } catch (e) {}                                        // the old scene's movie must not play on under the reloaded one
+  _tpSetPlayhead(0, false); renderTimeline();
+  var src = _tpCurrentSrc(); if (!src) { _tp.state = 'idle'; _tpUi(); return; }
+  _tp.busy = true; _tpSetState('syncing', 'rewinding…');
+  var failure = null;
+  try { await _tpLoadScene(_tpBust(src)); _tp.state = 'ready'; _tp.extra = ''; }
+  catch (e) { console.warn('[Transport] Rewind failed:', e); _tp.state = 'stopped'; _tp.extra = ''; failure = e; }
+  _tp.busy = false; _tpUi();
+  if (failure) _tpStatus('Rewind failed', failure.message, failure.message);
+}
+
+
+// ================= Export settings + Versions (dropdowns) =================
+var VM_OPTS = [
+  ['sounds', 'Sounds (audio nodes)'], ['protos', 'Prototypes'], ['interps', 'Interpolators'],
+  ['script', 'Script node'], ['labels', 'Labels'], ['dialogueTTY', 'Dialogue TTY']
+];
+var _vm = { opts: {}, open: null, ver: null, busy: false, confirm: null, hosted: !!(window.parent && window.parent !== window), opened: [], current: '' };
+function vmStatus(msg, bad) { var s = document.getElementById('vm-status'); if (s) { s.textContent = msg || ''; s.style.color = bad ? 'var(--accent2)' : 'var(--accent4)'; } }
+function vmClose() {
+  _vm.open = null; _vm.confirm = null;
+  ['export', 'versions'].forEach(function (k) { var p = document.getElementById('vm-pop-' + k); if (p) p.classList.remove('open'); });
+  ['vm-export-btn', 'vm-ver-btn'].forEach(function (i) { var b = document.getElementById(i); if (b) b.classList.remove('on'); });
+}
+function vmToggle(which) {
+  if (_vm.open === which) { vmClose(); return; }
+  vmClose(); _vm.open = which;
+  var btn = document.getElementById(which === 'export' ? 'vm-export-btn' : 'vm-ver-btn'), pop = document.getElementById('vm-pop-' + which);
+  if (!btn || !pop) return;
+  btn.classList.add('on');
+  var r = btn.getBoundingClientRect();
+  pop.style.top = (r.bottom + 4) + 'px'; pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - 430)) + 'px';
+  pop.classList.add('open');
+  if (which === 'export') { vmRenderExport(); return; }
+  if (!_vm.hosted) { vmLoad(); return; }
+  _vm.awaitName = true;                                   // ask the Composer which scene it has open right now, then load that scene's history
+  window.parent.postMessage({ type: 'mccf_get_export_options' }, '*');
+  setTimeout(function () { if (_vm.awaitName) { _vm.awaitName = false; if (_vm.open === 'versions') vmLoad(); } }, 700);
+}
+document.addEventListener('mousedown', function (e) {
+  if (!_vm.open) return;
+  if (e.target.closest && (e.target.closest('.vm-pop') || e.target.closest('#vm-wrap'))) return;
+  vmClose();
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && _vm.open) vmClose(); });
+
+function vmRenderExport() {
+  var p = document.getElementById('vm-pop-export'); if (!p) return;
+  var h = '<h4>Export settings</h4>';
+  VM_OPTS.forEach(function (o) { h += '<label><input type="checkbox" data-opt="' + o[0] + '"' + (_vm.opts[o[0]] ? ' checked' : '') + (_vm.hosted ? '' : ' disabled') + '> ' + o[1] + '</label>'; });
+  h += '<div class="vm-meta" style="margin-top:6px">' + (_vm.hosted ? 'Same settings as the Composer; applied at the next export.' : 'Open this page inside the Scene Composer to change these.') + '</div>';
+  h += '<div style="margin-top:6px"><button class="vm-act" onclick="vmExportNow()">Export &amp; reload now</button></div>';
+  p.innerHTML = h;
+  p.querySelectorAll('input[data-opt]').forEach(function (cb) { cb.addEventListener('change', function () { vmSetOpt(cb.getAttribute('data-opt'), cb.checked); }); });
+}
+function vmSetOpt(k, v) { _vm.opts[k] = !!v; window.parent.postMessage({ type: 'mccf_set_export_options', options: _vm.opts }, '*'); }
+
+// export everything (x3d + scene xml, with the cues as they are now) and force the viewport to the new file
+async function _vmExport() {
+  if (!_vm.hosted) throw new Error('not hosted in the Composer');
+  if (typeof _tp !== 'undefined' && _tp.state === 'playing' && typeof tpStop === 'function') { try { await tpStop(); } catch (e) {} }
+  var wait = _tpWaitReady(20000);
+  window.parent.postMessage({ type: 'mccf_export_all', data: { cues: CUES } }, '*');
+  var url = await wait;
+  if (typeof _tp !== 'undefined') { _tp.syncedHash = null; _tp.cuesKey = null; _tp.stale = false; }
+  if (url) await _tpLoadScene(_tpBust(url));
+  return url;
+}
+async function _vmRun(label, fn) {
+  if (_vm.busy) return;
+  _vm.busy = true; vmStatus(label + '…');
+  try { var r = await fn(); vmStatus('done'); setTimeout(function () { if (!_vm.busy) vmStatus(''); }, 2500); return r; }
+  catch (e) { vmStatus(String(e && e.message || e), true); console.warn('[Versions]', e); }
+  finally { _vm.busy = false; }
+}
+function vmExportNow() { _vmRun('exporting', _vmExport).then(vmClose); }
+
+async function _vmJson(url, body) {
+  var r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  var j = await r.json().catch(function () { return {}; });
+  if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+function _vmSceneName() { return _vm.current || ''; }
+function vmLoad() {
+  var p = document.getElementById('vm-pop-versions'); if (!p) return;
+  if (!_vm.hosted) { p.innerHTML = '<div class="vm-meta">Versions need the Composer: open this page from the Scene Composer.</div>'; return; }
+  if (!_vmSceneName()) { p.innerHTML = '<div class="vm-meta">Waiting for the scene name from the Composer…</div>'; return; }
+  p.innerHTML = '<div class="vm-meta">loading…</div>';
+  _vmJson('/scene/versions?scene=' + encodeURIComponent(_vmSceneName())).then(function (j) { _vm.ver = j; vmRenderVersions(); })
+    .catch(function (e) { p.innerHTML = '<div class="vm-note">' + String(e.message).replace(/</g, '&lt;') + '</div>'; });
+}
+function _vmEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+function _vmAgo(t) { var s = Math.max(0, Date.now() / 1000 - t); if (s < 90) return 'just now'; if (s < 5400) return Math.round(s / 60) + ' min ago'; if (s < 129600) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' d ago'; }
+function vmRenderVersions() {
+  var p = document.getElementById('vm-pop-versions'), j = _vm.ver; if (!p || !j) return;
+  var h = '';
+  if (j.isDraft) {
+    h += '<div class="vm-note">Editing DRAFT “' + _vmEsc(j.scene.split('__draft__')[1]) + '” of ' + _vmEsc(j.base) + '. The Loader does not see drafts.</div>';
+    h += '<button class="vm-act" onclick="vmPromote(\'' + _vmEsc(j.scene) + '\')">Promote to ' + _vmEsc(j.base) + '</button>';
+    h += '<button class="vm-act" onclick="vmOpenScene(\'' + _vmEsc(j.base) + '\')">Back to ' + _vmEsc(j.base) + '</button>';
+    h += '<button class="vm-act warn" onclick="vmDiscard(\'' + _vmEsc(j.scene) + '\')">Discard draft</button>';
+  }
+  h += '<h4>Save</h4><input type="text" id="vm-label" placeholder="label (optional)" maxlength="40"> ';
+  h += '<button class="vm-act" onclick="vmSaveVersion()">Save version</button>';
+  h += '<button class="vm-act" onclick="vmSaveDraft()" title="Branch to a draft that stays out of the Loader">Save as draft</button>';
+  h += '<h4>History (' + j.versions.length + ')</h4>';
+  if (!j.versions.length) h += '<div class="vm-meta">No earlier versions yet. Each save keeps the one it replaces.</div>';
+  j.versions.slice(0, 30).forEach(function (v) {
+    var armed = _vm.confirm === v.n;
+    h += '<div class="vm-row"><span>#' + v.n + (v.label ? ' <b>' + _vmEsc(v.label) + '</b>' : '') + ' <span class="vm-meta">' + _vmAgo(v.t) + (v.cues != null ? ' · ' + v.cues + ' cues' : '') + (v.note ? ' · ' + _vmEsc(v.note) : '') + '</span></span>' +
+         '<button class="vm-act' + (armed ? ' warn' : '') + '" onclick="vmRestore(' + v.n + ')">' + (armed ? 'Confirm' : 'Restore') + '</button></div>';
+  });
+  if (!j.isDraft) {
+    h += '<h4>Drafts (' + j.drafts.length + ')</h4>';
+    if (!j.drafts.length) h += '<div class="vm-meta">None.</div>';
+    j.drafts.forEach(function (d) { h += '<div class="vm-row"><span>✎ ' + _vmEsc(d.label) + ' <span class="vm-meta">' + _vmAgo(d.mtime) + ' · ' + d.cues + ' cues</span></span><span><button class="vm-act" onclick="vmOpenScene(\'' + _vmEsc(d.name) + '\')">Open</button><button class="vm-act" onclick="vmPromote(\'' + _vmEsc(d.name) + '\')">Promote</button></span></div>'; });
+  }
+  p.innerHTML = h;
+}
+function _vmLabel() { var i = document.getElementById('vm-label'); return i ? i.value.trim() : ''; }
+function vmSaveVersion() {
+  var label = _vmLabel();
+  _vmRun('saving version', async function () {
+    await _vmExport();
+    await _vmJson('/scene/versions/save', { scene: _vmSceneName(), label: label, note: '' });
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+function vmSaveDraft() {
+  var label = _vmLabel().replace(/[^A-Za-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  if (!label) { vmStatus('Give the draft a label first (letters, digits, dashes)', true); var i = document.getElementById('vm-label'); if (i) i.focus(); return; }
+  _vmRun('saving draft', async function () {
+    var wait = _tpWaitReady(20000);
+    window.parent.postMessage({ type: 'mccf_save_draft', label: label, data: { cues: CUES } }, '*');
+    await wait;
+    var name = _vmSceneName().split('__draft__')[0] + '__draft__' + label;
+    await _vmOpened(await _vmOpen(name));
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+function vmRestore(n) {
+  if (_vm.confirm !== n) { _vm.confirm = n; vmRenderVersions(); return; }
+  _vm.confirm = null;
+  _vmRun('restoring #' + n, async function () {
+    try { await _vmExport(); } catch (e) { /* nothing exported yet is fine; restore snapshots the live files itself */ }
+    await _vmJson('/scene/versions/restore', { scene: _vmSceneName(), n: n });
+    await _vmOpened(await _vmOpen(_vmSceneName()));
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+function vmPromote(draft) {
+  _vmRun('promoting', async function () {
+    var r = await _vmJson('/scene/drafts/promote', { draft: draft });
+    await _vmOpened(await _vmOpen(r.base || draft.split('__draft__')[0]));
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+function vmDiscard(draft) {
+  if (_vm.confirm !== draft) { _vm.confirm = draft; vmStatus('Click Discard again to confirm (it is moved to scenes/_trash)'); return; }
+  _vm.confirm = null;
+  _vmRun('discarding', async function () {
+    await _vmJson('/scene/drafts/discard', { draft: draft });
+    await _vmOpened(await _vmOpen(draft.split('__draft__')[0]));
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+function vmOpenScene(name) {
+  _vmRun('opening ' + name, async function () {
+    if (_vmSceneName() && name !== _vmSceneName() && typeof CUES !== 'undefined' && CUES.length) { try { await _vmExport(); } catch (e) { /* keep going: the open still works */ } }
+    await _vmOpened(await _vmOpen(name));
+  }).then(function () { if (_vm.open === 'versions') vmLoad(); });
+}
+// ask the Composer to open a scene; resolves with its mccf_scene_opened reply
+function _vmOpen(name) {
+  return new Promise(function (res, rej) {
+    var w = { res: res, rej: rej, timer: setTimeout(function () { _vm.opened = _vm.opened.filter(function (x) { return x !== w; }); rej(new Error('the Composer did not open ' + name)); }, 30000) };
+    _vm.opened.push(w);
+    window.parent.postMessage({ type: 'mccf_open_scene', name: name }, '*');
+  });
+}
+async function _vmOpened(d) {
+  if (!d || d.ok === false) throw new Error('could not open ' + (d && d.name || 'the scene'));
+  _vm.current = d.name || _vm.current;
+  window.postMessage({ type: 'mccf_load_cues', cues: d.cues || [] }, '*');           // same path the Composer uses on a normal load
+  if (typeof _tp !== 'undefined') { _tp.syncedHash = null; _tp.cuesKey = null; _tp.stale = false; }
+  if (d.url) await _tpLoadScene(_tpBust(d.url));                                      // always a forced reload: the file under the same URL changed
+}
+
+
+// ================= right column tabs + TTY pane =================
+function inspTab(which) {
+  var p = document.querySelector('.insp-panel'); if (!p) return;
+  p.setAttribute('data-tab', which);
+  var a = document.getElementById('insp-tab-props'), b = document.getElementById('insp-tab-dlg');
+  if (a) a.classList.toggle('on', which === 'props'); if (b) b.classList.toggle('on', which === 'dlg');
+  if (which === 'dlg') { var l = document.getElementById('tty-log'); if (l) l.scrollTop = l.scrollHeight; }
+}
+var DLG = [];                                           // lines from the Composer: [{id, actor, trigger:'declared:3', text, audioFile}]
+var _tty = { off: 0, rec: {}, tap: true, skipped: {}, ev: [], idx: 0, timer: null, t0: 0, running: false, untimed: 0, est: false, lastT: 0 };
+function _ttyEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function _ttyTrig(s) { s = String(s || 'scene-start'); var i = s.indexOf(':'); return { type: i < 0 ? s : s.slice(0, i), rest: i < 0 ? '' : s.slice(i + 1) }; }
+function _ttyDur(l) {                                   // how long the spoken line takes (an estimate: ~150 words a minute)
+  var w = String(l.text || '').trim().split(/\s+/).filter(Boolean).length; return Math.max(1.0, w / 2.5 + 0.4);
+}
+// when each line speaks, on the scene clock.  A line the author TAPPED uses that time.  Otherwise, with tapping on the line is held back (it has no time yet);
+// with tapping off: scene-start = the start offset, declared = offset + its time, sensed = right after the line it follows (ESTIMATED: the real gap is however long
+// the voice takes), zone / touch / arc-complete lines wait on something in the scene and have no time here.
+function _ttySchedule() {
+  var byId = {}; DLG.forEach(function (l) { byId[l.id] = l; });
+  var memo = {}, busy = {};
+  function start(l) {
+    if (l.id in memo) return memo[l.id];
+    if (_tty.rec[l.id] !== undefined) return (memo[l.id] = { t: _tty.rec[l.id], est: false });
+    if (_tty.tap) return (memo[l.id] = null);
+    if (busy[l.id]) return null; busy[l.id] = true;
+    var t = _ttyTrig(l.trigger), r = null;
+    if (t.type === 'scene-start') r = { t: _tty.off, est: false };
+    else if (t.type === 'declared') r = { t: _tty.off + (parseFloat(t.rest) || 0), est: false };
+    else if (t.type === 'sensed' && byId[t.rest]) { var p = start(byId[t.rest]); if (p) r = { t: p.t + _ttyDur(byId[t.rest]) + 0.3, est: true }; }
+    busy[l.id] = false; memo[l.id] = r; return r;
+  }
+  var ev = [], untimed = 0;
+  DLG.forEach(function (l) { var s = start(l); if (!s) { untimed++; return; } ev.push({ t: s.t, kind: 'dlg', line: l, est: s.est }); });
+  (typeof CUES !== 'undefined' ? CUES : []).forEach(function (c) {
+    if (c.track !== 'gesture' && c.track !== 'face') return;
+    var what = c.clip || c.label || (c.params && (c.params.expression || c.params.clip)) || '';
+    ev.push({ t: c.t0 || 0, kind: 'cue', track: c.track, who: c.target || '', what: what });
+  });
+  ev.sort(function (a, b) { return a.t - b.t || (a.kind === 'dlg' ? -1 : 1); });
+  _tty.untimed = untimed; _tty.est = ev.some(function (e) { return e.est; });
+  return ev;
+}
+function _ttyRow(e, cur) {
+  var tm = '<span class="tty-t">' + (e.est ? '~' : '') + _fmtT(e.t) + '</span>';
+  if (e.kind === 'dlg') return '<div class="tty-line' + (cur ? ' cur' : '') + '">' + tm + '<span class="tty-who">' + _ttyEsc(e.line.actor) + '</span>' + _ttyEsc(e.line.text) + '</div>';
+  return '<div class="tty-cue ' + e.track + '">' + tm + '&#9656; ' + e.track + (e.who ? ' &middot; ' + _ttyEsc(e.who) : '') + (e.what ? ' &middot; ' + _ttyEsc(e.what) : '') + '</div>';
+}
+function _ttyShown(e) { return e.kind === 'dlg' || (document.getElementById('tty-cues') || { checked: true }).checked; }
+function _ttyState(msg) { var s = document.getElementById('tty-state'); if (s) s.textContent = msg || ''; }
+function _ttyUpcoming() {                               // lines not on the log yet, in the order they were authored, minus the ones skipped this take
+  var on = {}; for (var i = 0; i < _tty.idx; i++) if (_tty.ev[i].kind === 'dlg') on[_tty.ev[i].line.id] = true;
+  return DLG.filter(function (l) { return !on[l.id] && !_tty.skipped[l.id]; });
+}
+function _ttyNext() { var u = _ttyUpcoming(); return u.length ? u[0] : null; }
+function _ttyUi() {
+  var n = _ttyNext(), go = document.getElementById('tty-go'), sk = document.getElementById('tty-skip');
+  var live = _tty.running && _tty.tap && n; if (go) go.disabled = !live; if (sk) sk.disabled = !live;
+  var tab = document.getElementById('insp-tab-dlg'); if (tab) tab.textContent = 'dialogue' + (DLG.length ? ' (' + DLG.length + ')' : '');
+}
+function ttyRender() {                                  // redraw everything spoken so far (also used when the gestures box is toggled)
+  var log = document.getElementById('tty-log'); if (!log) return;
+  var last = -1; for (var i = 0; i < _tty.idx; i++) if (_tty.ev[i].kind === 'dlg') last = i;
+  var h = ''; for (var j = 0; j < _tty.idx; j++) if (_ttyShown(_tty.ev[j])) h += _ttyRow(_tty.ev[j], j === last);
+  if (_tty.running && _tty.tap) _ttyUpcoming().slice(0, 3).forEach(function (l, k) { h += '<div class="tty-next' + (k ? ' later' : '') + '"><span class="tty-who">' + (k ? '' : 'next &#9656; ') + _ttyEsc(l.actor) + '</span>' + _ttyEsc(l.text) + '</div>'; });
+  log.innerHTML = h || (_tty.running ? '' : _ttyHint()); log.scrollTop = log.scrollHeight; _ttyUi();
+}
+function _ttyHint() {
+  var n = DLG.length;
+  if (!n) return '<div class="tty-hint">No dialogue lines in this scene yet. Author them in the Dialogue tab of the Composer; they appear here while the scene plays.</div>';
+  _ttySchedule();
+  var rec = DLG.filter(function (l) { return _tty.rec[l.id] !== undefined; }).length;
+  return '<div class="tty-hint">' + n + ' dialogue line' + (n === 1 ? '' : 's') + ', ' + rec + ' with a tapped start time. ' +
+    (_tty.tap ? 'Press Play, then <b>line starts</b> (or Enter) as each line begins: the next line waits until you do. Taps are remembered and replay on the clock.'
+              : 'Following the start time' + (_tty.off ? ' (' + _fmtT(_tty.off) + ')' : '') + ' and estimates' + (_tty.untimed ? '; ' + _tty.untimed + ' line' + (_tty.untimed === 1 ? ' waits' : 's wait') + ' on a zone, touch or arc event' : '') + '. Times marked ~ are estimates.') +
+    ' Stop leaves the lines where they are.</div>';
+}
+function ttyReset() {                                   // a fresh log at t = 0
+  if (_tty.timer) { clearInterval(_tty.timer); _tty.timer = null; }
+  _tty.running = false; _tty.skipped = {}; _ttyLoad(); _tty.ev = _ttySchedule(); _tty.idx = 0; _tty.lastT = 0; _ttyState('');
+  var log = document.getElementById('tty-log'); if (log) { log.innerHTML = _ttyHint(); log.scrollTop = 0; } _ttyUi();
+}
+function _ttyAdvance(t) {
+  var log = document.getElementById('tty-log'); if (!log) return;
+  var moved = false;
+  while (_tty.idx < _tty.ev.length && _tty.ev[_tty.idx].t <= t) { _tty.idx++; moved = true; }
+  _tty.lastT = t; _ttyState(_fmtT(t));
+  if (moved) ttyRender();
+  if (_tty.idx >= _tty.ev.length && !_ttyNext()) { clearInterval(_tty.timer); _tty.timer = null; _ttyState('done'); }
+}
+function ttyStart() {                                   // Play has started: follow the cue clock, and keep going after the last cue ends (speech can outlast it)
+  ttyReset(); inspTab('dlg');
+  var R = (typeof _tpRuntime === 'function') ? _tpRuntime() : null, e0 = R && R.elapsed ? R.elapsed() : 0;
+  _tty.running = true; _tty.t0 = performance.now() - (e0 || 0) * 1000;
+  var log = document.getElementById('tty-log'); if (log) log.innerHTML = '';
+  _ttyAdvance(e0 || 0); ttyRender();
+  if (!_tty.timer && (_tty.idx < _tty.ev.length || _ttyNext())) _tty.timer = setInterval(function () { _ttyAdvance((performance.now() - _tty.t0) / 1000); }, 100);
+}
+function ttyFreeze() {                                  // Stop: leave the log exactly as it is
+  if (_tty.timer) { clearInterval(_tty.timer); _tty.timer = null; }
+  if (_tty.running) { _tty.running = false; _ttyState('stopped at ' + _fmtT(_tty.lastT)); var l = document.getElementById('tty-log'); if (l) { l.querySelectorAll('.tty-next').forEach(function (n) { n.remove(); }); } _ttyUi(); }
+}
+// ---- remembered per scene, in this browser ----
+function _ttyKey(k) { var n = (typeof _vm !== 'undefined' && _vm.current) || ((typeof _tpCurrentSrc === 'function' && _tpCurrentSrc()) || '').split('?')[0].split('/').pop() || 'scene'; return 'mccf_tty_' + k + ':' + n; }
+function _ttyLoad() {
+  var off = 0, rec = {}, tap = true;
+  try { off = parseFloat(localStorage.getItem(_ttyKey('start'))) || 0; rec = JSON.parse(localStorage.getItem(_ttyKey('lines')) || '{}') || {}; var tp = localStorage.getItem('mccf_tty_tap'); if (tp !== null) tap = tp !== '0'; } catch (e) {}
+  _tty.off = Math.max(0, off); _tty.rec = rec; _tty.tap = tap;
+  var i = document.getElementById('tty-off'); if (i) i.value = _tty.off ? _tty.off.toFixed(2) : '0';
+  var c = document.getElementById('tty-taponly'); if (c) c.checked = tap;
+}
+function _ttySave() {
+  try { if (_tty.off) localStorage.setItem(_ttyKey('start'), String(_tty.off)); else localStorage.removeItem(_ttyKey('start'));
+        if (Object.keys(_tty.rec).length) localStorage.setItem(_ttyKey('lines'), JSON.stringify(_tty.rec)); else localStorage.removeItem(_ttyKey('lines')); localStorage.setItem('mccf_tty_tap', _tty.tap ? '1' : '0'); } catch (e) {}
+  var i = document.getElementById('tty-off'); if (i) i.value = _tty.off ? _tty.off.toFixed(2) : '0';
+}
+function _ttyNow() {                                      // the scene time right now: the cue clock while playing, else the playhead
+  if (_tty.running) return Math.max(0, (performance.now() - _tty.t0) / 1000);
+  return (typeof _playheadT === 'number') ? _playheadT : 0;
+}
+function _ttyApplyOff() {                                 // re-time the log to the new schedule without losing what is on screen
+  var now = _tty.running ? _ttyNow() : _tty.lastT;
+  _tty.ev = _ttySchedule();
+  if (_tty.running || _tty.lastT > 0) {
+    _tty.idx = 0; while (_tty.idx < _tty.ev.length && _tty.ev[_tty.idx].t <= now) _tty.idx++;
+    ttyRender();
+    if (_tty.running && !_tty.timer) _tty.timer = setInterval(function () { _ttyAdvance((performance.now() - _tty.t0) / 1000); }, 100);
+  } else { var log = document.getElementById('tty-log'); if (log) log.innerHTML = _ttyHint(); _ttyUi(); }
+}
+function ttySetNow() { _tty.off = Math.round(_ttyNow() * 20) / 20; _ttySave(); _ttyApplyOff(); }
+function ttyOffChanged() { var i = document.getElementById('tty-off'); _tty.off = Math.max(0, Math.round((parseFloat(i && i.value) || 0) * 20) / 20); _ttySave(); _ttyApplyOff(); }
+function ttyOffReset() { _tty.off = 0; _ttySave(); _ttyApplyOff(); }
+function ttyTapMode() { var c = document.getElementById('tty-taponly'); _tty.tap = !c || c.checked; _ttySave(); _ttyApplyOff(); }
+// the author presses this as the next line begins: its start becomes the scene time now
+function ttyTap() {
+  if (!_tty.running || !_tty.tap) return; var l = _ttyNext(); if (!l) return;
+  _tty.rec[l.id] = Math.round(_ttyNow() * 20) / 20; _ttySave(); _ttyApplyOff();
+}
+function ttySkip() { if (!_tty.running || !_tty.tap) return; var l = _ttyNext(); if (!l) return; _tty.skipped[l.id] = true; ttyRender(); }
+var _ttyClearArm = 0;
+function ttyClearTimes() {
+  var b = document.getElementById('tty-clear'); if (!b) return;
+  if (!_ttyClearArm) { _ttyClearArm = setTimeout(function () { _ttyClearArm = 0; b.textContent = 'clear taps'; }, 3000); b.textContent = 'sure?'; return; }
+  clearTimeout(_ttyClearArm); _ttyClearArm = 0; b.textContent = 'clear taps'; _tty.rec = {}; _ttySave(); _ttyApplyOff();
+}
+document.addEventListener('keydown', function (e) {       // Enter = the next line starts (only on the Dialogue tab, mid-take, outside fields and buttons)
+  if (e.key !== 'Enter' || !_tty.running || !_tty.tap) return;
+  var p = document.querySelector('.insp-panel'); if (!p || p.getAttribute('data-tab') !== 'dlg') return;
+  var tg = e.target && e.target.tagName; if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(tg || '')) return;
+  e.preventDefault(); ttyTap();
+});
+(function () {                                          // hook the transport and the selection without touching their code
+  var _play = window.tpPlay, _stop = window.tpStop, _rew = window.tpRewind, _selC = window.selectCue, _selO = window.selectObject;
+  window.tpPlay = async function () { var r = await _play.apply(this, arguments); if (typeof _tp !== 'undefined' && _tp.state === 'playing' && !_tty.running) ttyStart(); return r; };
+  window.tpStop = function () { var r = _stop.apply(this, arguments); ttyFreeze(); return r; };
+  window.tpRewind = function () { ttyReset(); return _rew.apply(this, arguments); };
+  if (_selC) window.selectCue = function () { var r = _selC.apply(this, arguments); if (!_tty.running) inspTab('props'); return r; };
+  if (_selO) window.selectObject = function () { var r = _selO.apply(this, arguments); if (!_tty.running) inspTab('props'); return r; };
+})();
+window.addEventListener('load', function () { setTimeout(function () { if (!_tty.running) ttyReset(); }, 0); });
+
+document.addEventListener('keydown', function (e) {                           // Space = Play / Stop, M = sound on/off, unless a field has focus
+  if ((e.code !== 'Space' && e.code !== 'KeyM') || e.ctrlKey || e.metaKey || e.altKey) return;
+  var t = e.target, tag = t && t.tagName;
+  if (/^(INPUT|TEXTAREA|SELECT|BUTTON|OPTION)$/.test(tag || '') || (t && t.isContentEditable)) return;
+  e.preventDefault();
+  if (e.code === 'KeyM') { tpToggleSound(); return; }
+  if (_tp.state === 'playing' || _tp.state === 'syncing') tpStop(); else tpPlay();
+});
+// The viewport's top bar wraps onto as many rows as it needs; the corner labels below it follow its real height (--vp-bar-h).
+function _tpTrackBarHeight() {
+  var bar = document.querySelector('.x3d-topbar'), vp = document.getElementById('x3d-viewport'); if (!bar || !vp) return;
+  var set = function () { vp.style.setProperty('--vp-bar-h', bar.offsetHeight + 'px'); }; set();
+  if (window.ResizeObserver) new ResizeObserver(set).observe(bar); else window.addEventListener('resize', set);
+}
+window.addEventListener('load', function () { _tpUi(); _tpTrackBarHeight(); });
+
 </script>
 </body>
 </html>

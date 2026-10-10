@@ -692,6 +692,123 @@ def _update_image_texture_url(root, new_url: str) -> bool:
     return True
 
 
+def _build_parent_map(root):
+    """Stdlib ElementTree has no .getparent() -- build a lookup once per call."""
+    return {c: p for p in root.iter() for c in p}
+
+
+def _find_skin_appearance_and_material(root):
+    """
+    Locate the Appearance/PhysicalMaterial pair actually painted by the same
+    atlas ImageTexture _update_image_texture_url targets -- so "expose the
+    skin material" always means the material the skin swap feature already
+    edits, not just the first PhysicalMaterial anywhere in the file (which
+    could belong to an unrelated prop/accessory if a rig ever has more than
+    one material).
+
+    Deliberately PhysicalMaterial only, never the classic Material node --
+    this rig's skin is a PBR material (X3D4), and Material's transparency
+    field means the same thing but is a structurally different node type.
+    Confirmed live: pointing an Effect cue's ROUTE at the wrong node level
+    (or the wrong node type) fails silently or throws "Unknown field" at
+    reconnect time, not at export time -- worth getting right here rather
+    than downstream.
+
+    Returns (appearance_el, material_el), either or both None if not found.
+    """
+    ns = _X3D_NS
+    tex = None
+    for el in root.iter(f'{{{ns}}}ImageTexture'):
+        if 'TextureAtlas' in el.get('DEF', '') or 'textureatlas' in el.get('DEF', '').lower():
+            tex = el
+            break
+    if tex is None:
+        for el in root.iter(f'{{{ns}}}ImageTexture'):
+            tex = el
+            break
+    if tex is None:
+        for el in root.iter('ImageTexture'):
+            tex = el
+            break
+    if tex is None:
+        return None, None
+
+    parent_map = _build_parent_map(root)
+    node = parent_map.get(tex)
+    material = None
+    while node is not None:
+        if _tag_local(node) == 'PhysicalMaterial':
+            material = node
+            break
+        node = parent_map.get(node)
+    if material is None:
+        return None, None
+
+    appearance = parent_map.get(material)
+    if appearance is not None and _tag_local(appearance) != 'Appearance':
+        appearance = None
+    return appearance, material
+
+
+def _apply_skin_effect_export(root, scene_el, enabled: bool) -> dict:
+    """
+    Opt-in: expose the skin's PhysicalMaterial so MCCF Scene Composer can
+    register it as an Effect Target (a scalar/color fade driven by a
+    Timeline cue). Mirrors the "EXPORT the primary gesture timers" block
+    below -- identity export (localDEF == AS), idempotent (a prior EXPORT
+    this function wrote is always removed before re-adding), never rewrites
+    an existing DEF the author (or a prior run) already assigned.
+
+    alphaMode="OPAQUE" is the PBR default and makes the renderer ignore
+    transparency entirely, regardless of what the field itself says --
+    confirmed live, cost real debugging time to track down. Forced to
+    "BLEND" whenever enabled=True so a registered fade is never silently a
+    no-op. Deliberately NOT reverted back to OPAQUE when enabled=False --
+    unchecking this box retracts the EXPORT (so nothing external can reach
+    the field any more) without also making an unrelated rendering-mode
+    decision the author didn't ask for.
+
+    Returns {'applied': bool, 'def': str|None, 'reason': str|None} for the
+    export response, so the client can show a clear message when the skin
+    material can't be found at all (rig changed shape, texture missing).
+    """
+    ns = _X3D_NS
+    appearance, material = _find_skin_appearance_and_material(root)
+
+    if material is None:
+        # Clean up a stale EXPORT even when the material can't be found this
+        # run -- never leave one pointing at nothing.
+        for tag in ('EXPORT', f'{{{ns}}}EXPORT'):
+            for ex in list(scene_el.findall(tag)):
+                if ex.get('AS') == 'SkinMaterial':
+                    scene_el.remove(ex)
+        return {'applied': False, 'def': None, 'reason': 'skin PhysicalMaterial not found'}
+
+    def_name = material.get('DEF')
+    if not def_name:
+        # New DEF, nothing pre-existing to preserve -- descriptive on its
+        # own, matching the DEF the author would otherwise have had to type
+        # into Composer's Effect Target form by hand (see AnnaPM precedent).
+        def_name = 'SkinMaterial'
+        material.set('DEF', def_name)
+
+    for tag in ('EXPORT', f'{{{ns}}}EXPORT'):
+        for ex in list(scene_el.findall(tag)):
+            if ex.get('localDEF') == def_name or ex.get('AS') == 'SkinMaterial':
+                scene_el.remove(ex)
+
+    if not enabled:
+        return {'applied': False, 'def': def_name, 'reason': None}
+
+    if appearance is not None:
+        appearance.set('alphaMode', 'BLEND')
+
+    ex = _ET_hanim.SubElement(scene_el, 'EXPORT')
+    ex.set('localDEF', def_name)
+    ex.set('AS', def_name)
+    return {'applied': True, 'def': def_name, 'reason': None}
+
+
 def _collect_routes(root) -> list:
     """Return all ROUTE element attribute dicts from the tree."""
     ns = _X3D_NS
@@ -1655,6 +1772,10 @@ def hanim_export():
     receptivity   = body.get('receptivity') or {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
     clips         = body.get('clips') or []
     expressions   = body.get('expressions') or []
+    # Opt-in (Character Creator's Skin pane checkbox): expose the skin's
+    # PhysicalMaterial for Effect cues. Absent/false = leave any existing
+    # EXPORT retracted; true = (re)apply. See _apply_skin_effect_export.
+    skin_effect_export = bool(body.get('skin_effect_export'))
     # au_weights in each expression must be the full vector (all AUs, zeroes included)
     # displacers: AU weight values written back into HAnimDisplacer nodes in X3D
 
@@ -1875,6 +1996,9 @@ def hanim_export():
                       'A clip name containing & < > or a double quote is the usual cause: ' + str(exc),
         }), 409
 
+    # ── Skin PhysicalMaterial Effect export (opt-in, Skin pane checkbox) ───
+    skin_effect_result = _apply_skin_effect_export(x3d_root, scene_el, skin_effect_export)
+
     # ── Atomic triple-write ──────────────────────────────────────────────
     # 1. Back up all three files (expressions XML may not exist yet — that is fine)
     _hanim_backup(x3d_filepath)
@@ -1979,6 +2103,7 @@ def hanim_export():
         'clips_written':        clips_written,
         'routes_written':       routes_written,
         'skin_updated':         skin_updated,
+        'skin_effect_export':   skin_effect_result,
         'camera_rig_written':   camera_rig_written,
         'displacers_updated':   displacers_updated,
         'expressions_written':  expressions_written,

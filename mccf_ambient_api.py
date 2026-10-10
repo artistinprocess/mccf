@@ -19,8 +19,11 @@ Three simultaneous perceptual channels: sound, light, voice.
 """
 
 import json
+import os
+import re
+import tempfile
 import time
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 
 ambient_bp = Blueprint('ambient', __name__)
 
@@ -88,22 +91,8 @@ def ambient_sync():
         audio_feats = data.get("audio_features")
 
         if sensor_data:
-            # Inline — avoids circular import with mccf_api
-            from mccf_core import ChannelVector as _CV
-            def _compute_cv(sd):
-                dist    = float(sd.get("distance",   5.0))
-                dwell   = float(sd.get("dwell",       0.0))
-                vel     = float(sd.get("velocity",    0.0))
-                gaze    = float(sd.get("gaze_angle",  90.0))
-                maxr    = float(sd.get("max_range",   10.0))
-                E = max(0.0, min(1.0, 1.0 - dist / maxr)) if maxr > 0 else 0.5
-                B = max(0.0, min(1.0, dwell / 10.0))
-                P = max(0.0, min(1.0, abs(vel) / 2.0))
-                S = max(0.0, min(1.0, 1.0 - abs(gaze - 90.0) / 90.0))
-                return _CV(E=round(E,4), B=round(B,4), P=round(P,4), S=round(S,4),
-                           outcome_delta=float(sd.get("outcome_delta", 0.0)),
-                           was_dissonant=bool(sd.get("was_dissonant", False)))
-            cv = _compute_cv(sensor_data)
+            from mccf_api import compute_channel_vector
+            cv = compute_channel_vector(sensor_data)
             if scene:
                 cv = scene.apply_zone_pressure(cv, tuple(position))
             field.interact(from_name, to_name, cv)
@@ -355,3 +344,237 @@ def ambient_state():
         "music":    _last_music    or {},
         "timestamp": time.time()
     })
+
+
+# ---------------------------------------------------------------------------
+# Theme Workshop: save a MIDI file (and its recipe) into the scene media folder
+# ---------------------------------------------------------------------------
+# The Workshop page can download a file, or - when this server is reachable - save it straight into
+#   <static folder>/x3d/X3DAssets/media/music/   (recipes: .../music/recipes/)
+# where the Scene Composer's MIDI tab and the Loader find it.  Deliberately narrow, because it writes to disk:
+#   - plain names only (letters, digits, . _ -), ending in .mid / .recipe.json: no paths, no spaces
+#   - the bytes must really be a Standard MIDI File (header check), and at most MAX_MIDI_BYTES
+#   - an existing file is NEVER replaced unless the request says overwrite=1 (the page asks the user first)
+#   - the write is atomic (temp file, then rename), so a failed save cannot leave half a file
+#   - only requests from this machine are accepted, unless MCCF_ALLOW_REMOTE_SAVE=1 is set in the environment
+MIDI_SUBPATH = ("x3d", "X3DAssets", "media", "music")
+MAX_MIDI_BYTES = 5 * 1024 * 1024
+MAX_RECIPE_BYTES = 1024 * 1024
+_SAFE_MID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,78}\.mid$")
+_SAFE_RECIPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,90}\.recipe\.json$")
+
+
+def _err(message, status, **extra):
+    out = {"ok": False, "error": message}
+    out.update(extra)
+    return jsonify(out), status
+
+
+def _save_guard():
+    """None if the request may write files, else an error response."""
+    if os.environ.get("MCCF_ALLOW_REMOTE_SAVE") != "1" and request.remote_addr not in ("127.0.0.1", "::1"):
+        return _err("saving is only allowed from this machine (set MCCF_ALLOW_REMOTE_SAVE=1 to allow others)", 403)
+    if not current_app.static_folder:
+        return _err("this server has no static folder to save into", 500)
+    return None
+
+
+def _media_dir(*extra):
+    return os.path.join(os.path.realpath(os.path.join(current_app.static_folder, *MIDI_SUBPATH)), *extra)
+
+
+def _write_atomic(directory, name, data, overwrite):
+    """Write data to directory/name.  -> 'created' | 'overwritten' | 'exists' (nothing written)."""
+    os.makedirs(directory, exist_ok=True)
+    real_dir = os.path.realpath(directory)
+    target = os.path.realpath(os.path.join(real_dir, name))
+    if os.path.dirname(target) != real_dir:
+        raise ValueError("bad file name")
+    existed = os.path.exists(target)
+    if existed and not overwrite:
+        return "exists"
+    fd, tmp = tempfile.mkstemp(dir=real_dir, prefix=".tmp_", suffix=".part")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, target)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return "overwritten" if existed else "created"
+
+
+def _looks_like_midi(data):
+    # "MThd", header length 6, format 0-2, at least one track, a division
+    return len(data) >= 14 and data[:4] == b"MThd" and data[4:8] == b"\x00\x00\x00\x06" and data[9] <= 2 and (data[10] << 8 | data[11]) >= 1
+
+
+@ambient_bp.route("/ambient/save_midi", methods=["POST"])
+def save_midi():
+    """POST raw .mid bytes.  Query: name=<file>.mid  overwrite=1 (optional)."""
+    denied = _save_guard()
+    if denied:
+        return denied
+    name = request.args.get("name") or ""
+    if not _SAFE_MID.match(name):
+        return _err("the file name must be letters, digits, '.', '_' or '-', start with a letter or digit, and end in .mid", 400)
+    if request.content_length is not None and request.content_length > MAX_MIDI_BYTES:
+        return _err("that file is too large (limit %d bytes)" % MAX_MIDI_BYTES, 413)
+    data = request.get_data(cache=False)
+    if len(data) > MAX_MIDI_BYTES:
+        return _err("that file is too large (limit %d bytes)" % MAX_MIDI_BYTES, 413)
+    if not _looks_like_midi(data):
+        return _err("that is not a Standard MIDI File", 400)
+    try:
+        result = _write_atomic(_media_dir(), name, data, request.args.get("overwrite") == "1")
+    except (OSError, ValueError) as e:
+        return _err("could not save: %s" % e, 500)
+    if result == "exists":
+        return _err("%s already exists" % name, 409, name=name, exists=True)
+    return jsonify({"ok": True, "name": name, "url": "X3DAssets/media/music/" + name, "bytes": len(data),
+                    "overwritten": result == "overwritten"}), (200 if result == "overwritten" else 201)
+
+
+@ambient_bp.route("/ambient/save_recipe", methods=["POST"])
+def save_recipe():
+    """POST a recipe as JSON.  Query: name=<file>.recipe.json  overwrite=1 (optional)."""
+    denied = _save_guard()
+    if denied:
+        return denied
+    name = request.args.get("name") or ""
+    if not _SAFE_RECIPE.match(name):
+        return _err("the recipe name must be letters, digits, '.', '_' or '-', and end in .recipe.json", 400)
+    data = request.get_data(cache=False)
+    if len(data) > MAX_RECIPE_BYTES:
+        return _err("that recipe is too large (limit %d bytes)" % MAX_RECIPE_BYTES, 413)
+    try:
+        doc = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return _err("that is not valid JSON", 400)
+    if not isinstance(doc, dict) or not isinstance(doc.get("voices"), list) or not isinstance(doc.get("source"), dict):
+        return _err("that does not look like a Theme Workshop recipe", 400)
+    try:
+        result = _write_atomic(_media_dir("recipes"), name, data, request.args.get("overwrite") == "1")
+    except (OSError, ValueError) as e:
+        return _err("could not save: %s" % e, 500)
+    if result == "exists":
+        return _err("%s already exists" % name, 409, name=name, exists=True)
+    return jsonify({"ok": True, "name": name, "url": "X3DAssets/media/music/recipes/" + name, "bytes": len(data),
+                    "overwritten": result == "overwritten"}), (200 if result == "overwritten" else 201)
+
+
+@ambient_bp.route("/ambient/media_midi", methods=["GET"])
+def media_midi():
+    """The .mid files already in the scene media folder (so the page can warn before overwriting)."""
+    folder = _media_dir() if current_app.static_folder else None
+    files = []
+    if folder and os.path.isdir(folder):
+        for entry in sorted(os.listdir(folder)):
+            full = os.path.join(folder, entry)
+            if entry.lower().endswith(".mid") and os.path.isfile(full):
+                st = os.stat(full)
+                files.append({"name": entry, "bytes": st.st_size, "modified": int(st.st_mtime)})
+    return jsonify({"ok": True, "files": files})
+
+
+# ---- emotional arc -> MIDI state (what the Ambient page is using; read by the dashboard) -------------------------------------------------------
+_ARC_STATE = {"state": None, "updated": None}
+_ARC_CURVES = ("E", "B", "P", "S", "Coherence")
+_MAX_ARC_BYTES = 256 * 1024
+
+
+def _num(v, lo=None, hi=None):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+        return None
+    if lo is not None and v < lo:
+        return None
+    if hi is not None and v > hi:
+        return None
+    return v
+
+
+def _txt(v, n=200):
+    return v[:n] if isinstance(v, str) else ""
+
+
+def clean_arc_state(body):
+    """Rebuild a posted arc summary from known fields only. Returns (state, None) or (None, reason)."""
+    if not isinstance(body, dict):
+        return None, "the body must be a JSON object"
+    arc = body.get("arc")
+    if not isinstance(arc, dict):
+        return None, "missing 'arc'"
+    stats_in, curves_in, spec_in = body.get("stats"), body.get("curves"), body.get("spec")
+    if not isinstance(stats_in, list) or len(stats_in) > 8:
+        return None, "'stats' must be a list of at most 8"
+    if not isinstance(curves_in, dict) or len(curves_in) > 8:
+        return None, "'curves' must be an object of at most 8 curves"
+    if not isinstance(spec_in, dict) or not isinstance(spec_in.get("lanes"), list) or len(spec_in["lanes"]) > 16:
+        return None, "'spec.lanes' must be a list of at most 16"
+    stats = []
+    for s in stats_in:
+        if not isinstance(s, dict) or s.get("curve") not in _ARC_CURVES:
+            return None, "a stat has an unknown curve"
+        stats.append({"curve": s["curve"], **{k: _num(s.get(k)) for k in ("min", "max", "mean", "sd", "range", "first", "last")},
+                      "distinct": _num(s.get("distinct"), 0, 100000), "n": _num(s.get("n"), 0, 100000)})
+    curves = {}
+    for k, v in curves_in.items():
+        if k not in _ARC_CURVES or not isinstance(v, list) or len(v) > 200:
+            return None, "curve %r is not an allowed name with at most 200 values" % (k,)
+        pts = [_num(x, 0, 1) for x in v]
+        if any(p is None for p in pts):
+            return None, "curve %r has a value outside 0..1" % (k,)
+        curves[k] = pts
+    lanes = []
+    for l in spec_in["lanes"]:
+        if not isinstance(l, dict) or l.get("curve") not in _ARC_CURVES:
+            return None, "a lane has an unknown curve"
+        cc, lo, hi = _num(l.get("cc"), 0, 127), _num(l.get("lo"), 0, 127), _num(l.get("hi"), 0, 127)
+        if cc is None or lo is None or hi is None:
+            return None, "a lane needs cc, lo and hi between 0 and 127"
+        lanes.append({"curve": l["curve"], "cc": int(cc), "lo": int(lo), "hi": int(hi), "on": bool(l.get("on", True))})
+    built = []
+    for l in body.get("lanes") or []:
+        if isinstance(l, dict) and l.get("curve") in _ARC_CURVES and _num(l.get("cc"), 0, 127) is not None:
+            built.append({"curve": l["curve"], "cc": int(l["cc"]), "events": int(_num(l.get("events"), 0, 10 ** 7) or 0), "tracks": int(_num(l.get("tracks"), 0, 1000) or 0)})
+    state = {
+        "arc": {"id": _txt(arc.get("id")), "scene": _txt(arc.get("scene")), "title": _txt(arc.get("title")), "agent": _txt(arc.get("agent")),
+                "waypoints": int(_num(arc.get("waypoints"), 0, 100000) or 0), "words": int(_num(arc.get("words"), 0, 10 ** 7) or 0),
+                "modes": [_txt(m, 40) for m in (arc.get("modes") or [])[:20] if isinstance(m, str)],
+                "hasValence": bool(arc.get("hasValence")), "hasUncertainty": bool(arc.get("hasUncertainty")), "hasReward": bool(arc.get("hasReward"))},
+        "stats": stats, "curves": curves,
+        "spec": {"enabled": bool(spec_in.get("enabled", True)), "interp": "step" if spec_in.get("interp") == "step" else "linear", "span": "whole", "lanes": lanes},
+        "lanes": built, "file": _txt(body.get("file"), 120), "sha256": _txt(body.get("sha256"), 64), "source": _txt(body.get("source"), 120), "recipe": _txt(body.get("recipe"), 16),
+        "warnings": [_txt(w, 300) for w in (body.get("warnings") or [])[:10] if isinstance(w, str)],
+    }
+    return state, None
+
+
+@ambient_bp.route("/ambient/arc/state", methods=["GET", "POST"])
+def arc_state():
+    """POST (this machine only): the Ambient page's current arc mapping, or {"clear": true}. GET: what was last posted."""
+    if request.method == "GET":
+        s = _ARC_STATE["state"]
+        return jsonify({"ok": True, "loaded": s is not None, "updated": _ARC_STATE["updated"], "state": s})
+    if os.environ.get("MCCF_ALLOW_REMOTE_SAVE") != "1" and request.remote_addr not in ("127.0.0.1", "::1"):
+        return _err("only this machine may set the arc state (set MCCF_ALLOW_REMOTE_SAVE=1 to allow others)", 403)
+    if (request.content_length or 0) > _MAX_ARC_BYTES:
+        return _err("too large (limit %d bytes)" % _MAX_ARC_BYTES, 413)
+    raw = request.get_data(cache=False)
+    if len(raw) > _MAX_ARC_BYTES:
+        return _err("too large (limit %d bytes)" % _MAX_ARC_BYTES, 413)
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return _err("the body is not JSON", 400)
+    if isinstance(body, dict) and body.get("clear") is True:
+        _ARC_STATE["state"], _ARC_STATE["updated"] = None, None
+        return jsonify({"ok": True, "loaded": False})
+    state, why = clean_arc_state(body)
+    if why:
+        return _err(why, 400)
+    _ARC_STATE["state"], _ARC_STATE["updated"] = state, time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
+    return jsonify({"ok": True, "loaded": True, "updated": _ARC_STATE["updated"]})

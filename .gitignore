@@ -74,6 +74,10 @@ static/x3d/media/
 # --- X3D asset library — large binaries, not source ---
 static/x3d/X3DAssets/
 
+# --- stuff ---
+
+stuff/
+
 # --- Generated/test X3D scene exports (per-scene output, not the proto library) ---
 static/x3d/*.x3d
 static/avatars/

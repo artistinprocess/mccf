@@ -1,0 +1,106 @@
+{
+  "recipeVersion": 1,
+  "engine": {
+    "name": "mccf-theory",
+    "version": "0.3"
+  },
+  "source": {
+    "file": "badwater.mid",
+    "sha256": "edef0ac0c2898c7d32910fc356e2003df1fd5b28173991248c4ef72ec6f3b5f6",
+    "tracks": [
+      3
+    ],
+    "bars": [
+      10,
+      16
+    ]
+  },
+  "key": {
+    "tonic": "A",
+    "scale": "major"
+  },
+  "ruleSet": "chorale-strict",
+  "seed": 1729,
+  "harmony": {
+    "weights": {
+      "melodyFit": 1,
+      "transition": 1,
+      "cadence": 1,
+      "voiceLeading": 1,
+      "stylePenalty": 1
+    }
+  },
+  "voices": [
+    {
+      "id": "lead",
+      "name": "Theme (nylon guitar)",
+      "source": "theme",
+      "chain": [],
+      "entryBar": 1,
+      "program": 24,
+      "channel": 5,
+      "volume": 110,
+      "enabled": true
+    },
+    {
+      "id": "ri",
+      "name": "Retrograde-inversion (kalimba)",
+      "source": "theme",
+      "chain": [
+        {
+          "type": "retrogradeInversion",
+          "version": 1,
+          "params": {
+            "axis": "first",
+            "mode": "diatonic"
+          }
+        }
+      ],
+      "entryBar": 1,
+      "program": 108,
+      "channel": 6,
+      "volume": 100,
+      "enabled": true
+    },
+    {
+      "id": "canon1",
+      "name": "Canon below 1",
+      "source": "theme",
+      "chain": [
+        {
+          "type": "transpose",
+          "version": 1,
+          "params": {
+            "steps": -4,
+            "mode": "diatonic"
+          }
+        }
+      ],
+      "entryBar": 3,
+      "program": 24,
+      "channel": 7,
+      "volume": 90,
+      "enabled": true
+    },
+    {
+      "id": "canon2",
+      "name": "Canon below 2",
+      "source": "theme",
+      "chain": [
+        {
+          "type": "transpose",
+          "version": 1,
+          "params": {
+            "steps": -8,
+            "mode": "diatonic"
+          }
+        }
+      ],
+      "entryBar": 5,
+      "program": 24,
+      "channel": 8,
+      "volume": 90,
+      "enabled": true
+    }
+  ]
+}

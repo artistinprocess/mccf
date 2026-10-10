@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <title>MCCF X3D Scene</title>
+<script>
+// Remember every media element that plays. X_ITE's MovieTexture keeps its <video> out of the document, so Stop could never find it to pause it.
+(function () {
+  var seen = window._mccfMedia = new Set(), proto = window.HTMLMediaElement && HTMLMediaElement.prototype; if (!proto) return;
+  var play = proto.play;
+  proto.play = function () { try { seen.add(this); } catch (e) {} return play.apply(this, arguments); };
+  window._mccfMediaHush = function (on) {          // on = pause and mute them all; off = unmute (playing is up to the scene)
+    seen.forEach(function (el) { try { if (on) { el.pause(); el.muted = true; } else { el.muted = false; } } catch (e) {} });
+  };
+})();
+</script>
 <script defer src="https://cdn.jsdelivr.net/npm/x_ite@16.1.3/dist/x_ite.min.js"></script>
 <!-- Bumped from 11.6.0 → 16.1.3 (verified latest release as of Sept 2026).
      cycleComplete swap for _wirePathTimerBehavior's fraction_changed>=0.99
@@ -175,8 +186,12 @@ button.active { background: #4af0a8; color: #111; }
   background: rgba(0,0,0,0.92);
   border-top: 1px solid #1c2238;
   padding: 6px 10px;
-  display: flex; gap: 6px; flex-wrap: nowrap; align-items: center;
-  overflow-x: auto;
+  /* Day 90: was nowrap + overflow-x:auto, which is how controls kept running
+     off the right edge — anything added a click away in a horizontal
+     scrollbar the person had no reason to think was there. Wrapping lets
+     the bar settle into as many rows as the window actually needs (2 at
+     wide widths, 3 narrower) instead of one hidden-off-screen row. */
+  display: flex; gap: 6px 10px; flex-wrap: wrap; justify-content: center; align-items: center;
   z-index: 100;
 }
 #controls .tgroup { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; white-space: nowrap; }
@@ -396,24 +411,35 @@ button.active { background: #4af0a8; color: #111; }
     <label title="Toggles the facial EBPS driver poll entirely — for isolating whether it contributes to frame-rate drops, independent of gestures/event cues. Live-only, never affects the exported scene."><input type="checkbox" id="pb-facial-ebps" checked onchange="pbFacialEBPSChanged()"/>FACS EBPS</label>
   </div>
   <div class="tdiv"></div>
-  <div class="tgroup">
-    <span class="tlabel">Jump</span>
+  <div class="tgroup" title="Teleports to a dialogue/arc step position, not a spatial jump — in an EventCue-only scene (no Path elements) every step sits at the same (0,0) origin.">
+    <span class="tlabel">Waypoints:</span>
     <select id="jump-agent" style="width:100px;" onfocus="populateJumpAgents()"></select>
     <input id="jump-step" type="number" min="1" value="1" style="width:40px;">
     <button onclick="pbJumpToWaypoint(document.getElementById('jump-agent').value, document.getElementById('jump-step').value)"
       style="border-color:#e0a0f0;color:#e0a0f0;">&#8618; Fire</button>
+    <button onclick="resetToStartPosition()" style="border-color:#c080f0;color:#c080f0;">&#8602; Reset Pos</button>
   </div>
-  <div class="tdiv"></div>
-  <button onclick="resetToStartPosition()" style="border-color:#c080f0;color:#c080f0;">&#8602; Reset Pos</button>
   <div class="tdiv"></div>
   <span id="vp-zone-btns" class="tgroup"></span>
   <div class="tdiv"></div>
   <button onclick="togglePolling()" id="poll-btn">⏸ Pause</button>
   <span id="cam-telemetry" style="font-family:monospace;font-size:11px;color:#7fd8a0;margin-left:4px;">—</span>
-  <div style="flex:1 1 auto;min-width:8px;"></div>
+  <div class="tdiv"></div>
+  <!-- Scene clock: seconds since Play. Every Events Timeline cue's t0 is measured from this
+       zero, so it can be read off directly to find timing points. The MIDI figure appears
+       only while a MIDI cue is playing. -->
+  <span id="scene-clock" title="Scene clock — time since Play (cue t0 values are on this clock)"
+        style="font-family:monospace;font-size:15px;font-weight:bold;color:#7fd8a0;letter-spacing:1px;">&#9201; 00:00.0</span>
+  <span id="midi-clock" title="Position within the playing MIDI file"
+        style="display:none;font-family:monospace;font-size:13px;color:#e0a0f0;margin-left:6px;">&#9834; 00:00.0</span>
+  <div class="tdiv"></div>
+  <!-- Day 90: was a flex:1 auto spacer pushing this to the far right, which
+       under flex-wrap forced it onto its own row with nothing else. Just
+       flows with the rest now, so it lands wherever there's room. -->
   <button id="audio-toggle-btn" onclick="toggleAudioDrawer()">&#9836; Audio</button>
 </div>
 
+<script src="js/mccf_midi.js"></script>
 <script>
 const API = 'http://localhost:5000';
 const POLL_MS     = 750;
@@ -458,6 +484,8 @@ function toggleAudioDrawer() {
         el.textContent = 'FPS ' + fps;
         el.classList.toggle('fps-low', fps < 24);
       }
+      window._lastFps = fps;                                   // read by _sceneReadyNow (Play-waits-for-load guard)
+      (window._fpsHist = window._fpsHist || []).push(fps); if (window._fpsHist.length > 4) window._fpsHist.shift();
       reportCount++;
       if (reportCount % 2 === 0) console.log('[fps]', fps);
       frames = 0;
@@ -483,6 +511,9 @@ function _bindCanvasEvents(el) {
       return;
     }
     setStatus('Scene loaded');
+    window._sceneLoadedAt = performance.now();   // Play-waits-for-load guard
+    window._fpsHist = [];
+    _quiesceSceneAudio();                       // older exports: keep wind/waves off until Play
     buildVPButtons();
     startPolling();
     spInit();
@@ -1399,6 +1430,11 @@ var _agentCurrentStep    = {};   // {safeName: stepNo} — most-recently ARRIVED
 var _agentSegZoneMap     = {};   // {safeName: {segNo: zoneId}} — built from scene XML at play-start
 var _eventCues           = [];   // [{track,label,t,dur,trigger,viewpoint,blend,node,intensity,agent,clip,...}] — from EventCues in scene XML
 var _pendingCueTimers    = [];   // [timeoutId,...] — cue delay timers; cleared on Stop/Reset
+var _audioSources        = {};   // {name: {name,url,loop,gain,x,y,z}} — from <AudioSources> in scene XML (Events Timeline 'audio' cues target these by name)
+var _midiSources         = {};   // {name:{name,url,device,tempo,loop,tracks:[{index,enabled,channel,volume}]}} — from <MidiSources> in scene XML
+var _midiRecs            = {};   // {name:{src,player,ready,output,mode}} — prepared MidiSources (file fetched + parsed at scene load)
+var _sceneClockStart     = null; // performance.now() at Play; null = not running
+var _activeCueAudio      = [];   // [{audio,timer,name}] — cue-triggered audio currently playing; silenced on Stop/Reset
 // Day 85: real race condition, confirmed by a live test where a "wide"
 // static shot at t0=0 visibly clobbered a "free_camera" cue that had
 // already bound successfully at t0=26.2s. Root cause: every camera-shot
@@ -2238,6 +2274,45 @@ function _parseEventCues(doc) {
   // written by anything and are not parsed here — this project has never
   // actually shipped a scene with real EventCues content until this fix,
   // so there is no legacy real-world XML to stay compatible with.
+  // Audio sources placed in the Composer (<AudioSources><AudioSource name= url= loop= gain= x= y= z=>).
+  // Read straight from the scene XML rather than through the X3D BasicAudioSource
+  // PROTO: that proto's ExternProto file was failing to load (404), and the
+  // XML carries everything an 'audio' cue needs.
+  _audioSources = {};
+  doc.querySelectorAll('AudioSources > AudioSource').forEach(function(el) {
+    var nm = el.getAttribute('name');
+    if (!nm) return;
+    var g = parseFloat(el.getAttribute('gain'));
+    _audioSources[nm] = {
+      name: nm,
+      url:  el.getAttribute('url') || '',
+      loop: el.getAttribute('loop') === 'true',
+      gain: isNaN(g) ? 1 : g,
+      x: parseFloat(el.getAttribute('x')) || 0,
+      y: parseFloat(el.getAttribute('y')) || 0,
+      z: parseFloat(el.getAttribute('z')) || 0
+    };
+  });
+  // MIDI sources: <MidiSources><MidiSource name url device tempo loop><Track index enabled channel volume/></MidiSource>
+  _midiSources = {};
+  doc.querySelectorAll('MidiSources > MidiSource').forEach(function(el) {
+    var nm = el.getAttribute('name');
+    if (!nm) return;
+    var tempo = parseFloat(el.getAttribute('tempo'));
+    var tracks = [];
+    el.querySelectorAll('Track').forEach(function(t) {
+      var idx = parseInt(t.getAttribute('index'), 10);
+      if (isNaN(idx)) return;
+      var o = { index: idx };
+      if (t.hasAttribute('enabled')) o.enabled = t.getAttribute('enabled') !== 'false';
+      if (t.hasAttribute('channel')) o.channel = parseInt(t.getAttribute('channel'), 10);
+      if (t.hasAttribute('volume'))  o.volume  = parseInt(t.getAttribute('volume'), 10);
+      tracks.push(o);
+    });
+    _midiSources[nm] = { name: nm, url: el.getAttribute('url') || '', device: el.getAttribute('device') || '',
+                         tempo: (isNaN(tempo) || tempo <= 0) ? 1 : tempo, loop: el.getAttribute('loop') === 'true', tracks: tracks };
+  });
+  _midiPrepareAll();
   var cues = [];
   doc.querySelectorAll('EventCues > Cue').forEach(function(el) {
     function ga(attr) { return el.getAttribute(attr); }
@@ -2261,6 +2336,7 @@ function _parseEventCues(doc) {
       clip:     ga('clip')   || null,     // gesture cues only
       pathId:      ga('pathId') || null,     // path cues only
       walkGesture: ga('walkGesture') || null, // path cues only, optional
+      paceEbps: _parsePaceEbps(ga('paceEbps')),   // path cues only: live EBPS pace (channel,depth,neutral,smooth,min,max)
       pathStart: (ga('pathStartX') !== null) ? [gf('pathStartX',0), gf('pathStartY',0), gf('pathStartZ',0)] : null,
       pathStartOrient: (ga('pathStartAngle') !== null) ? [gf('pathStartAX',0), gf('pathStartAY',1), gf('pathStartAZ',0), gf('pathStartAngle',0)] : null,
       // Day 88: real, new track types. triggerRef is the exact node name
@@ -2269,6 +2345,11 @@ function _parseEventCues(doc) {
       // formula at all, just read what's given.
       internalDef: ga('internalDef') || null,
       triggerRef:  ga('triggerRef')  || null,
+      // Day 90: effect cues only. Left as strings (not gf()-parsed floats) --
+      // a color field's value is "R G B" (three space-separated numbers),
+      // not a single float, so this has to stay generic text either way.
+      from:        ga('from') || null,
+      to:          ga('to')   || null,
       visible:     ga('visible') === 'false' ? false : true,  // movie cues only; defaults true (matches the form's own default)
       // Day 95: facial cues (track="face"). expression = name in the avatar's expressions file;
       // weights = its AU weights embedded by the Composer at export ("AU12_LipCornerPuller=0.85;...").
@@ -2415,6 +2496,7 @@ function fireScheduledEventCues() {
   var sceneKey = xSel ? xSel.value : '__scene__';
   if (window._scheduledCuesFiredFor === sceneKey) return; // one-shot per scene, same guard pattern as fireManualCues
   window._scheduledCuesFiredFor = sceneKey;
+  _sceneClockStart = performance.now();   // t=0 for every cue's t0 (shown in the transport bar)
   if (!_eventCues.length) return;
   _eventCues.forEach(function(cue) {
     var delayMs = Math.max(0, (parseFloat(cue.t0) || 0) * 1000);
@@ -2773,6 +2855,166 @@ function _fireFaceEventCue(cue, opts) {
 }
 // ==== FACE CUE END =======================================================
 
+// ==== AUDIO CUE ==========================================================
+// Timeline 'audio' cue: plays the named Composer audio source at t0.
+// First pass is deliberately plain, like Dialogue audio: an HTML5 Audio element,
+// NOT the X3D BasicAudioSource node, and NOT spatialised (the source's x/y/z
+// are kept on _audioSources for a later panning/attenuation pass).
+//   label 'play' (default) -> play; label 'stop' -> silence that source.
+//   One-shots play to the end of the file. Looping sources are stopped after
+//   the cue's duration, otherwise they would never end.
+// File URL resolves like the scene's other assets: /static/x3d/<url>.
+function _stopAudioCueRecord(rec) {
+  if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
+  try { rec.audio.pause(); } catch (e) {}
+  _activeCueAudio = _activeCueAudio.filter(function(r) { return r !== rec; });
+}
+function _stopAudioCues(name) {
+  _activeCueAudio.slice().forEach(function(rec) {
+    if (!name || rec.name === name) _stopAudioCueRecord(rec);
+  });
+}
+function _fireAudioEventCue(cue) {
+  if (cue.label === 'stop') { _stopAudioCues(cue.target); return; }
+  var src = _audioSources[cue.target];
+  if (!cue.target || !src) {
+    console.warn('[EventCues] audio: no audio source named "' + (cue.target || '') + '" — known sources:',
+                 Object.keys(_audioSources).join(', ') || '(none)');
+    return;
+  }
+  if (!src.url) { console.warn('[EventCues] audio: source "' + src.name + '" has no file'); return; }
+  var url = /^(https?:)?\//.test(src.url) ? src.url : '/static/x3d/' + src.url;
+  var a = new Audio(url);
+  a.volume = Math.max(0, Math.min(1, src.gain));
+  a.loop = !!src.loop;
+  var rec = { audio: a, timer: null, name: src.name };
+  a.addEventListener('ended', function() { _stopAudioCueRecord(rec); });
+  a.addEventListener('error', function() {
+    console.warn('[EventCues] audio: could not load', url, '— is the file in static/x3d/' + src.url + ' ?');
+    _stopAudioCueRecord(rec);
+  });
+  _activeCueAudio.push(rec);
+  var pr = a.play();
+  if (pr && pr.catch) pr.catch(function(e) {
+    console.warn('[EventCues] audio: play() rejected for', src.name, '-', e && e.name,
+                 e && e.name === 'NotAllowedError' ? '(browser wants a click in this window first)' : '');
+    _stopAudioCueRecord(rec);
+  });
+  if (a.loop) rec.timer = setTimeout(function() { _stopAudioCueRecord(rec); }, Math.max(0.1, cue.duration || 4) * 1000);
+  console.log('[EventCues] audio:', src.name, '->', url, '| gain', a.volume, a.loop ? '| loop for ' + (cue.duration || 4) + 's' : '| one-shot');
+}
+// ==== AUDIO CUE END ======================================================
+
+// ==== MIDI CUE ===========================================================
+// Timeline 'midi' cue: plays a registered MIDI source on the scene clock using the
+// shared player in js/mccf_midi.js (the same code as the Ambient page's theme
+// player, which was tested against the Roland/MOTU rig). The scene XML carries
+// what to play and how it's mixed; the cue is just play/stop at t0:
+//   <MidiSource name="Theme" url="X3DAssets/media/midi/x.mid" device="MOTU" tempo="1" loop="false">
+//     <Track index="2" enabled="true" channel="1" volume="100"/> ...
+//   <Cue track="midi" target="Theme" label="play" t0="0" dur="4"/>   (label "stop" silences it)
+// The file is fetched + parsed when the scene loads, so a cue at t0 starts instantly.
+// `device` is a HINT: the first Web MIDI output whose name contains it (case-
+// insensitive). Not found / no device / no Web MIDI -> falls back to a crude
+// browser synth, so a scene still opens on a machine without the hardware.
+var _midiAccessPromise = null, _midiFallbackCtx = null, _midiStopGen = 0;
+
+function _midiGetAccess() {
+  if (!_midiAccessPromise) {
+    _midiAccessPromise = navigator.requestMIDIAccess
+      ? navigator.requestMIDIAccess()
+      : Promise.reject(new Error('Web MIDI is not available in this browser'));
+  }
+  return _midiAccessPromise;
+}
+function _midiFallbackAudio() {
+  if (!_midiFallbackCtx) {
+    try { _midiFallbackCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (_midiFallbackCtx && _midiFallbackCtx.state === 'suspended') { try { _midiFallbackCtx.resume(); } catch (e) {} }
+  return _midiFallbackCtx;
+}
+
+function _midiPrepare(src) {
+  var rec = { src: src, output: null, mode: 'audio', player: null, ready: null };
+  rec.player = new MccfMidi.Player({
+    getMidiOutput:   function() { return rec.output; },
+    getOutputMode:   function() { return rec.mode; },
+    getAudioContext: _midiFallbackAudio,
+    onEnd: function() { console.log('[EventCues] midi: "' + src.name + '" finished'); }
+  });
+  rec.player.loop = src.loop;
+  rec.player.tempoScale = src.tempo;
+  var url = /^(https?:)?\//.test(src.url) ? src.url : '/static/x3d/' + src.url;
+  var fileP = fetch(url).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + url);
+    return r.arrayBuffer();
+  });
+  var devP = !src.device ? Promise.resolve() : _midiGetAccess().then(function(access) {
+    var outs = []; access.outputs.forEach(function(o) { outs.push(o); });
+    var h = src.device.toLowerCase();
+    var found = outs.filter(function(o) { return (o.name || '').toLowerCase().indexOf(h) >= 0; })[0];
+    if (found) { rec.output = found; rec.mode = 'midi'; }
+    else console.warn('[EventCues] midi: no output matching "' + src.device + '" — using browser synth. Available:',
+                      outs.map(function(o) { return o.name; }).join(' | ') || '(none)');
+  }).catch(function(e) { console.warn('[EventCues] midi: Web MIDI unavailable (' + e.message + ') — using browser synth'); });
+  rec.ready = Promise.all([fileP, devP]).then(function(res) {
+    rec.player.load(res[0]);
+    rec.player.applyTrackSettings(src.tracks);
+    console.log('[EventCues] midi: "' + src.name + '" ready —', rec.player.data.tracks.length, 'tracks, output:',
+                rec.mode === 'midi' ? rec.output.name : 'browser synth');
+    return rec;
+  }).catch(function(e) {
+    console.warn('[EventCues] midi: could not prepare "' + src.name + '":', e && e.message);
+    return null;
+  });
+  return rec;
+}
+function _midiPrepareAll() {
+  Object.keys(_midiRecs).forEach(function(k) { try { _midiRecs[k].player.dispose(); } catch (e) {} });
+  _midiRecs = {};
+  if (typeof MccfMidi === 'undefined') return;
+  Object.keys(_midiSources).forEach(function(k) { _midiRecs[k] = _midiPrepare(_midiSources[k]); });
+}
+function _stopMidiCues() {
+  _midiStopGen++;   // cancels any cue still waiting for its file to load
+  Object.keys(_midiRecs).forEach(function(k) {
+    var r = _midiRecs[k];
+    r.player.stop();
+    if (r.mode === 'midi') r.player.panic();
+  });
+}
+function _fireMidiEventCue(cue) {
+  var rec = _midiRecs[cue.target];
+  if (!cue.target || !rec) {
+    console.warn('[EventCues] midi: no MIDI source named "' + (cue.target || '') + '" — known sources:',
+                 Object.keys(_midiRecs).join(', ') || '(none)');
+    return;
+  }
+  if (cue.label === 'stop') { rec.player.stop(); if (rec.mode === 'midi') rec.player.panic(); return; }
+  var gen = _midiStopGen;
+  rec.ready.then(function(r) {
+    if (!r || gen !== _midiStopGen) return;   // failed to load, or Stop/Reset happened meanwhile
+    r.player.start(0);
+    console.log('[EventCues] midi: playing "' + r.src.name + '"');
+  });
+}
+
+// Scene clock display (seconds since Play) + MIDI position while a MIDI cue plays.
+function _sceneClockTick() {
+  if (typeof MccfMidi === 'undefined') return;
+  var el = document.getElementById('scene-clock');
+  if (el) el.textContent = '\u23F1 ' + MccfMidi.fmtClock(_sceneClockStart === null ? 0 : (performance.now() - _sceneClockStart) / 1000);
+  var me = document.getElementById('midi-clock'), t = null;
+  Object.keys(_midiRecs).forEach(function(k) { var p = _midiRecs[k].player; if (p.playing && t === null) t = p.elapsed(); });
+  if (me) {
+    if (t === null) me.style.display = 'none';
+    else { me.style.display = 'inline'; me.textContent = '\u266A ' + MccfMidi.fmtClock(t); }
+  }
+}
+setInterval(_sceneClockTick, 100);
+// ==== MIDI CUE END =======================================================
+
 function _dispatchCue(cue, firedVia) {
   console.log('[EventCues] firing:', cue.track, '"' + (cue.label || cue.target || '') + '"', 'via', firedVia);
   switch (cue.track) {
@@ -2787,6 +3029,9 @@ function _dispatchCue(cue, firedVia) {
     case 'animation': _fireAnimationEventCue(cue); break;
     case 'path':      _firePathEventCue(cue); break;
     case 'turn':      _fireTurnEventCue(cue); break;
+    case 'effect':    _fireEffectEventCue(cue); break;
+    case 'audio':     _fireAudioEventCue(cue); break;
+    case 'midi':      _fireMidiEventCue(cue); break;    // plays a registered MIDI source (see MIDI CUE block)   // was missing entirely -> 'unknown track: audio'
     default: console.warn('[EventCues] unknown track:', cue.track);
   }
 }
@@ -4166,6 +4411,43 @@ function _fireTurnEventCue(cue) {
   );
 }
 
+// Day 90: effect cues -- starts the pre-built, disabled TimeSensor Composer
+// generated for this cue (EffectTimer_EC_<id>, see buildEffectInterpNodes'
+// own comment), which drives its interpolator -> target field via the
+// ROUTEs Composer also generated. Same shape as _fireAnimationEventCue
+// immediately below (find the pre-built timer, restart it by writing
+// stopTime just behind now and startTime just ahead) -- no internalDef
+// needed here, since the timer's own name IS the trigger, not a name typed
+// into an asset file. If a target is registered but its exportedDEF was
+// wrong or the file lacks that DEF, this timer node still exists and still
+// runs (X_ite just silently drops the ROUTE at load, already warned about
+// separately as "Unknown named or imported node") -- so a fired-but-
+// invisible effect is a target/DEF-name problem, not a firing problem.
+function _fireEffectEventCue(cue) {
+  if (!cue.triggerRef) {
+    console.warn('[EventCues] effect: cue has no triggerRef — was this exported by the current Composer? Re-export and try again:', cue);
+    return;
+  }
+  _resolveEventCueTriggerNode(cue.triggerRef, 1,
+    function(node, attempt) {
+      try {
+        var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
+          ? canvas.browser.currentTime : (performance.now() / 1000);
+        node.stopTime  = tNow - 0.01;
+        node.startTime = tNow + 0.05;
+        node.enabled   = true; // Day 94 precedent (path/turn timers): must be set explicitly, a TimeSensor with only startTime written can stay disabled
+        console.log('[EventCues] effect: ' + cue.target + ' (' + (cue.from||'?') + ' → ' + (cue.to||'?') + ') started at t=' + tNow.toFixed(2),
+                    attempt > 1 ? '(attempt ' + attempt + ')' : '');
+      } catch(e) {
+        console.warn('[EventCues] effect: found ' + cue.triggerRef + ' but it has no startTime field (not a TimeSensor?):', e.message);
+      }
+    },
+    function() {
+      console.warn('[EventCues] effect: ' + cue.triggerRef + ' not found after retries — check "' + cue.target + '" is still a registered Effect Target in Composer\'s Assets tab, and re-export.');
+    }
+  );
+}
+
 function _fireAnimationEventCue(cue) {
   if (!cue.triggerRef || !cue.internalDef) {
     console.warn('[EventCues] animation: cue missing internalDef (no TimeSensor name authored) — nothing to fire:', cue);
@@ -4204,6 +4486,79 @@ function _fireAnimationEventCue(cue) {
 // via X_ITE's own GitHub examples) wires the two pieces this snippet
 // can't reference on its own: the target's Transform (lives outside the
 // snippet, in the main scene) and the pre-built main path timer.
+// ── Live EBPS pace for a path cue ───────────────────────────────────────────────────────────────────
+// The Composer bakes the author's speed curve into PathInterp_/PathOrient_EC_<cue>.  A cue that also carries paceEbps="E,depth,neutral,smooth,min,max"
+// is not driven by its TimeSensor: this clock advances the interpolators' set_fraction itself, at (1 + depth*2*(channel - neutral)) times the
+// authored pace, kept between min and max and smoothed over `smooth` seconds.  The channel is the target character's live observed_cv, so the
+// Affects couplers (resonance, damping, ...) shape it before it gets here.  If anything it needs is missing the cue plays on its TimeSensor as before.
+var _pacedPaths = {};
+function _parsePaceEbps(s) {
+  if (!s) return null; var a = String(s).split(','); if (!/^[EBPS]$/.test(a[0])) return null;
+  var n = function(i, d) { var v = parseFloat(a[i]); return isFinite(v) ? v : d; };
+  return { channel: a[0], depth: n(1, 0), neutral: n(2, 0.5), smooth: Math.max(0, n(3, 1.5)), min: Math.max(0.05, n(4, 0.3)), max: Math.max(0.05, n(5, 2)) };
+}
+function _pacedFactor(cv, e) {
+  var c = cv && typeof cv[e.channel] === 'number' && isFinite(cv[e.channel]) ? cv[e.channel] : e.neutral;
+  return Math.min(Math.max(e.min, e.max), Math.max(e.min, 1 + e.depth * 2 * (c - e.neutral)));
+}
+function _pacedAgentCv(name) {
+  var a = ((window._lastFieldData || {}).agents || {})[name]; return a ? (a.observed_cv || a.weights || null) : null;
+}
+function _pacedWrite(node, u) { try { node.set_fraction = u; } catch (e) { try { node.getField('set_fraction').setValue(u); } catch (e2) {} } }
+function _pacedPathReady(cue) {
+  if (!cue || !cue.paceEbps || !cue.triggerRef) return null;
+  try {
+    var scene = canvas.browser.currentScene, ref = cue.triggerRef.replace(/^PathTimer_/, ''), pos = null, ori = null;
+    try { pos = scene.getNamedNode('PathInterp_' + ref); } catch (e) {}
+    try { ori = scene.getNamedNode('PathOrient_' + ref); } catch (e) {}
+    return pos ? { pos: pos, ori: ori } : null;
+  } catch (e) { return null; }
+}
+function _pacedPathStop(ref) { var st = _pacedPaths[ref]; if (st && st.timer) clearInterval(st.timer); delete _pacedPaths[ref]; }
+function _pacedPathsStopAll() { Object.keys(_pacedPaths).forEach(_pacedPathStop); }
+function _pacedPathStart(cue, afterTimer) {
+  var nodes = _pacedPathReady(cue); if (!nodes) return false;
+  var ref = cue.triggerRef, e = cue.paceEbps, gen = _pbCbGeneration, dur = (cue.duration > 0 ? cue.duration : (cue.dur > 0 ? cue.dur : 1));
+  _pacedPathStop(ref);
+  var run = function() {
+    if (_pbCbGeneration !== gen) return;
+    var st = { u: 0, f: _pacedFactor(_pacedAgentCv(cue.target), e), t: performance.now(), timer: null }; _pacedPaths[ref] = st;
+    _pacedWrite(nodes.pos, 0); if (nodes.ori) _pacedWrite(nodes.ori, 0);
+    console.log('[EventCues] path: ' + cue.target + ' — live ' + e.channel + ' pace, start x' + st.f.toFixed(2) + ' (effect ' + e.depth + ', neutral ' + e.neutral + ', ' + dur + ' s at the authored pace)');
+    st.timer = setInterval(function() {
+      if (_pbCbGeneration !== gen || _pacedPaths[ref] !== st) { _pacedPathStop(ref); return; }
+      var now = performance.now(), dt = Math.min(0.25, (now - st.t) / 1000); st.t = now;
+      var tf = _pacedFactor(_pacedAgentCv(cue.target), e), k = e.smooth > 0 ? 1 - Math.exp(-dt / e.smooth) : 1; st.f += (tf - st.f) * k; st.u += dt / dur * st.f;
+      var u = Math.min(1, st.u); _pacedWrite(nodes.pos, u); if (nodes.ori) _pacedWrite(nodes.ori, u); st.now = u;
+      if (u >= 1) { _pacedPathStop(ref); console.log('[EventCues] path: ' + cue.target + ' — live-paced walk finished'); }
+    }, 33);
+  };
+  if (!afterTimer) { run(); return true; }
+  // after the ease-in: start when its timer goes inactive again
+  var seen = false, fld = null, key = 'paceStart_' + ref + '_' + gen;
+  try { fld = afterTimer.getField('isActive'); } catch (e1) {}
+  if (!fld || typeof fld.addFieldCallback !== 'function') { run(); return true; }
+  fld.addFieldCallback(key, function(v) {
+    if (v === true || v === 'true') { seen = true; return; }
+    if (!seen) return; seen = false; try { fld.removeFieldCallback(key); } catch (e2) {} run();
+  });
+  return true;
+}
+// The walk starts when the ease-in timer goes inactive (see patch_loader_easefix.py).  If the timer cannot be watched, start the walk at once, as before.
+function _pathAfterEase(easeTimer, mainTimer) {
+  var gen = _pbCbGeneration, fld = null, seen = false, key = 'pathEase_' + Math.random().toString(36).slice(2);
+  var go = function() {
+    if (_pbCbGeneration !== gen) return;
+    var t = (canvas.browser.currentTime && canvas.browser.currentTime > 0) ? canvas.browser.currentTime : (performance.now() / 1000);
+    mainTimer.stopTime = t - 0.01; mainTimer.startTime = t + 0.05; mainTimer.enabled = true;
+  };
+  try { fld = easeTimer.getField('isActive'); } catch (e) {}
+  if (!fld || typeof fld.addFieldCallback !== 'function') { mainTimer.enabled = true; return; }
+  fld.addFieldCallback(key, function(v) {
+    if (v === true || v === 'true') { seen = true; return; }
+    if (!seen) return; seen = false; try { fld.removeFieldCallback(key); } catch (e2) {} go();
+  });
+}
 function _firePathEventCue(cue) {
   if (!cue.target || !cue.pathId || !cue.triggerRef) {
     console.warn('[EventCues] path: cue missing target/pathId — nothing to fire:', cue);
@@ -4263,6 +4618,7 @@ function _firePathEventCue(cue) {
       var tNow = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
         ? canvas.browser.currentTime : (performance.now() / 1000);
       function startMainDirectly(why) {
+        if (cue.paceEbps && _pacedPathStart(cue, null)) { mainTimer.enabled = false; return; }   // live EBPS pace: our own clock plays it
         mainTimer.stopTime  = tNow - 0.01;
         mainTimer.startTime = tNow + 0.05;
         // Day 94: paired with Composer now exporting PathTimer_EC_* as
@@ -4297,7 +4653,7 @@ function _firePathEventCue(cue) {
       // Ease-in: fixed, reasonable duration rather than distance-scaled —
       // simple, predictable, easy to reason about while this is new.
       var easeDur = 1.5;
-      var cueSafe = cue.triggerRef.replace(/[^A-Za-z0-9_]/g, '_');
+      var cueSafe = cue.triggerRef.replace(/^PathTimer_/, '').replace(/[^A-Za-z0-9_]/g, '_');   // 'EC_<id>': the name the Composer bakes the PathEase* nodes under
       // Day 88: real, new capability — rotation ease, sharing the exact
       // same EaseTimer as position (one clock, paired interpolators,
       // same architecture as the main path playback itself). Read
@@ -4383,7 +4739,8 @@ function _firePathEventCue(cue) {
         // to be set explicitly first or that routed startTime has nothing
         // to activate when it lands.
         easeTimer.enabled   = true;
-        mainTimer.enabled   = true;
+        if (cue.paceEbps && _pacedPathReady(cue) && _pacedPathStart(cue, easeTimer)) mainTimer.enabled = false;   // live EBPS pace takes over when the ease-in ends
+        else _pathAfterEase(easeTimer, mainTimer);   // the walk starts when the ease-in ends
         console.log('[EventCues] path: ' + cue.target + ' — easing in over ' + easeDur + 's (dist=' + dist.toFixed(2) + 'm'+(curRot&&easeOrient?', with rotation':'')+'), then main path timer starts');
       } catch(e4) {
         console.warn('[EventCues] path: ease-in field mutation failed (' + e4.message + ') — falling back to instant jump + direct start');
@@ -4828,6 +5185,7 @@ function pbActivateX3DTimers(cultivars, cultivarSessionMap) {
 }
 
 function pbStopX3DTimers() {
+  try { _pacedPathsStopAll(); } catch (e) {}
   // Disable timers by deriving names from _x3dTimerActive keys (Avatar_X -> Timer_X_1, Timer_X_2, etc.)
   // Does NOT use scene.namedNodes enumeration — Script nodes not reliably enumerated by X_ITE SAI.
   if (canvas && canvas.browser) {
@@ -5052,6 +5410,8 @@ async function pbPlay() {
   console.log('pbPlay: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
   const file = document.getElementById('pb-file');
   if (!file || !file.value) { alert('Select an arc file first.'); return; }
+  if (window._pbWaitingForScene) { window._pbSkipSceneWait = true; return; }   // second click = start now
+  if (!_sceneReadyNow()) await _waitForSceneReady();
   // Ensure zone command data is loaded.
   var _zoneDataReady2 = Object.keys(_zoneCommands).length > 0 ||
                         Object.keys(_cultivarActors).length > 0 ||
@@ -5288,11 +5648,13 @@ async function pbPlayAll() {
 
   // Guard: prevent concurrent calls (e.g. Reset fires pbPlayAll while Play All button also fired)
   if (window._pbPlayAllInFlight) {
-    console.warn('pbPlayAll: already in flight — ignoring duplicate call');
+    if (window._pbWaitingForScene) { window._pbSkipSceneWait = true; console.log('pbPlayAll: Play clicked while waiting for the scene — starting now'); }
+    else console.warn('pbPlayAll: already in flight — ignoring duplicate call');
     return;
   }
   window._pbPlayAllInFlight = true;
   try {
+    if (!_sceneReadyNow()) await _waitForSceneReady();   // scene still loading/settling: hold Play until it is
     await _pbPlayAllInner();
   } finally {
     window._pbPlayAllInFlight = false;
@@ -6377,9 +6739,13 @@ async function pbStop() {
   // Cancel any pending EventCue delay timers
   _pendingCueTimers.forEach(function(tid) { clearTimeout(tid); });
   _pendingCueTimers = [];
+  _stopAudioCues();
+  _stopMidiCues();
+  _sceneClockStart = null;
   try { const r=await fetch(API+'/arc/playback/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); pbUpdateDisplay(await r.json()); } catch(e) {}
 }
 async function pbReset() {
+  try { _stopSceneMovie(); } catch (e) {}   // Reset must not leave the movie's sound running
   console.log('pbReset: called — _x3dTimerActive keys:', Object.keys(_x3dTimerActive));
   pbStopPolling();
   stopChorusPoll();
@@ -6427,6 +6793,9 @@ async function pbReset() {
   // Cancel all pending EventCue delay timers on reset
   _pendingCueTimers.forEach(function(tid) { clearTimeout(tid); });
   _pendingCueTimers = [];
+  _stopAudioCues();
+  _stopMidiCues();
+  _sceneClockStart = null;
   // Day 85: real gap, found while moving EventCues' scene-clock from
   // scene-load onto Play — without this, a second Play click after Reset
   // would silently do nothing for EventCues at all, since
@@ -6926,6 +7295,8 @@ function x3dFileChanged() {
   var fname = sel.value;
   if (!fname) return;
   var myGen = ++_x3dLoadGen;
+  _silenceSceneAudio();            // old scene's wind/waves/cues must not outlive it
+  window._sceneLoadedAt = 0; window._fpsHist = [];   // new scene: not ready until its own 'load' + settle
   var hdrName = document.getElementById('hdr-scene-name');
   if (hdrName) hdrName.textContent = fname;
   // Repeatedly writing .src on the same <x3d-canvas> spins up a fresh WebGL/X_ITE
@@ -7404,6 +7775,7 @@ function spSetFader(field, value) {
 
 // Session C: stop all known AudioClips (Music, Bed, all zone Ambients + Dwells)
 function spStopAll() {
+  try { _pacedPathsStopAll(); } catch (e) {}
   try {
     var scene = canvas.browser.currentScene;
     if (!scene) return;
@@ -7425,6 +7797,7 @@ function spStopAll() {
     // Re-disable Clip_Bed — X_ITE re-fires loop=true clips on AudioDestination re-init
     // if enabled is left true. This restores the load-time block for Stop/Reset cycles.
     try { var bClip = scene.getNamedNode('Clip_Bed'); if (bClip) bClip.enabled = false; } catch(e) {}
+    try { var mClip2 = scene.getNamedNode('Clip_Music'); if (mClip2) mClip2.enabled = false; } catch(e) {}   // same block for Music
     // Zone clips
     _spZones.forEach(function(z) {
       ['Clip_'+z.key+'_Ambient', 'Clip_'+z.key+'_Dwell'].forEach(function(id) {
@@ -7433,6 +7806,7 @@ function spStopAll() {
     });
     console.log('[sound] spStopAll: stopped all clips at t=', tNow);
   } catch(e) { console.warn('spStopAll error:', e); }
+  _stopSceneMovie();   // the scene movie's sound too (it was never stopped before)
 }
 
 // Day 47: Start Music + Bed on Play. Both clips are started via SAI so they
@@ -7442,6 +7816,105 @@ function spStopAll() {
 // and Clip_Bed so AudioDestination does not auto-fire them at time=0.
 // This function is the one and only place that starts global scene tracks.
 // Called from pbPlay and pbPlayAll, never from _resumeAudioContext.
+// ==== SCENE-READY GUARD + SCENE AUDIO HOUSEKEEPING ==========================
+// Play used to start the wind/waves, movie, clock and cues even while X_ITE was
+// still loading (start-up logo showing, frame rate 4-13 fps), so the sound
+// stuttered and the movie started badly. Play now waits until the scene has
+// loaded AND the frame rate has settled, then starts everything together.
+// Clicking Play again while it waits starts immediately (override). A hard
+// timeout means a slow machine is never blocked forever.
+var SCENE_READY_MIN_MS  = 1500;    // at least this long after the 'load' event
+var SCENE_READY_FPS     = 20;      // last two fps samples must be at least this
+var SCENE_READY_TIMEOUT = 20000;   // give up waiting after this long
+function _sceneReadyNow() {
+  try {
+    if (!window._sceneLoadedAt) return false;                        // 'load' event not seen yet
+    if (!canvas || !canvas.browser || !canvas.browser.currentScene) return false;
+    if (performance.now() - window._sceneLoadedAt < SCENE_READY_MIN_MS) return false;
+    // X_ITE counts resources it is still loading (Inlines, textures, the movie);
+    // if this build exposes it, it must be zero. Absent = ignore.
+    var lc = canvas.browser.loadCount;
+    if (typeof lc === 'number' && lc > 0) return false;
+    var h = window._fpsHist || [];
+    if (h.length < 2) return false;                                  // not enough frame-rate samples yet
+    return h[h.length - 1] >= SCENE_READY_FPS && h[h.length - 2] >= SCENE_READY_FPS;
+  } catch (e) { return true; }                                        // never block Play on a detection error
+}
+function _waitForSceneReady() {
+  return new Promise(function(resolve) {
+    var t0 = performance.now(), note = 0;
+    window._pbWaitingForScene = true; window._pbSkipSceneWait = false;
+    setStatus('Waiting for the scene to finish loading… (click Play again to start now)');
+    (function poll() {
+      if (window._pbSkipSceneWait) { console.log('[play] scene wait skipped by user'); return done('skipped'); }
+      if (_sceneReadyNow())        { return done('ready'); }
+      if (performance.now() - t0 > SCENE_READY_TIMEOUT) { console.warn('[play] scene still not settled after ' + (SCENE_READY_TIMEOUT/1000) + 's — starting anyway'); return done('timeout'); }
+      if (++note % 8 === 0) console.log('[play] waiting for scene… fps=' + (window._lastFps || '?') + ' loaded ' + Math.round((performance.now() - (window._sceneLoadedAt || t0)) / 1000) + 's ago');
+      setTimeout(poll, 250);
+    })();
+    function done(why) {
+      window._pbWaitingForScene = false; window._pbSkipSceneWait = false;
+      console.log('[play] scene ' + why + ' after ' + Math.round(performance.now() - t0) + 'ms — starting');
+      setStatus('Playing');
+      resolve(why);
+    }
+  });
+}
+
+// X_ITE ignores a loop=true clip's startTime/stopTime guard at AudioDestination
+// init, so wind/waves could begin while the scene was still loading. enabled=false
+// is the reliable block (Composer now writes it for the Music clip too; this covers
+// scenes exported earlier). spStartSceneTracks() lifts it on Play.
+function _quiesceSceneAudio() {
+  try {
+    var scene = canvas.browser.currentScene; if (!scene) return;
+    ['Clip_Music', 'Clip_Bed'].forEach(function(id) {
+      try { var n = scene.getNamedNode(id); if (n) n.enabled = false; } catch (e) {}
+    });
+  } catch (e) {}
+}
+// Called before a scene is swapped out / the page closes: stop every clip and zero
+// every AudioDestination, so nothing keeps playing under the next scene.
+function _silenceSceneAudio() {
+  try { spStopAll(); } catch (e) {}
+  try {
+    var scene = canvas && canvas.browser && canvas.browser.currentScene; if (!scene) return;
+    var walk = function(node) {
+      try {
+        if (node.getTypeName && node.getTypeName() === 'AudioDestination') node.gain = 0;
+        if (node.children) node.children.forEach(walk);
+      } catch (e) {}
+    };
+    scene.rootNodes.forEach(walk);
+  } catch (e) {}
+  try { _stopAudioCues(); } catch (e) {}
+  try { _stopMidiCues(); } catch (e) {}
+  try { _stopSceneMovie(); } catch (e) {}
+}
+window.addEventListener('pagehide', function() { try { _silenceSceneAudio(); } catch (e) {} });
+// The scene movie (MovieTexture TheSceneMovie) is started by Play; this is the matching stop. Without it Stop, Reset and leaving the page left its sound running.
+function _sceneMovieNode() {
+  var scene = canvas && canvas.browser && canvas.browser.currentScene, n = null; if (!scene) return null;
+  try { n = scene.getImportedNode('TheSceneMovie'); } catch (e) {}
+  if (!n) { try { n = scene.getNamedNode('TheSceneMovie'); } catch (e) {} }
+  return n;
+}
+function _stopSceneMovie() {
+  try {
+    var n = _sceneMovieNode();
+    if (n) {
+      var t = (canvas.browser.currentTime && canvas.browser.currentTime > 0) ? canvas.browser.currentTime : (performance.now() / 1000);
+      try { n.stopTime = t; } catch (e) {}
+      try { n.enabled = false; } catch (e) {}     // same reliable block the Music and Bed clips use
+    }
+  } catch (e) {}
+  try { window._mccfMediaHush(true); } catch (e) {}   // and whatever <video>/<audio> X_ITE made for it
+}
+window.addEventListener('message', function (ev) {  // a host page (the Composer) switching away from this one
+  try { if (ev && ev.data && ev.data.type === 'mccf_tab_hidden') _silenceSceneAudio(); } catch (e) {}
+});
+// ==== SCENE-READY GUARD END ==================================================
+
 function spStartSceneTracks() {
   var musicTrack = window._spSceneMusicTrack;
   var bedTrack   = window._spSceneBedTrack;
@@ -7466,6 +7939,7 @@ function spStartSceneTracks() {
     try {
       var mClip = scene.getNamedNode('Clip_Music');
       if (mClip) {
+        mClip.enabled   = true;          // lift the enabled=false load-time block (see _quiesceSceneAudio)
         mClip.stopTime  = tNow - 0.01;   // clear guard (startTime=-1 stopTime=-2 set by composer)
         mClip.startTime = tNow + 0.05;
         console.log('[sound] Clip_Music started via SAI at t=', tNow.toFixed(2),
@@ -7515,6 +7989,8 @@ function spStartSceneTracks() {
       if (movieNode) {
         var tNow2 = (canvas.browser.currentTime && canvas.browser.currentTime > 0)
           ? canvas.browser.currentTime : (performance.now() / 1000);
+        try { movieNode.enabled = true; } catch (e) {}                // lift the block Stop put on it
+        try { window._mccfMediaHush(false); } catch (e) {}
         movieNode.stopTime  = tNow2 - 0.01;
         movieNode.startTime = tNow2 + 0.05;
         console.log('[movie] TheSceneMovie started via SAI at t=', tNow2.toFixed(2),
