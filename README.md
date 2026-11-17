@@ -1,4 +1,92 @@
-# Multi-Channel Coherence Field (MCCF)
+# MCCF: Multi-Channel Coherence Field
+
+MCCF is a semantic framework for composing and investigating coherent narrative
+experiences. Characters have explicit state and relationships, dialogue and
+events change that state, and the result is staged in 3D with X3D, with music and
+an LLM taking part. Everything is written down in open, validated XML so that
+people, programs and language models can all read and improve it.
+
+It has two jobs, and they share one architecture:
+
+- **A laboratory.** An environment for investigating how dialogue, character
+  state, relationships, events and presentation affect one another under
+  controlled conditions. It is judged by reproducibility and observability.
+- **A composition instrument.** An authoring environment for characters,
+  dialogue, sound, timing and spatial staging. It is judged by expressive range,
+  authorial control and what people make with it.
+
+MCCF does estimate the affect expressed in text, crudely, by counting words from
+word lists (lexicon packs), and it uses that to move the simulated state of its
+characters. It does not detect or measure what any real person feels, and those
+estimates are unvalidated. It is also not an autonomous-agent framework or a model
+of human psychology. Its numbers describe the behaviour of the implemented model.
+
+## The spirit
+
+- **The ten-year-old test.** If a ten year old can use it, it is well done. If a
+  poor-as-dirt ten year old can lay hands on it and work unmolested, it is a well
+  done spiritual work.
+- **Ecosystem fitness.** A system's fitness as an ecosystem member is measured by
+  how easily and transparently it is improving other ecosystem members.
+- **Respectful but promiscuous.** Take it, change it, cross it with other work.
+  Keep the credit, and say what you changed.
+
+## Licence
+
+Code and schemas: Apache License 2.0 (`LICENSE`, `NOTICE`).
+Documentation, lessons and images: CC BY 4.0 (`LICENSE-DOCS.md`).
+Third-party material keeps its own terms (`NOTICE`).
+
+To help, read `CONTRIBUTING.md`. Independent trials and bug reports are
+welcome, and they are how this project gets better.
+
+## Quick start (V5)
+
+```bash
+pip install flask flask-cors
+python mccf_api.py
+```
+
+Open `http://localhost:5000/static/mccf_launcher.html`. No API key is needed; the Stub adapter works without one.
+
+**Port 5000 busy (macOS).** On macOS 12 and later the AirPlay Receiver uses port 5000, so the server may fail to start or another program may answer. Either turn off AirPlay Receiver (System Settings, General, AirDrop & Handoff), or start MCCF on another port and open the pages from that port:
+
+    MCCF_PORT=5055 python3 mccf_api.py
+    http://localhost:5055/static/mccf_launcher.html
+
+The pages use the address they were opened from. A page opened as a file can be pointed at the server with `?api=http://localhost:5055` on its address; the choice is remembered.
+
+**Local models and empty replies.** Some models (reasoning models in particular) spend the whole token budget thinking and return nothing. MCCF retries once with a larger budget and says so in the server log. Settings, all environment variables: `MCCF_OLLAMA_TIMEOUTS` (default `180,240` seconds), `MCCF_ZONE_NUM_PREDICT` (60), `MCCF_ZONE_TIMEOUT` (30), `MCCF_CHORUS_TIMEOUT` (120), `MCCF_EMPTY_RETRY_FACTOR` (3). A reply that is still empty shows as a bracketed message instead of silence.
+
+Full installation, folder layout, module list, routes and troubleshooting: [docs/SERVER_REFERENCE.md](docs/SERVER_REFERENCE.md).
+To confirm an install matches the release, run `bash verify_install.sh` from the install folder.
+
+### What is new in V5
+- **Ambient Composer** with generative, MIDI theme player and Theme Workshop modes, including serial (twelve-tone) composing and a Repeat transform.
+- **Help Composer**: programmed-instruction lessons with pictures and video, live callouts, read-aloud, session logs and a report. Two Getting Started modules ship with it.
+- **H-Anim export** to X3D with duplicate camera declarations removed.
+- **File lists on every open/save control**, so authors do not memorize the file tree.
+- **Reaper and X3D editor launchers**, scene versions and drafts.
+
+## Documentation
+- [User's Guide](docs/guide/MCCF_V5_Guide.pdf) ([HTML](docs/guide/MCCF_V5_Guide.html)): every tool, with a Getting Started that builds a scene in one sitting.
+- [Systems Implementation Guide](docs/guide/SystemsImplementationGuide.pdf) ([HTML](docs/guide/SystemsImplementationGuide.html)): how the code is built, module by module, and the issue register.
+- [Server reference](docs/SERVER_REFERENCE.md), [ecosystem principles](docs/ECOSYSTEM_PRINCIPLES.md), [release notes](RELEASE_NOTES_V5.md), [change log](CHANGELOG.md).
+
+## Example scene and what is not included
+`scenes/ConeAndCamera/` and `zones/ConeAndCamera_zones.xml` are the example the Getting Started lessons build. Open the scene in the Scene Composer and use Export to make the X3D file the Loader plays.
+
+Not shipped, bring your own:
+- **Audio.** The example scene names sound files under `X3DAssets/media/` (music and effects). Put your own files there, or change the tracks in the Assets tab.
+- **The Cindy avatar** (`cindy_hanim.x3d`) is based on the Jin avatar from the Web3D Consortium and stays under its [BSD licence](https://www.web3d.org/x3d/content/examples/license.html). Download it from the Web3D Consortium and place it in `static/avatars/`. `Anna.x3d` ships with this repository.
+- **X_ITE** (3D engine) loads from a CDN, pinned to version 16.7.1.
+
+## Author
+Len Bullard. Video channel: [youtube.com/~clenbullard](https://www.youtube.com/~clenbullard). Blog: [aiartistinprocess.blogspot.com](https://aiartistinprocess.blogspot.com).
+
+---
+
+## Architecture and research background
 
 **Running code talks. Everything else walks.**
 

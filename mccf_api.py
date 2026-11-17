@@ -394,9 +394,56 @@ def save_scene_xml():
     filepath = os.path.join(scene_dir, filename)
     try: _versions_store.before_write(scene_name)      # keep what is about to be overwritten (history)
     except Exception as _ve: print('[versions] snapshot skipped:', _ve)
+    report = _validate_scene_text(content)
+    if report and not report['ok'] and os.environ.get('MCCF_VALIDATE', '').lower() == 'strict':
+        return jsonify({'status': 'error', 'error': 'scene failed validation; nothing saved',
+                        'validation': report}), 422
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
-    return jsonify({'status': 'ok', 'path': f'scenes/{scene_name}/{filename}'})
+    out = {'status': 'ok', 'path': f'scenes/{scene_name}/{filename}'}
+    if report is not None:
+        out['validation'] = report
+    return jsonify(out)
+
+
+def _validate_scene_text(text):
+    """Run the scene validator (XSD + Schematron + code checks). Advisory by default:
+    returns {ok, errors, warnings}, or None if the validator is not installed.
+    Set MCCF_VALIDATE=strict to refuse saves that have errors."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        for d in (os.path.join(here, 'xmlschemas'), os.path.join(here, '..', 'xmlschemas')):
+            if os.path.exists(os.path.join(d, 'mccf_validate.py')):
+                if d not in sys.path: sys.path.insert(0, d)
+                import mccf_validate
+                return mccf_validate.validate(text, cultivars_dir=os.path.join(here, 'cultivars'), base_dir=here)
+    except Exception as e:
+        print('[validate] skipped:', e)
+    return None
+
+
+from mccf_reports import register_reports as _register_reports
+from mccf_reaper import register_reaper as _register_reaper
+from mccf_pi import register_pi as _register_pi
+from mccf_x3dedit import register_x3dedit as _register_x3dedit
+_register_reaper(app, os.path.dirname(os.path.abspath(__file__)))
+_register_pi(app, os.path.dirname(os.path.abspath(__file__)))
+_register_x3dedit(app, os.path.dirname(os.path.abspath(__file__)))
+_register_reports(app, os.path.dirname(os.path.abspath(__file__)),
+                  honor_getter=lambda: _agent_honor, validate_text=lambda t: _validate_scene_text(t))
+
+
+@app.route('/scene/validate', methods=['POST'])
+def validate_scene_route():
+    """Body: {content: "<Scene>..."}  ->  {ok, errors, warnings}"""
+    data = request.get_json() or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({'status': 'error', 'error': 'content required'}), 400
+    r = _validate_scene_text(content)
+    if r is None:
+        return jsonify({'status': 'error', 'error': 'validator not installed'}), 501
+    return jsonify(dict(r, status='ok'))
 
 
 def _derive_scene_name(filename):
@@ -589,7 +636,9 @@ def list_effects():
         and f.lower().endswith('.x3d')
         and not f.startswith('.')
     ])
-    return jsonify({'files': files, 'effects_dir': effects_dir})
+    import mccf_effects_registry as _er
+    return jsonify({'files': files, 'effects_dir': effects_dir,
+                    'codes': _er.codes_by_file(os.path.dirname(effects_dir)) if subdir == 'user' else {}})
 
 @app.route('/effects/save', methods=['POST'])
 def save_effect():
@@ -622,9 +671,36 @@ def save_effect():
     effects_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'Effects', 'user')
     os.makedirs(effects_dir, exist_ok=True)
     out_path = os.path.join(effects_dir, safe_name)
+    # DM code for the assembly (see mccf_effects_registry.py). The issuer
+    # is the install's own code: MCCF_ISSUER in the environment, else MCCF.
+    import mccf_effects_registry as _er
+    m = re.search(r'<meta\s+name="title"\s+content="([^"]*)"', content)
+    title = m.group(1) if m else os.path.splitext(safe_name)[0]
+    try:
+        entry = _er.issue(os.path.dirname(effects_dir), safe_name, title,
+                          category=data.get('category'),
+                          issuer=data.get('issuer') or os.environ.get('MCCF_ISSUER'))
+    except _er.RegistryError as e:
+        return jsonify({'error': str(e)}), 400
+    content = _er.stamp(content, entry)
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(content)
-    return jsonify({'status': 'saved', 'filename': safe_name, 'path': out_path})
+    return jsonify({'status': 'saved', 'filename': safe_name, 'path': out_path,
+                    'code': entry['code'], 'issuer': entry['issuer'],
+                    'reused_code': entry.get('reused', False), 'content': content})
+
+
+@app.route('/effects/retire', methods=['POST'])
+def retire_effect():
+    """Retire an assembly's DM code. The code is never reused. Body: { code }."""
+    import mccf_effects_registry as _er
+    data = request.get_json(force=True) or {}
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'x3d', 'Effects')
+    try:
+        e = _er.retire(root, data.get('code', ''))
+    except _er.RegistryError as err:
+        return jsonify({'error': str(err)}), 404
+    return jsonify({'status': 'retired', 'entry': e})
 
 
 
@@ -761,10 +837,11 @@ def load_scene_xml():
         'description': ''
     }
 
-    # ── placedAgents from <EmotionalArc cultivar="..." voice="..."> ───────
+    # ── placedAgents from <AgentPlacement cultivar="..." voice="..."> ─────
     AGENT_COLORS  = ['#60a8f0','#4af0a8','#f0c060','#f06060','#c080f0','#f09040']
     placed_agents = {}
-    for idx, ea in enumerate(root.findall('EmotionalArc')):
+    # AgentPlacement is the name; EmotionalArc is the older name for the same element in a Scene.
+    for idx, ea in enumerate(list(root.findall('AgentPlacement')) + list(root.findall('EmotionalArc'))):
         name  = ea.get('cultivar', '').strip()
         voice = ea.get('voice', '')
         if not name:
@@ -1054,10 +1131,12 @@ class AgentRuntimeState:
             phi   = self.constitutional_cv[ch]
             eps   = self.expressive_cv[ch]
             new   = eps + filtered_delta
-            # Clamp to [0, 1]
-            new   = min(1.0, max(0.0, new))
-            # Clamp drift from ϕ
-            new   = min(phi + drift_cap, max(phi - drift_cap, new))
+            # ϵ is a signed deviation from ϕ, bounded by +/- drift_cap.
+            # (Previously ϵ was clamped to [0,1] and then to [ϕ-cap, ϕ+cap],
+            # which mixed ϵ with ϕ: ϵ could never go negative, so nothing
+            # could darken a character, and high-ϕ characters had a floor.)
+            # observed_cv = clamp(ϕ+ϵ, 0, 1) keeps the observable in range.
+            new   = min(drift_cap, max(-drift_cap, new))
             self.expressive_cv[ch] = round(new, 4)
         self.last_tick_time = time.time()
 
@@ -1162,6 +1241,39 @@ def _compute_salience(coherence_delta: float,
 
 # Keyed by (src_name, tgt_name) — direction matters (asymmetric trust)
 _link_trust: dict[tuple, dict] = {}
+
+
+# ---------------------------------------------------------------------------
+# Honor (read-only, derived) -- promised consistency
+#
+# Per CHARACTER, not per link. The promise is the character's own constitutional
+# vector (phi). The scene's pressure on it is the expressive drift (epsilon),
+# written by couplers. Each tick the character either keeps its word (drift
+# stays within HONOR_TOLERANCE of its allowed range, max_drift) or does not.
+# Same Beta counters as link trust: start at Beta(2,2), mu = a / (a + b).
+#
+# READ-ONLY: this value is reported and displayed. It does not change coupler
+# strength, drift bounds or any scene behavior. Whether it should is open.
+# Trust (link, held by others) is the social side; honor is held by the self.
+# ---------------------------------------------------------------------------
+HONOR_TOLERANCE = 0.5     # fraction of max_drift the character may drift and still "keep its word"
+_agent_honor: dict = {}   # agent name -> {alpha, beta, ticks, mu, drift_ratio}
+
+
+def _update_agent_honor(name: str, rs) -> dict:
+    h = _agent_honor.setdefault(
+        name, {'alpha': 2.0, 'beta': 2.0, 'ticks': 0, 'mu': 0.5, 'drift_ratio': 0.0})
+    max_drift = rs.max_drift
+    drift = max(abs(rs.expressive_cv[ch]) for ch in ('E', 'B', 'P', 'S'))
+    ratio = 0.0 if max_drift <= 0 else min(1.0, drift / max_drift)
+    if ratio <= HONOR_TOLERANCE:
+        h['alpha'] += 1.0
+    else:
+        h['beta'] += 1.0
+    h['ticks'] += 1
+    h['drift_ratio'] = round(ratio, 4)
+    h['mu'] = round(h['alpha'] / (h['alpha'] + h['beta']), 4)
+    return h
 
 
 def _get_link_trust(src: str, tgt: str) -> dict:
@@ -1491,6 +1603,37 @@ def ping():
         )
     })
 
+def _ebps_similarity(a: dict, b: dict) -> float:
+    """1 - RMS difference of the four channels: 1.0 = identical EBPS state, 0.0 = opposite extremes."""
+    d = sum((float(a.get(c, 0.0)) - float(b.get(c, 0.0))) ** 2 for c in ('E', 'B', 'P', 'S')) / 4.0
+    return round(1.0 - d ** 0.5, 4)
+
+
+def _live_coherence() -> dict:
+    """Live multichannel coherence for the scene being played: how alike each character's current EBPS state is to every other
+    character's and to each zone's live state, plus each character's attunement to each zone (the coherence it has built by staying in it)."""
+    out = {'scene': _last_tick_scene, 'agents': {}, 'zones': {}}
+    try:
+        import mccf_zone_dynamics as _zdl
+        chars = {n.split('::', 1)[1]: rs for n, rs in _agent_runtime.items() if n.startswith('character::')}
+        zf = _zdl._fields.get(_last_tick_scene or '__global__')
+        zrep = zf.report() if zf else {}
+        for zid, z in zrep.items():
+            out['zones'][zid] = {'name': z.get('name', zid), 'state': z.get('state', {})}
+        for n, rs in chars.items():
+            ob = rs.observed_cv
+            row = {'with': {m: _ebps_similarity(ob, r2.observed_cv) for m, r2 in chars.items() if m != n}, 'zones': {}}
+            for zid, z in zrep.items():
+                row['zones'][zid] = {'similarity': _ebps_similarity(ob, z.get('state', {})),
+                                     'attunement': round(zf.coherence.get((zid, n), 0.0), 4)}
+            vals = list(row['with'].values()) + [v['similarity'] for v in row['zones'].values()]
+            row['mean'] = round(sum(vals) / len(vals), 4) if vals else None
+            out['agents'][n] = row
+    except Exception as e:      # the dashboard must never take /field down
+        out['error'] = str(e)
+    return out
+
+
 @app.route("/field", methods=["GET"])
 def get_field():
     matrix = field.field_matrix()
@@ -1515,7 +1658,12 @@ def get_field():
         rt_key = _rt_key(name)
         if rt_key in _agent_runtime:
             agents_summary[name]["runtime"] = _agent_runtime[rt_key].as_dict()
+            # Live ϕ+ϵ. The Loader (face, gesture clips, pace) reads agents[name].observed_cv
+            # and, before this, never found it, so it fell back to the static weights and
+            # the coupler/zone dynamics never reached the render.
+            agents_summary[name]["observed_cv"] = dict(_agent_runtime[rt_key].observed_cv)
     return jsonify({
+        "live_coherence":      _live_coherence(),
         "matrix":              matrix,
         "echo_chamber_risks":  echo,
         "asymmetry":           {
@@ -1710,7 +1858,28 @@ from mccf_energy import make_energy_api
 _energy_bp = make_energy_api(field)
 app.register_blueprint(_energy_bp)
 _nr_transformer = NeoRiemannianTransformer()
-_nr_bp = make_neoriemannian_api(field, _nr_transformer)
+
+
+def _nr_live() -> dict:
+    """Characters in the scene being played, from their live runtime state: what drives their harmony."""
+    out = {}
+    try:
+        lc = _live_coherence().get('agents', {})
+        for key, rs in _agent_runtime.items():
+            if not key.startswith('character::'):
+                continue
+            n = key.split('::', 1)[1]
+            cap = rs.max_drift or 0.0
+            eps = max(abs(v) for v in rs.expressive_cv.values()) if rs.expressive_cv else 0.0
+            out[n] = {'observed': dict(rs.observed_cv), 'drift': (eps / cap) if cap > 0 else 0.0,
+                      'coherence': (lc.get(n) or {}).get('mean')}
+    except Exception:
+        return {}
+    return out
+
+
+_nr_bp = make_neoriemannian_api(field, _nr_transformer, live=_nr_live)
+_nr_scene = ''
 app.register_blueprint(_nr_bp)
 
 # ---------------------------------------------------------------------------
@@ -2178,6 +2347,25 @@ def arc_record():
 
     agent = field.agents[cultivar]
 
+    # Regulation: the character's own setting is authoritative. A field agent that was
+    # registered without one (default 1.0 = "drift locked to zero") otherwise stays that way
+    # for the whole scene, and nothing -- couplers, zones -- can move the character.
+    try:
+        _reg = data.get("regulation")
+        if _reg is None:
+            # the cultivar registry holds the author-made cultivars (cultivars/*.xml, incl. a character's own); the older dict is the fallback
+            _cd = _cultivar_registry.get(cultivar)
+            if _cd is not None and getattr(_cd, "regulation", None) is not None:
+                _reg = _cd.regulation
+            elif cultivar in cultivars:
+                _reg = cultivars[cultivar].get("regulation")
+        if _reg is not None:
+            _reg = max(0.0, min(1.0, float(_reg)))
+            if abs(agent._affect_regulation - _reg) > 1e-9:
+                agent.set_regulation(_reg)
+    except (TypeError, ValueError):
+        pass
+
     # ── cv override path ────────────────────────────────────────────────────
     # Caller (e.g. X3D loader seeding ϕ from pre-recorded arc XML) may pass an
     # explicit 'cv' dict with E/B/P/S values to bypass sentiment recomputation.
@@ -2225,7 +2413,9 @@ def arc_record():
         was_dissonant=(pressure > 0.5 or sentiment < -0.3)
     )
 
-    others = [n for n in field.agents if n != cultivar]
+    # Pair with characters that are actually in this scene (already seeded), not whichever built-in cultivar registers first;
+    # alone in a scene, a character is paired with no one (neutral coherence) instead of with a stranger.
+    others = [n for n in field.agents if n != cultivar and _rt_key(n, rt_scope) in _agent_runtime]
     if others:
         field.interact(cultivar, others[0], cv, mutual=False)
     else:
@@ -2450,7 +2640,7 @@ def _enforce_coupler_variance_floor(agent, floor: float) -> None:
         for ch in ('E', 'B', 'P', 'S'):
             noise = (agent.constitutional_cv[ch] - mean) * floor
             agent.expressive_cv[ch] = round(
-                min(1.0, max(0.0, agent.expressive_cv[ch] + noise)), 4
+                min(agent.max_drift, max(-agent.max_drift, agent.expressive_cv[ch] + noise)), 4
             )
 
 
@@ -2635,18 +2825,26 @@ def couplers_tick():
 
     # Increment per-scene timestep
     ts_key   = scene_name or '__global__'
+    global _last_tick_scene, _nr_scene
+    if scene_name: _last_tick_scene = scene_name
+    if scene_name and scene_name != _nr_scene:       # a new scene starts its harmony and its progression afresh
+        _nr_scene = scene_name
+        try: _nr_transformer.reset(0)
+        except Exception: pass
     _coupler_timestep[ts_key] = _coupler_timestep.get(ts_key, 0) + 1
     timestep = _coupler_timestep[ts_key]
 
     # Load network topology from scene XML
     network = []
+    scene_text = ''
     if scene_name:
         for candidate in [scene_name + '_scene.xml', scene_name + '.xml']:
             cpath = _scene_filepath(candidate)
             if _os_tick.path.exists(cpath):
                 try:
                     with open(cpath, encoding='utf-8') as f:
-                        network = _parse_network_links(f.read())
+                        scene_text = f.read()
+                        network = _parse_network_links(scene_text)
                 except Exception:
                     network = []
                 break
@@ -2674,6 +2872,14 @@ def couplers_tick():
             'note':          'no agents in runtime — play an arc first',
         })
 
+    # Zones <-> characters (mccf_zone_dynamics). The Composer writes a zone in a link by its bare id; the engine reads 'zone:<id>'.
+    import mccf_zone_dynamics as _zd
+    _zf = _zd.get_field(ts_key, _zd.parse_zones(scene_text), reset=bool(data.get('reset_zones')))
+    network = _zd.normalise_links(network, agents.keys(), _zf.ids)
+    _zpos = _zd.merge_positions(ts_key, data.get('positions'), _zd.parse_start_positions(scene_text))
+    _cvs_before = {n: dict(a.observed_cv) for n, a in agents.items()}
+    _zone_pulls = _zf.pulls(_cvs_before, _zpos, network)       # zone -> character, from the room as it is now
+
     # Record current observed_cv into history BEFORE this tick
     for name, agent in agents.items():
         _get_coupler_history(name).append(dict(agent.observed_cv))
@@ -2693,13 +2899,23 @@ def couplers_tick():
     deltas = field_tick(
         agents=agents,
         network=network,
-        zones=[],        # zone proximity couplers deferred until Zone XML adds <Couplers>
+        zones=_zf.zone_dicts(),   # live zone states; a link from a zone carries the room as it is now
         timestep=timestep,
         history=_coupler_history,
     )
 
+    # Zone -> character pulls join the coupler deltas (same regulation bound and receptivity as any coupler)
+    deltas = dict(deltas)
+    for _n, _pull in _zone_pulls.items():
+        _d = deltas.setdefault(_n, {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0})
+        for _ch in ('E', 'B', 'P', 'S'):
+            _d[_ch] += _pull[_ch]
+
     # Apply deltas + enforce variance floor
     apply_field_tick_deltas(agents, deltas, variance_floor=variance_floor)
+    _zone_report = _zf.update(_cvs_before, _zpos, network)   # character -> zone, from the state they had at the start of the tick
+    try: _nr_bp.advance()          # the scene's tick keeps the harmony moving (at most one step per 2 s), with or without a browser open
+    except Exception: pass
 
     # Phase transition check
     phase = detect_phase_transition(agents)
@@ -2722,6 +2938,21 @@ def couplers_tick():
             'beta':  round(t['beta'],  2),
             'mu':    round(mu, 4),
             'ticks': t['ticks'],
+        }
+
+    # Honor (read-only): promised consistency per character, plus reputation
+    # (mean trust the others hold toward it over incoming links).
+    honor_summary: dict = {}
+    for name, rs in agents.items():
+        h = _update_agent_honor(name, rs)
+        incoming = [v['mu'] for k, v in trust_summary.items() if k.endswith('\u2192' + name)]
+        honor_summary[name] = {
+            'mu':          h['mu'],
+            'alpha':       round(h['alpha'], 2),
+            'beta':        round(h['beta'], 2),
+            'ticks':       h['ticks'],
+            'drift_ratio': h['drift_ratio'],
+            'reputation':  round(sum(incoming) / len(incoming), 4) if incoming else None,
         }
 
     # Salience: if phase transition fired, backfill phase_fired=True on the most
@@ -2755,7 +2986,72 @@ def couplers_tick():
         },
         'phase':         phase,
         'trust':         trust_summary,
+        'honor':         honor_summary,
+        'zones':         _zone_report,
+        'zone_pulls':    _zone_pulls,
     })
+
+
+@app.route('/zone_field/live', methods=['GET'])
+def zone_field_live():
+    """Live state of each zone (baseline, current state, who is inside and how strongly each character weighs in) for a scene key."""
+    import mccf_zone_dynamics as _zd
+    key = request.args.get('scene', '').strip() or _last_tick_scene or '__global__'
+    f = _zd._fields.get(key)
+    if f is None:
+        return jsonify({'status': 'none', 'note': 'no coupler tick has run for this scene yet', 'zones': {}})
+    return jsonify({'status': 'ok', 'scene': key, 'zones': f.report()})
+
+
+_last_tick_scene = ''
+
+
+@app.route('/scene/waypoints', methods=['GET'])
+def scene_waypoints():
+    """The waypoints (dialogue lines, in order) of a scene -- the one being played if no ?scene= is given -- and the latest step recorded per character."""
+    import re as _re_w, xml.etree.ElementTree as _ET_w
+    name = request.args.get('scene', '').strip() or _last_tick_scene
+    if not name:
+        return jsonify({'status': 'none', 'note': 'no scene has been played yet', 'waypoints': []})
+    text = ''
+    for cand in (name + '_scene.xml', name + '.xml'):
+        pth = _scene_filepath(cand)
+        if os.path.exists(pth):
+            try:
+                text = open(pth, encoding='utf-8').read()
+            except OSError:
+                text = ''
+            break
+    if not text:
+        return jsonify({'status': 'none', 'scene': name, 'note': 'scene file not found', 'waypoints': []})
+    try:
+        root = _ET_w.fromstring(_re_w.sub(r'^<\?xml[^>]*\?>', '', text.strip()))
+    except _ET_w.ParseError:
+        return jsonify({'status': 'none', 'scene': name, 'note': 'scene file is not readable XML', 'waypoints': []})
+    wps = []
+    for el in root.iter():
+        if el.tag.split('}')[-1] != 'Line':
+            continue
+        raw = el.get('ttsText') or el.get('text') or ''
+        plain = _re_w.sub(r'\[[^\]]*\]', '', raw)
+        plain = _re_w.sub(r'\s+', ' ', plain).strip()
+        wps.append({'n': len(wps) + 1, 'id': el.get('id', ''), 'actor': el.get('actor', ''), 'type': el.get('type', ''),
+                    'text': plain[:90] + ('…' if len(plain) > 90 else '')})
+    cur = {}
+    for cname, hist in _arc_coherence_history.items():
+        if hist:
+            try: cur[cname] = max(int(h.get('step', 0)) for h in hist)
+            except (TypeError, ValueError): pass
+    return jsonify({'status': 'ok', 'scene': name, 'waypoints': wps, 'latest_step': cur})
+
+
+@app.route('/zone_field/reset', methods=['POST'])
+def zone_field_reset():
+    """Return every zone of a scene to its authored baseline and forget the coherence each character has built."""
+    import mccf_zone_dynamics as _zd
+    key = (request.get_json() or {}).get('scene', '').strip() or '__global__'
+    _zd._fields.pop(key, None); _zd._positions.pop(key, None)
+    return jsonify({'status': 'ok', 'scene': key})
 
 
 # ---------------------------------------------------------------------------
@@ -3098,20 +3394,31 @@ def zone_command():
     )
 
     try:
-        _payload = _json_zc.dumps({
-            'model':   ollama_model,
-            'prompt':  prompt,
-            'stream':  False,
-            'options': {'num_predict': 60},  # ~one sentence; enforces prompt instruction
-        }).encode('utf-8')
-        _req = _urllib_req.Request(
-            f'{ollama_url}/api/generate',
-            data=_payload,
-            headers={'Content-Type': 'application/json'},
-            method='POST',
-        )
-        with _urllib_req.urlopen(_req, timeout=30) as _resp:
-            response_text = _json_zc.loads(_resp.read().decode('utf-8')).get('response', '').strip()
+        import os as _os_zc
+        _np   = int(_os_zc.environ.get('MCCF_ZONE_NUM_PREDICT', '60'))   # ~one sentence
+        _tmo  = int(_os_zc.environ.get('MCCF_ZONE_TIMEOUT', '30'))
+        _fac  = float(_os_zc.environ.get('MCCF_EMPTY_RETRY_FACTOR', '3'))
+        def _zone_call(n_predict):
+            _payload = _json_zc.dumps({
+                'model':   ollama_model,
+                'prompt':  prompt,
+                'stream':  False,
+                'options': {'num_predict': n_predict},
+            }).encode('utf-8')
+            _req = _urllib_req.Request(
+                f'{ollama_url}/api/generate',
+                data=_payload,
+                headers={'Content-Type': 'application/json'},
+                method='POST',
+            )
+            with _urllib_req.urlopen(_req, timeout=_tmo) as _resp:
+                return _json_zc.loads(_resp.read().decode('utf-8')).get('response', '').strip()
+        response_text = _zone_call(_np)
+        if not response_text:
+            print(f'[MCCF] zone command: empty reply from {ollama_model} (num_predict={_np}); retrying once with {int(_np*_fac)}')
+            response_text = _zone_call(int(_np * _fac))
+            if not response_text:
+                response_text = f'[Empty reply from {ollama_model}. Raise MCCF_ZONE_NUM_PREDICT or use a non-reasoning model.]'
     except _urllib_err.URLError as e:
         return jsonify({
             'status':   'error',
@@ -3285,8 +3592,10 @@ if __name__ == "__main__":
         if _loaded:
             print(f"  Loaded {_loaded} cultivar definitions from cultivars/")
 
-    print("MCCF API server starting on http://localhost:5000")
+    import os as _os_p
+    _port = int(_os_p.environ.get("MCCF_PORT", "5000"))
+    print(f"MCCF API server starting on http://localhost:{_port}")
     print("Endpoints: /sensor /field /agent /cultivar /zone /waypoint /scene /voice")
     print("           /hothouse/state /hothouse/x3d /hothouse/humanml")
     print("           /collapse/run /export/x3d /export/python /export/json")
-    app.run(debug=True, port=5000, threaded=True)
+    app.run(debug=True, port=_port, threaded=True)

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_witness_2026-11-14T030014" scene="ConeAndCamera">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_witness_2026-11-14T030014" agentname="The Witness" path_name="path_witness">
+    <Timestamp date="2026-11-14" time="03:00:14"/>
+    <Seed value="cqwwhm" source="randomized" note="arc noise locked for reproducibility"/>
+    <Waypoint id="WP1" stepno="1" name="WP1" E="0.2013" B="0.1574" P="0.2144" S="0.2695" Mode="scene" Coherence="0.0536" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="21.65" pos_y="0.00" pos_z="25.80">
+      <Statement speaker="The Witness">Welcome to the Island.</Statement>
+      <Response speaker="Salida">We are here to get you started creating narrative worlds with MCCF.</Response>
+    </Waypoint>
+    <Waypoint id="WP2" stepno="2" name="WP2" E="0.1733" B="0.1494" P="0.2204" S="0.2695" Mode="scene" Coherence="0.0532" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="26.30" pos_y="0.00" pos_z="20.60">
+      <Response speaker="The Witness">Worlds have Zones and Avatars and Assets,  We are avatars.  I am The Witness,</Response>
+      <Statement speaker="Salida">I am Salida.  Worlds have dialog and music,</Statement>
+    </Waypoint>
+    <Waypoint id="WP3" stepno="3" name="WP3" E="0.3343" B="0.1495" P="0.2345" S="0.2695" Mode="scene" Coherence="0.0545" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="21.30" pos_y="0.00" pos_z="14.70">
+      <Question speaker="Salida">Do you want to use the Getting Started PI Course?</Question>
+      <Response speaker="The Witness">I will not use the Getting Started PI Course. I am currently in a state of metacognitive observation, and I must proceed with caution, considering the low relationship coherence with Salida.</Response>
+      <Statement speaker="The Witness">The Help PI is a guided instruction application that teaches you step by step how to create worlds in MCCF.</Statement>
+    </Waypoint>
+    <Waypoint id="WP4" stepno="4" name="WP4" E="0.2133" B="0.1254" P="0.2465" S="0.3305" Mode="scene" Coherence="0.0555" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="14.20" pos_y="0.00" pos_z="19.90">
+      <Question speaker="The Witness">Are you ready to begin?</Question>
+      <Response speaker="The Witness">Let&apos;s begin our first lesson.</Response>
+      <Response speaker="Salida">We will teach how to make THIS world.</Response>
+      <Response speaker="The Witness">I will proceed with caution, acknowledging that my understanding of this interaction is based on the information provided, and I should not assume or make incorrect inferences.</Response>
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

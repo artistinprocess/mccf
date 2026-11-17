@@ -148,7 +148,8 @@ function parseMidiFile(arrayBuffer) {
     tracks.push({
       index: t, name: name || ('Track ' + (t+1)), channel: channelsSeen.size ? [...channelsSeen][0] : 0,
       channelsSeen: [...channelsSeen], program, programs, notes, noteCount: notes.length, controllers,
-      lengthTicks: notes.reduce((m,n) => Math.max(m, n.startTick + n.durTicks), 0)
+      // A noteless track named 'Video bars' (made by the Video tab) takes its length from its end-of-track, so Grid and Notation show the empty bars.
+      lengthTicks: Math.max(notes.reduce((m,n) => Math.max(m, n.startTick + n.durTicks), 0), (!notes.length && /^Video bars/.test(name || '')) ? tick : 0)
     });
   }
 
@@ -267,6 +268,7 @@ function Player(opts) {
   this.polyOn = true;             // CC127 before playback (mitigation for mono patches)
   this.sendSetup = true;          // file's Bank/Program/Pan/Reverb/Chorus before playback
   this.playing = false;
+  this.paused = false; this._pausedAt = 0;
   this.startWall = 0;             // now() at (virtual) playback position 0
   this.viz = [];                  // {pitch,vel,track,drum,startMs,endMs} for visualizations
 
@@ -357,7 +359,7 @@ P.setVolume = function (i, v) {
 };
 
 // ---- position / info
-P.elapsed = function () { return this.playing ? Math.max(0, (this.now() - this.startWall) / 1000) : 0; };
+P.elapsed = function () { return this.playing ? Math.max(0, (this.now() - this.startWall) / 1000) : (this.paused ? this._pausedAt : 0); };
 P.totalSeconds = function () {
   if (!this.data) return 0;
   var t2s = makeTickToSeconds(this.data.ppq, this.data.tempoEvents), self = this, maxTick = 0;
@@ -660,7 +662,20 @@ P._release = function () {
   this._recent = [];
 };
 
-P.stop = function () { this._release(); this.playing = false; };
+P.stop = function () { this._release(); this.playing = false; this.paused = false; this._pausedAt = 0; };
+
+// Pause: silence the notes and remember the position; resume() carries on from there. elapsed() holds still while paused.
+P.pause = function () {
+  if (!this.playing) return false;
+  this._pausedAt = this.elapsed();
+  this._release(); this.playing = false; this.paused = true;
+  return true;
+};
+P.resume = function () {
+  if (!this.paused) return false;
+  var at = this._pausedAt; this.paused = false;
+  return this.start(at);
+};
 
 // Closing a page mid-song used to leave the synth holding notes (Web MIDI has
 // no auto-release), so every live player panics when its page goes away.

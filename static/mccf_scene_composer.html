@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCCF Scene Composer - V4</title>
+<title>MCCF Scene Composer - V5</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
 :root {
@@ -180,6 +180,8 @@ header { min-width: 0; }
 @media (max-width: 1500px) { .logo span { display: none; } .mtab { padding: 3px 5px; } .api-row input { width: 130px; } }
 @media (max-width: 1300px) { .vbadge { display: none; } .mtab { padding: 3px 4px; font-size: 14px; } .api-row input { width: 150px; } .api-row { gap: 5px; } }
 @media (max-width: 1180px) { .api-row #stext { display: none; } .api-row input { width: 100px; } }
+.tb{display:block;margin:6px auto 2px;border:1px solid var(--border);border-radius:50%;background:var(--s2);cursor:grab;touch-action:none}
+.tb:active{cursor:grabbing}
 </style>
 </head>
 <body>
@@ -219,8 +221,8 @@ header { min-width: 0; }
     <button class="mtab" onclick="setMode('route')">Routes</button>
     <button class="mtab" onclick="setMode('ambient')">Ambient</button>
     <button class="mtab" onclick="setMode('network')">Affects</button>
-    <button class="mtab" onclick="setMode('run')">WP Arc</button>
     <button class="mtab" onclick="setMode('export')">Export</button>
+    <button class="mtab" onclick="setMode('help')" title="Help and programmed instruction lessons">Help Composer</button>
   </div>
   <div class="api-row">
     <div class="sdot" id="sdot"></div>
@@ -246,6 +248,7 @@ header { min-width: 0; }
     <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
       <label>Scene Name</label>
       <input id="sc-name" type="text" value="" placeholder="unnamed_scene" onchange="sceneChanged()">
+      <button class="btn" style="margin-top:4px" title="Open this scene's compiled X3D file in the X3D editor (Sunrize by default)" onclick="x3dEditOpen((sceneConfig.name||'').trim().replace(/[^A-Za-z0-9_\-]/g,'_') ? (sceneConfig.name||'').trim().replace(/[^A-Za-z0-9_\-]/g,'_')+'.x3d' : '')">Edit X3D in Sunrize</button>
       <div class="setup-grid" style="margin-top:8px">
         <div><label>Width (m)</label><input id="sc-width" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
         <div><label>Depth (m)</label><input id="sc-depth" type="number" value="40" min="10" max="200" step="5" onchange="sceneChanged()"></div>
@@ -260,6 +263,8 @@ header { min-width: 0; }
       <label style="margin-top:8px">Seed <span style="color:var(--dim);font-size:16px">(blank = randomize each take)</span></label>
       <input id="sc-seed" type="text" placeholder="unset — randomizes" onchange="sceneChanged()">
       <div id="sc-seed-resolved" style="font-size:15px;color:var(--dim);min-height:14px;margin-top:2px"></div>
+      <label style="margin-top:8px">DM code <span style="color:var(--dim);font-size:16px">(optional; the scene's data module code, info code 040A)</span></label>
+      <input id="sc-dm" type="text" placeholder="e.g. MCCF-A-00-00-00-00A-040A-A" onchange="sceneChanged()">
       <!-- Day 88: real, new capability — multi-stop sky/ground gradient
            authoring, per the author's own tested example (a 5-stop night
            sky). Background MUST sit at true root level, never inlined,
@@ -364,64 +369,12 @@ header { min-width: 0; }
     <div class="place-subnav">
       <button class="mtab" id="place-tab-zones" onclick="setPlaceType('zones')">Zones</button>
       <button class="mtab" id="place-tab-waypoints" onclick="setPlaceType('waypoints')">Waypoints</button>
-      <button class="mtab" id="place-tab-paths" onclick="setPlaceType('paths')">Paths</button>
+      <button class="mtab" id="place-tab-paths" onclick="setPlaceType('paths')">WP Paths</button>
       <button class="mtab" id="place-tab-cameras" onclick="setPlaceType('cameras')">Cameras</button>
       <button class="mtab" id="place-tab-lights" onclick="setPlaceType('lights')">Lights</button>
       <button class="mtab" id="place-tab-audio" onclick="setPlaceType('audio')">Audio</button>
       <button class="mtab" id="place-tab-midi" onclick="setPlaceType('midi')">MIDI</button>
       <button class="mtab" id="place-tab-assets" onclick="setPlaceType('assets')">Assets</button>
-    </div>
-    <!-- Day 89: terrain overlay from Events Editor's Capture Terrain
-         button — persistent across every Place sub-tab (zones/waypoints/
-         assets/etc all place onto the same grid this overlay sits under),
-         so it lives here in the shared wrapper, not inside any one
-         sub-panel. Disabled/greyed until a capture actually exists. -->
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-top:10px">
-      <div class="sh" style="margin-top:0">Terrain overlay</div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">
-        <input type="checkbox" id="terrain-overlay-toggle" checked onchange="toggleTerrainOverlay()">
-        Show <span style="color:var(--dim);font-size:15px">(capture from Events Editor's Capture Terrain button)</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:6px">
-        <span style="color:var(--dim);font-size:15px;width:52px;flex-shrink:0">opacity</span>
-        <input type="range" id="terrain-overlay-opacity" min="5" max="95" value="50" oninput="setTerrainOverlayOpacity(this.value)" style="flex:1">
-        <span id="terrain-overlay-opacity-val" style="color:var(--warm);font-size:15px;width:32px;text-align:right">0.50</span>
-      </label>
-    </div>
-    <!-- Map layers — every category drawScene() draws, gated behind
-         _placeLayerVisible. Links already have their own toggle in the
-         Affects tab sidebar (_showLinks) even though it affects this same
-         map — not duplicated here, listed as a note instead so it's not
-         a silent omission. -->
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-top:10px">
-      <div class="sh" style="margin-top:0">Map layers</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-zones" checked onchange="togglePlaceLayer('zones')"> Zones
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-waypoints" checked onchange="togglePlaceLayer('waypoints')"> Waypoints
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-paths" checked onchange="togglePlaceLayer('paths')"> Paths
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-cameras" checked onchange="togglePlaceLayer('cameras')"> Cameras
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-lights" checked onchange="togglePlaceLayer('lights')"> Lights
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-audio" checked onchange="togglePlaceLayer('audio')"> Audio
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-assets" checked onchange="togglePlaceLayer('assets')"> Assets
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="layer-toggle-agents" checked onchange="togglePlaceLayer('agents')"> Agents
-        </label>
-      </div>
-      <div style="color:var(--dim);font-size:13px;margin-top:6px">Coupler links have their own toggle in the Affects tab</div>
     </div>
   </div>
   <div id="mode-zones" style="display:none">
@@ -446,6 +399,7 @@ header { min-width: 0; }
         <option value="authority">authority / throne</option><option value="garden">garden path</option>
         <option value="threat">threat zone</option><option value="sacred">sacred / memorial</option>
       </select>
+      <div id="z-type-desc" style="font-size:15px;color:var(--dim);margin:-2px 0 6px"></div>
       <label>Radius (m)</label><input id="z-radius" type="number" value="4" min="1" max="20" step="0.5">
       <label>Zone Image <span style="color:var(--dim);font-size:16px">(icon shown in Affects graph — same media/icons/ folder as Character portraits)</span></label>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
@@ -455,9 +409,8 @@ header { min-width: 0; }
         </select>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <label class="btn" style="flex:1;text-align:center;cursor:pointer;font-size:15px;padding:3px 6px;margin:0">📂 Upload…
-          <input type="file" id="z-image-file" accept="image/png,image/jpeg,image/webp" onchange="onZoneImageFileSelected(event)" style="display:none">
-        </label>
+        <button type="button" class="btn" style="flex:1;text-align:center;font-size:15px;padding:3px 6px;margin:0" onclick="zoneImagePick()" title="Choose from the icons folder on the server, or from your computer">📂 Choose…</button>
+        <input type="file" id="z-image-file" accept="image/png,image/jpeg,image/webp" onchange="onZoneImageFileSelected(event)" style="display:none">
         <button class="btn" style="font-size:15px;padding:3px 10px" onclick="clearZoneImage()" title="Reset to default">✕</button>
       </div>
       <label>Descriptor</label>
@@ -470,6 +423,7 @@ header { min-width: 0; }
         <option value="phrygian">phrygian</option><option value="lydian">lydian</option>
         <option value="aeolian">aeolian</option><option value="locrian">locrian</option><option value="whole_tone">whole tone</option>
       </select>
+      <label style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:inherit"><input type="checkbox" id="z-ambient-drive" style="width:auto;margin:0"> Drive the Ambient Composer: play this scale while an actor is in the zone</label>
       <div class="sh">Channel Weights</div>
       <div class="bias-row"><span class="bch" style="color:var(--E)">E</span>
         <input type="range" id="zw-E" min="0" max="1" step="0.01" value="0.25" oninput="updW('E')">
@@ -496,9 +450,7 @@ header { min-width: 0; }
             <option value="ollama:llama3.2">ollama:llama3.2</option>
             <option value="ollama:mistral">ollama:mistral</option>
             <option value="ollama:gemma2">ollama:gemma2</option>
-            <option value="openai:gpt-4o-mini">openai:gpt-4o-mini</option>
-            <option value="openai:gpt-4o">openai:gpt-4o</option>
-          </select>
+                  </select>
           <label>Tone</label>
           <select id="z-chorus-tone">
             <option value="ominous">ominous</option>
@@ -594,8 +546,13 @@ header { min-width: 0; }
             <input id="z-asset-offset-y" type="number" value="0" step="0.1" style="width:33%" title="Y offset (height)">
             <input id="z-asset-offset-z" type="number" value="0" step="0.1" style="width:33%" title="Z offset">
           </div>
-          <label style="margin-top:8px">Rotation (Y-axis, degrees)</label>
-          <input id="z-asset-rotation" type="number" value="0" step="1" min="-180" max="180">
+          <label style="margin-top:8px">Rotation (degrees, X Y Z)</label>
+          <div style="display:flex;gap:6px">
+            <input id="z-asset-rotx" type="number" value="0" step="1" style="width:33%" title="Rotation about X (pitch)">
+            <input id="z-asset-rotation" type="number" value="0" step="1" style="width:33%" title="Rotation about Y (turn)">
+            <input id="z-asset-rotz" type="number" value="0" step="1" style="width:33%" title="Rotation about Z (roll)">
+          </div>
+          <canvas id="tb-zasset" class="tb" width="120" height="120" title="Drag: left/right turns (Y), up/down pitches (X). Shift-drag up/down: roll (Z)."></canvas>
           <label style="margin-top:8px">Scale</label>
           <input id="z-asset-scale" type="number" value="1" step="0.1" min="0.01">
         </div>
@@ -638,7 +595,13 @@ header { min-width: 0; }
            could be set. Optional: 0 (ground) is by far the common case,
            so this stays out of the way unless the terrain actually needs
            it. -->
-      <label>Y (height, m) — for walking over non-flat terrain</label><input id="wp-y" type="number" value="0" step="0.1">
+      <label>Position (m) <span style="color:var(--dim);font-size:15px">Y is height above the ground</span></label>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('wp_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy XYZ</button></div>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="wp-x" type="number" step="0.1" placeholder="map click" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input id="wp-y" type="number" value="0" step="0.1" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="wp-z" type="number" step="0.1" placeholder="map click" onkeydown="coordKey(event)"></div>
+      </div>
       <div class="sh" style="margin-top:10px">Dialogue Lines</div>
       <div style="display:flex;gap:4px;margin-bottom:3px;font-size:16px;color:var(--dim)">
         <div style="width:84px;min-width:84px">Type</div>
@@ -659,7 +622,7 @@ header { min-width: 0; }
     </div>
   </div>
   <div id="mode-paths" style="display:none">
-    <div class="sh">Paths</div>
+    <div class="sh">WP Paths</div>
     <div id="path-list"></div>
     <div style="margin-top:10px">
       <div class="sh" id="path-form-heading">New Path</div>
@@ -722,50 +685,19 @@ header { min-width: 0; }
       no clock, because sensed events don't have an authored "when."
     </div>
   </div>
+  <div id="mode-help" style="display:none">
+    <div class="sh">Help Composer</div>
+    <div style="font-size:18px;color:var(--dim);line-height:1.7">
+      Programmed instruction lessons. Each frame is one step or one question, with the module scene and a reference image
+      above it and the matching User's Guide module linked below it. Your scene is not touched while you are here.
+    </div>
+  </div>
   <div id="mode-ambient" style="display:none">
     <div class="sh">Ambient</div>
     <div style="font-size:18px;color:var(--dim);line-height:1.7">
-      The Ambient Engine and Theme Workshop: build a theme from a MIDI file, harmonise it, edit the notes and drums,
+      The Ambient Composer and Theme Workshop: build a theme from a MIDI file, harmonise it, edit the notes and drums,
       and save MIDI into this scene's media. Your work stays here when you switch tabs; the music stops.
     </div>
-  </div>
-  <div id="mode-run" style="display:none">
-    <div class="sh">WP Arc</div>
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
-      <label>Paths — select one or more (Ctrl/Cmd-click). Paths sharing a Waypoint Order run concurrently; higher orders wait for lower ones to finish.</label>
-      <select id="run-path" multiple size="4"></select>
-      <label>LLM Adapter</label>
-      <select id="run-adapter">
-        <option value="ollama">ollama (local)</option>
-        <option value="stub">stub (no LLM)</option>
-        <option value="anthropic">anthropic</option>
-        <option value="openai">openai</option>
-      </select>
-      <label>API Key (if needed)</label>
-      <input id="run-apikey" type="text" placeholder="sk-... or leave blank for ollama">
-      <div class="btn-row" style="margin-top:8px">
-        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Arc</button>
-        <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
-        <button class="btn" onclick="resetSceneArc()">&#8635; Reset</button>
-      </div>
-    </div>
-    <div class="sh">Progress</div>
-    <div id="run-progress" style="font-size:16px;color:var(--dim);margin-bottom:6px">Not running.</div>
-    <div id="run-multi-status"></div>
-    <div class="sh" style="margin-top:10px">Arc Export</div>
-    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:8px">
-      <div style="font-size:17px;color:var(--dim)">
-        Take: <span id="take-current" style="color:var(--accent)">none yet — starts on first save</span>
-      </div>
-      <div class="btn-row" style="margin-top:6px">
-        <input id="take-label" type="text" placeholder="optional take label" style="flex:1">
-        <button class="btn" onclick="_startNewTake(document.getElementById('take-label').value)">New Take</button>
-      </div>
-      <div style="font-size:16px;color:var(--dim);margin-top:4px">
-        Every arc saved without starting a new take lands in the same take folder — this is how multiple agents' arcs from one session end up grouped together, and how the playback dropdown stays scoped to one scene/take instead of showing arcs from every scene ever recorded.
-      </div>
-    </div>
-    <div id="run-log" style="font-size:18px;color:var(--dim)">Run a scene to generate arc.</div>
   </div>
   <div id="mode-network" style="display:none">
     <div class="sh">Coupling Network</div>
@@ -805,9 +737,11 @@ header { min-width: 0; }
     <div style="margin-top:12px">
       <div class="sh">New Link</div>
       <label>From Agent</label>
-      <select id="net-from" style="margin-bottom:6px"></select>
+      <select id="net-from" style="margin-bottom:6px" onchange="netShowTypes()"></select>
+      <div id="net-from-info" style="display:none;font-size:15px;color:var(--dim);margin:-2px 0 6px"></div>
       <label>To Agent</label>
-      <select id="net-to" style="margin-bottom:6px"></select>
+      <select id="net-to" style="margin-bottom:6px" onchange="netShowTypes()"></select>
+      <div id="net-to-info" style="display:none;font-size:15px;color:var(--dim);margin:-2px 0 6px"></div>
       <label>Strength <span id="net-str-val" style="color:var(--warm)">0.60</span></label>
       <input type="range" id="net-strength" min="0" max="1" step="0.05" value="0.60"
         oninput="document.getElementById('net-str-val').textContent=parseFloat(this.value).toFixed(2)">
@@ -890,6 +824,15 @@ header { min-width: 0; }
   <div id="mode-cameras" style="display:none">
     <div class="sh">Free Cameras</div>
     <div id="camera-list"></div>
+    <div id="cam-bulk" style="margin-top:8px">
+      <div class="sh">Add standard cameras</div>
+      <div class="insp-field"><label>Set</label>
+        <select id="cam-bulk-set"><option value="basic">Basic: Wide, Medium, Close-Up</option><option value="coverage">Coverage: Wide, Medium, Close-Up, Over Shoulder, Profile, Overhead</option></select></div>
+      <div class="insp-field"><label>Around</label><select id="cam-bulk-subject"></select></div>
+      <div class="btn-row"><button class="btn" onclick="addStandardCameras()" title="Adds the set in one step, framed on the chosen character. Names are CAM_Shot_Character. Each camera can be edited afterwards.">Add set</button>
+      <button class="btn" id="cam-bulk-undo" style="display:none" onclick="undoStandardCameras()">Undo last set</button></div>
+      <div class="btn-row" style="margin-top:6px"><button class="btn" onclick="addCenterCameras(false)" title="Adds four cameras around the middle of the grid, at face height, all looking at the centre. Names are Center_1 to Center_4.">Add four centre cameras</button></div>
+    </div>
     <button class="btn full" style="margin-top:6px" onclick="startPlace('camera')">+ Place Free Camera</button>
     <div id="camera-form" style="display:none;margin-top:10px">
       <div class="sh">New Free Camera</div>
@@ -907,10 +850,10 @@ header { min-width: 0; }
       </div>
       <label>Name</label><input id="cam-name" type="text" placeholder="CAM_Wide1">
       <label>Position (m)</label>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('camera_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('camera_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="cam-x" type="number" step="0.01" placeholder="map click" onkeydown="coordKey(event)"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input id="cam-height" type="number" value="1.7" step="0.01" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input id="cam-height" type="number" value="1.7" step="0.01" onkeydown="coordKey(event)"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="cam-z" type="number" step="0.01" placeholder="map click" onkeydown="coordKey(event)"></div>
       </div>
       <div class="insp-field">
@@ -1007,10 +950,10 @@ header { min-width: 0; }
         <option value="directional">Directional</option>
       </select>
       <label>Position (m)</label>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('light_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('light_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="light-x" type="number" step="0.01" placeholder="map click" onkeydown="coordKey(event)"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input id="light-height" type="number" value="4" step="0.01" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input id="light-height" type="number" value="4" step="0.01" onkeydown="coordKey(event)"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="light-z" type="number" step="0.01" placeholder="map click" onkeydown="coordKey(event)"></div>
       </div>
       <!-- Day 82: single-axis tilt (rotate about local X only, "1 0 0
@@ -1048,6 +991,20 @@ header { min-width: 0; }
           <input id="light-tilt-num" type="number" step="0.1" value="45" style="width:88px" oninput="angFromNum('light-tilt')" onkeydown="angKey(event,null,'light-tilt')" title="Type an exact angle. Up/Down 0.1, Shift 1, Alt 0.01. The slider is coarse (whole degrees).">
         </div>
       </div>
+      <div class="insp-field" id="light-roll-row">
+        <label>Roll (°, about the aim direction)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="light-roll" type="range" min="-180" max="180" step="1" value="0" style="flex:1" oninput="angFromSlider('light-roll')">
+          <input id="light-roll-num" type="number" step="0.1" value="0" style="width:88px" oninput="angFromNum('light-roll')" onkeydown="angKey(event,null,'light-roll')" title="Type an exact angle. Up/Down 0.1, Shift 1, Alt 0.01. The slider is coarse (whole degrees).">
+        </div>
+      </div>
+      <div class="sh" style="margin-top:10px">Follow an actor</div>
+      <label>Follow</label>
+      <select id="light-follow"><option value="">None (fixed in the scene)</option></select>
+      <label style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:inherit"><input type="checkbox" id="light-follow-turns" style="width:auto;margin:0"> Turn with the actor (parenting). Off: follow its position only.</label>
+      <label style="margin-top:6px" title="Points a spot or directional light at the middle of the chosen actor, whatever the yaw and tilt below say. Use it with Follow so the beam stays on that actor.">Aim at actor</label>
+      <select id="light-aim"><option value="">None (use yaw / tilt below)</option></select>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:4px">The light keeps its distance and direction from the actor as the actor moves. The position above is where it sits at the actor's starting point.</div>
       <div class="sh" style="margin-top:10px">Optical Properties</div>
       <div style="display:flex;align-items:center;gap:8px;margin:4px 0 8px">
         <input id="light-on" type="checkbox" checked style="width:auto">
@@ -1122,7 +1079,13 @@ header { min-width: 0; }
       <label>Name</label><input id="audio-name" type="text" placeholder="StreamAmbience">
       <label>Sound file</label>
       <select id="audio-url" style="background:#0d1520;color:#c0d8e8;border:1px solid #2a3545;border-radius:3px;padding:3px 6px;font-size:17px;font-family:monospace;width:100%"></select>
-      <label>Height (m)</label><input id="audio-height" type="number" value="1.5" step="0.1" min="0">
+      <label>Position (m)</label>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('audio_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy XYZ</button></div>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="audio-x" type="number" step="0.1" placeholder="map click" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input id="audio-height" type="number" value="1.5" step="0.1" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="audio-z" type="number" step="0.1" placeholder="map click" onkeydown="coordKey(event)"></div>
+      </div>
       <div class="insp-field">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="audio-loop" style="width:auto;margin:0">
@@ -1194,11 +1157,12 @@ header { min-width: 0; }
            as before) AND directly editable afterward — the author can
            "nudge into place" with exact numbers instead of only ever
            re-clicking the map. -->
-      <label>Position (m) &mdash; X, Z here; height (Y) below</label>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('asset_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('asset_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('asset_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <label>Position (m)</label>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('asset_form')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('asset_form',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('asset_form',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px">
-        <div style="flex:1"><label>X</label><input id="asset-x" type="number" step="0.1"></div>
-        <div style="flex:1"><label>Z</label><input id="asset-z" type="number" step="0.1"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="asset-x" type="number" step="0.1" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input id="asset-height" type="number" value="0" step="0.1" onkeydown="coordKey(event)"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="asset-z" type="number" step="0.1" onkeydown="coordKey(event)"></div>
       </div>
       <label>X3D / glTF file</label>
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1244,11 +1208,14 @@ header { min-width: 0; }
           <button type="button" class="btn" style="flex:1" onclick="document.getElementById('asset-xml-editor').style.display='none'">Cancel</button>
         </div>
       </div>
-      <label>Height (m)</label><input id="asset-height" type="number" value="0" step="0.1">
       <div class="insp-field">
-        <label style="margin:0;flex:1">Rotation (Y-axis, degrees) <span id="asset-rot-val" style="color:var(--warm)">0</span></label>
-        <input type="range" id="asset-rot" min="0" max="360" step="1" value="0"
-          oninput="document.getElementById('asset-rot-val').textContent=this.value">
+        <label style="margin:0 0 4px">Rotation (degrees)<span id="asset-rot-val" style="display:none">0</span></label>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input id="asset-rotx" type="number" value="0" step="1" onkeydown="coordKey(event)"></div>
+          <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y</label><input id="asset-rot" type="number" value="0" step="1" onkeydown="coordKey(event)"></div>
+          <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input id="asset-rotz" type="number" value="0" step="1" onkeydown="coordKey(event)"></div>
+        </div>
+        <canvas id="tb-asset" class="tb" width="120" height="120" title="Drag: left/right turns (Y), up/down pitches (X). Shift-drag up/down: roll (Z). Ctrl: snap to 15 degrees."></canvas>
       </div>
       <label>Scale</label><input id="asset-scale" type="number" value="1" step="0.1" min="0.01">
       <!-- Day 87: real, new capability — a placed asset that's actually
@@ -1311,6 +1278,60 @@ header { min-width: 0; }
     </div>
   </div>
 </div>
+  <div id="place-map-tools" style="display:none">
+    <!-- Day 89: terrain overlay from Events Editor's Capture Terrain
+         button — persistent across every Place sub-tab (zones/waypoints/
+         assets/etc all place onto the same grid this overlay sits under),
+         so it lives here in the shared wrapper, not inside any one
+         sub-panel. Disabled/greyed until a capture actually exists. -->
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-top:10px">
+      <div class="sh" style="margin-top:0">Terrain overlay</div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">
+        <input type="checkbox" id="terrain-overlay-toggle" checked onchange="toggleTerrainOverlay()">
+        Show <span style="color:var(--dim);font-size:15px">(capture from Events Editor's Capture Terrain button)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px">
+        <span style="color:var(--dim);font-size:15px;width:52px;flex-shrink:0">opacity</span>
+        <input type="range" id="terrain-overlay-opacity" min="5" max="95" value="50" oninput="setTerrainOverlayOpacity(this.value)" style="flex:1">
+        <span id="terrain-overlay-opacity-val" style="color:var(--warm);font-size:15px;width:32px;text-align:right">0.50</span>
+      </label>
+    </div>
+    <!-- Map layers — every category drawScene() draws, gated behind
+         _placeLayerVisible. Links already have their own toggle in the
+         Affects tab sidebar (_showLinks) even though it affects this same
+         map — not duplicated here, listed as a note instead so it's not
+         a silent omission. -->
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-top:10px">
+      <div class="sh" style="margin-top:0">Map layers</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-zones" checked onchange="togglePlaceLayer('zones')"> Zones
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-waypoints" checked onchange="togglePlaceLayer('waypoints')"> Waypoints
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-paths" checked onchange="togglePlaceLayer('paths')"> Paths
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-cameras" checked onchange="togglePlaceLayer('cameras')"> Cameras
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-lights" checked onchange="togglePlaceLayer('lights')"> Lights
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-audio" checked onchange="togglePlaceLayer('audio')"> Audio
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-assets" checked onchange="togglePlaceLayer('assets')"> Assets
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="layer-toggle-agents" checked onchange="togglePlaceLayer('agents')"> Agents
+        </label>
+      </div>
+      <div style="color:var(--dim);font-size:13px;margin-top:6px">Coupler links have their own toggle in the Affects tab</div>
+    </div>
+  </div>
   <div id="mode-export" style="display:none">
     <div class="sh">X3D Export</div>
     <div style="border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:4px">
@@ -1319,7 +1340,7 @@ header { min-width: 0; }
     </div>
     <div class="sh" style="margin-top:14px">Exports</div>
     <div style="border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:4px">
-      <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V3</div></div>
+      <div class="explbl"><div>Zone XML</div><div class="expdsc">zones/[name].xml for V5</div></div>
       <button class="btn cool" onclick="exportZoneXML()" style="font-size:13px;padding:3px 8px;margin-top:6px">Export</button>
     </div>
     <div style="border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:4px">
@@ -1389,6 +1410,8 @@ header { min-width: 0; }
          is untouched by this — only the debug-visual geometry is
          skipped. Defaults to checked so nothing changes unless the
          author explicitly turns it off. -->
+    <label style="margin-top:6px" title="Three-point lighting (key, fill, back) for every actor, turning and moving with the actor. Saved with the scene."><input type="checkbox" id="exp-stdlights" onchange="sceneConfig.stdLights=this.checked" style="width:auto;margin-right:6px">Standard character lights (key, fill, back)</label>
+    <label style="margin-top:6px" title="Front, Side and Back cameras on each placeholder actor. Uncheck to leave them out. Saved with the scene."><input type="checkbox" id="exp-stdcams" checked onchange="sceneConfig.stdCameras=this.checked" style="width:auto;margin-right:6px">Standard actor cameras (Front, Side, Back)</label>
     <label style="margin-top:6px"><input type="checkbox" id="exp-labels" checked onchange="sceneConfig.labelsEnabled=this.checked" style="width:auto;margin-right:6px">Name labels &amp; zone markers (uncheck for a clean movie export)</label>
     <!-- Day 90: "Dispatcher runtime" checkbox removed — same investigation as
          the Preview panel above. It's genuinely inert now: checked or not,
@@ -1407,7 +1430,7 @@ header { min-width: 0; }
          lets them turn it off at export time rather than hearing both.
          Checked by default so nothing changes for anyone not using this
          workflow. -->
-    <label style="margin-top:6px"><input type="checkbox" id="exp-dialogue-tty" checked onchange="sceneConfig.dialogueTTYEnabled=this.checked" style="width:auto;margin-right:6px">Per-line dialogue / TTY (uncheck if using a single pre-mixed audio track instead)</label>
+    <label style="margin-top:6px"><input type="checkbox" id="exp-dialogue-tty" checked onchange="sceneConfig.dialogueTTYEnabled=this.checked" style="width:auto;margin-right:6px">Per-line dialogue, browser voice (uncheck if using a single pre-mixed audio track or Event Timeline audio events)</label>
     <div class="sh" style="margin-top:14px">Last Export</div>
     <div id="exp-log" style="font-size:21px;color:var(--dim)">Nothing exported yet.</div>
   </div>
@@ -1444,11 +1467,14 @@ header { min-width: 0; }
          never torn down to about:blank. -->
     <iframe id="route-graph-frame" src="/static/mccf_route_graph_prototype.html"
       style="display:none;width:100%;height:100%;border:none;" title="Routes"></iframe>
-    <!-- Ambient Engine / Theme Workshop: loaded the first time its tab opens (data-src), then kept for the whole session, never torn
+    <!-- Ambient Composer / Theme Workshop: loaded the first time its tab opens (data-src), then kept for the whole session, never torn
          down to about:blank like Events, because its recipe and hand edits live in the page. It gets {type:'mccf_tab_hidden'} when you
          leave, so the music stops. -->
     <iframe id="ambient-frame" data-src="/static/mccf_ambient.html" src="about:blank"
       style="display:none;width:100%;height:100%;border:none;" title="Ambient"></iframe>
+    <!-- Help Composer: loaded the first time its tab opens, then kept. -->
+    <iframe id="help-frame" data-src="/static/mccf_pi.html" src="about:blank"
+      style="display:none;width:100%;height:100%;border:none;" title="Help Composer"></iframe>
     <!-- Offline placeholder -->
     <div id="tool-offline" style="display:none;position:absolute;inset:0;flex-direction:column;
       align-items:center;justify-content:center;gap:14px;background:var(--s2);">
@@ -1468,6 +1494,7 @@ header { min-width: 0; }
       <div style="flex:1">
         <div id="zd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:var(--warm);margin-bottom:2px;"></div>
         <div id="zd-type" style="font-size:21px;color:var(--dim);"></div>
+        <div id="zd-type-desc" style="font-size:15px;color:var(--dim);margin-top:2px"></div>
       </div>
       <div id="zd-portrait-thumb" style="width:40px;height:40px;border-radius:6px;background:#0d1520;border:1px solid #2a3545;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0">🗺️</div>
     </div>
@@ -1515,10 +1542,10 @@ header { min-width: 0; }
     </div>
     <div class="dsect"><div class="sh" style="margin:0 0 6px">Weights</div><div id="ad-weights"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('agent_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('agent_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('agent_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('agent_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('agent_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('agent_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px;margin-bottom:4px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input type="number" step="0.1" id="ad-pos-x" style="width:100%"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input type="number" step="0.1" id="ad-pos-y" style="width:100%"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input type="number" step="0.1" id="ad-pos-y" style="width:100%"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input type="number" step="0.1" id="ad-pos-z" style="width:100%"></div>
       </div>
       <!-- Day 86: real gap closed — placeAgentAt (click-to-place) was the
@@ -1530,6 +1557,31 @@ header { min-width: 0; }
            avatar standing on the temple steps, not just ground level). -->
       <button class="btn pri" style="font-size:16px" onclick="saveAgentPosition()">Apply Position</button>
     </div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Rotation (degrees, X Y Z)</div>
+      <div style="display:flex;gap:6px;margin-bottom:4px">
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input type="number" step="1" id="ad-rot-x" style="width:100%"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y</label><input type="number" step="1" id="ad-rot-y" style="width:100%"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input type="number" step="1" id="ad-rot-z" style="width:100%"></div>
+      </div>
+      <canvas id="tb-agent" class="tb" width="120" height="120" title="Drag: left/right turns (Y), up/down pitches (X). Shift-drag up/down: roll (Z). Ctrl: snap to 15 degrees. Double-click resets."></canvas>
+      <button class="btn pri" style="font-size:16px" onclick="saveAgentRotation()">Apply Rotation</button>
+    </div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar scale (this scene)</div>
+      <div style="display:flex;gap:6px;margin-bottom:4px;align-items:flex-end">
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Scale (1 = as authored)</label><input type="number" step="0.05" min="0.05" max="20" id="ad-scale" value="1" style="width:100%" title="Resizes the avatar in this scene only. The avatar file is not changed."></div>
+        <button class="btn pri" style="font-size:16px" onclick="saveAgentScale()">Apply Scale</button>
+      </div>
+    </div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Character lights (light set)</div>
+      <select id="ad-lightset" style="margin-bottom:4px" title="Key, fill and back lights that move and turn with this actor. Scene default follows the Export tab checkbox.">
+        <option value="">Scene default (Export tab)</option><option value="on">On for this actor</option><option value="off">Off for this actor</option></select>
+      <div style="display:flex;gap:6px;margin-bottom:4px">
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Key</label><input type="number" step="0.05" min="0" max="2" id="ad-light-key" value="0.9" style="width:100%"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Fill</label><input type="number" step="0.05" min="0" max="2" id="ad-light-fill" value="0.4" style="width:100%"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Back</label><input type="number" step="0.05" min="0" max="2" id="ad-light-back" value="0.7" style="width:100%"></div>
+      </div>
+      <button class="btn pri" style="font-size:16px" onclick="saveAgentLightSet()">Apply Lights</button>
+    </div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Avatar</div>
       <div id="ad-hanim" style="font-size:17px;color:var(--dim);word-break:break-all;margin-bottom:4px">(placeholder — assign in Character Creator)</div>
       <select id="ad-hanim-select" style="display:none;margin-bottom:4px">
@@ -1540,6 +1592,12 @@ header { min-width: 0; }
         <button class="btn pri" style="font-size:16px;display:none" id="ad-hanim-save" onclick="saveHanimSrc()">Apply</button>
       </div>
       <div style="font-size:16px;color:var(--dim);margin-top:4px">To assign a new H-Anim figure, use Character Creator.</div>
+      <div class="sh" style="margin:10px 0 4px">Waiting poses</div>
+      <label style="font-size:16px;color:var(--dim)">While waiting for a live reply (thinking)</label>
+      <select id="ad-think" onchange="setAgentPose('think',this.value)" style="margin-bottom:4px"></select>
+      <label style="font-size:16px;color:var(--dim)">While waiting for the user (hold)</label>
+      <select id="ad-hold" onchange="setAgentPose('hold',this.value)" style="margin-bottom:4px"></select>
+      <div style="font-size:16px;color:var(--dim)">Pick from this character's own clips. None means no change.</div>
     </div>
     <div class="dsect" id="ad-couplers-sect" style="display:none">
       <div class="sh" style="margin:0 0 6px">Couplers Affecting This Agent</div>
@@ -1566,10 +1624,10 @@ header { min-width: 0; }
     <div class="sh" style="margin-top:0">Free Camera</div>
     <div id="cd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:#e0c860;margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (m)</div>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('camera_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('camera_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('camera_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px;margin-bottom:4px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input type="number" step="0.01" id="cd-pos-x" style="width:100%" onchange="applyPlacedPos('camera')" onkeydown="coordKey(event,'camera')"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input type="number" step="0.01" id="cd-pos-y" style="width:100%" onchange="applyPlacedPos('camera')" onkeydown="coordKey(event,'camera')"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input type="number" step="0.01" id="cd-pos-y" style="width:100%" onchange="applyPlacedPos('camera')" onkeydown="coordKey(event,'camera')"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input type="number" step="0.01" id="cd-pos-z" style="width:100%" onchange="applyPlacedPos('camera')" onkeydown="coordKey(event,'camera')"></div>
       </div>
       <!-- Day 90: coarse full-grid sliders, paired with (not replacing) the
@@ -1608,10 +1666,10 @@ header { min-width: 0; }
     <div id="ld-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:var(--pink);margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Type</div><div id="ld-type" style="font-size:21px;color:var(--dim)"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position (m)</div>
-      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('light_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
+      <div style="display:flex;gap:4px;margin:0 0 6px;flex-wrap:wrap"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copyXYZ('light_detail')" title="Copy this position (X, Y, Z) to the clipboard">Copy</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_detail',false)" title="Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box.">Paste XYZ</button><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="pasteXYZ('light_detail',true)" title="Paste X and Z only, keeping this object's own height (Y)">Paste XZ</button></div>
       <div style="display:flex;gap:6px;margin-bottom:4px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">X</label><input type="number" step="0.01" id="ld-pos-x" style="width:100%" onchange="applyPlacedPos('light')" onkeydown="coordKey(event,'light')"></div>
-        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Y (height)</label><input type="number" step="0.01" id="ld-pos-y" style="width:100%" onchange="applyPlacedPos('light')" onkeydown="coordKey(event,'light')"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)" title="Height above the ground, in metres">Y</label><input type="number" step="0.01" id="ld-pos-y" style="width:100%" onchange="applyPlacedPos('light')" onkeydown="coordKey(event,'light')"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Z</label><input type="number" step="0.01" id="ld-pos-z" style="width:100%" onchange="applyPlacedPos('light')" onkeydown="coordKey(event,'light')"></div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
@@ -1628,6 +1686,7 @@ header { min-width: 0; }
       <div style="display:flex;gap:6px;margin-bottom:4px">
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Yaw</label><input type="number" step="0.1" id="ld-ang-yaw" style="width:100%" onchange="applyPlacedAngles('light')" onkeydown="angKey(event,'light')"></div>
         <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Tilt (down)</label><input type="number" step="0.1" id="ld-ang-tilt" style="width:100%" onchange="applyPlacedAngles('light')" onkeydown="angKey(event,'light')"></div>
+        <div style="flex:1"><label style="font-size:14px;color:var(--dim)">Roll</label><input type="number" step="0.1" id="ld-ang-roll" style="width:100%" onchange="applyPlacedAngles('light')" onkeydown="angKey(event,'light')"></div>
       </div>
       <div style="font-size:13px;color:var(--dim)">Enter / Tab applies &middot; &uarr;&darr; 0.1&deg; &middot; Shift 1&deg; &middot; Alt 0.01&deg;</div>
     </div>
@@ -1662,7 +1721,7 @@ header { min-width: 0; }
     <div id="asd-name" style="font-family:var(--display);font-size:25px;font-weight:700;color:#78d8a0;margin-bottom:8px;"></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">File</div><div id="asd-url" style="font-size:19px;color:var(--dim);word-break:break-all"></div></div>
     <div class="dsect"><div class="sh" style="margin:0 0 4px">Position</div><div style="display:flex;gap:4px;margin:0 0 6px"><button type="button" class="btn cool" style="font-size:14px;padding:2px 8px" onclick="copySelectedPos('asset')" title="Copy this position (X, Y, Z) to the clipboard, then Paste it into a camera, light, agent or asset">Copy</button></div><div id="asd-pos" style="font-size:21px;color:var(--accent)"></div></div>
-    <div class="dsect"><div class="sh" style="margin:0 0 4px">Rotation / Scale</div><div id="asd-xform" style="font-size:21px;color:var(--dim)"></div></div>
+    <div class="dsect"><div class="sh" style="margin:0 0 4px">Rotation / Scale</div><div id="asd-xform" style="font-size:21px;color:var(--dim)"></div><canvas id="tb-asd" class="tb" style="cursor:default" width="120" height="120" title="Shows the asset's turn. Click Edit to change it."></canvas></div>
     <div class="btn-row">
       <button class="btn cool" onclick="editAsset(selectedId)">Edit</button>
       <button class="btn danger" onclick="deleteSelected('asset')">Delete</button>
@@ -1685,7 +1744,44 @@ header { min-width: 0; }
       <button class="btn danger" onclick="deleteSelected('path')">Delete</button>
     </div>
   </div>
+  <div id="detail-wparc" style="display:none">
+    <div class="sh" style="margin-top:0">WP Arc: record a path run</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:10px">
+      <label>Paths — select one or more (Ctrl/Cmd-click). Paths sharing a Waypoint Order run concurrently; higher orders wait for lower ones to finish.</label>
+      <select id="run-path" multiple size="4"></select>
+      <label>LLM Adapter</label>
+      <select id="run-adapter">
+        <option value="ollama">ollama (local)</option>
+        <option value="stub">stub (no LLM)</option>
+      </select>
+      <label>API Key (if needed)</label>
+      <input id="run-apikey" type="password" autocomplete="off" placeholder="not needed for ollama">
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn pri" id="run-btn" onclick="runSceneArc()">&#9654; Record Arc</button>
+        <button class="btn danger" onclick="stopSceneArc()">&#9646; Stop</button>
+        <button class="btn" onclick="resetSceneArc()">&#8635; Reset</button>
+      </div>
+    </div>
+    <div class="sh">Progress</div>
+    <div id="run-progress" style="font-size:16px;color:var(--dim);margin-bottom:6px">Not running.</div>
+    <div id="run-multi-status"></div>
+    <div class="sh" style="margin-top:10px">Arc Export</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:8px">
+      <div style="font-size:17px;color:var(--dim)">
+        Take: <span id="take-current" style="color:var(--accent)">none yet — starts on first save</span>
+      </div>
+      <div class="btn-row" style="margin-top:6px">
+        <input id="take-label" type="text" placeholder="optional take label" style="flex:1">
+        <button class="btn" onclick="_startNewTake(document.getElementById('take-label').value)">New Take</button>
+      </div>
+      <div style="font-size:16px;color:var(--dim);margin-top:4px">
+        Every arc saved without starting a new take lands in the same take folder — this is how multiple agents' arcs from one session end up grouped together, and how the playback dropdown stays scoped to one scene/take instead of showing arcs from every scene ever recorded.
+      </div>
+    </div>
+    <div id="run-log" style="font-size:18px;color:var(--dim)">Run a scene to generate arc.</div>
+  </div>
   <div id="detail-arc">
+    <div id="arc-chart-wrap" style="display:none">
     <div class="sh" style="margin-top:0">Affective Arc</div>
     <canvas id="arc-canvas"></canvas>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
@@ -1700,6 +1796,7 @@ header { min-width: 0; }
          pattern instead, listed here. Populated by drawArcChart(); empty
          until a WP Arc run completes. -->
     <div id="arc-agent-legend" style="font-size:16px;color:var(--dim);margin-top:2px"></div>
+    </div>
     <div class="sh" style="margin-top:12px">Field State</div>
     <div id="field-state" style="font-size:21px;color:var(--dim)">Connect to API.</div>
     <div class="sh" style="margin-top:12px">Scene Stats</div>
@@ -1758,13 +1855,14 @@ header { min-width: 0; }
 <script src="/static/js/mccf_seeded_prng.js"></script>
 <script>
 // MCCF Scene Composer V5 - waypointOrder required sequencing
-var API = 'http://localhost:5000';
+var API = (function(){try{var q=new URLSearchParams(location.search).get('api');if(q){localStorage.setItem('mccf_api',q);return q;}if(location.protocol==='file:'){var s=localStorage.getItem('mccf_api');if(s)return s;}}catch(e){}return location.protocol.indexOf('http')===0?location.origin:'http://localhost:5000';})();
+try{var _ae=document.getElementById('api-url');if(_ae)_ae.value=API;}catch(e){}
 var mode = 'scene';
 var tool = 'select';
 var placing = null;
 var pendingPos = null;
 var placingAgent = null;
-var sceneConfig = { name: '', width: 40, depth: 40, description: '', labelsEnabled: true, dialogueTTYEnabled: true, seed: '' };
+var sceneConfig = { name: '', width: 40, depth: 40, description: '', labelsEnabled: true, stdLights: false, stdCameras: true, dialogueTTYEnabled: true, seed: '', dm: '' };
 // seed: '' means unset — MCCF_PRNG.beginRun() treats empty string same as
 // null/undefined and randomizes (gesture constellation §6).
 // Day 88: real, new capability — multi-stop Background gradient, per the
@@ -2064,6 +2162,7 @@ var CAM_SEED_PRESETS = {
 // editor's _prevResolveSubjectPos, which has to fall back to WPS/stage-canvas guesses
 // because it doesn't have direct access to this.
 function camSeedResolveSubjectPos(name){
+  if(name==='__grid_centre__') return [sceneConfig.width/2, 0, sceneConfig.depth/2];
   var a = placedAgents[name];
   return a && a.position ? a.position : [0,0,0];
 }
@@ -2190,6 +2289,24 @@ var ZONE_PRESETS = {
   threat:   {E:0.40,B:0.20,P:0.30,S:0.05,noise:0.25,ambient:'locrian'},
   sacred:   {E:0.25,B:0.20,P:0.25,S:0.25,noise:0.05,ambient:'lydian'}
 };
+// Zone type description, built from the preset table (so it always matches the numbers): which channels
+// the type leans toward and the noise and scale it carries. Types will come from a pack file later (IMPL-R01, R28).
+var CH_NAMES={E:'Emotion',B:'Behavior',P:'Predictive',S:'Social'};
+function zoneTypeInfo(t){
+  var p=ZONE_PRESETS[t]; if(!p) return {label:t||'neutral',desc:'A custom type. No preset values.'};
+  var ch=['E','B','P','S'].sort(function(a,b){return p[b]-p[a]});
+  var flat=(p[ch[0]]-p[ch[3]])<0.05;
+  var lean=flat?'Even across E, B, P and S.':'Leans '+CH_NAMES[ch[0]]+' ('+p[ch[0]].toFixed(2)+') then '+CH_NAMES[ch[1]]+' ('+p[ch[1]].toFixed(2)+'); lowest '+CH_NAMES[ch[3]]+' ('+p[ch[3]].toFixed(2)+').';
+  return {label:t,desc:lean+' Noise '+p.noise.toFixed(2)+'. Ambient scale '+p.ambient+'.'};
+}
+function netShowTypes(){
+  [['net-from','net-from-info'],['net-to','net-to-info']].forEach(function(pr){
+    var sel=document.getElementById(pr[0]),box=document.getElementById(pr[1]); if(!sel||!box) return;
+    var v=sel.value,z=zones[v];
+    if(z){var i=zoneTypeInfo(z.zone_type||'neutral');box.innerHTML='<b style="color:var(--warm)">'+xe(i.label)+'</b> zone. '+xe(i.desc);box.style.display='block';}
+    else{box.style.display='none';box.textContent='';}
+  });
+}
 var AGENT_COLORS = ['#60a8f0','#4af0a8','#f06060','#f0c060','#a060f0','#60d0f0','#f080a0','#80f0a0'];
 var colorIdx = 0, colorMap = {};
 function agentColor(n){if(!colorMap[n])colorMap[n]=AGENT_COLORS[colorIdx++%AGENT_COLORS.length];return colorMap[n];}
@@ -2324,8 +2441,8 @@ window.addEventListener('load',function(){
 function resizeCanvas(){
   var wrap=document.getElementById('map-panel');
   W=canvas.width=wrap.clientWidth;H=canvas.height=wrap.clientHeight;
-  arcCanvas.width=arcCanvas.parentElement.clientWidth-24;
-  arcCanvas.height=140; // matches #arc-canvas CSS height — set explicitly so the
+  var _aw=arcCanvas.parentElement.clientWidth-24;
+  if(_aw>0){ arcCanvas.width=_aw; arcCanvas.height=140; } // matches #arc-canvas CSS height — set explicitly so the
                         // drawing buffer isn't the browser's 150px intrinsic
                         // default, which would stretch/blur the chart slightly
   drawArcChart(); // redraw at the new size — a completed arc shouldn't vanish on window resize
@@ -2397,7 +2514,7 @@ function loadAll(){
         // An empty cultivar hanim_src must NOT clobber a value already loaded from
         // scene XML — that is the source of the avatar persistence bug (Day 61).
         if(placedAgents[c.agentname]){
-          if(c.hanim_src) { placedAgents[c.agentname].hanim_src=c.hanim_src; camRigFetchManifest(c.hanim_src); }
+          if(c.hanim_src && !placedAgents[c.agentname].hanim_none) { placedAgents[c.agentname].hanim_src=c.hanim_src; camRigFetchManifest(c.hanim_src); }
           placedAgents[c.agentname].hanim_loa=c.hanim_loa||4;
           placedAgents[c.agentname].behavior_clips=c.behavior_clips||[];
         }
@@ -2504,7 +2621,7 @@ function setMode(m){
   // onward highlighted one position behind whatever was actually
   // clicked — confirmed precisely against a live report (clicking Export
   // highlighted Record Scene Arc; clicking back highlighted Network).
-  var ms=['scene','place','agents','characters','events','dialogue','route','ambient','network','run','export'];
+  var ms=['scene','place','agents','characters','events','dialogue','route','ambient','network','export','help'];
   ms.forEach(function(n){document.getElementById('mode-'+n).style.display=n===m?'block':'none';});
   // Scoped to header — the Place tab's own sub-nav buttons also carry .mtab for shared
   // styling, and would otherwise throw off this array's positional index matching.
@@ -2524,6 +2641,7 @@ function setMode(m){
     // Export tab"). Now covers every Place sub-panel, not just the four
     // that happened to get noticed.
     ['zones','waypoints','paths','cameras','lights','audio','midi','assets'].forEach(function(n){document.getElementById('mode-'+n).style.display='none';});
+    var _pmt2=document.getElementById('place-map-tools'); if(_pmt2) _pmt2.style.display='none';
   }
   if(m==='agents'){loadAgents();}
   // Day 85: real bug, confirmed by live console log — Events only ever
@@ -2534,8 +2652,8 @@ function setMode(m){
   // empty for the whole session, and the Gesture dropdown silently fell
   // back to ['Default'] with no indication anything was missing.
   if(m==='events'){loadAgents(); faceExprRefreshAll().then(function(){ _sendSceneDataToEventsEditor(); });}   // Day 95: face cue dropdown
-  if(m==='run'){populateRunUI();_renderDialogueExportStatus();}
   if(m==='network')populateNetworkUI();
+  _syncWparcPane();
   if(m==='scene'||m==='export')refreshSceneList();
   if(m==='export')_renderDialogueExportStatus();
 
@@ -2543,8 +2661,8 @@ function setMode(m){
   // the entire content area. Kept as a mode->frame map (not a hardcoded pair) since
   // there are three tool frames now, not two — each mode shows its own frame and
   // hides the other two, rather than the old binary active/inactive swap.
-  var TOOL_FRAME_IDS = { characters:'char-creator-frame', events:'events-editor-frame', dialogue:'dialogue-editor-frame', route:'route-graph-frame', ambient:'ambient-frame' };
-  var TOOL_LABELS    = { characters:'Character Creator', events:'Events', dialogue:'Dialogue', route:'Routes', ambient:'Ambient' };
+  var TOOL_FRAME_IDS = { characters:'char-creator-frame', events:'events-editor-frame', dialogue:'dialogue-editor-frame', route:'route-graph-frame', ambient:'ambient-frame', help:'help-frame' };
+  var TOOL_LABELS    = { characters:'Character Creator', events:'Events', dialogue:'Dialogue', route:'Routes', ambient:'Ambient', help:'Help Composer' };
   var isToolMode = Object.prototype.hasOwnProperty.call(TOOL_FRAME_IDS, m);
   document.body.classList.toggle('tool-fullscreen', isToolMode);
   var wrap = document.getElementById('tool-iframe-wrap');
@@ -2571,6 +2689,10 @@ function setMode(m){
     var ambFrame = document.getElementById('ambient-frame');
     if(m==='ambient' && ambFrame.dataset.src && ambFrame.getAttribute('src')==='about:blank'){
       ambFrame.src = ambFrame.dataset.src;
+    }
+    var helpFrame = document.getElementById('help-frame');
+    if(m==='help' && helpFrame.dataset.src && helpFrame.getAttribute('src')==='about:blank'){
+      helpFrame.src = helpFrame.dataset.src;
     }
     activeFrame.onload = function(){
       try{
@@ -2629,6 +2751,24 @@ function setMode(m){
 // Switches between Zones/Waypoints/Paths/Cameras within the single Place tab.
 // Each panel's own internal markup/logic (startPlace, confirm*, render*List) is
 // untouched — this only owns which one is visible and which init call it needs.
+// WP Arc lives in the right frame while Assets > Paths is open. The arc chart
+// appears under its controls only after a run has finished.
+var _arcRan = false;
+function _syncWparcPane(){
+  var on = (mode==='place' && _placeType==='paths');
+  var w=document.getElementById('detail-wparc'); if(w) w.style.display = on ? 'block' : 'none';
+  var c=document.getElementById('arc-chart-wrap');
+  if(c){
+    var show = on && _arcRan;
+    c.style.display = show ? 'block' : 'none';
+    if(show && arcCanvas){
+      var aw = arcCanvas.parentElement.clientWidth-24;
+      if(aw>0){ arcCanvas.width=aw; arcCanvas.height=140; }
+      drawArcChart();
+    }
+  }
+  if(on){ populateRunUI(); _renderDialogueExportStatus(); }
+}
 function setPlaceType(t){
   // Sub-tab buttons (Zones/Waypoints/Paths/Cameras) call this directly, not through
   // setMode — so without this, selecting e.g. a zone then clicking Waypoints left
@@ -2649,6 +2789,8 @@ function setPlaceType(t){
   if(t==='audio')renderAudioList();
   if(t==='midi')renderMidiList();
   if(t==='assets'){renderAssetList();renderEffectTargetList();}
+  var _pmt=document.getElementById('place-map-tools'); if(_pmt) _pmt.style.display='block';
+  _syncWparcPane();
   drawScene();
 }
 // ── Events Editor postMessage bridge ──────────────────────────────────────────
@@ -2840,6 +2982,12 @@ function _buildSceneData() {
     // for the old dialogue tool's display marker) — Route Graph authors
     // a ProximitySensor node's own center/size fields directly.
     zones: Object.keys(zones),
+    // Files that can hold TouchSensor DEFs, for the Route Graph's touch sensor
+    // list: each placed avatar's H-Anim file and each placed asset.
+    sensorSources: Object.keys(placedAgents).filter(function(n){ return placedAgents[n].hanim_src; })
+      .map(function(n){ return { name: n, url: placedAgents[n].hanim_src }; })
+      .concat(Object.values(placedAssets).filter(function(pa){ return pa.url; })
+      .map(function(pa){ return { name: pa.name, url: pa.url }; })),
   };
 }
 
@@ -3258,9 +3406,8 @@ window.addEventListener('message', function(evt) {
       lgt.rotation = lupd.rotation;
       // Day 90: yawDeg/tiltDeg used to go stale here, so the next Edit -> Save
       // would recompute the rotation from the OLD yaw/tilt and undo this update.
-      var _yt = decomposeYawTilt(lgt.rotation);
-      lgt.yawDeg = _yt.yawDeg; lgt.tiltDeg = _yt.tiltDeg; lgt.aimHasRoll = _yt.hasRoll;
-      if (_yt.hasRoll) console.warn('[Composer] light "' + lupd.name + '" rotation includes roll; Yaw/Tilt are the closest yaw+tilt aim, and editing them drops the roll.');
+      var _yt = eulerFromRot(lgt.rotation);
+      lgt.yawDeg = _yt.yDeg; lgt.tiltDeg = _yt.xDeg; lgt.rollDeg = _yt.zDeg; lgt.aimHasRoll = false;
     }
     drawScene();
     if (selectedType === 'light' && selectedId === lupd.name) showLD(lupd.name);
@@ -3502,6 +3649,7 @@ function sceneChanged(){
   sceneConfig.width=parseInt(document.getElementById('sc-width').value)||40;
   sceneConfig.depth=parseInt(document.getElementById('sc-depth').value)||40;
   var seedEl=document.getElementById('sc-seed'); if(seedEl) sceneConfig.seed=seedEl.value.trim();
+  var dmEl=document.getElementById('sc-dm'); if(dmEl) sceneConfig.dm=dmEl.value.trim();
   var bgDefEl=document.getElementById('bg-def'); if(bgDefEl) bgConfig.def=bgDefEl.value.trim();
   var navTypeEl=document.getElementById('nav-type'); if(navTypeEl) navConfig.type=navTypeEl.value;
   var navTransEl=document.getElementById('nav-transition'); if(navTransEl) navConfig.transitionType=navTransEl.value;
@@ -3518,6 +3666,11 @@ function applyScene(){
   // Day 47: clear XML-load guard so loadAll can update server state freely on fresh sessions
   window._sceneXmlLoaded = false;
   computeScale();drawScene();updateSummary();toast('Grid: '+sceneConfig.width+'x'+sceneConfig.depth+'m');
+  // First Apply on a blank scene: give the author four cameras around the centre.
+  if(!_centerCamsOffered && !Object.keys(zones).length && !Object.keys(waypoints).length &&
+     !Object.keys(placedAgents).length && !Object.keys(placedCameras).length){
+    _centerCamsOffered = true; addCenterCameras(true);
+  }
 }
 function updateSummary(){
   document.getElementById('scene-summary').innerHTML=
@@ -3541,7 +3694,69 @@ function renderAll(){
   renderZoneList();renderWPList();renderPathList();renderAgentRoster();renderPlaced();renderCameraList();renderLightList();renderAudioList();renderMidiList();renderAssetList();renderEffectTargetList();
   updateStats();updateSummary();drawScene();
 }
+var CAM_BULK_SETS = {
+  basic:    ['wide','medium','closeup'],
+  coverage: ['wide','medium','closeup','over_shoulder','profile','overhead']
+};
+var _lastBulkCams = [];
+function renderCamBulk(){
+  var sel=document.getElementById('cam-bulk-subject'); if(!sel) return;
+  var keep=sel.value, names=Object.keys(placedAgents);
+  sel.innerHTML = names.length ? names.map(function(n){return '<option value="'+xe(n)+'">'+xe(n)+'</option>';}).join('')
+                               : '<option value="">(no characters placed: centre of the grid)</option>';
+  if(keep && names.indexOf(keep)>=0) sel.value=keep;
+  var u=document.getElementById('cam-bulk-undo'); if(u) u.style.display=_lastBulkCams.length?'':'none';
+}
+// Adds a set of preset-framed Free Cameras around one subject in a single step.
+// Same seed maths as the single-camera form (camSeedCompute); names CAM_<Shot>_<Subject>,
+// with _2, _3 ... if a name is taken. Never overwrites an existing camera.
+function addStandardCameras(){
+  var setId=document.getElementById('cam-bulk-set').value;
+  var subj=document.getElementById('cam-bulk-subject').value;
+  var types=CAM_BULK_SETS[setId]; if(!types) return;
+  var added=[];
+  types.forEach(function(t){
+    var seed=camSeedCompute(t, subj||'__grid_centre__');  // no subject: frame the centre of the grid
+    var label=CAM_SEED_TYPES.filter(function(x){return x.value===t;})[0].label.replace(/[^A-Za-z0-9]+/g,'');
+    var base='CAM_'+label+(subj?'_'+subj.replace(/[^A-Za-z0-9]+/g,''):''), name=base, n=2;
+    while(placedCameras[name]) name=base+'_'+(n++);
+    placedCameras[name]={name:name, position:[seed.position[0],seed.height,seed.position[1]],
+      hAngle:seed.hAngle, vAngle:seed.vAngle, roll:seed.roll,
+      fieldOfView:45*Math.PI/180, nearDistance:-1, farDistance:-1, jump:false};
+    added.push(name);
+  });
+  _lastBulkCams=added;
+  renderAll();
+  toast('Added '+added.length+' cameras'+(subj?' around '+subj:' around the centre of the grid'));
+}
+// Four user-aid cameras: spaced evenly around the middle of the grid at face height (1.7 m),
+// every one looking at the centre. Distance is 7 m (less only if the grid is smaller than 14 m).
+// Center_1 sits on the +Z side and looks toward -Z, the X3D default view direction; 2 to 4 follow
+// clockwise on the map. Never overwrites a camera of the same name.
+var CENTER_CAM_HEIGHT = 1.7, CENTER_CAM_DISTANCE = 7, _centerCamsOffered = false;
+function addCenterCameras(auto){
+  var cx=sceneConfig.width/2, cz=sceneConfig.depth/2, d=Math.min(CENTER_CAM_DISTANCE, Math.min(sceneConfig.width,sceneConfig.depth)/2);  // 7 m out, kept on the grid
+  var added=[];
+  for(var i=0;i<4;i++){
+    var a=i*Math.PI/2, px=cx+d*Math.sin(a), pz=cz+d*Math.cos(a);
+    var yaw=Math.atan2(-(cx-px),-(cz-pz))*180/Math.PI;
+    var name='Center_'+(i+1);
+    if(placedCameras[name]) continue;
+    placedCameras[name]={name:name, position:[px,CENTER_CAM_HEIGHT,pz], hAngle:Math.round(yaw*100)/100, vAngle:0, roll:0,
+      fieldOfView:45*Math.PI/180, nearDistance:-1, farDistance:-1, jump:false};
+    added.push(name);
+  }
+  if(!added.length){ if(!auto) toast('The four centre cameras are already placed.'); return; }
+  _lastBulkCams=added; renderAll();
+  toast('Added '+added.length+' centre cameras at face height, looking at the middle of the grid');
+}
+function undoStandardCameras(){
+  _lastBulkCams.forEach(function(n){ delete placedCameras[n]; });
+  var k=_lastBulkCams.length; _lastBulkCams=[];
+  renderAll(); toast('Removed '+k+' cameras');
+}
 function renderCameraList(){
+  renderCamBulk();
   var el=document.getElementById('camera-list');if(!el)return;
   var list=Object.values(placedCameras);
   if(!list.length){el.innerHTML='<div style="color:var(--dim);font-size:16px">No free cameras placed.</div>';return;}
@@ -4825,10 +5040,10 @@ function onCanvasClick(e){
   }
   var wp=c2w(cx,cy);
   if(placing){var cl=clamp(wp.wx,wp.wz);pendingPos=[cl.wx,0,cl.wz];
-    if(placing==='zone')confirmZone();else if(placing==='waypoint')confirmWP();
+    if(placing==='zone')confirmZone();else if(placing==='waypoint'){document.getElementById('wp-x').value=cl.wx;document.getElementById('wp-z').value=cl.wz;confirmWP();}
     else if(placing==='camera'){document.getElementById('cam-x').value=cl.wx;document.getElementById('cam-z').value=cl.wz;confirmCamera();}
     else if(placing==='light'){document.getElementById('light-x').value=cl.wx;document.getElementById('light-z').value=cl.wz;confirmLight();}
-    else if(placing==='audio')confirmAudio();
+    else if(placing==='audio'){document.getElementById('audio-x').value=cl.wx;document.getElementById('audio-z').value=cl.wz;confirmAudio();}
     else if(placing==='asset'){
       // Day 88: confirmAsset() now reads X/Z from the form fields (so
       // they're directly editable afterward, see that function's own
@@ -4891,6 +5106,7 @@ function showZD(id){
   document.getElementById('detail-zone').style.display='block';
   document.getElementById('zd-name').textContent=z.name||id;
   document.getElementById('zd-type').textContent=z.zone_type||'neutral';
+  var _zi=document.getElementById('zd-type-desc'); if(_zi) _zi.textContent=zoneTypeInfo(z.zone_type||'neutral').desc;
   var zdThumb=document.getElementById('zd-portrait-thumb');
   if(zdThumb) zdThumb.innerHTML=_iconThumbHtml(z.image,'🗺️');
   var pos=z.location||z.position||[0,0,0];
@@ -4948,8 +5164,11 @@ function showZD(id){
     assetEl.innerHTML =
       '<div>model: <span style="color:var(--purple)">' + xe(z.asset.url) + '</span></div>' +
       '<div>offset: <span style="color:var(--text)">' + (z.asset.offsetX||0) + ', ' + (z.asset.offsetY||0) + ', ' + (z.asset.offsetZ||0) + '</span></div>' +
-      '<div>rotation: <span style="color:var(--text)">' + (z.asset.rotationY||0) + '&deg;</span></div>' +
-      '<div>scale: <span style="color:var(--text)">' + (z.asset.scale!==undefined?z.asset.scale:1) + '</span></div>';
+      '<div>rotation X Y Z: <span style="color:var(--text)">' + (z.asset.rotationX||0) + ', ' + (z.asset.rotationY||0) + ', ' + (z.asset.rotationZ||0) + '&deg;</span></div>' +
+      '<div>scale: <span style="color:var(--text)">' + (z.asset.scale!==undefined?z.asset.scale:1) + '</span></div>' +
+      '<canvas id="tb-zad" class="tb" style="cursor:default" width="120" height="120" title="Shows the asset\'s turn. Click Edit to change it."></canvas>' +
+      '<button type="button" class="btn cool" style="font-size:14px;padding:2px 8px;display:block;margin:2px auto" onclick="rotCopy(\'tb-zad\')">Copy rot</button>';
+    _tbShow('tb-zad',{x:z.asset.rotationX||0,y:z.asset.rotationY||0,z:z.asset.rotationZ||0});
   } else {
     assetSect.style.display = 'none';
     assetEl.textContent = '';
@@ -4971,6 +5190,33 @@ function saveZoneInterpolator(){
   if(!id) return;
   var triples=getNetTriples('zone:'+id);
   saveTriplesAsAsset(triples,(zones[id]&&zones[id].name)||id,'zone:'+id);
+}
+function saveAgentRotation(){
+  var name=selectedType==='agent'?selectedId:null;
+  if(!name||!placedAgents[name]){toast('No agent selected',true);return;}
+  var x=parseFloat(document.getElementById('ad-rot-x').value)||0, y=parseFloat(document.getElementById('ad-rot-y').value)||0, z=parseFloat(document.getElementById('ad-rot-z').value)||0;
+  placedAgents[name].rotationX=x; placedAgents[name].rotationY=y; placedAgents[name].rotationZ=z;
+  renderAll();
+  toast(name+' rotated to ('+x+', '+y+', '+z+')');
+  _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
+}
+function saveAgentLightSet(){
+  var name=selectedType==='agent'?selectedId:null;
+  if(!name||!placedAgents[name]){toast('No agent selected',true);return;}
+  var a=placedAgents[name], g=function(id,d){var v=parseFloat(document.getElementById(id).value);return (v>=0&&v<=2)?v:d;};
+  a.lightSet=document.getElementById('ad-lightset').value||'';
+  a.lightKey=g('ad-light-key',0.9); a.lightFill=g('ad-light-fill',0.4); a.lightBack=g('ad-light-back',0.7);
+  toast(name+' lights: '+(a.lightSet||'scene default')+' (applies on export)');
+  _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
+}
+function saveAgentScale(){
+  var name=selectedType==='agent'?selectedId:null;
+  if(!name||!placedAgents[name]){toast('No agent selected',true);return;}
+  var v=parseFloat(document.getElementById('ad-scale').value);
+  if(!(v>0)||v>20){toast('Scale must be between 0.05 and 20',true);return;}
+  placedAgents[name].avatarScale=v;
+  toast(name+' avatar scale '+v+' (applies on export)');
+  _sendSceneDataToEventsEditor();_sendSceneDataToRouteGraphEditor();
 }
 function saveAgentPosition(){
   var name=selectedType==='agent'?selectedId:null;
@@ -5110,19 +5356,33 @@ function decomposeYawTilt(rot){
   var r6=function(v){return Math.round(v*1e6)/1e6;};
   return{yawDeg:r6(yaw*180/Math.PI),tiltDeg:r6(tilt*180/Math.PI),hasRoll:err>1e-4};
 }
+// Inverse of composeEuler: R = Ry(y)*Rx(x)*Rz(z). Returns degrees.
+function eulerFromRot(rot){
+  var x=rot[0],y=rot[1],z=rot[2],a=rot[3],nrm=Math.sqrt(x*x+y*y+z*z);
+  if(!(nrm>1e-9)||!isFinite(a)||Math.abs(a)<1e-12)return{xDeg:0,yDeg:0,zDeg:0};
+  x/=nrm;y/=nrm;z/=nrm;
+  var c=Math.cos(a),sn=Math.sin(a),t=1-c;
+  var m=[[t*x*x+c,t*x*y-sn*z,t*x*z+sn*y],[t*x*y+sn*z,t*y*y+c,t*y*z-sn*x],[t*x*z-sn*y,t*y*z+sn*x,t*z*z+c]];
+  var ex=Math.asin(Math.max(-1,Math.min(1,-m[1][2])));
+  var ey,ez;
+  if(Math.abs(m[1][2])<0.999999){ey=Math.atan2(m[0][2],m[2][2]);ez=Math.atan2(m[1][0],m[1][1]);}
+  else{ey=Math.atan2(-m[2][0],m[0][0]);ez=0;}
+  var r6=function(v){return Math.round(v*180/Math.PI*1e6)/1e6;};
+  return{xDeg:r6(ex),yDeg:r6(ey),zDeg:r6(ez)};
+}
 function lightYawTilt(l){
-  if(l.yawDeg!==undefined&&l.tiltDeg!==undefined)return{yawDeg:l.yawDeg,tiltDeg:l.tiltDeg};
-  if(l.rotation)return decomposeYawTilt(l.rotation);
-  return{yawDeg:0,tiltDeg:45};
+  if(l.yawDeg!==undefined&&l.tiltDeg!==undefined)return{yawDeg:l.yawDeg,tiltDeg:l.tiltDeg,rollDeg:l.rollDeg||0};
+  if(l.rotation){var e=eulerFromRot(l.rotation);return{yawDeg:e.yDeg,tiltDeg:e.xDeg,rollDeg:e.zDeg};}
+  return{yawDeg:0,tiltDeg:45,rollDeg:0};
 }
 var _ANG_IDS={
   camera:['cd-ang-yaw','cd-ang-pitch','cd-ang-roll'],
-  light: ['ld-ang-yaw','ld-ang-tilt']
+  light: ['ld-ang-yaw','ld-ang-tilt','ld-ang-roll']
 };
 function setAngleFields(kind,obj){
   var ids=_ANG_IDS[kind], vals;
   if(kind==='camera')vals=[obj.hAngle||0,obj.vAngle||0,obj.roll||0];
-  else{var yt=lightYawTilt(obj);vals=[yt.yawDeg,yt.tiltDeg];}
+  else{var yt=lightYawTilt(obj);vals=[yt.yawDeg,yt.tiltDeg,yt.rollDeg||0];}
   ids.forEach(function(id,i){document.getElementById(id).value=fmtAng(vals[i]);});
 }
 function setLightRotReadout(l){
@@ -5136,8 +5396,8 @@ function applyPlacedAngles(kind){
   if(v.some(function(n){return !isFinite(n);})){toast('Angles must be numbers',true);setAngleFields(kind,ref.obj);return;}
   if(kind==='camera'){ ref.obj.hAngle=v[0]; ref.obj.vAngle=v[1]; ref.obj.roll=v[2]; }
   else{
-    ref.obj.yawDeg=v[0]; ref.obj.tiltDeg=v[1];
-    ref.obj.rotation=composeYawTilt(v[0],v[1]);
+    ref.obj.yawDeg=v[0]; ref.obj.tiltDeg=v[1]; ref.obj.rollDeg=v[2];
+    ref.obj.rotation=composeEuler(v[1],v[0],v[2]);
     ref.obj.aimHasRoll=false;
     setLightRotReadout(ref.obj);
   }
@@ -5170,7 +5430,9 @@ var _XYZ_GROUPS={
   light_detail: {ids:['ld-pos-x','ld-pos-y','ld-pos-z'],  src:'light',  apply:function(){applyPlacedPos('light');}},
   camera_form:  {ids:['cam-x','cam-height','cam-z']},
   light_form:   {ids:['light-x','light-height','light-z']},
-  asset_form:   {ids:['asset-x','asset-height','asset-z']}
+  asset_form:   {ids:['asset-x','asset-height','asset-z']},
+  audio_form:   {ids:['audio-x','audio-height','audio-z']},
+  wp_form:      {ids:['wp-x','wp-y','wp-z']}
 };
 var _XYZ_BY_ID={};
 Object.keys(_XYZ_GROUPS).forEach(function(g){_XYZ_GROUPS[g].ids.forEach(function(id){_XYZ_BY_ID[id]=g;});});
@@ -5277,8 +5539,20 @@ function _iconThumbHtml(src, fallbackGlyph){
   var url = src.indexOf('data:')===0 ? src : '/static/x3d/'+src;
   return '<img src="'+url+'" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.textContent=\''+fallbackGlyph+'\'">';
 }
+function fillPoseSel(id,a,cur){
+  var s=document.getElementById(id);if(!s)return;
+  var names=(a.behavior_clips||[]).map(function(c){return (c&&typeof c==='object')?c.name:c;}).filter(Boolean);
+  if(cur&&names.indexOf(cur)<0)names.push(cur);   // keep a saved choice visible even if the clip list is not loaded yet
+  s.innerHTML='<option value="">(none)</option>'+names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+(n===cur?' selected':'')+'>'+n.replace(/</g,'&lt;')+'</option>';}).join('');
+}
+function setAgentPose(which,val){
+  var name=document.getElementById('ad-name').textContent;
+  var a=placedAgents[name];if(!a)return;
+  if(val)a[which]=val;else delete a[which];
+}
 function showAD(name){
   var a=placedAgents[name];if(!a)return;
+  fillPoseSel('ad-think',a,a.think||'');fillPoseSel('ad-hold',a,a.hold||'');
   document.getElementById('detail-agent').style.display='block';
   document.getElementById('ad-name').textContent=name;
   document.getElementById('ad-name').style.color=a.color||'#aab0be';
@@ -5291,6 +5565,12 @@ function showAD(name){
   document.getElementById('ad-pos-x').value=pos[0].toFixed(2);
   document.getElementById('ad-pos-y').value=(pos[1]!==undefined?pos[1]:0).toFixed(2);
   document.getElementById('ad-pos-z').value=pos[2].toFixed(2);
+  document.getElementById('ad-rot-x').value=a.rotationX||0;
+  document.getElementById('ad-rot-y').value=a.rotationY||0;
+  document.getElementById('ad-rot-z').value=a.rotationZ||0;
+  var _adSc=document.getElementById('ad-scale'); if(_adSc) _adSc.value=(a.avatarScale>0?a.avatarScale:1);
+  var _ls=document.getElementById('ad-lightset'); if(_ls){ _ls.value=a.lightSet||''; document.getElementById('ad-light-key').value=(a.lightKey!==undefined?a.lightKey:0.9); document.getElementById('ad-light-fill').value=(a.lightFill!==undefined?a.lightFill:0.4); document.getElementById('ad-light-back').value=(a.lightBack!==undefined?a.lightBack:0.7); }
+  tbRedraw();
   document.getElementById('ad-weights').innerHTML=chBars(a.weights);
   var adInterpEl = document.getElementById('ad-interp');
   var adInterpSaveBtn = document.getElementById('ad-interp-save');
@@ -5403,16 +5683,20 @@ function saveHanimSrc(){
   // val is the hanim_src path stored in the cultivar definition —
   // set by Character Creator via /avatar/upload, never a raw filename chosen here.
   var val=sel.value.trim();
-  if(!val){toast('No MCCF avatar selected — create one in Character Creator first',true);return;}
-  if(placedAgents[name])placedAgents[name].hanim_src=val;
-  if(agents[name])agents[name].hanim_src=val;
-  camRigFetchManifest(val);
+  // The first option is the cylinder placeholder. Choosing it is a real choice:
+  // the scene stores an explicit empty hanim_src so a reload does not bring the
+  // cultivar's avatar back.
+  var usePlaceholder = !val && sel.selectedIndex===0;
+  if(!val && !usePlaceholder){toast('No MCCF avatar selected — create one in Character Creator first',true);return;}
+  if(placedAgents[name]){placedAgents[name].hanim_src=val;placedAgents[name].hanim_none=usePlaceholder;}
+  if(agents[name]){agents[name].hanim_src=val;agents[name].hanim_none=usePlaceholder;}
+  if(val)camRigFetchManifest(val);
   var hEl=document.getElementById('ad-hanim');
-  if(hEl)hEl.textContent=val;
+  if(hEl)hEl.textContent=val||'(placeholder — assign in Character Creator)';
   sel.style.display='none';
   var sav=document.getElementById('ad-hanim-save');
   if(sav)sav.style.display='none';
-  toast('Avatar assigned for '+name+' — saving scene XML…');
+  toast((usePlaceholder?'Placeholder restored for ':'Avatar assigned for ')+name+' — saving scene XML…');
   // Auto-save so the hanim_src survives tab switches and scene reloads.
   // Day 79 retired the OLD Events Editor cue system (~40 functions removed)
   // and the comment here used to say _eventTracks was "a harmless no-op now
@@ -5430,7 +5714,8 @@ function saveHanimSrc(){
   // reload — it was just never being given any to read, since export never
   // wrote them. Fixed by sourcing from the live variable instead.
   _doExportSceneXML((_lastTimelineCues && _lastTimelineCues.cues) || []);
-  toast('Avatar assignment saved for '+name);
+  toast((usePlaceholder?'Placeholder saved for ':'Avatar assignment saved for ')+name);
+  if(typeof drawScene==='function')drawScene();
 }
 function showWD(name){
   var wp=waypoints[name];if(!wp)return;
@@ -5517,7 +5802,8 @@ function showAssetD(name){
   document.getElementById('asd-url').textContent=a.url||'(none selected)';
   var pos=a.position||[0,0,0];
   document.getElementById('asd-pos').textContent='X='+pos[0].toFixed(1)+' Y='+pos[1].toFixed(1)+' Z='+pos[2].toFixed(1);
-  document.getElementById('asd-xform').textContent='rotY='+(a.rotationY||0)+'°  scale='+(a.scale!==undefined?a.scale:1);
+  document.getElementById('asd-xform').textContent='rot X Y Z='+(a.rotationX||0)+', '+(a.rotationY||0)+', '+(a.rotationZ||0)+'°  scale='+(a.scale!==undefined?a.scale:1);
+  _tbShow('tb-asd',{x:a.rotationX||0,y:a.rotationY||0,z:a.rotationZ||0});
 }
 function editCamera(name){
   var c=placedCameras[name];if(!c)return;
@@ -5560,6 +5846,8 @@ function editWaypoint(name) {
   document.getElementById('wp-dwell').value = wp.dwell || 2;
   document.getElementById('wp-pace').value  = wp.pace  || 1.4;
   document.getElementById('wp-y').value = (wp.position && wp.position[1] !== undefined) ? wp.position[1] : 0;
+  document.getElementById('wp-x').value = (wp.position && wp.position[0] !== undefined) ? wp.position[0] : 0;
+  document.getElementById('wp-z').value = (wp.position && wp.position[2] !== undefined) ? wp.position[2] : 0;
   populateWPZones();
   var zSel = document.getElementById('wp-zone');
   if (wp.zone) zSel.value = wp.zone;
@@ -5612,7 +5900,7 @@ function startPlace(t){
     var btn=document.querySelector('#'+fid+' .btn.pri'); if(btn) btn.textContent='Place on Map';
   });
   if(t==='zone'){clearZoneForm();document.getElementById('zone-form').style.display='block';placing='zone';_zoneCommandRules=[];renderZoneCommandsForm();}
-  else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';document.getElementById('wp-y').value=0;}
+  else if(t==='waypoint'){document.getElementById('wp-form').style.display='block';placing='waypoint';document.getElementById('wp-y').value=0;document.getElementById('wp-x').value='';document.getElementById('wp-z').value='';}
   else if(t==='camera'){
     document.getElementById('camera-form').style.display='block';placing='camera';
     document.getElementById('cam-x').value='';
@@ -5628,6 +5916,8 @@ function startPlace(t){
     document.getElementById('light-height').value=4;
     setAngleField('light-yaw', 0);
     setAngleField('light-tilt', 45);
+    setAngleField('light-roll', 0);
+    fillFollowSel('light-follow','light-follow-turns','',false); fillAimSel('');
     // Day 83: reset the optical-property fields to each proto's own
     // authored defaults (see mccf_light_protos.x3d's ProtoInterface),
     // not arbitrary form defaults, so a fresh placement matches what the
@@ -5653,6 +5943,7 @@ function startPlace(t){
     document.getElementById('audio-name').value='';
     _populateMediaSelect(document.getElementById('audio-url'), '');
     document.getElementById('audio-height').value=1.5;
+    document.getElementById('audio-x').value='';document.getElementById('audio-z').value='';
     document.getElementById('audio-loop').checked=false;
     document.getElementById('audio-gain').value=0.8;
     document.getElementById('audio-gain-val').textContent='0.80';
@@ -5664,7 +5955,7 @@ function startPlace(t){
     document.getElementById('asset-z').value='';
     _populateAssetSelect(document.getElementById('asset-place-url'), '');
     document.getElementById('asset-height').value=0;
-    document.getElementById('asset-rot').value=0;
+    document.getElementById('asset-rot').value=0;document.getElementById('asset-rotx').value=0;document.getElementById('asset-rotz').value=0;tbRedraw();
     document.getElementById('asset-rot-val').textContent='0';
     document.getElementById('asset-scale').value=1;
     document.getElementById('asset-is-movie').checked=false;
@@ -5684,6 +5975,8 @@ function updateLightFormForType(){
   if(yawRow) yawRow.style.display=(t==='point')?'none':'block';
   var row=document.getElementById('light-tilt-row');
   if(row) row.style.display=(t==='point')?'none':'block';
+  var rrow=document.getElementById('light-roll-row');
+  if(rrow) rrow.style.display=(t==='point')?'none':'block';
   var atten=document.getElementById('light-atten-row');
   if(atten) atten.style.display=(t==='directional')?'none':'block';
   var radius=document.getElementById('light-radius-row');
@@ -5723,11 +6016,13 @@ function clearZoneForm(){
   document.getElementById('z-id').value='';
   document.getElementById('z-name').value='';
   document.getElementById('z-type').value='neutral';
+  var _td0=document.getElementById('z-type-desc'); if(_td0) _td0.textContent=zoneTypeInfo(document.getElementById('z-type').value).desc;
   document.getElementById('z-radius').value=4;
   clearZoneImage();
   document.getElementById('z-desc').value='';
   document.getElementById('z-noise').value=0.10;
   document.getElementById('z-ambient').value='dorian';
+  document.getElementById('z-ambient-drive').checked=false;
   ['E','B','P','S'].forEach(function(ch){
     document.getElementById('zw-'+ch).value=0.25;
     document.getElementById('zwv-'+ch).textContent='0.25';
@@ -5749,7 +6044,7 @@ function clearZoneForm(){
   document.getElementById('z-asset-offset-x').value=0;
   document.getElementById('z-asset-offset-y').value=0;
   document.getElementById('z-asset-offset-z').value=0;
-  document.getElementById('z-asset-rotation').value=0;
+  document.getElementById('z-asset-rotation').value=0;document.getElementById('z-asset-rotx').value=0;document.getElementById('z-asset-rotz').value=0;tbRedraw();
   document.getElementById('z-asset-scale').value=1;
 }
 function cancelPlace(){
@@ -6035,8 +6330,10 @@ function loadZoneTemplate() {
   if (!t) { toast('Template not found: ' + name, true); return; }
 
   document.getElementById('z-type').value = t.zone_type || 'neutral';
+  var _td0=document.getElementById('z-type-desc'); if(_td0) _td0.textContent=zoneTypeInfo(document.getElementById('z-type').value).desc;
   document.getElementById('z-desc').value = t.descriptor || '';
   document.getElementById('z-ambient').value = (t.ambient_theme && t.ambient_theme.scale) || 'dorian';
+  document.getElementById('z-ambient-drive').checked = !!(t.ambient_theme && t.ambient_theme.drive);
   var w = t.weights || {E:0.25,B:0.25,P:0.25,S:0.25};
   ['E','B','P','S'].forEach(function(ch){
     document.getElementById('zw-'+ch).value = w[ch] || 0.25;
@@ -6087,6 +6384,9 @@ function loadZoneTemplate() {
     document.getElementById('z-asset-offset-y').value = asset.offsetY || 0;
     document.getElementById('z-asset-offset-z').value = asset.offsetZ || 0;
     document.getElementById('z-asset-rotation').value = asset.rotationY || 0;
+    document.getElementById('z-asset-rotx').value = asset.rotationX || 0;
+    document.getElementById('z-asset-rotz').value = asset.rotationZ || 0;
+    tbRedraw();
     document.getElementById('z-asset-scale').value = asset.scale !== undefined ? asset.scale : 1;
   }
 
@@ -6105,6 +6405,7 @@ function saveZoneAsTemplate() {
   var type = document.getElementById('z-type').value;
   var desc = document.getElementById('z-desc').value.trim();
   var ambient = document.getElementById('z-ambient').value;
+  var ambientDrive = document.getElementById('z-ambient-drive').checked;
   var w = {}; ['E','B','P','S'].forEach(function(ch){ w[ch] = parseFloat(document.getElementById('zw-'+ch).value); });
 
   var chorus = null;
@@ -6141,7 +6442,9 @@ function saveZoneAsTemplate() {
       offsetX: parseFloat(document.getElementById('z-asset-offset-x').value) || 0,
       offsetY: parseFloat(document.getElementById('z-asset-offset-y').value) || 0,
       offsetZ: parseFloat(document.getElementById('z-asset-offset-z').value) || 0,
+      rotationX: parseFloat(document.getElementById('z-asset-rotx').value) || 0,
       rotationY: parseFloat(document.getElementById('z-asset-rotation').value) || 0,
+      rotationZ: parseFloat(document.getElementById('z-asset-rotz').value) || 0,
       scale: parseFloat(document.getElementById('z-asset-scale').value) || 1
     };
   }
@@ -6149,7 +6452,7 @@ function saveZoneAsTemplate() {
   var x = xmlDecl() + '<ZoneTemplate name="'+xe(name)+'" zone_type="'+xe(type)+'">\n';
   x += '  <Descriptor>'+xe(desc)+'</Descriptor>\n';
   x += '  <Weights E="'+w.E+'" B="'+w.B+'" P="'+w.P+'" S="'+w.S+'"/>\n';
-  x += '  <AmbientTheme scale="'+xe(ambient)+'" tempo="medium"/>\n';
+  x += '  <AmbientTheme scale="'+xe(ambient)+'" tempo="medium"'+(ambientDrive?' drive="1"':'')+'/>\n';
   if (chorus) {
     x += '  <Chorus llm="'+xe(chorus.llm)+'" tone="'+xe(chorus.tone)+'" max_tokens="'+chorus.max_tokens+'" display="'+xe(chorus.display)+'">\n';
     if (chorus.persona) x += '    <Persona>'+xe(chorus.persona)+'</Persona>\n';
@@ -6164,7 +6467,7 @@ function saveZoneAsTemplate() {
   }
   if (asset && asset.url) {
     x += '  <Asset url="'+xe(asset.url)+'" offsetX="'+asset.offsetX+'" offsetY="'+asset.offsetY+'" offsetZ="'+asset.offsetZ
-       + '" rotationY="'+asset.rotationY+'" scale="'+asset.scale+'"/>\n';
+       + '" rotationX="'+(asset.rotationX||0)+'" rotationY="'+asset.rotationY+'" rotationZ="'+(asset.rotationZ||0)+'" scale="'+asset.scale+'"/>\n';
   }
   x += '</ZoneTemplate>\n';
 
@@ -6189,6 +6492,58 @@ var _mediaFiles = [];  // cached from last fetch
 // Shared by drawAgent/drawZone below. Same /media/list?subdir= convention
 // as the audio media lists further down — files live in
 // static/x3d/X3DAssets/media/icons/.
+// ---- server file chooser (system rule: the author is shown the server folder, not asked to remember it) ----
+window.MccfPick = window.MccfPick || (function () {
+  var cssDone = false;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function css() {
+    if (cssDone) return; cssDone = true;
+    var st = document.createElement('style');
+    st.textContent = '.mpk-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center}' +
+      '.mpk-box{background:#101821;color:#c8dcea;border:1px solid #2a3545;border-radius:6px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;padding:14px;font-family:inherit}' +
+      '.mpk-box h3{margin:0 0 4px;font-size:18px;color:#e6f2fa}.mpk-sub{font-size:14px;color:#8aa;margin:0 0 8px;word-break:break-all}' +
+      '.mpk-list{overflow:auto;border:1px solid #2a3545;border-radius:4px;min-height:60px;max-height:44vh;margin-bottom:10px}' +
+      '.mpk-row{display:flex;justify-content:space-between;gap:10px;padding:5px 9px;border-bottom:1px solid #1b2634;font-size:15px}' +
+      '.mpk-row.pk{cursor:pointer}.mpk-row.pk:hover{background:#1c2b3c}.mpk-row small{color:#7f98aa;text-align:right}' +
+      '.mpk-row.ro{color:#8aa}.mpk-msg{padding:10px;color:#9ab;font-size:15px}' +
+      '.mpk-f{width:100%;box-sizing:border-box;margin:0 0 8px;padding:4px 6px;background:#0d1520;color:#c8dcea;border:1px solid #2a3545;border-radius:3px;font-size:15px}' +
+      '.mpk-bar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}' +
+      '.mpk-bar button{font-size:15px;padding:4px 12px;background:#16212e;color:#c8dcea;border:1px solid #3a4b60;border-radius:4px;cursor:pointer}.mpk-bar button.pri{border-color:#2b8a84;color:#fff;background:#1d4a48}';
+    document.head.appendChild(st);
+  }
+  // o: {title, folder, mode:'open'|'upload', items:[{name,value,note}] or function returning a Promise of that,
+  //     onPick(item), onComputer(), computerLabel, empty}
+  function choose(o) {
+    css();
+    var up = o.mode === 'upload', ov = document.createElement('div'); ov.className = 'mpk-ov';
+    ov.innerHTML = '<div class="mpk-box"><h3>' + esc(o.title || 'Choose a file') + '</h3>' +
+      '<p class="mpk-sub">' + (up ? 'Already on the server in ' : 'On the server in ') + '<b>' + esc(o.folder || '') + '</b>' + (up ? '. A file with the same name asks before it replaces one.' : '') + '</p>' +
+      '<input class="mpk-f" placeholder="filter" style="display:none"><div class="mpk-list"><div class="mpk-msg">Loading…</div></div>' +
+      '<div class="mpk-bar"></div></div>';
+    document.body.appendChild(ov);
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); document.removeEventListener('keydown', key); }
+    function key(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', key);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var list = ov.querySelector('.mpk-list'), flt = ov.querySelector('.mpk-f'), bar = ov.querySelector('.mpk-bar'), all = [];
+    function draw() {
+      var q = flt.value.trim().toLowerCase(), rows = all.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
+      if (!rows.length) { list.innerHTML = '<div class="mpk-msg">' + esc(all.length ? 'No file matches.' : (o.empty || 'Nothing here yet.')) + '</div>'; return; }
+      list.innerHTML = rows.map(function (i, n) { return '<div class="mpk-row ' + (up ? 'ro' : 'pk') + '" data-n="' + all.indexOf(i) + '"><span>' + esc(i.name) + '</span>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</div>'; }).join('');
+      if (!up) Array.prototype.forEach.call(list.querySelectorAll('.mpk-row'), function (r) { r.onclick = function () { var it = all[+r.getAttribute('data-n')]; close(); if (o.onPick) o.onPick(it); }; });
+    }
+    flt.oninput = draw;
+    var b = '';
+    if (o.onComputer) b += '<button class="' + (up ? 'pri' : '') + '" data-a="pc">' + esc(o.computerLabel || (up ? 'Choose a file from my computer…' : 'From my computer…')) + '</button>';
+    b += '<button data-a="x">Cancel</button>'; bar.innerHTML = b;
+    bar.onclick = function (e) { var a = e.target.getAttribute && e.target.getAttribute('data-a'); if (a === 'x') close(); else if (a === 'pc') { close(); o.onComputer(); } };
+    Promise.resolve(typeof o.items === 'function' ? o.items() : o.items).then(function (items) {
+      all = items || []; flt.style.display = all.length > 8 ? '' : 'none'; draw();
+    }).catch(function (e) { list.innerHTML = '<div class="mpk-msg">The server list is not available (' + esc(e && e.message || e) + ').' + (o.onComputer ? ' You can still choose a file from your computer.' : '') + '</div>'; });
+  }
+  return { choose: choose };
+})();
+
 var _iconFiles = [];
 function refreshIconsList() {
   fetch(API + '/media/list?subdir=icons')
@@ -6215,6 +6570,13 @@ function _populateIconSelect(sel, currentVal) {
 }
 
 var _zoneImageSrc = '';
+function zoneImagePick() {
+  MccfPick.choose({ title: 'Zone image', folder: 'static/x3d/X3DAssets/media/icons/', mode: 'open',
+    items: function () { return fetch(API + '/media/list?subdir=icons').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) { return (d.files || []).filter(function (f) { return /\.(png|jpe?g|webp|gif)$/i.test(f); }).map(function (f) { return { name: f.replace(/^icons\//, ''), value: 'X3DAssets/media/' + f }; }); }); },
+    onPick: function (it) { _zoneImageSrc = it.value; var s = document.getElementById('z-image-select'); if (s) s.value = it.value; var fi = document.getElementById('z-image-file'); if (fi) fi.value = ''; updateZoneImageThumb(); },
+    onComputer: function () { var fi = document.getElementById('z-image-file'); if (fi) { fi.value = ''; fi.click(); } } });
+}
 function onZoneImageSelectChange() {
   _zoneImageSrc = document.getElementById('z-image-select').value;
   var fi = document.getElementById('z-image-file'); if (fi) fi.value = '';
@@ -6419,7 +6781,7 @@ function _populateSoundEffectsSelect(sel, currentVal) {
 var _zoneCommandRules = [];  // [{event, cultivar, command}] — buffer while zone form is open
 
 var ZONE_COMMAND_EVENTS   = ['OnEnter', 'OnExit', 'OnDwell'];
-var ZONE_COMMAND_COMMANDS = ['reflect', 'attend', 'greet', 'release', 'observe', 'respond', 'lament', 'celebrate', 'warn', 'question'];
+var ZONE_COMMAND_COMMANDS = ['reflect', 'confess', 'release', 'attend', 'greet', 'warn', 'grieve', 'celebrate', 'calculate', 'initiate'];   // must match the server's _ZONE_COMMAND_VOCAB (the server rejects any other word)
 
 function addZoneCommand() {
   _zoneCommandRules.push({event: 'OnEnter', cultivar: '*', command: 'reflect'});
@@ -6471,6 +6833,7 @@ function confirmZone(){
   var type=document.getElementById('z-type').value,radius=parseFloat(document.getElementById('z-radius').value);
   var desc=document.getElementById('z-desc').value.trim(),noise=parseFloat(document.getElementById('z-noise').value);
   var ambient=document.getElementById('z-ambient').value;
+  var ambientDrive=document.getElementById('z-ambient-drive').checked;
   if(!id){toast('Zone ID required',true);return;}
   var w={};['E','B','P','S'].forEach(function(ch){w[ch]=parseFloat(document.getElementById('zw-'+ch).value);});
   // Chorus config
@@ -6516,7 +6879,9 @@ function confirmZone(){
       offsetX: parseFloat(document.getElementById('z-asset-offset-x').value) || 0,
       offsetY: parseFloat(document.getElementById('z-asset-offset-y').value) || 0,
       offsetZ: parseFloat(document.getElementById('z-asset-offset-z').value) || 0,
+      rotationX: parseFloat(document.getElementById('z-asset-rotx').value) || 0,
       rotationY: parseFloat(document.getElementById('z-asset-rotation').value) || 0,
+      rotationZ: parseFloat(document.getElementById('z-asset-rotz').value) || 0,
       scale: parseFloat(document.getElementById('z-asset-scale').value) || 1
     };
   }
@@ -6531,7 +6896,7 @@ function confirmZone(){
   var wasEditingZone=!!_editingZoneId;
   if(wasEditingZone && _editingZoneId!==id) delete zones[_editingZoneId];  // rename
   zones[id]={id:id,name:name||id,zone_type:type,location:pendingPos.slice(),radius:radius,weights:w,
-    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium'},chorus:chorus,
+    descriptor:desc,noise_coefficient:noise,ambient_theme:{scale:ambient,tempo:'medium',drive:ambientDrive},chorus:chorus,
     commands:_zoneCommandRules.slice(),sound:sound,asset:asset,template:templateName,image:_zoneImageSrc||''};
   _editingZoneId=null;
   apiPost('/zone',{name:name||id,preset:type,radius:radius,location:pendingPos.slice(),
@@ -6551,6 +6916,7 @@ function editZone(id){
   document.getElementById('z-id').value=z.id||'';
   document.getElementById('z-name').value=z.name||'';
   document.getElementById('z-type').value=z.zone_type||'neutral';
+  var _td0=document.getElementById('z-type-desc'); if(_td0) _td0.textContent=zoneTypeInfo(document.getElementById('z-type').value).desc;
   document.getElementById('z-radius').value=z.radius||4;
   // Zone image — select the matching option if it's a registered file,
   // otherwise still preview it (e.g. a data URL saved before /media/upload
@@ -6562,6 +6928,7 @@ function editZone(id){
   document.getElementById('z-desc').value=z.descriptor||'';
   document.getElementById('z-noise').value=(z.noise_coefficient!==undefined)?z.noise_coefficient:0.10;
   document.getElementById('z-ambient').value=(z.ambient_theme&&z.ambient_theme.scale)||'dorian';
+  document.getElementById('z-ambient-drive').checked=!!(z.ambient_theme&&z.ambient_theme.drive);
   var w=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25};
   ['E','B','P','S'].forEach(function(ch){
     document.getElementById('zw-'+ch).value=w[ch]||0.25;
@@ -6615,6 +6982,9 @@ function editZone(id){
     document.getElementById('z-asset-offset-y').value = asset.offsetY || 0;
     document.getElementById('z-asset-offset-z').value = asset.offsetZ || 0;
     document.getElementById('z-asset-rotation').value = asset.rotationY || 0;
+    document.getElementById('z-asset-rotx').value = asset.rotationX || 0;
+    document.getElementById('z-asset-rotz').value = asset.rotationZ || 0;
+    tbRedraw();
     document.getElementById('z-asset-scale').value = asset.scale !== undefined ? asset.scale : 1;
   }
   // Set pendingPos so confirmZone doesn't reject — use existing zone location
@@ -6631,6 +7001,7 @@ function loadZonePreset(){
   var t=document.getElementById('z-type').value,p=ZONE_PRESETS[t]||ZONE_PRESETS.neutral;
   ['E','B','P','S'].forEach(function(ch){document.getElementById('zw-'+ch).value=p[ch];document.getElementById('zwv-'+ch).textContent=p[ch].toFixed(2);});
   document.getElementById('z-noise').value=p.noise;document.getElementById('z-ambient').value=p.ambient;
+  var _td=document.getElementById('z-type-desc'); if(_td) _td.textContent=zoneTypeInfo(t).desc;
 }
 function updW(ch){var v=parseFloat(document.getElementById('zw-'+ch).value);document.getElementById('zwv-'+ch).textContent=v.toFixed(2);}
 function startPlaceAgent(name){
@@ -6660,8 +7031,15 @@ function placeAgentAt(name,wx,wz){
   placedAgents[name]={name:name,position:[wx,0,wz],color:a.color,weights:a.weights,regulation:a.regulation,disposition:a.disposition||'',voice:voice,hanim_src:a.hanim_src||'',hanim_loa:a.hanim_loa||4,behavior_clips:a.behavior_clips||[],portrait:a.portrait||''};
   placing=null;placingAgent=null;pendingPos=null;hideHint();renderAll();toast(name+' placed ('+wx.toFixed(1)+',0,'+wz.toFixed(1)+')');
 }
+function _typedXZ(xid,zid){
+  var x=parseFloat(document.getElementById(xid).value),z=parseFloat(document.getElementById(zid).value);
+  if(!isNaN(x)&&!isNaN(z)) return [x,0,z];
+  return pendingPos?[pendingPos[0],0,pendingPos[2]]:null;
+}
 function confirmWP(){
-  if(!pendingPos){toast('Click map first',true);return;}
+  var _xz=_typedXZ('wp-x','wp-z');
+  if(!_xz){toast('Click the map first, or type X and Z',true);return;}
+  pendingPos=_xz;
   var name=document.getElementById('wp-name').value.trim(),label=document.getElementById('wp-label').value.trim();
   var zone=document.getElementById('wp-zone').value,dwell=parseFloat(document.getElementById('wp-dwell').value);
   var pace=parseFloat(document.getElementById('wp-pace').value)||1.4;
@@ -6753,6 +7131,144 @@ function confirmCamera(){
 // shape the Light proto's rotation field expects — no change needed
 // anywhere else in the write/read path, this just replaces how that one
 // array gets computed.
+// Rotation about X, Y and Z (degrees). Y turns first (outer), then X pitch, then Z roll,
+// the same order composeYawTilt uses. Returns one X3D SFRotation [ax,ay,az,angle].
+function composeEuler(xDeg,yDeg,zDeg){
+  function q(ax,deg){var h=deg*Math.PI/360,c=Math.cos(h),sn=Math.sin(h);return [c,ax[0]*sn,ax[1]*sn,ax[2]*sn];}
+  function mul(a,b){return [a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];}
+  var r=mul(mul(q([0,1,0],yDeg||0),q([1,0,0],xDeg||0)),q([0,0,1],zDeg||0));
+  var sn=Math.sqrt(r[1]*r[1]+r[2]*r[2]+r[3]*r[3]);
+  if(sn<1e-9) return [0,1,0,0];
+  return [r[1]/sn,r[2]/sn,r[3]/sn,2*Math.atan2(sn,r[0])];
+}
+function rotAttr(o){
+  var x=o.rotationX||0,y=o.rotationY||0,z=o.rotationZ||0;
+  if(!x&&!z) return '0 1 0 '+(y*Math.PI/180).toFixed(4);   // Y only: same text as before
+  var r=composeEuler(x,y,z);
+  return r[0].toFixed(5)+' '+r[1].toFixed(5)+' '+r[2].toFixed(5)+' '+r[3].toFixed(4);
+}
+// Trackball (a 3D eyeball): drag turns Y and pitches X, Shift-drag up/down rolls Z. It writes the X/Y/Z boxes above it.
+var _TB=[{id:'tb-agent',x:'ad-rot-x',y:'ad-rot-y',z:'ad-rot-z'},{id:'tb-asset',x:'asset-rotx',y:'asset-rot',z:'asset-rotz'},{id:'tb-zasset',x:'z-asset-rotx',y:'z-asset-rotation',z:'z-asset-rotz'}];
+var _TBRO={};
+function _tbShow(id,vals){_TBRO[id]=vals;_tbDraw({id:id,ro:1});}
+function _tbVals(t){if(t.ro)return _TBRO[t.id]||{x:0,y:0,z:0};function v(i){return parseFloat(document.getElementById(i).value)||0}return {x:v(t.x),y:v(t.y),z:v(t.z)}}
+function _tbRot(v){
+  var rx=v.x*Math.PI/180,ry=v.y*Math.PI/180,rz=v.z*Math.PI/180,cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry),cz=Math.cos(rz),sz=Math.sin(rz);
+  return function(p){var x=p[0]*cz-p[1]*sz,y=p[0]*sz+p[1]*cz,z=p[2];   // Z first
+    var y2=y*cx-z*sx,z2=y*sx+z*cx;                                      // then X
+    return [x*cy+z2*sy,y2,-x*sy+z2*cy];};                               // then Y (same order as composeEuler)
+}
+var _TB_VEINS=(function(){var o=[],i,N=30;for(i=0;i<N;i++){var f=((i*7)%11)/11,ph=i/N*6.2832+f*0.5,b0=0.85+((i*13)%17)/17*1.7,len=0.45+((i*5)%7)*0.08,pts=[],k;
+  for(k=0;k<=14;k++){var bb=b0-len*k/14,pp=ph+Math.sin(k*0.45+i*1.7)*0.1*k/14;pts.push([Math.sin(bb)*Math.cos(pp),Math.sin(bb)*Math.sin(pp),Math.cos(bb)]);}
+  o.push(pts);}return o;})();
+function _tbDraw(t){
+  var c=document.getElementById(t.id);if(!c)return;var g=c.getContext('2d'),w=c.width,h=c.height,r=w/2-4,v=_tbVals(t),R=_tbRot(v);
+  g.clearRect(0,0,w,h);g.save();g.translate(w/2,h/2);
+  g.fillStyle='#e8eef5';g.beginPath();g.arc(0,0,r,0,7);g.fill();
+  g.save();g.beginPath();g.arc(0,0,r,0,7);g.clip();
+  // veins are curves fixed to the ball, so they turn with it; only the near side is drawn
+  g.strokeStyle='#d96a62';g.lineWidth=0.8;
+  _TB_VEINS.forEach(function(vn){var pen=false;g.beginPath();
+    vn.forEach(function(q){var p=R(q);if(p[2]>0.02){var X=p[0]*r,Y=-p[1]*r;if(!pen){g.moveTo(X,Y);pen=true}else g.lineTo(X,Y)}else pen=false});g.stroke();});
+  // iris, pupil and roll tick are caps on the sphere
+  function cap(al,col){var pts=[],n=36,j,vis=false;
+    for(j=0;j<n;j++){var th=j/n*6.2832,p=R([Math.sin(al)*Math.cos(th),Math.sin(al)*Math.sin(th),Math.cos(al)]);
+      if(p[2]>0)vis=true;var X=p[0],Y=-p[1];if(p[2]<0){var m=Math.sqrt(X*X+Y*Y)||1;X/=m;Y/=m}pts.push([X*r,Y*r]);}
+    if(!vis)return;g.fillStyle=col;g.beginPath();pts.forEach(function(q,j){j?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.closePath();g.fill();}
+  cap(0.62,'#2f6fb3');cap(0.3,'#0b1220');
+  var pa=R([Math.sin(0.62),0,Math.cos(0.62)]),pb=R([Math.sin(0.3),0,Math.cos(0.3)]);   // tick along local +X: shows roll
+  if(pa[2]>0&&pb[2]>0){g.strokeStyle='#d9573f';g.lineWidth=2;g.beginPath();g.moveTo(pa[0]*r,-pa[1]*r);g.lineTo(pb[0]*r,-pb[1]*r);g.stroke();}
+  var pc=R([0,0,1]);if(pc[2]>0){g.fillStyle='rgba(255,255,255,.9)';g.beginPath();g.arc(pc[0]*r-r*0.07,-pc[1]*r-r*0.07,r*0.06,0,7);g.fill();}
+  g.restore();g.restore();
+  g.strokeStyle='#8aa';g.lineWidth=1;g.beginPath();g.arc(w/2,h/2,r,0,7);g.stroke();
+}
+function tbRedraw(){_TB.forEach(_tbDraw)}
+function _tbInit(){
+  _TB.forEach(function(t){
+    var c=document.getElementById(t.id);if(!c||c._tb)return;c._tb=1;var drag=null;
+    ['x','y','z'].forEach(function(k){var el=document.getElementById(t[k]);if(el)el.addEventListener('input',function(){_tbDraw(t)})});
+    c.addEventListener('pointerdown',function(e){c.setPointerCapture(e.pointerId);drag={px:e.clientX,py:e.clientY,v:_tbVals(t)}});
+    c.addEventListener('pointermove',function(e){
+      if(!drag)return;var dx=e.clientX-drag.px,dy=e.clientY-drag.py,n;
+      function set(id,val){var el=document.getElementById(id);if(e.ctrlKey||e.metaKey)val=Math.round(val/15)*15;el.value=Math.round(val*10)/10;}
+      function wrap(a){a=((a+180)%360+360)%360-180;return a}
+      if(e.shiftKey){set(t.z,wrap(drag.v.z-dy*1.5));}
+      else{set(t.y,wrap(drag.v.y+dx*1.5));set(t.x,Math.max(-90,Math.min(90,drag.v.x+dy*1.5)));}
+      _tbDraw(t);
+    });
+    c.addEventListener('pointerup',function(){drag=null});
+    c.addEventListener('dblclick',function(){['x','y','z'].forEach(function(k){document.getElementById(t[k]).value=0});_tbDraw(t)});
+    _tbDraw(t);
+  });
+}
+window.addEventListener('load',_tbInit);
+
+// ---- rotation helpers under each trackball: Copy rot, Paste rot, Face a target ----
+var _rotClip=null;
+var _TBX={'tb-agent':{own:function(){return selectedType==='agent'&&placedAgents[selectedId]?_selPos('agent'):null},note:'Press Apply Rotation to keep it.'},
+  'tb-asset':{own:function(){var v=['asset-x','asset-height','asset-z'].map(function(i){return parseFloat(document.getElementById(i).value)});return v.every(isFinite)?v:null},note:'It is kept when you Place or Save.'},
+  'tb-zasset':{own:function(){var z=selectedType==='zone'?_selPos('zone'):null;if(!z)return null;var o=['z-asset-offset-x','z-asset-offset-y','z-asset-offset-z'].map(function(i){return parseFloat(document.getElementById(i).value)||0});return [z[0]+o[0],z[1]+o[1],z[2]+o[2]]},note:'It is kept when you Save the zone.'}};
+function _tbEntry(id){for(var i=0;i<_TB.length;i++)if(_TB[i].id===id)return _TB[i];return null;}
+function _rotText(v){return 'rot '+v.map(_fmtXYZ).join(', ');}
+function rotCopy(id){
+  var v=_TBRO[id]?[_TBRO[id].x,_TBRO[id].y,_TBRO[id].z]:(function(){var t=_tbEntry(id);if(!t)return null;var q=_tbVals(t);return [q.x,q.y,q.z]})();
+  if(!v){toast('Nothing to copy',true);return;}
+  _rotClip=v.slice();_writeClipboard(_rotText(v));toast('Copied '+_rotText(v));
+}
+function _rotFill(id,v,what){
+  var t=_tbEntry(id);if(!t)return;
+  ['x','y','z'].forEach(function(k,i){var el=document.getElementById(t[k]);el.value=_fmtXYZ(v[i]);});
+  _tbDraw(t);toast(what+' '+_rotText(v)+'. '+(_TBX[id]?_TBX[id].note:''));
+}
+function rotPaste(id){
+  var fb=function(){if(!_rotClip){toast('Clipboard has no rotation. Use Copy rot first.',true);return;}_rotFill(id,_rotClip.slice(),'Pasted');};
+  try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(tx){var v=parseXYZ(tx);if(v)_rotFill(id,v,'Pasted');else fb();},fb);return;}}catch(e){}
+  fb();
+}
+function _faceTargets(){
+  var out=[];
+  function add(kind,label,map,fn){var ks=Object.keys(map||{});if(!ks.length)return;out.push({label:label,items:ks.map(function(n){return {key:kind+'|'+n,name:n,pos:fn(map[n])}}).filter(function(i){return i.pos&&i.pos.length>=3})});}
+  add('agent','Agents',placedAgents,function(a){return a.position});
+  add('asset','Assets',placedAssets,function(a){return a.position});
+  add('camera','Cameras',placedCameras,function(a){return a.position});
+  add('light','Lights',placedLights,function(a){return a.translation});
+  add('audio','Audio',placedAudio,function(a){return a.translation});
+  add('zone','Zones',zones,function(a){return a.location||a.position});
+  add('waypoint','Waypoints',waypoints,function(a){return a.position});
+  return out;
+}
+function _faceFill(sel){
+  var groups=_faceTargets();sel.innerHTML='<option value="">Face…</option>';
+  groups.forEach(function(g){var og=document.createElement('optgroup');og.label=g.label;
+    g.items.forEach(function(i){var o=document.createElement('option');o.value=i.key;o.textContent=i.name;og.appendChild(o)});sel.appendChild(og);});
+}
+function rotFace(id,key,tilt){
+  if(!key)return;var own=_TBX[id]&&_TBX[id].own();
+  if(!own){toast('Select the thing being edited first so I know where it stands',true);return;}
+  var k=key.split('|'),tp=null;_faceTargets().forEach(function(g){g.items.forEach(function(i){if(i.key===key)tp=i.pos})});
+  if(!tp){toast('Target not found',true);return;}
+  var dx=tp[0]-own[0],dy=(tp[1]||0)-(own[1]||0),dz=tp[2]-own[2],h=Math.sqrt(dx*dx+dz*dz);
+  if(h<1e-6&&Math.abs(dy)<1e-6){toast('Same position: nothing to face',true);return;}
+  var yaw=h<1e-6?0:Math.atan2(dx,dz)*180/Math.PI,pitch=tilt?-Math.atan2(dy,h)*180/Math.PI:0;
+  var t=_tbEntry(id),cur=_tbVals(t);
+  _rotFill(id,[Math.round(pitch*10)/10,Math.round(yaw*10)/10,tilt?cur.z:cur.z],'Facing '+k[1]+':');
+}
+function _rotBarInit(){
+  Object.keys(_TBX).forEach(function(id){
+    var c=document.getElementById(id);if(!c||c._bar)return;c._bar=1;
+    var d=document.createElement('div');d.style.cssText='display:flex;gap:4px;margin:4px 0;flex-wrap:wrap;justify-content:center;align-items:center';
+    var b1=document.createElement('button');b1.type='button';b1.className='btn cool';b1.style.cssText='font-size:14px;padding:2px 8px';b1.textContent='Copy rot';b1.title='Copy X, Y, Z rotation to the clipboard';b1.onclick=function(){rotCopy(id)};
+    var b2=document.createElement('button');b2.type='button';b2.className='btn cool';b2.style.cssText='font-size:14px;padding:2px 8px';b2.textContent='Paste rot';b2.title='Paste X, Y, Z rotation from the clipboard';b2.onclick=function(){rotPaste(id)};
+    var sel=document.createElement('select');sel.style.cssText='font-size:14px;max-width:110px';sel.title='Turn to face another object (a flat turn, Y only unless Tilt is ticked). Zero rotation faces +Z.';
+    sel.onfocus=function(){_faceFill(sel)};sel.onmousedown=function(){_faceFill(sel)};_faceFill(sel);
+    var lb=document.createElement('label');lb.style.cssText='font-size:13px;color:var(--dim);display:flex;align-items:center;gap:2px';var cb=document.createElement('input');cb.type='checkbox';lb.appendChild(cb);lb.appendChild(document.createTextNode('Tilt'));lb.title='Also pitch up or down toward the target';
+    sel.onchange=function(){rotFace(id,sel.value,cb.checked);sel.value=''};
+    d.appendChild(b1);d.appendChild(b2);d.appendChild(sel);d.appendChild(lb);c.parentNode.insertBefore(d,c.nextSibling);
+  });
+  ['tb-asd'].forEach(function(id){var c=document.getElementById(id);if(!c||c._bar)return;c._bar=1;
+    var b=document.createElement('button');b.type='button';b.className='btn cool';b.style.cssText='font-size:14px;padding:2px 8px;display:block;margin:2px auto';b.textContent='Copy rot';b.onclick=function(){rotCopy(id)};c.parentNode.insertBefore(b,c.nextSibling);});
+}
+window.addEventListener('load',_rotBarInit);
 function composeYawTilt(yawDeg, tiltDeg){
   var yawRad = yawDeg*Math.PI/180, tiltRad = tiltDeg*Math.PI/180;
   // Quaternion from axis-angle: (cos(θ/2), axis*sin(θ/2))
@@ -6786,6 +7302,7 @@ function confirmLight(){
   var height=parseFloat(document.getElementById('light-height').value);
   if(isNaN(height))height=4;
   var tiltDeg=readAngle('light-tilt',0);
+  var rollDeg=readAngle('light-roll',0);
   var yawDeg=readAngle('light-yaw',0);
   if(!name){toast('Name required',true);return;}
   if(!registerId(placedLights, name, _editingLightName, 'Light')) return;
@@ -6800,7 +7317,7 @@ function confirmLight(){
   // entirely). Point lights still carry a rotation value for shape
   // consistency (see original comment below) — harmless, PointLight has
   // no direction field to aim.
-  var rotation=composeYawTilt(yawDeg,tiltDeg);
+  var rotation=composeEuler(tiltDeg,yawDeg,rollDeg);
   // Day 83: read the full optical property set. Stored on every light
   // regardless of type (even fields a given type's proto doesn't declare,
   // e.g. a Directional's unused attenuation/radius) — same "store the
@@ -6822,10 +7339,13 @@ function confirmLight(){
   placedLights[name]={
     name:name, type:type,
     translation:[lx,height,lz],
-    rotation:rotation, yawDeg:yawDeg, tiltDeg:tiltDeg,
+    rotation:rotation, yawDeg:yawDeg, tiltDeg:tiltDeg, rollDeg:rollDeg,
     on:on, color:color, intensity:intensity, ambientIntensity:ambientIntensity,
     attenuation:attenuation, radius:radius,
     cutOffAngle:cutOffAngle, beamWidth:beamWidth,
+    follow:document.getElementById('light-follow').value||'',
+    followTurns:document.getElementById('light-follow-turns').checked,
+    aim:(document.getElementById('light-aim')||{}).value||'',
   };
   var wasEditing=!!_editingLightName;
   placing=null;pendingPos=null;_editingLightName=null;
@@ -6856,6 +7376,9 @@ function editLight(name){
   var yt = lightYawTilt(l);
   setAngleField('light-yaw', yt.yawDeg);
   setAngleField('light-tilt', yt.tiltDeg);
+  setAngleField('light-roll', yt.rollDeg||0);
+  fillFollowSel('light-follow','light-follow-turns',l.follow||'',!!l.followTurns);
+  fillAimSel(l.aim||'');
   // Day 83: populate the optical-property fields. Falls back to each
   // proto's own default whenever a field is missing — covers lights
   // placed before this session, which were only ever stored with
@@ -6893,7 +7416,9 @@ function editLight(name){
   setPlaceType('lights');
 }
 function confirmAudio(){
-  if(!pendingPos){toast('Click map first',true);return;}
+  var _xz=_typedXZ('audio-x','audio-z');
+  if(!_xz){toast('Click the map first, or type X and Z',true);return;}
+  pendingPos=_xz;
   var name=document.getElementById('audio-name').value.trim();
   var url=document.getElementById('audio-url').value;
   var height=parseFloat(document.getElementById('audio-height').value)||1.5;
@@ -6923,6 +7448,8 @@ function confirmAsset(){
   var z=parseFloat(document.getElementById('asset-z').value);
   var height=parseFloat(document.getElementById('asset-height').value)||0;
   var rotationY=parseFloat(document.getElementById('asset-rot').value)||0;
+  var rotationX=parseFloat(document.getElementById('asset-rotx').value)||0;
+  var rotationZ=parseFloat(document.getElementById('asset-rotz').value)||0;
   var scale=parseFloat(document.getElementById('asset-scale').value);
   var isMovie=document.getElementById('asset-is-movie').checked;
   if(!name){toast('Name required',true);return;}
@@ -6933,7 +7460,7 @@ function confirmAsset(){
   if(_editingAssetName&&_editingAssetName!==name)delete placedAssets[_editingAssetName];  // rename
   placedAssets[name]={
     name:name, url:url, position:[x,height,z],
-    rotationY:rotationY, scale:scale, isMovie:isMovie,
+    rotationX:rotationX, rotationY:rotationY, rotationZ:rotationZ, scale:scale, isMovie:isMovie,
   };
   var wasEditing=!!_editingAssetName;
   placing=null;pendingPos=null;_editingAssetName=null;
@@ -6954,6 +7481,9 @@ function editAsset(name){
   document.getElementById('asset-height').value=(a.position&&a.position[1]!==undefined)?a.position[1]:0;
   document.getElementById('asset-rot').value=a.rotationY||0;
   document.getElementById('asset-rot-val').textContent=a.rotationY||0;
+  document.getElementById('asset-rotx').value=a.rotationX||0;
+  document.getElementById('asset-rotz').value=a.rotationZ||0;
+  tbRedraw();
   document.getElementById('asset-scale').value=(a.scale!==undefined)?a.scale:1;
   document.getElementById('asset-is-movie').checked=!!a.isMovie;
   pendingPos=(a.position||[0,0,0]).slice();
@@ -7099,6 +7629,8 @@ function editAudio(name){
   document.getElementById('audio-name').value=a.name;
   _populateMediaSelect(document.getElementById('audio-url'), a.url||'');
   document.getElementById('audio-height').value=(a.translation&&a.translation[1]!==undefined)?a.translation[1]:1.5;
+  document.getElementById('audio-x').value=(a.translation&&a.translation[0]!==undefined)?a.translation[0]:0;
+  document.getElementById('audio-z').value=(a.translation&&a.translation[2]!==undefined)?a.translation[2]:0;
   document.getElementById('audio-loop').checked=!!a.loop;
   document.getElementById('audio-gain').value=a.gain!==undefined?a.gain:0.8;
   document.getElementById('audio-gain-val').textContent=(a.gain!==undefined?a.gain:0.8).toFixed(2);
@@ -7331,7 +7863,7 @@ async function exportX3D(silent){
   x+='<!DOCTYPE X3D PUBLIC "ISO//Web3D//DTD X3D 4.0//EN" "https://www.web3d.org/specifications/x3d-4.0.dtd">\n';
   x+='<X3D profile="Immersive" version="4.0">\n';
   x+='<!-- MCCF Scene: '+sn+' Generated: '+ts+' Grid: '+w+'mx'+d+'m -->\n';
-  x+='<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V3"/></head>\n<Scene>\n\n';
+  x+='<head><meta name="title" content="'+xe(sn)+'"/><meta name="generator" content="MCCF Scene Composer V5"/></head>\n<Scene>\n\n';
   // Camera proto library — Day 64 agent_orbit conversion. Unconditional (unlike the
   // MCCFAgent/MCCFZone protos below, which stay behind the exp-protos toggle): this is
   // required infrastructure per the Day 63 PROTO decision, not an optional include.
@@ -7510,6 +8042,7 @@ async function exportX3D(silent){
     console.warn('[export] fresh /cultivars/xml fetch failed (' + eCx.message + ') — behavior_clips may be stale for this export');
   }
   Object.values(placedAgents).forEach(function(a){x+=buildAX3D(a,showLabels);});
+  x+=buildFollowRoutesX3D();
   Object.values(placedAssets).forEach(function(pa){x+=buildAssetX3D(pa);});
   // Day 88: real, new capability — Movie/Animation EventCues need an
   // <IMPORT> exposing whatever internal Shape/TimeSensor DEF the author
@@ -7810,9 +8343,9 @@ function buildAP(){
   s+='<field name="coherenceLevel" accessType="inputOutput" type="SFFloat" value="0.5"/>\n';
   s+='</ProtoInterface><ProtoBody><Transform>\n';
   s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="0.2 0.4 0.8" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
-  s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
-  s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
-  s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
+  s+='<Transform translation="0 0.73 0"><Shape><Appearance><Material diffuseColor="0.30 0.55 0.90" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.10" radius="0.27"/></Shape></Transform>\n';
+  s+='<Transform translation="0 1.50 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.245"/></Shape></Transform>\n';
+  s+='<Transform translation="0 2.15 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
   s+='<Text><IS><connect nodeField="string" protoField="agentName"/></IS><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
      '</Text></Shape></Billboard></Transform>\n';
   s+='</Transform></ProtoBody></ProtoDeclare>\n\n';return s;
@@ -7854,7 +8387,7 @@ function buildZX3D(z,iS,showLabels){
     // geometry, always emitted when a zone has an asset assigned.
     var az=z.asset;
     s+='<Transform DEF="ZoneAsset_'+sid+'" translation="'+(az.offsetX||0)+' '+(az.offsetY||0)+' '+(az.offsetZ||0)+
-       '" rotation="0 1 0 '+((az.rotationY||0)*Math.PI/180).toFixed(4)+'" scale="'+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+'">\n';
+       '" rotation="'+rotAttr(az)+'" scale="'+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+' '+(az.scale!==undefined?az.scale:1)+'">\n';
     s+='  <Inline url=\'"'+xe(az.url)+'"\'/>\n';
     s+='</Transform>\n';
   }
@@ -8044,7 +8577,8 @@ function buildAX3D(a,showLabels){
   showLabels = showLabels !== false; // default true — matches the checkbox's own default-checked state
   var pos=a.position||[0,0,0],col=hexToX3D(a.color||'#aab0be'),sn=safeId(a.name),qn=xe(a.name);
   var s='<!-- Agent: '+qn+' -->\n';
-  s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' '+(pos[1]||0)+' '+pos[2]+'">\n';
+  var _arot=(a.rotationX||a.rotationY||a.rotationZ)?' rotation="'+rotAttr(a)+'"':'';
+  s+='<Transform DEF="Avatar_'+sn+'" translation="'+pos[0]+' '+(pos[1]||0)+' '+pos[2]+'"'+_arot+'>\n';
 
   if(a.hanim_src){
     // H-Anim figure via Inline + IMPORT.
@@ -8070,7 +8604,10 @@ function buildAX3D(a,showLabels){
     var hanimUrl=a.hanim_src.replace(/\\/g,'/').replace(/^\/+/,'')
       .replace(/^static\//,'').replace(/^(\.\.\/)+/,'').replace(/^avatars\//,'');
     hanimUrl='../avatars/'+hanimUrl;
+    var _asc=(a.avatarScale>0&&a.avatarScale!==1)?a.avatarScale:1;
+    if(_asc!==1) s+='  <Transform DEF="AvatarScale_'+sn+'" scale="'+_asc+' '+_asc+' '+_asc+'">\n';
     s+='  <Inline DEF="HAnim_'+sn+'" url=\'&quot;'+xe(hanimUrl)+'&quot;\'/>\n';
+    if(_asc!==1) s+='  </Transform>\n';
     // IMPORT behavior TimeSensors from Inline scope into parent scene.
     // HAnim file must have matching EXPORT statements (added by mccf_api.py upload_avatar).
     // AS = TimerBase_AgentSafeName for multi-agent collision safety.
@@ -8160,21 +8697,37 @@ function buildAX3D(a,showLabels){
   } else {
     // Cylinder placeholder — used when no H-Anim figure assigned via Character Creator
     s+='<Transform translation="0 0.04 0"><Shape><Appearance><Material diffuseColor="'+col+'" transparency="0.55"/></Appearance><Cylinder height="0.04" radius="0.75"/></Shape></Transform>\n';
-    s+='<Transform translation="0 0.9 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.35" radius="0.33"/></Shape></Transform>\n';
-    s+='<Transform translation="0 1.85 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.30"/></Shape></Transform>\n';
-    // No camera rig at all for placeholder agents — there is no avatar file for
-    // Character Creator to have authored one in. Matches the Avatar Camera Rig
-    // Manifest doc's stated behavior for any missing-manifest case: "naturally
-    // offers nothing to trigger on," not a special-cased guard.
+    s+='<Transform translation="0 0.73 0"><Shape><Appearance><Material DEF="BodyMat_'+sn+'" diffuseColor="'+col+'" specularColor="0.5 0.6 0.9" shininess="0.65"/></Appearance><Cylinder height="1.10" radius="0.27"/></Shape></Transform>\n';
+    s+='<Transform translation="0 1.50 0"><Shape><Appearance><Material diffuseColor="0.88 0.78 0.68" shininess="0.3"/></Appearance><Sphere radius="0.245"/></Shape></Transform>\n';
+    // Default cameras for a placeholder: Front, Side and Back, each 1.75 m from the
+    // body axis at the height of the head sphere's centre (1.50 m), looking at it.
+    // They sit inside the actor's Transform, so they turn and move with the actor.
+    // The actor faces +Z. A Viewpoint looks down -Z, so Front needs no turn, Back turns
+    // 180 degrees about Y and Side (on the actor's +X) turns 90 degrees. DEF names follow
+    // the VP_<name>_<Eye|Side> convention, so the Loader lists them and a cue's agent_side
+    // shot finds VP_<name>_Side. Avatars keep the camera rig authored in Character Creator.
+    if(sceneConfig.stdCameras!==false) [['Front','0 1.5 3.5','0 1 0 0'],['Side','3.5 1.5 0','0 1 0 1.5708'],['Back','0 1.5 -3.5','0 1 0 3.14159']].forEach(function(c){
+      s+='<Viewpoint DEF="VP_'+sn+'_'+c[0]+'" description="'+qn+' '+c[0]+'" position="'+c[1]+'" orientation="'+c[2]+'"/>\n';
+    });
   }
 
   // Name label — Day 86: gated behind showLabels (see buildZX3D's own
   // comment for the reasoning — authoring aid, not scene content). The
   // avatar's own body/geometry above this line is untouched regardless.
   if (showLabels) {
-    s+='<Transform translation="0 3.1 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
+    s+='<Transform translation="0 2.15 0"><Billboard axisOfRotation="0 1 0"><Shape><Appearance><Material emissiveColor="0.8 0.95 1.0"/></Appearance>\n';
     s+='<Text DEF="NameText_'+sn+'" string=\'"'+qn+'"\' ><FontStyle size="0.32" family=\'"SANS"\' justify=\'"MIDDLE"\'/>'+
        '</Text></Shape></Billboard></Transform>\n';
+  }
+  s+=buildParentedLightsX3D(a);
+  if(a.lightSet==='on' || (a.lightSet!=='off' && sceneConfig.stdLights)){
+    // Standard character lights: key (front left, high), fill (front right, low, soft), back/rim.
+    // Nested in the actor's Transform, so they turn and move with the actor, which faces +Z.
+    var _tg=[0,1.2,0], f4=function(n){return +n.toFixed(5);};
+    [['Key',[-1.8,2.8,2.6],'1 0.96 0.9',(a.lightKey!==undefined?a.lightKey:0.9),0.50,0.35],['Fill',[2.2,1.8,2.8],'0.85 0.9 1',(a.lightFill!==undefined?a.lightFill:0.4),0.70,0.60],['Back',[0.6,3.0,-2.4],'1 1 1',(a.lightBack!==undefined?a.lightBack:0.7),0.50,0.35]].forEach(function(L){
+      s+=_lightX3D({name:'Std_'+a.name+'_'+L[0],type:'spot',color:L[2],intensity:L[3],ambientIntensity:0,attenuation:[1,0,0],radius:12,cutOffAngle:L[4],beamWidth:L[5],on:true},
+                   L[1],_aimAA(L[1],_tg).map(f4));
+    });
   }
   s+='</Transform>\n\n';return s;
 }
@@ -8189,7 +8742,7 @@ function buildAssetX3D(pa){
   var pos=pa.position||[0,0,0],sn=safeId(pa.name),scale=(pa.scale!==undefined?pa.scale:1);
   var s='<!-- Asset: '+xe(pa.name)+' -->\n';
   s+='<Transform DEF="PlacedAsset_'+sn+'" translation="'+pos[0]+' '+(pos[1]||0)+' '+pos[2]+
-     '" rotation="0 1 0 '+((pa.rotationY||0)*Math.PI/180).toFixed(4)+'" scale="'+scale+' '+scale+' '+scale+'">\n';
+     '" rotation="'+rotAttr(pa)+'" scale="'+scale+' '+scale+' '+scale+'">\n';
   // Day 88: every placed asset's Inline now gets a DEF unconditionally —
   // previously only true when isMovie was set, which meant any OTHER
   // asset (the moon, anything else) had no way to be targeted by the new
@@ -8789,7 +9342,7 @@ function buildMS(){
     return '<field accessType="inputOnly" type="SFVec3f" name="pos_'+s+'"/>\n<field accessType="outputOnly" type="SFFloat" name="arousal_'+s+'"/>\n';}).join('');
   var zf=Object.keys(zones).map(function(id){return '<field accessType="inputOnly" type="SFBool" name="zoneActive_'+safeId(id)+'"/>\n';}).join('');
   var s='<Script DEF="MCCFMaster" directOutput="true" mustEvaluate="true">\n';
-  s+='<field accessType="initializeOnly" type="SFString" name="api_url" value="http://localhost:5000"/>\n';
+  s+='<field accessType="initializeOnly" type="SFString" name="api_url" value="'+API+'"/>\n';
   s+='<field accessType="inputOnly" type="SFString" name="startAgent"/>\n';
   s+='<field accessType="inputOnly" type="SFString" name="releaseDwellAgent"/>\n';
   s+='<field accessType="inputOnly" type="SFString" name="startNextTimer"/>\n';
@@ -8876,36 +9429,104 @@ var LIGHT_TAG = { point:'BasicPointLight', spot:'BasicSpotLight', directional:'B
 // Spot gets cutOffAngle/beamWidth. Falls back to each proto's own default
 // for any light stored before this session (name/type/translation/
 // rotation only), so old scenes still export valid, sensible X3D.
+// Follow: a light can follow an actor. "Parenting" (followTurns) nests the light inside
+// the actor's own Transform, so it turns with the actor. Otherwise a wrapper Transform
+// copies the actor's translation only (a ROUTE, see buildFollowRoutesX3D). Either way
+// the light keeps the offset it had from the actor's starting position.
+function _qMul(a,b){return [a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3], a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2], a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1], a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];}
+function _qFromAA(r){var n=Math.hypot(r[0],r[1],r[2])||1,h=r[3]/2,sn=Math.sin(h);return [Math.cos(h), r[0]/n*sn, r[1]/n*sn, r[2]/n*sn];}
+function _qConj(q){return [q[0],-q[1],-q[2],-q[3]];}
+function _qRot(q,v){var p=_qMul(_qMul(q,[0,v[0],v[1],v[2]]),_qConj(q));return [p[1],p[2],p[3]];}
+function _qToAA(q){var sn=Math.hypot(q[1],q[2],q[3]); if(sn<1e-9) return [1,0,0,0]; return [q[1]/sn,q[2]/sn,q[3]/sn,2*Math.atan2(sn,q[0])];}
+function _followActor(l){ return (l.follow && placedAgents[l.follow]) ? placedAgents[l.follow] : null; }
+function _actorAA(a){ return rotAttr(a).split(' ').map(parseFloat); }
+// Aim: rotation that turns a light's direction (local -Z) from point 'from' toward point 'to'.
+function _aimAA(from,to){
+  var d=[to[0]-from[0],to[1]-from[1],to[2]-from[2]],n=Math.hypot(d[0],d[1],d[2])||1; d=[d[0]/n,d[1]/n,d[2]/n];
+  var ax=[d[1],-d[0],0],am=Math.hypot(ax[0],ax[1],ax[2]);
+  if(am<1e-6) return d[2]<0?[1,0,0,0]:[0,1,0,Math.PI];
+  return [ax[0]/am,ax[1]/am,ax[2]/am,Math.acos(Math.max(-1,Math.min(1,-d[2])))];
+}
+function _aimTarget(l){ var a=(l.aim&&placedAgents[l.aim])?placedAgents[l.aim]:null; if(!a) return null; var p=a.position||[0,0,0]; return [p[0],(p[1]||0)+1.2,p[2]]; }
+function _lightRot(l){ var tg=_aimTarget(l); if(!tg||l.type==='point') return l.rotation||[1,0,0,0]; var f=function(n){return +n.toFixed(5);}; return _aimAA(l.translation||[0,3,0],tg).map(f); }
+function fillAimSel(cur){
+  var sel=document.getElementById('light-aim'); if(!sel) return;
+  var h='<option value="">None (use yaw / tilt below)</option>';
+  Object.keys(placedAgents).forEach(function(n){h+='<option value="'+xe(n)+'">'+xe(n)+'</option>';});
+  sel.innerHTML=h; sel.value=cur||''; if(sel.value!==(cur||'')) sel.value='';
+}
+function _lightX3D(l, t, r){
+  var tag = LIGHT_TAG[l.type] || 'BasicPointLight';
+  var on = (l.on!==undefined) ? l.on : true;
+  var color = l.color || '1 1 1';
+  var intensity = (l.intensity!==undefined) ? l.intensity : 1;
+  var ambientIntensity = (l.ambientIntensity!==undefined) ? l.ambientIntensity : 0;
+  var attrs = 'DEF="LIGHT_'+safeId(l.name)+'" '+
+     'translation="'+t[0]+' '+t[1]+' '+t[2]+'" '+
+     'rotation="'+r[0]+' '+r[1]+' '+r[2]+' '+r[3]+'" '+
+     'on="'+(on?'true':'false')+'" '+
+     'color="'+color+'" '+
+     'intensity="'+intensity+'" '+
+     'ambientIntensity="'+ambientIntensity+'"';
+  if(l.type==='point'||l.type==='spot'){
+    var atten = l.attenuation || [1,0,0];
+    var radius = (l.radius!==undefined) ? l.radius : 100;
+    attrs += ' attenuation="'+atten[0]+' '+atten[1]+' '+atten[2]+'" radius="'+radius+'"';
+  }
+  if(l.type==='spot'){
+    var cutOffAngle = (l.cutOffAngle!==undefined) ? l.cutOffAngle : 0.785398;
+    var beamWidth = (l.beamWidth!==undefined) ? l.beamWidth : 0.785398;
+    attrs += ' cutOffAngle="'+cutOffAngle+'" beamWidth="'+beamWidth+'"';
+  }
+  return '<'+tag+' '+attrs+'/>\n';
+}
+// Lights that turn with an actor: emitted inside that actor's Transform (called by buildAX3D).
+function buildParentedLightsX3D(a){
+  var s='';
+  Object.values(placedLights).forEach(function(l){
+    if(!l.followTurns || _followActor(l)!==a) return;
+    var t=l.translation||[0,3,0], r=_lightRot(l), p=a.position||[0,0,0];
+    var qa=_qFromAA(_actorAA(a));
+    var off=_qRot(_qConj(qa),[t[0]-p[0],t[1]-(p[1]||0),t[2]-p[2]]);
+    var rl=_qToAA(_qMul(_qConj(qa),_qFromAA(r)));
+    var f=function(n){return +n.toFixed(4);};
+    s+=_lightX3D(l,[f(off[0]),f(off[1]),f(off[2])],[f(rl[0]),f(rl[1]),f(rl[2]),f(rl[3])]);
+  });
+  return s;
+}
+// ROUTEs for position-only followers. Must come after the avatars are defined.
+function buildFollowRoutesX3D(){
+  var s='';
+  Object.values(placedLights).forEach(function(l){
+    var a=_followActor(l); if(!a || l.followTurns) return;
+    s+='<ROUTE fromNode="Avatar_'+safeId(a.name)+'" fromField="translation_changed" toNode="FOLLOW_'+safeId(l.name)+'" toField="set_translation"/>\n';
+  });
+  return s;
+}
 function buildLightsX3D(){
   var s='';
   Object.values(placedLights).forEach(function(l){
-    var tag = LIGHT_TAG[l.type] || 'BasicPointLight';
     var t = l.translation || [0,3,0];
-    var r = l.rotation || [1,0,0,0];
-    var on = (l.on!==undefined) ? l.on : true;
-    var color = l.color || '1 1 1';
-    var intensity = (l.intensity!==undefined) ? l.intensity : 1;
-    var ambientIntensity = (l.ambientIntensity!==undefined) ? l.ambientIntensity : 0;
-    var attrs = 'DEF="LIGHT_'+safeId(l.name)+'" '+
-       'translation="'+t[0]+' '+t[1]+' '+t[2]+'" '+
-       'rotation="'+r[0]+' '+r[1]+' '+r[2]+' '+r[3]+'" '+
-       'on="'+(on?'true':'false')+'" '+
-       'color="'+color+'" '+
-       'intensity="'+intensity+'" '+
-       'ambientIntensity="'+ambientIntensity+'"';
-    if(l.type==='point'||l.type==='spot'){
-      var atten = l.attenuation || [1,0,0];
-      var radius = (l.radius!==undefined) ? l.radius : 100;
-      attrs += ' attenuation="'+atten[0]+' '+atten[1]+' '+atten[2]+'" radius="'+radius+'"';
+    var r = _lightRot(l);
+    var a=_followActor(l);
+    if(a && l.followTurns) return;                       // nested inside the actor, see buildAX3D
+    if(a){                                               // position-only follower
+      var p=a.position||[0,0,0];
+      var off=[t[0]-p[0], t[1]-(p[1]||0), t[2]-p[2]];
+      s+='<Transform DEF="FOLLOW_'+safeId(l.name)+'" translation="'+p[0]+' '+(p[1]||0)+' '+p[2]+'">'+
+         '<Transform translation="'+off[0]+' '+off[1]+' '+off[2]+'">\n'+_lightX3D(l,[0,0,0],r)+'</Transform></Transform>\n';
+      return;
     }
-    if(l.type==='spot'){
-      var cutOffAngle = (l.cutOffAngle!==undefined) ? l.cutOffAngle : 0.785398;
-      var beamWidth = (l.beamWidth!==undefined) ? l.beamWidth : 0.785398;
-      attrs += ' cutOffAngle="'+cutOffAngle+'" beamWidth="'+beamWidth+'"';
-    }
-    s+='<'+tag+' '+attrs+'/>\n';
+    s+=_lightX3D(l,t,r);
   });
   return s;
+}
+function fillFollowSel(selId,chkId,cur,turns){
+  var sel=document.getElementById(selId); if(!sel) return;
+  var h='<option value="">None (fixed in the scene)</option>';
+  Object.keys(placedAgents).forEach(function(n){h+='<option value="'+xe(n)+'">'+xe(n)+'</option>';});
+  sel.innerHTML=h; sel.value=cur||''; if(sel.value!==(cur||'')) sel.value='';
+  var c=document.getElementById(chkId); if(c) c.checked=!!turns;
 }
 // Day 82. Only translation/url/loop/gain are emitted — startTime/stopTime
 // aren't authored anywhere in Place yet either (those are Timeline's job,
@@ -8967,14 +9588,14 @@ function sendToLauncher(silent){
 // Export X3D already had).
 function exportZoneXML(){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
-  var x=xmlDecl()+'<!-- MCCF V3 Zone Definitions - '+sn+' - '+ts+' -->\n<ZoneSet id="'+xe(sn)+'" timestamp="'+ts+'">\n';
+  var x=xmlDecl()+'<!-- MCCF V5 Zone Definitions - '+sn+' - '+ts+' -->\n<ZoneSet xmlns="http://mccf.artistinprocess.com/v1" id="'+xe(sn)+'" timestamp="'+ts+'">\n';
   Object.values(zones).forEach(function(z){
     var pos=z.location||z.position||[0,0,0],w=z.weights||{E:0.25,B:0.25,P:0.25,S:0.25},at=z.ambient_theme||{scale:'major',tempo:'medium'};
     x+='<Zone id="'+xe(z.id)+'" zone_type="'+xe(z.zone_type)+'">\n';
     x+='<Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
     x+='<Weights E="'+w.E+'" B="'+w.B+'" P="'+w.P+'" S="'+w.S+'"/>\n';
     x+='<Position x="'+pos[0]+'" y="0" z="'+pos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
-    x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"/>\n';
+    x+='<AmbientTheme scale="'+xe(at.scale)+'" tempo="'+xe(at.tempo||'medium')+'"'+(at.drive?' drive="1"':'')+'/>\n';
     if(z.chorus){
       x+='<Chorus llm="'+xe(z.chorus.llm)+'" tone="'+xe(z.chorus.tone)+
         '" max_tokens="'+z.chorus.max_tokens+'" display="'+xe(z.chorus.display)+'">\n';
@@ -9363,8 +9984,8 @@ function exportSceneXML(){
 
 function _doExportSceneXML(_eventTracks){
   var sn=sceneConfig.name,ts=new Date().toISOString().slice(0,19);
-  var x=xmlDecl()+'<!-- MCCF V3 Scene Wrapper - '+sn+' - '+ts+' -->\n';
-  x+='<Scene id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'" labelsEnabled="'+(sceneConfig.labelsEnabled!==false?'true':'false')+'" dialogueTTYEnabled="'+(sceneConfig.dialogueTTYEnabled!==false?'true':'false')+'" seed="'+xe(sceneConfig.seed||'')+'">\n';
+  var x=xmlDecl()+'<!-- MCCF V5 Scene Wrapper - '+sn+' - '+ts+' -->\n';
+  x+='<Scene xmlns="http://mccf.artistinprocess.com/v1" id="'+xe(sn)+'" timestamp="'+ts+'" zone_set="'+xe(sn)+'" mode="improvisation" width="'+sceneConfig.width+'" depth="'+sceneConfig.depth+'" labelsEnabled="'+(sceneConfig.labelsEnabled!==false?'true':'false')+'" stdLights="'+(sceneConfig.stdLights?'1':'0')+'" stdCameras="'+(sceneConfig.stdCameras!==false?'1':'0')+'" dialogueTTYEnabled="'+(sceneConfig.dialogueTTYEnabled!==false?'true':'false')+'" seed="'+xe(sceneConfig.seed||'')+'"'+(sceneConfig.dm?' dm="'+xe(sceneConfig.dm)+'"':'')+'>\n';
   // Scene-level sound (Music + Bed) — read from DOM directly, no Apply Grid required
   var snd = {
     musicUrl:  document.getElementById('sc-music-url').value || '',
@@ -9396,7 +10017,7 @@ function _doExportSceneXML(_eventTracks){
       x+='    <Descriptor>'+xe(z.descriptor||'')+'</Descriptor>\n';
       x+='    <Weights E="'+zw.E+'" B="'+zw.B+'" P="'+zw.P+'" S="'+zw.S+'"/>\n';
       x+='    <Position x="'+zpos[0]+'" y="0" z="'+zpos[2]+'"/><Radius value="'+(z.radius||4)+'"/>\n';
-      x+='    <AmbientTheme scale="'+xe(zat.scale)+'" tempo="'+xe(zat.tempo||'medium')+'"/>\n';
+      x+='    <AmbientTheme scale="'+xe(zat.scale)+'" tempo="'+xe(zat.tempo||'medium')+'"'+(zat.drive?' drive="1"':'')+'/>\n';
       if(z.chorus){
         x+='    <Chorus llm="'+xe(z.chorus.llm)+'" tone="'+xe(z.chorus.tone)+
           '" max_tokens="'+z.chorus.max_tokens+'" display="'+xe(z.chorus.display)+'">\n';
@@ -9414,15 +10035,15 @@ function _doExportSceneXML(_eventTracks){
       }
       if(z.asset && z.asset.url){
         x+='    <Asset url="'+xe(z.asset.url)+'" offsetX="'+(z.asset.offsetX||0)+'" offsetY="'+(z.asset.offsetY||0)+
-           '" offsetZ="'+(z.asset.offsetZ||0)+'" rotationY="'+(z.asset.rotationY||0)+'" scale="'+(z.asset.scale!==undefined?z.asset.scale:1)+'"/>\n';
+           '" offsetZ="'+(z.asset.offsetZ||0)+'" rotationX="'+(z.asset.rotationX||0)+'" rotationY="'+(z.asset.rotationY||0)+'" rotationZ="'+(z.asset.rotationZ||0)+'" scale="'+(z.asset.scale!==undefined?z.asset.scale:1)+'"/>\n';
       }
       x+='  </Zone>\n';
     });
     x+='</Zones>\n';
   }
   Object.values(placedAgents).forEach(function(a){
-    var hSrc = a.hanim_src ? ' hanim_src="'+xe(a.hanim_src)+'"' : '';
-    x+='<EmotionalArc cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"'+hSrc+'><StartPosition x="'+a.position[0]+'" y="'+(a.position[1]||0)+'" z="'+a.position[2]+'"/></EmotionalArc>\n';
+    var hSrc = a.hanim_src ? ' hanim_src="'+xe(a.hanim_src)+'"' : (a.hanim_none ? ' hanim_src=""' : '');
+    x+='<AgentPlacement cultivar="'+xe(a.name)+'" actor="'+xe(exportActor)+'" voice="'+xe(a.voice||'')+'"'+(a.think?' think="'+xe(a.think)+'"':'')+(a.hold?' hold="'+xe(a.hold)+'"':'')+((a.avatarScale>0&&a.avatarScale!==1)?' avatar_scale="'+a.avatarScale+'"':'')+(a.lightSet?' light_set="'+a.lightSet+'" light_key="'+(a.lightKey!==undefined?a.lightKey:0.9)+'" light_fill="'+(a.lightFill!==undefined?a.lightFill:0.4)+'" light_back="'+(a.lightBack!==undefined?a.lightBack:0.7)+'"':'')+hSrc+'><StartPosition x="'+a.position[0]+'" y="'+(a.position[1]||0)+'" z="'+a.position[2]+'"/>'+((a.rotationX||a.rotationY||a.rotationZ)?'<StartRotation x="'+(a.rotationX||0)+'" y="'+(a.rotationY||0)+'" z="'+(a.rotationZ||0)+'"/>':'')+'</AgentPlacement>\n';
   });
   if(Object.keys(waypoints).length>0){
     x+='<Waypoints>\n';
@@ -9514,7 +10135,7 @@ function _doExportSceneXML(_eventTracks){
     Object.values(placedAssets).forEach(function(pa){
       var apos=pa.position||[0,0,0];
       x+='  <Asset name="'+xe(pa.name)+'" url="'+xe(pa.url)+'" x="'+apos[0]+'" y="'+(apos[1]||0)+'" z="'+apos[2]+
-        '" rotationY="'+(pa.rotationY||0)+'" scale="'+(pa.scale!==undefined?pa.scale:1)+'" isMovie="'+(pa.isMovie?'true':'false')+'"/>\n';
+        '" rotationX="'+(pa.rotationX||0)+'" rotationY="'+(pa.rotationY||0)+'" rotationZ="'+(pa.rotationZ||0)+'" scale="'+(pa.scale!==undefined?pa.scale:1)+'" isMovie="'+(pa.isMovie?'true':'false')+'"/>\n';
     });
     x+='</Assets>\n';
   }
@@ -9578,7 +10199,7 @@ function _doExportSceneXML(_eventTracks){
         '" on="'+(on?'true':'false')+'" color="'+xe(color)+'" intensity="'+intensity+
         '" ambientIntensity="'+ambientIntensity+'" attenC="'+atten[0]+'" attenL="'+atten[1]+
         '" attenQ="'+atten[2]+'" radius="'+radius+'" cutOffAngle="'+cutOffAngle+
-        '" beamWidth="'+beamWidth+'"/>\n';
+        '" beamWidth="'+beamWidth+'"'+(l.follow?' follow="'+xe(l.follow)+'"'+(l.followTurns?' followTurns="1"':''):'')+(l.aim?' aim="'+xe(l.aim)+'"':'')+'/>\n';
     });
     x+='</Lights>\n';
   }
@@ -9833,6 +10454,17 @@ function _doExportSceneXML(_eventTracks){
         var ew = l.emoteWeights;
         attrs += ' emoteE="'+ew.E+'" emoteB="'+ew.B+'" emoteP="'+ew.P+'" emoteS="'+ew.S+'"';
       }
+      if (l.awaits) { attrs += ' awaits="'+_dlgXe(l.awaits)+'"'; if (l.awaitsTimeout) attrs += ' awaitsTimeout="'+l.awaitsTimeout+'"'; }
+      if (l.reply) attrs += ' reply="'+_dlgXe(l.reply)+'"';
+      if (l.gesture) { attrs += ' gesture="'+_dlgXe(l.gesture)+'"'; if (l.gestureAt) attrs += ' gestureAt="'+l.gestureAt+'"'; }
+      if (l.expression) {
+        attrs += ' expression="'+_dlgXe(l.expression)+'"';
+        if (l.expressionAt) attrs += ' expressionAt="'+l.expressionAt+'"';
+        if (l.expressionDur) attrs += ' expressionDur="'+l.expressionDur+'"';
+        var _lw = faceWeightsString(l.actor, l.expression);
+        if (_lw) attrs += ' expressionWeights="'+_dlgXe(_lw)+'"';
+        else console.warn('[dialogue expression] no AU weights for "'+l.expression+'" on '+l.actor+' -- check its expressions file');
+      }
       if (l.audioFile !== undefined && l.audioFile !== null) {
         var aSrc = l.audioSource || {type:'recorded'};
         var aStr = aSrc.type === 'other-engine' ? ('other-engine:'+(aSrc.name||'')) : aSrc.type;
@@ -9848,8 +10480,21 @@ function _doExportSceneXML(_eventTracks){
     body:JSON.stringify({filename:filename,content:x,scene_name:sn})})
     .then(function(r){return r.json();})
     .then(function(res){
-      document.getElementById('exp-log').innerHTML='<div style="color:var(--cool)">Scene XML: scenes/'+filename+'</div>';
-      toast('Scene XML saved to scenes/');
+      var v=res.validation, h='';
+      if(res.status==='error'&&v){
+        h='<div style="color:var(--hot)">Not saved: the scene has errors.</div>';
+      } else {
+        h='<div style="color:var(--cool)">Scene XML: scenes/'+filename+'</div>';
+      }
+      if(v){
+        v.errors.forEach(function(m){h+='<div style="color:var(--hot)">Error: '+_dlgXe(m)+'</div>';});
+        v.warnings.forEach(function(m){h+='<div style="color:var(--warm,#e0b040)">Warning: '+_dlgXe(m)+'</div>';});
+        if(!v.errors.length&&!v.warnings.length) h+='<div style="color:var(--cool)">Checked: no problems found.</div>';
+      }
+      document.getElementById('exp-log').innerHTML=h;
+      if(res.status==='error'&&v){toast('Scene not saved: '+v.errors.length+' error(s). See the export log.',true);return;}
+      var nE=v?v.errors.length:0,nW=v?v.warnings.length:0;
+      toast('Scene XML saved to scenes/'+(nE||nW?' ('+nE+' error(s), '+nW+' warning(s); see the export log)':''),!!nE);
       refreshSceneList();
     })
     .catch(function(){
@@ -10051,10 +10696,15 @@ function _restoreChorusFromXml(xml) {
         sceneConfig.labelsEnabled = sceneEl.getAttribute('labelsEnabled') !== 'false';
         var lblEl = document.getElementById('exp-labels'); if (lblEl) lblEl.checked = sceneConfig.labelsEnabled;
       }
+      sceneConfig.stdLights = sceneEl.getAttribute('stdLights') === '1';
+      sceneConfig.stdCameras = sceneEl.getAttribute('stdCameras') !== '0';
+      { var _sl=document.getElementById('exp-stdlights'); if(_sl) _sl.checked=sceneConfig.stdLights; var _sc=document.getElementById('exp-stdcams'); if(_sc) _sc.checked=sceneConfig.stdCameras; }
       if (sceneEl.hasAttribute('dialogueTTYEnabled')) {
         sceneConfig.dialogueTTYEnabled = sceneEl.getAttribute('dialogueTTYEnabled') !== 'false';
         var ttyEl = document.getElementById('exp-dialogue-tty'); if (ttyEl) ttyEl.checked = sceneConfig.dialogueTTYEnabled;
       }
+      sceneConfig.dm = sceneEl.getAttribute('dm') || '';
+      var dmEl2 = document.getElementById('sc-dm'); if (dmEl2) dmEl2.value = sceneConfig.dm;
       if (sceneEl.hasAttribute('seed')) {
         sceneConfig.seed = sceneEl.getAttribute('seed') || '';
         var seedEl = document.getElementById('sc-seed'); if (seedEl) seedEl.value = sceneConfig.seed;
@@ -10087,7 +10737,8 @@ function _restoreChorusFromXml(xml) {
                             : { E:0.25, B:0.25, P:0.25, S:0.25 };
       var descriptor    = descEl ? (descEl.textContent || '').trim() : '';
       var ambient_theme = atEl   ? { scale: atEl.getAttribute('scale')||'major',
-                                     tempo: atEl.getAttribute('tempo')||'medium' }
+                                     tempo: atEl.getAttribute('tempo')||'medium',
+                                     drive: atEl.getAttribute('drive')==='1' }
                                  : { scale:'major', tempo:'medium' };
 
       // Chorus
@@ -10147,7 +10798,9 @@ function _restoreChorusFromXml(xml) {
           offsetX:   parseFloat(assetEl.getAttribute('offsetX')   || '0'),
           offsetY:   parseFloat(assetEl.getAttribute('offsetY')   || '0'),
           offsetZ:   parseFloat(assetEl.getAttribute('offsetZ')   || '0'),
+          rotationX: parseFloat(assetEl.getAttribute('rotationX') || '0'),
           rotationY: parseFloat(assetEl.getAttribute('rotationY') || '0'),
+          rotationZ: parseFloat(assetEl.getAttribute('rotationZ') || '0'),
           scale:     parseFloat(assetEl.getAttribute('scale')     || '1')
         };
       }
@@ -10310,7 +10963,9 @@ function _restoreChorusFromXml(xml) {
           parseFloat(asEl.getAttribute('y') || '0'),
           parseFloat(asEl.getAttribute('z') || '0')
         ],
+        rotationX: parseFloat(asEl.getAttribute('rotationX') || '0'),
         rotationY: parseFloat(asEl.getAttribute('rotationY') || '0'),
+        rotationZ: parseFloat(asEl.getAttribute('rotationZ') || '0'),
         scale: asEl.hasAttribute('scale') ? parseFloat(asEl.getAttribute('scale')) : 1,
         isMovie: asEl.getAttribute('isMovie') === 'true'
       };
@@ -10390,6 +11045,9 @@ function _restoreChorusFromXml(xml) {
       var lname = lEl.getAttribute('name');
       if (!lname) return;
       placedLights[lname] = {
+        follow: lEl.getAttribute('follow') || '',
+        followTurns: lEl.getAttribute('followTurns') === '1',
+        aim: lEl.getAttribute('aim') || '',
         name: lname,
         type: lEl.getAttribute('type') || 'point',
         translation: [
@@ -10497,23 +11155,28 @@ function _restoreChorusFromXml(xml) {
       if (bdGainVal2)bdGainVal2.textContent = (sceneConfig.sound.bedGain || 0.50).toFixed(2);
     }
 
-    // ── 7. Restore placedAgents from <EmotionalArc> ──────────────────────────
+    // ── 7. Restore placedAgents from <AgentPlacement> (older scenes: <EmotionalArc>) ──────────────────────────
     // Two responsibilities:
     // (a) If placedAgents is empty (server returned nothing), build it fully from XML.
     // (b) Always patch hanim_src and voice from XML onto any already-placed agent —
     //     the server cultivar definitions do not carry hanim_src, so without this patch
     //     avatar assignments vanish every time the scene is reloaded even though they
     //     were correctly serialized into the scene XML on save.
-    doc.querySelectorAll('EmotionalArc').forEach(function(ea) {
+    doc.querySelectorAll('AgentPlacement, EmotionalArc').forEach(function(ea) {
       var name  = ea.getAttribute('cultivar');
       var voice = ea.getAttribute('voice') || '';
       var spEl  = ea.querySelector('StartPosition');
       var px3   = spEl ? parseFloat(spEl.getAttribute('x') || '0') : 0;
       var py3   = spEl ? parseFloat(spEl.getAttribute('y') || '0') : 0;
       var pz3   = spEl ? parseFloat(spEl.getAttribute('z') || '0') : 0;
+      var srEl  = ea.querySelector('StartRotation');
+      var rx3   = srEl ? parseFloat(srEl.getAttribute('x') || '0') : 0;
+      var ry3   = srEl ? parseFloat(srEl.getAttribute('y') || '0') : 0;
+      var rz3   = srEl ? parseFloat(srEl.getAttribute('z') || '0') : 0;
       if (!name) return;
       var ag       = agents[name] || {};
       var xmlHanim = ea.getAttribute('hanim_src') || '';
+      var xmlNone  = ea.hasAttribute('hanim_src') && !xmlHanim;   // explicit placeholder choice
       if (!placedAgents[name]) {
         // Agent not yet in placedAgents — build the full entry from XML (path a)
         // Day 83: added behavior_clips — same real bug/fix as placeAgentAt's own
@@ -10521,29 +11184,40 @@ function _restoreChorusFromXml(xml) {
         // from /cultivars/xml right here, same as hanim_src/hanim_loa below —
         // it just wasn't being copied across.
         placedAgents[name] = {
-          name: name, position: [px3, py3, pz3],
+          name: name, position: [px3, py3, pz3], rotationX: rx3, rotationY: ry3, rotationZ: rz3,
           color:       ag.color       || agentColor(name),
           weights:     ag.weights     || {E:0.25,B:0.25,P:0.25,S:0.25},
           regulation:  ag.regulation  || 0.7,
           disposition: ag.disposition || '',
           voice:       voice,
-          hanim_src:   xmlHanim || ag.hanim_src || '',
+          hanim_src:   xmlHanim || (xmlNone ? '' : (ag.hanim_src || '')),
+          hanim_none:  xmlNone,
           hanim_loa:   ag.hanim_loa   || 4,
           behavior_clips: ag.behavior_clips || [],
           portrait:    ag.portrait || ''
         };
+        if (ea.getAttribute('think')) placedAgents[name].think = ea.getAttribute('think'); if (ea.getAttribute('hold')) placedAgents[name].hold = ea.getAttribute('hold');
+        { var _avs = parseFloat(ea.getAttribute('avatar_scale')); placedAgents[name].avatarScale = (_avs > 0) ? _avs : 1;
+          var _lsx = ea.getAttribute('light_set') || ''; placedAgents[name].lightSet = _lsx;
+          if (_lsx) { placedAgents[name].lightKey = parseFloat(ea.getAttribute('light_key')); placedAgents[name].lightFill = parseFloat(ea.getAttribute('light_fill')); placedAgents[name].lightBack = parseFloat(ea.getAttribute('light_back')); } }
         if(placedAgents[name].hanim_src) camRigFetchManifest(placedAgents[name].hanim_src);
       } else {
         // Agent already in placedAgents (server path) — patch hanim_src and voice
         // from XML, which is the only authoritative source for these fields (path b).
-        if (xmlHanim) { placedAgents[name].hanim_src = xmlHanim; camRigFetchManifest(xmlHanim); }
+        if (xmlHanim) { placedAgents[name].hanim_src = xmlHanim; placedAgents[name].hanim_none = false; camRigFetchManifest(xmlHanim); }
+        else if (xmlNone) { placedAgents[name].hanim_src = ''; placedAgents[name].hanim_none = true; }
         if (voice)    placedAgents[name].voice      = voice;
         // Portrait isn't carried in the scene XML at all (it's a cultivar-only
         // property) — always patch from /cultivars/xml's ag, same reasoning
         // as hanim_src falling back to ag.hanim_src above.
         if (ag.portrait) placedAgents[name].portrait = ag.portrait;
+        if (ea.getAttribute('think')) placedAgents[name].think = ea.getAttribute('think'); if (ea.getAttribute('hold')) placedAgents[name].hold = ea.getAttribute('hold');
+        { var _avs = parseFloat(ea.getAttribute('avatar_scale')); placedAgents[name].avatarScale = (_avs > 0) ? _avs : 1;
+          var _lsx = ea.getAttribute('light_set') || ''; placedAgents[name].lightSet = _lsx;
+          if (_lsx) { placedAgents[name].lightKey = parseFloat(ea.getAttribute('light_key')); placedAgents[name].lightFill = parseFloat(ea.getAttribute('light_fill')); placedAgents[name].lightBack = parseFloat(ea.getAttribute('light_back')); } }
         // Also patch position from XML — server may return a stale start position
         if (px3 || py3 || pz3) placedAgents[name].position = [px3, py3, pz3];
+        placedAgents[name].rotationX = rx3; placedAgents[name].rotationY = ry3; placedAgents[name].rotationZ = rz3;
         // Day 83: same behavior_clips bug/fix as path (a) above — the server
         // path that pre-populates this placedAgents entry doesn't necessarily
         // carry behavior_clips either. Guarded (only fills in if genuinely
@@ -10721,6 +11395,20 @@ function _restoreChorusFromXml(xml) {
             P: parseFloat(lEl.getAttribute('emoteP')),
             S: parseFloat(lEl.getAttribute('emoteS')),
           };
+        }
+        if (lEl.hasAttribute('awaits')) {
+          line.awaits = lEl.getAttribute('awaits');
+          if (lEl.hasAttribute('awaitsTimeout')) line.awaitsTimeout = parseFloat(lEl.getAttribute('awaitsTimeout')) || 0;
+        }
+        if (lEl.hasAttribute('reply')) line.reply = lEl.getAttribute('reply');
+        if (lEl.hasAttribute('gesture')) {
+          line.gesture = lEl.getAttribute('gesture');
+          if (lEl.hasAttribute('gestureAt')) line.gestureAt = parseFloat(lEl.getAttribute('gestureAt')) || 0;
+        }
+        if (lEl.hasAttribute('expression')) {
+          line.expression = lEl.getAttribute('expression');
+          if (lEl.hasAttribute('expressionAt')) line.expressionAt = parseFloat(lEl.getAttribute('expressionAt')) || 0;
+          if (lEl.hasAttribute('expressionDur')) line.expressionDur = parseFloat(lEl.getAttribute('expressionDur')) || 0;
         }
         if (lEl.hasAttribute('audioFile')) {
           line.audioFile = lEl.getAttribute('audioFile');
@@ -10923,6 +11611,7 @@ function _maybeAdvanceGroup(){
   } else {
     _sceneArcAnyRunning=false;
     document.getElementById('run-btn').disabled=false;
+    _arcRan=true; _syncWparcPane();
     drawArcChart(); // Day 90: the ONE place this draws — every group/agent in
                      // this run has just finished, not mid-run
   }
@@ -10947,6 +11636,7 @@ function resetSceneArc(){
   document.getElementById('run-progress').textContent='Not running.';
   document.getElementById('run-multi-status').innerHTML='';
   document.getElementById('run-log').textContent='Run a scene to generate arc.';
+  _arcRan=false; _syncWparcPane();
   drawArcChart(); // clears the chart back to blank on reset
 }
 
@@ -11032,7 +11722,7 @@ async function _sceneArcAdvance(pname){
         var llmResponse='', channels=null;
         var speakResp=await fetch(API+'/voice/speak',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({text:ql.text,agent_name:cultivar,position:[pos[0],0,pos[2]],record_to_field:true})
+          body:JSON.stringify({text:ql.text,agent_name:cultivar,position:[pos[0],0,pos[2]],record_to_field:true,max_sentences:2,max_tokens:120})
         });
         var reader=speakResp.body.getReader(),dec=new TextDecoder(),buf='';
         while(true){
@@ -11277,6 +11967,45 @@ function toast(msg,isErr){
 // had populated it yet this session. Safe to call this early — the
 // function no-ops if its DOM element doesn't exist yet.
 _renderDialogueExportStatus();
+</script>
+
+<!-- X3D editor button (R35): opens a file in the configured X3D editor, default Sunrize. One-way launcher. -->
+<script>
+(function(){
+  var BASE = function(){ return (typeof API !== 'undefined' ? API : ''); };
+  function box(){
+    var b = document.getElementById('x3de-box');
+    if (b) return b;
+    b = document.createElement('div'); b.id = 'x3de-box';
+    b.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:99999;max-width:420px;padding:12px 14px;border-radius:6px;background:#1c2030;color:#dfe3f0;border:1px solid #4a5a8a;font:14px/1.45 system-ui,sans-serif;box-shadow:0 6px 24px #0008;display:none';
+    document.body.appendChild(b); return b;
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function show(html){ var b = box(); b.innerHTML = html + '<div style="margin-top:8px;text-align:right"><button onclick="document.getElementById(\'x3de-box\').style.display=\'none\'">Close</button></div>'; b.style.display = 'block'; }
+  window.x3dEditSetPath = async function(){
+    var v = (document.getElementById('x3de-path')||{}).value || '';
+    try {
+      var r = await fetch(BASE()+'/x3dedit/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:v})});
+      var d = await r.json();
+      if (!r.ok) { show(esc(d.error||'Could not save the path.')); return; }
+      show('Path saved. Press the button again.');
+    } catch(e){ show('Could not reach the server.'); }
+  };
+  window.x3dEditOpen = async function(file){
+    if (!file) { show('There is no X3D file to open yet. Compile or choose a scene first (Send to Launcher in the Composer).'); return; }
+    try {
+      var r = await fetch(BASE()+'/x3dedit/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file})});
+      var d; try { d = await r.json(); } catch(e2) { show('The server answered (HTTP '+r.status+') but has no X3D editor route. Copy mccf_x3dedit.py and the new mccf_api.py into the server folder and restart the server. To test, open <code>'+esc(BASE())+'/x3dedit/config</code> in the browser. It should show a line of JSON.'); return; }
+      if (d.status === 'ok') { show('Opened in the X3D editor:<br><code>'+esc(d.opened)+'</code><br>Save in the editor, then reload the scene here.'); return; }
+      if (d.status === 'notfound') {
+        show(esc(d.error)+'<div style="margin-top:8px"><a style="color:#8fb4ff" target="_blank" rel="noopener" href="'+esc(d.download)+'">Download Sunrize</a></div>'
+          +'<div style="margin-top:8px">Program path: <input id="x3de-path" style="width:100%;margin-top:4px" placeholder="C:\\Users\\you\\AppData\\Local\\Programs\\Sunrize\\Sunrize.exe"> <button onclick="x3dEditSetPath()" style="margin-top:4px">Set</button></div>');
+        return;
+      }
+      show(esc(d.error||'The editor could not be started.'));
+    } catch(e){ show('Could not reach the server at <code>'+esc(BASE()||location.origin)+'</code>. Is mccf_api.py running?'); }
+  };
+})();
 </script>
 </body>
 </html>

@@ -233,7 +233,8 @@ function buildScore(data, opts) {
   var t0 = (from - 1) * m.barTicks, t1 = to * m.barTicks, staves = [], moved = 0, trip = 0, drop = 0, notes = 0, swung = 0;
   var want = opts.tracks || data.tracks.filter(function (t) { return t.noteCount; }).map(function (t) { return t.index; });
   want.forEach(function (ti) {
-    var tr = data.tracks[ti]; if (!tr || !tr.noteCount) return;
+    var tr = data.tracks[ti]; if (!tr) return;
+    if (!tr.noteCount && !(opts.tracks && !data.tracks.some(function (t) { return t.noteCount; }))) return;   // a score with no notes at all (video bars): the staff asked for is drawn empty
     var inWin = tr.notes.filter(function (n) { return n.startTick < t1 && n.startTick + n.durTicks > t0; });
     var drums = isDrumTrack(tr), q = quantize(inWin, u), ms = [], feel = q.tripletish >= 2 && q.tripletish / inWin.length > 0.12;   // a few swung notes in a sparse part still count
     if (feel && opts.straightenSwing !== false) q = Object.assign(quantize(inWin, u, { straighten: true }), { tripletish: q.tripletish });

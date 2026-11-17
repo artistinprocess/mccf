@@ -55,7 +55,7 @@ body {
   font-family: var(--display);
   font-weight: 800;
   font-size: 15px;
-  color: var(--accent);
+  color: var(--warm);
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -345,7 +345,7 @@ textarea { resize: vertical; line-height: 1.5; }
   <button class="pill-btn" onclick="openImportKateModal()">↓ Import tagged</button>
   <button class="pill-btn" onclick="openImportChorusModal()">🎭 Import from Chorus</button>
   <button class="pill-btn" onclick="openGenerateChorusModal()">💬 Generate Chorus response</button>
-  <button class="pill-btn" onclick="openGenerateImprovModal()">🗣 Generate improv lines</button>
+  <button class="pill-btn" onclick="openGenerateImprovModal()">🗣 Generate LLM prompt</button>
   <button class="pill-btn" onclick="openRunArcModal()">▶ Run Arc (batch persist)</button>
   <button class="pill-btn" onclick="openSplitMonologueModal()">✂ Split monologue</button>
   <button class="pill-btn" onclick="rechainSequentially()">⛓ Re-chain sequentially</button>
@@ -563,6 +563,14 @@ textarea { resize: vertical; line-height: 1.5; }
       if (l.audioFile !== undefined && l.audioFile !== null) {
         attrs += ` audioFile="${xmlEscape(l.audioFile)}" audioSource="${xmlEscape(serializeAudioSource(l.audioSource))}"`;
       }
+      if (l.awaits) { attrs += ` awaits="${xmlEscape(l.awaits)}"`; if (l.awaitsTimeout) attrs += ` awaitsTimeout="${l.awaitsTimeout}"`; }
+      if (l.reply) attrs += ` reply="${xmlEscape(l.reply)}"`;
+      if (l.gesture) { attrs += ` gesture="${xmlEscape(l.gesture)}"`; if (l.gestureAt) attrs += ` gestureAt="${l.gestureAt}"`; }
+      if (l.expression) {
+        attrs += ` expression="${xmlEscape(l.expression)}"`;
+        if (l.expressionAt) attrs += ` expressionAt="${l.expressionAt}"`;
+        if (l.expressionDur) attrs += ` expressionDur="${l.expressionDur}"`;
+      }
       return `  <Line ${attrs}>${xmlEscape(l.text.trim())}</Line>`;
     });
     return `<Dialogue>\n${rows.join('\n')}\n</Dialogue>`;
@@ -604,6 +612,20 @@ textarea { resize: vertical; line-height: 1.5; }
           P: parseFloat(attrs.emoteP),
           S: parseFloat(attrs.emoteS),
         };
+      }
+      if (attrs.awaits !== undefined) {
+        line.awaits = attrs.awaits;
+        if (attrs.awaitsTimeout !== undefined) line.awaitsTimeout = parseFloat(attrs.awaitsTimeout) || 0;
+      }
+      if (attrs.reply !== undefined) line.reply = attrs.reply;
+      if (attrs.gesture !== undefined) {
+        line.gesture = attrs.gesture.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        if (attrs.gestureAt !== undefined) line.gestureAt = parseFloat(attrs.gestureAt) || 0;
+      }
+      if (attrs.expression !== undefined) {
+        line.expression = attrs.expression.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        if (attrs.expressionAt !== undefined) line.expressionAt = parseFloat(attrs.expressionAt) || 0;
+        if (attrs.expressionDur !== undefined) line.expressionDur = parseFloat(attrs.expressionDur) || 0;
       }
       if (attrs.audioFile !== undefined) {
         line.audioFile = attrs.audioFile.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
@@ -755,8 +777,8 @@ const D = window.MCCFDialogue;
 // same reason dialogue-xml.js's own word lists get duplicated across
 // modules in this codebase (no shared-constant mechanism across Python/JS
 // without a build step). Keep in sync by hand if that list changes.
-const CORE_TAGS = ['happy','sad','excited','angry','whisper','annoyed','appalled','thoughtful','surprised','cute','dismissive'];
-const NONVERBAL_TAGS = ['laughs','chuckles','sighs','clears throat','exhales sharply','inhales deeply','muttering','gasp','swallows','short pause','long pause'];
+let CORE_TAGS = ['happy','sad','excited','angry','whisper','annoyed','appalled','thoughtful','surprised','cute','dismissive'];
+let NONVERBAL_TAGS = ['laughs','chuckles','sighs','clears throat','exhales sharply','inhales deeply','muttering','gasp','swallows','short pause','long pause'];
 // Day 83: was a hardcoded literal array — direct instruction: "We NEVER
 // hardwire the menus for objects that aren't in a scene." Replaced with a
 // live variable, populated from Composer's own placedAgents roster via the
@@ -766,6 +788,8 @@ const NONVERBAL_TAGS = ['laughs','chuckles','sighs','clears throat','exhales sha
 // loaded is the correct, honest state, not something to paper over with
 // placeholders.
 var ACTORS = [];
+var ACTOR_CLIPS = {};   // {actor: [clip names]} and ACTOR_EXPR {actor: [expression names]}, from the Composer's scene data
+var ACTOR_EXPR  = {};
 
 const TRIGGER_LABELS = {
   'scene-start':     'Scene start',
@@ -817,7 +841,150 @@ async function apiPost(path, body) {
   }
   return resp.json();
 }
-function onApiBaseChange(v) { apiBaseUrl = v; }
+function onApiBaseChange(v) { apiBaseUrl = v; loadLexicon(); }
+
+// ── Lexicon packs ──────────────────────────────────────────────────────
+// Word packs add vocabulary to the analysis; engine packs supply the delivery tag
+// chips for one voice engine. Both come from the server (/voice/lexicon). If the
+// server cannot be reached, the built-in ElevenLabs lists above stay in use.
+var LEX = { packs: [], active: [], engine: 'elevenlabs_v3', tagActive: null, ok: false };
+try {
+  var _saved = JSON.parse(localStorage.getItem('mccf_lexicon') || 'null');
+  if (_saved && Array.isArray(_saved.active)) { LEX.active = _saved.active; LEX.engine = _saved.engine || LEX.engine; if (Array.isArray(_saved.tagActive)) LEX.tagActive = _saved.tagActive; }
+} catch (e) {}
+function saveLex() { try { localStorage.setItem('mccf_lexicon', JSON.stringify({ active: LEX.active, engine: LEX.engine, tagActive: LEX.tagActive })); } catch (e) {} }
+function wordPacks() { return LEX.packs.filter((p) => p.kind === 'words'); }
+function enginePacks() { return LEX.packs.filter((p) => p.kind === 'engine_tags'); }
+function currentEnginePack() { return enginePacks().find((p) => p.pack_id === LEX.engine) || null; }
+// Delivery-tag packs are additive: every ticked engine pack contributes its groups.
+function activeTagPacks() {
+  const eps = enginePacks();
+  const ids = LEX.tagActive === null ? eps.map((p) => p.pack_id) : LEX.tagActive;
+  return eps.filter((p) => ids.includes(p.pack_id));
+}
+function tagGroups() {
+  const aps = activeTagPacks(), out = [];
+  aps.forEach((ep) => Object.keys(ep.groups).forEach((g) =>
+    out.push({ name: aps.length > 1 ? ep.label + ' - ' + g : g, tags: ep.groups[g] })));
+  if (out.length) return out;
+  return [{ name: 'Emotion', tags: CORE_TAGS }, { name: 'Non-verbal', tags: NONVERBAL_TAGS }];
+}
+function toggleTagPack(id, on) {
+  if (LEX.tagActive === null) LEX.tagActive = enginePacks().map((p) => p.pack_id);
+  LEX.tagActive = LEX.tagActive.filter((i) => i !== id);
+  if (on) LEX.tagActive.push(id);
+  saveLex(); renderAll();
+}
+function renderTagToolbars() {
+  return tagGroups().map((g) =>
+    `<div class="tag-toolbar" title="${esc(g.name)}">${g.tags.map((t) => `<span class="tag-chip" onclick="insertTag(this.dataset.tag)" data-tag="${esc(t)}">[${esc(t)}]</span>`).join('')}</div>`
+  ).join('');
+}
+async function loadLexicon() {
+  try {
+    const r = await fetch(`${apiBase()}/voice/lexicon`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    LEX.packs = d.packs || [];
+    LEX.ok = true;
+    const ids = LEX.packs.map((p) => p.pack_id);
+    LEX.active = LEX.active.filter((i) => ids.includes(i) && wordPacks().some((p) => p.pack_id === i));
+    if (!enginePacks().some((p) => p.pack_id === LEX.engine)) LEX.engine = (enginePacks()[0] || {}).pack_id || '';
+  } catch (e) {
+    LEX.packs = []; LEX.ok = false;
+  }
+  if (typeof renderAll === 'function' && typeof lines !== 'undefined') renderAll();
+}
+// ---- server file chooser (system rule: the author is shown the server folder, not asked to remember it) ----
+window.MccfPick = window.MccfPick || (function () {
+  var cssDone = false;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function css() {
+    if (cssDone) return; cssDone = true;
+    var st = document.createElement('style');
+    st.textContent = '.mpk-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center}' +
+      '.mpk-box{background:#101821;color:#c8dcea;border:1px solid #2a3545;border-radius:6px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;padding:14px;font-family:inherit}' +
+      '.mpk-box h3{margin:0 0 4px;font-size:18px;color:#e6f2fa}.mpk-sub{font-size:14px;color:#8aa;margin:0 0 8px;word-break:break-all}' +
+      '.mpk-list{overflow:auto;border:1px solid #2a3545;border-radius:4px;min-height:60px;max-height:44vh;margin-bottom:10px}' +
+      '.mpk-row{display:flex;justify-content:space-between;gap:10px;padding:5px 9px;border-bottom:1px solid #1b2634;font-size:15px}' +
+      '.mpk-row.pk{cursor:pointer}.mpk-row.pk:hover{background:#1c2b3c}.mpk-row small{color:#7f98aa;text-align:right}' +
+      '.mpk-row.ro{color:#8aa}.mpk-msg{padding:10px;color:#9ab;font-size:15px}' +
+      '.mpk-f{width:100%;box-sizing:border-box;margin:0 0 8px;padding:4px 6px;background:#0d1520;color:#c8dcea;border:1px solid #2a3545;border-radius:3px;font-size:15px}' +
+      '.mpk-bar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}' +
+      '.mpk-bar button{font-size:15px;padding:4px 12px;background:#16212e;color:#c8dcea;border:1px solid #3a4b60;border-radius:4px;cursor:pointer}.mpk-bar button.pri{border-color:#2b8a84;color:#fff;background:#1d4a48}';
+    document.head.appendChild(st);
+  }
+  // o: {title, folder, mode:'open'|'upload', items:[{name,value,note}] or function returning a Promise of that,
+  //     onPick(item), onComputer(), computerLabel, empty}
+  function choose(o) {
+    css();
+    var up = o.mode === 'upload', ov = document.createElement('div'); ov.className = 'mpk-ov';
+    ov.innerHTML = '<div class="mpk-box"><h3>' + esc(o.title || 'Choose a file') + '</h3>' +
+      '<p class="mpk-sub">' + (up ? 'Already on the server in ' : 'On the server in ') + '<b>' + esc(o.folder || '') + '</b>' + (up ? '. A file with the same name asks before it replaces one.' : '') + '</p>' +
+      '<input class="mpk-f" placeholder="filter" style="display:none"><div class="mpk-list"><div class="mpk-msg">Loading…</div></div>' +
+      '<div class="mpk-bar"></div></div>';
+    document.body.appendChild(ov);
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); document.removeEventListener('keydown', key); }
+    function key(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', key);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var list = ov.querySelector('.mpk-list'), flt = ov.querySelector('.mpk-f'), bar = ov.querySelector('.mpk-bar'), all = [];
+    function draw() {
+      var q = flt.value.trim().toLowerCase(), rows = all.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
+      if (!rows.length) { list.innerHTML = '<div class="mpk-msg">' + esc(all.length ? 'No file matches.' : (o.empty || 'Nothing here yet.')) + '</div>'; return; }
+      list.innerHTML = rows.map(function (i, n) { return '<div class="mpk-row ' + (up ? 'ro' : 'pk') + '" data-n="' + all.indexOf(i) + '"><span>' + esc(i.name) + '</span>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</div>'; }).join('');
+      if (!up) Array.prototype.forEach.call(list.querySelectorAll('.mpk-row'), function (r) { r.onclick = function () { var it = all[+r.getAttribute('data-n')]; close(); if (o.onPick) o.onPick(it); }; });
+    }
+    flt.oninput = draw;
+    var b = '';
+    if (o.onComputer) b += '<button class="' + (up ? 'pri' : '') + '" data-a="pc">' + esc(o.computerLabel || (up ? 'Choose a file from my computer…' : 'From my computer…')) + '</button>';
+    b += '<button data-a="x">Cancel</button>'; bar.innerHTML = b;
+    bar.onclick = function (e) { var a = e.target.getAttribute && e.target.getAttribute('data-a'); if (a === 'x') close(); else if (a === 'pc') { close(); o.onComputer(); } };
+    Promise.resolve(typeof o.items === 'function' ? o.items() : o.items).then(function (items) {
+      all = items || []; flt.style.display = all.length > 8 ? '' : 'none'; draw();
+    }).catch(function (e) { list.innerHTML = '<div class="mpk-msg">The server list is not available (' + esc(e && e.message || e) + ').' + (o.onComputer ? ' You can still choose a file from your computer.' : '') + '</div>'; });
+  }
+  return { choose: choose };
+})();
+
+async function loadPackFile(file, replace) {
+  if (!file) return;
+  let pack;
+  try { pack = JSON.parse(await file.text()); }
+  catch (e) { alert('That file is not valid JSON: ' + e.message); return; }
+  try {
+    const r = await fetch(`${apiBase()}/voice/lexicon/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pack, replace: !!replace }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 409 && !replace) {
+      if (confirm('A pack named "' + d.pack_id + '" already exists. Replace it?')) return loadPackFile(file, true);
+      return;
+    }
+    if (!r.ok) { alert('The pack was not added: ' + (d.error || ('HTTP ' + r.status))); return; }
+    await loadLexicon();
+  } catch (e) { alert('Could not reach the server: ' + e.message); }
+}
+function loadPackPick() {
+  MccfPick.choose({ title: 'Add a vocabulary or tag pack', folder: 'lexicon_packs/', mode: 'upload', empty: 'No packs on the server yet.',
+    items: function () { return fetch(`${apiBase()}/voice/lexicon`).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) { return (d.packs || []).map(function (p) { return { name: p.pack_id + '.json', note: p.kind || '' }; }); }); },
+    onComputer: function () { const el = document.getElementById('lex-file-input'); if (el) { el.value = ''; el.click(); } } });
+}
+function toggleLexPack(id, on) {
+  LEX.active = LEX.active.filter((i) => i !== id);
+  if (on) LEX.active.push(id);
+  saveLex();
+}
+function setEnginePack(id) { LEX.engine = id; saveLex(); renderAll(); }
+function renderLexiconBox() {
+  if (!LEX.ok) return '<div class="hint" style="margin-bottom:12px"><b>Vocabulary and tag packs not available.</b> The built-in tag lists are in use. Packs need the updated mccf_voice_api.py and a lexicon_packs folder on the server, and this page must be served by that server (or set API BASE above). <a href="#" onclick="loadLexicon();return false">Try again</a></div>';
+  const wp = wordPacks(), ep = enginePacks();
+  return `<div style="margin-bottom:14px">
+    <div class="section-title">Vocabulary</div>
+    ${wp.length ? wp.map((p) => `<label style="display:block;font-size:12px" title="${esc(p.description || '')}"><input type="checkbox" ${LEX.active.includes(p.pack_id) ? 'checked' : ''} onchange="toggleLexPack('${esc(p.pack_id)}', this.checked)"> ${esc(p.label)}</label>`).join('') : '<div class="hint">No extra word packs found. The core lexicon is always on.</div>'}
+    ${ep.length ? `<div class="section-title" style="margin-top:8px">Delivery tags</div>` + ep.map((p) => `<label style="display:block;font-size:12px" title="${esc(p.description || '')}"><input type="checkbox" ${activeTagPacks().some((a) => a.pack_id === p.pack_id) ? 'checked' : ''} onchange="toggleTagPack('${esc(p.pack_id)}', this.checked)"> ${esc(p.label)}</label>`).join('') : ''}
+    <div style="margin-top:8px"><button class="pill-btn" onclick="loadPackPick()" title="Add a lexicon pack (.json) from a file. It is saved on the server and loaded at once.">Load pack file…</button>
+    <input type="file" id="lex-file-input" accept=".json,application/json" style="display:none" onchange="loadPackFile(this.files[0])"></div>
+  </div>`;
+}
 
 function uid(prefix) {
   let id;
@@ -998,7 +1165,55 @@ function renderEditor() {
       </div>
     </div>
 
-    <div class="section-title">Delivery — ElevenLabs tags</div>
+    <div class="section-title">Acting (optional)</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Gesture</label>
+        <input type="text" list="dl-gestures" value="${esc(l.gesture || '')}" placeholder="a clip from ${esc(l.actor || 'the speaker')}" onchange="onActingEdit('gesture', this.value)">
+        <datalist id="dl-gestures">${(ACTOR_CLIPS[l.actor] || []).map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+        <div class="hint">Starts with the line, plus the offset. Leave empty for none.</div>
+      </div>
+      <div class="field" style="max-width:110px">
+        <label>Offset (s)</label>
+        <input type="number" step="0.1" min="0" value="${l.gestureAt || 0}" onchange="onActingEdit('gestureAt', this.value)">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Expression</label>
+        <input type="text" list="dl-expr" value="${esc(l.expression || '')}" placeholder="a face pose from ${esc(l.actor || 'the speaker')}" onchange="onActingEdit('expression', this.value)">
+        <datalist id="dl-expr">${(ACTOR_EXPR[l.actor] || []).map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+        <div class="hint">Needs the avatar's expressions file. Weights are embedded when the Composer exports.</div>
+      </div>
+      <div class="field" style="max-width:110px">
+        <label>Offset (s)</label>
+        <input type="number" step="0.1" min="0" value="${l.expressionAt || 0}" onchange="onActingEdit('expressionAt', this.value)">
+      </div>
+      <div class="field" style="max-width:110px">
+        <label>Hold (s)</label>
+        <input type="number" step="0.1" min="0.1" value="${l.expressionDur || 2}" onchange="onActingEdit('expressionDur', this.value)">
+      </div>
+    </div>
+
+    <div class="section-title">Interaction (optional)</div>
+    <div class="field-row">
+      <div class="field">
+        <label style="text-transform:none;font-size:12.5px;color:var(--text);font-weight:400"><input type="checkbox" ${l.awaits === 'user' ? 'checked' : ''} onchange="onFlagEdit('awaits', this.checked ? 'user' : '')"> Wait for the user's typed answer after this line</label>
+        <div class="hint">The speaker plays the hold pose set in the Composer. Lines chained to this one ("Another line arrives") continue after the answer.</div>
+      </div>
+      <div class="field" style="max-width:140px">
+        <label>Give up after (s)</label>
+        <input type="number" min="5" step="5" value="${l.awaitsTimeout || 90}" onchange="onFlagEdit('awaitsTimeout', this.value)">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label style="text-transform:none;font-size:12.5px;color:var(--text);font-weight:400"><input type="checkbox" ${l.reply === 'live' ? 'checked' : ''} onchange="onFlagEdit('reply', this.checked ? 'live' : '')"> Live reply — the text above is this speaker's aim; the model writes the spoken line from the user's last answer</label>
+        <div class="hint">If the model gives nothing, the text above is spoken as written.</div>
+      </div>
+    </div>
+
+    <div class="section-title">Delivery tags</div>
     <div class="field-row">
       <div class="field">
         <label>ttsText</label>
@@ -1006,12 +1221,7 @@ function renderEditor() {
         <div class="provenance-row">
           ${l.tagSource ? `<span class="prov-badge ${provClass(l.tagSource)}">${esc(provLabel(l.tagSource))}</span>` : '<span class="hint">no tag source yet</span>'}
         </div>
-        <div class="tag-toolbar">
-          ${CORE_TAGS.map((t) => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
-        </div>
-        <div class="tag-toolbar">
-          ${NONVERBAL_TAGS.map((t) => `<span class="tag-chip" onclick="insertTag('${t}')">[${t}]</span>`).join('')}
-        </div>
+        ${renderTagToolbars()}
       </div>
     </div>
 
@@ -1058,7 +1268,7 @@ function renderEditor() {
 function renderPreview() {
   const right = document.getElementById('right');
   const l = lines.find((x) => x.id === selectedId);
-  if (!l) { right.innerHTML = '<h2>Emotional preview</h2><div class="hint">Select a line first.</div>'; return; }
+  if (!l) { right.innerHTML = '<h2>Emotional preview</h2>' + renderLexiconBox() + '<div class="hint">Select a line first.</div>'; return; }
 
   const p = l._preview || null;
   const loading = !!l._previewLoading;
@@ -1066,6 +1276,7 @@ function renderPreview() {
 
   right.innerHTML = `
     <h2>Emotional preview</h2>
+    ${renderLexiconBox()}
     <button class="pill-btn primary" style="width:100%;margin-bottom:16px" onclick="runPreview()" ${loading || !l.text.trim() ? 'disabled' : ''}>
       ${loading ? '…calling /voice/preview' : '▶ Preview this line'}
     </button>
@@ -1136,7 +1347,7 @@ async function runPreview() {
     const resp = await fetch(`${apiBase()}/voice/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: l.text }),
+      body: JSON.stringify({ text: l.text, lexicon_packs: LEX.active, engine_pack: (activeTagPacks()[0] || {}).pack_id }),
     });
     if (!resp.ok) {
       const body = await resp.text().catch(() => '');
@@ -1194,6 +1405,25 @@ function updateField(field, value) {
   const l = lines.find((x) => x.id === selectedId);
   if (!l) return;
   l[field] = value;
+  renderAll();
+}
+
+function onFlagEdit(field, value) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  if (field === 'awaitsTimeout') { const n = parseFloat(value); l.awaitsTimeout = isNaN(n) ? 0 : Math.max(0, n); }
+  else if (value === '') { delete l[field]; if (field === 'awaits') delete l.awaitsTimeout; }
+  else l[field] = value;
+  renderAll();
+}
+
+function onActingEdit(field, value) {
+  const l = lines.find((x) => x.id === selectedId);
+  if (!l) return;
+  const num = (field === 'gestureAt' || field === 'expressionAt' || field === 'expressionDur');
+  if (num) { const n = parseFloat(value); l[field] = isNaN(n) ? 0 : Math.max(0, n); }
+  else if (value === '') { delete l[field]; if (field === 'gesture') delete l.gestureAt; if (field === 'expression') { delete l.expressionAt; delete l.expressionDur; } }
+  else l[field] = value;
   renderAll();
 }
 
@@ -1572,7 +1802,7 @@ function openLoadSceneModal() {
   document.getElementById('modal-title').textContent = 'Load scene';
   document.getElementById('modal-body').innerHTML = `
     <p>Paste raw scene XML, or choose a file. Reads the <code>&lt;Dialogue&gt;</code> block if present; if the scene predates this schema, falls back to migrating waypoint-nested lines (marked <code>legacy-waypoint</code> — pick a real trigger deliberately when you're ready, it's never guessed for you).</p>
-    <div class="file-drop" onclick="document.getElementById('scene-file-input').click()">Click to choose a .xml file</div>
+    <div class="file-drop" onclick="sceneFilePick()">Click to choose a .xml file from the server (or your computer)</div>
     <input type="file" id="scene-file-input" accept=".xml" style="display:none" onchange="onSceneFileChosen(this.files[0])">
     <textarea id="load-scene-text" placeholder="&lt;Scene&gt;...&lt;/Scene&gt;"></textarea>
     <div id="load-scene-msg"></div>
@@ -1586,6 +1816,16 @@ function openLoadSceneModal() {
   document.getElementById('modal-overlay').classList.add('show');
 }
 
+function sceneFilePick() {
+  MccfPick.choose({ title: 'Load a scene', folder: 'scenes/<scene name>/', mode: 'open', empty: 'No saved scene XML on the server yet.',
+    items: function () { return fetch(`${apiBase()}/scene/list/scenes`).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) { return (d.files || []).map(function (f) { return { name: f, value: f }; }); }); },
+    onPick: function (it) {
+      fetch(`${apiBase()}/scene/load/scene/raw?filename=${encodeURIComponent(it.value)}`).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(function (t) { document.getElementById('load-scene-text').value = t; })
+        .catch(function (e) { const m = document.getElementById('load-scene-msg'); if (m) m.innerHTML = '<div class="modal-err">Could not read ' + esc(it.value) + ' (' + esc(e.message) + ')</div>'; });
+    },
+    onComputer: function () { const el = document.getElementById('scene-file-input'); if (el) { el.value = ''; el.click(); } } });
+}
 function onSceneFileChosen(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -1966,7 +2206,7 @@ function openGenerateImprovModal() {
     return;
   }
 
-  document.getElementById('modal-title').textContent = 'Generate improv lines';
+  document.getElementById('modal-title').textContent = 'Generate LLM prompt';
   document.getElementById('modal-body').innerHTML = `
     <p>Generates text for ${empties.length} empty improv line(s), in character, as each line's own Question, Response, or Statement. Writes straight into each line's text — nothing is recorded to EBPS in this step. Review and edit the results normally afterward, then run <b>Run Arc (batch persist)</b> separately when you're happy with them.</p>
     <p style="color:var(--warm)">LLM output is often chatty — expect to trim these before persisting.</p>
@@ -1974,11 +2214,9 @@ function openGenerateImprovModal() {
     <select id="genimprov-adapter" class="input" style="width:100%;margin-top:4px">
       <option value="ollama">ollama (local)</option>
       <option value="stub">stub (no LLM)</option>
-      <option value="anthropic">anthropic</option>
-      <option value="openai">openai</option>
     </select>
     <label style="display:block;margin-top:8px">API key (if required)</label>
-    <input type="text" id="genimprov-apikey" class="input" style="width:100%;margin-top:4px" placeholder="leave blank for local/ollama">
+    <input type="password" autocomplete="off" id="genimprov-apikey" class="input" style="width:100%;margin-top:4px" placeholder="not needed for ollama">
     <div id="genimprov-status" style="margin-top:12px"></div>
   `;
   document.getElementById('modal-foot').innerHTML = `
@@ -2073,7 +2311,7 @@ function openRunArcModal() {
   document.getElementById('modal-title').textContent = 'Run Arc (batch persist)';
   document.getElementById('modal-body').innerHTML = `
     <p>Calls /arc/record for ${recordable} line(s) with text, in order. No generation happens here — this is persistence only.${stillEmptyImprov > 0
-      ? ` ${stillEmptyImprov} improv line(s) still have no text and will be skipped — run "Generate improv lines" first if you want them included.`
+      ? ` ${stillEmptyImprov} improv line(s) still have no text and will be skipped — run "Generate LLM prompt" first if you want them included.`
       : ''}</p>
     <p style="color:var(--warm)">This is a real, persisted run, saved as a real arc export — not a preview.</p>
     <div id="runarc-status" style="margin-top:12px"></div>
@@ -2358,6 +2596,8 @@ window.addEventListener('message', function(evt) {
   if (!d || d.type !== 'mccf_scene_data') return;
   const payload = d.data || {};
   ACTORS = Array.isArray(payload.agents) ? payload.agents.slice() : [];
+  ACTOR_CLIPS = payload.agentClips || {};
+  ACTOR_EXPR  = payload.agentExpressions || {};
   console.log('[dialogue] ACTORS updated to:', JSON.stringify(ACTORS));
   renderActorRosterBadge();
   renderAll();
@@ -2394,6 +2634,7 @@ function saveToComposer() {
 
 renderActorRosterBadge();
 renderAll();
+loadLexicon();
 </script>
 </body>
 </html>

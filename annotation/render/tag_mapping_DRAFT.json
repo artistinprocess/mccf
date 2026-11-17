@@ -1,0 +1,14 @@
+{
+  "status": "DRAFT - proposed by Claude; the author owns these choices",
+  "_note": "emotion_terms: lexicon emotion term (found in the spoken words) -> delivery tags. field: EBPS-driven tags, used only when a per-line field file is supplied. Tags come from the elevenlabs_v3 vocabulary; free-form tags also work.",
+  "emotion_terms": {
+    "joy": ["happy"], "sadness": ["sad"], "anger": ["angry"], "fear": ["nervously"], "anxiety": ["nervously"],
+    "surprise": ["surprised"], "curiosity": ["curious"], "relief": ["sighs"], "affection": ["warmly"], "gratitude": ["warmly"]
+  },
+  "field": [
+    {"if": {"channel": "E", "below": 0.3}, "tag": "quietly"},
+    {"if": {"channel": "E", "above": 0.7}, "tag": "with energy"},
+    {"if": {"channel": "S", "above": 0.7}, "tag": "intimate"},
+    {"if": {"channel": "P", "below": 0.25}, "tag": "hesitantly"}
+  ]
+}

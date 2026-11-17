@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EmotionalArc id="path_Salida4_2026-11-14T025003" scene="ConeAndCamera">
+  <title>MCCF Constitutional Arc Export</title>
+  <Cultivar id="path_Salida4_2026-11-14T025003" agentname="Salida" path_name="path_Salida4">
+    <Timestamp date="2026-11-14" time="02:50:03"/>
+    <Seed value="cqwwhm" source="randomized" note="arc noise locked for reproducibility"/>
+    <Waypoint id="WP2" stepno="1" name="WP2" E="0.3320" B="0.2074" P="0.1644" S="0.1695" Mode="scene" Coherence="0.0557" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="26.30" pos_y="0.00" pos_z="20.60">
+      <Response speaker="The Witness">Worlds have Zones and Avatars and Assets,  We are avatars.  I am The Witness,</Response>
+      <Statement speaker="Salida">I am Salida.  Worlds have dialog and music,</Statement>
+    </Waypoint>
+    <Waypoint id="WP3" stepno="2" name="WP3" E="0.4783" B="0.2075" P="0.1704" S="0.1614" Mode="scene" Coherence="0.0577" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="21.30" pos_y="0.00" pos_z="14.70">
+      <Question speaker="Salida">Do you want to use the Getting Started PI Course?</Question>
+      <Response speaker="Salida">I&apos;m not sure I understand what&apos;s being asked or why I would want to use the Getting Started PI Course. Can you please clarify what that is and how it relates to my current situation.</Response>
+      <Statement speaker="The Witness">The Help PI is a guided instruction application that teaches you step by step how to create worlds in MCCF.</Statement>
+    </Waypoint>
+    <Waypoint id="WP4" stepno="3" name="WP4" E="0.4140" B="0.1995" P="0.1764" S="0.2000" Mode="scene" Coherence="0.0597" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="14.20" pos_y="0.00" pos_z="19.90">
+      <Question speaker="The Witness">Are you ready to begin?</Question>
+      <Statement speaker="The Witness">Let&apos;s begin our first lesson.</Statement>
+      <Response speaker="Salida">We will teach how to make THIS world.</Response>
+      <Response speaker="Salida">I&apos;m not feeling entirely clear about what&apos;s happening or where I am in this interaction. Can you please restate the context and my current situation to help me understand the situation better?</Response>
+    </Waypoint>
+    <Waypoint id="WP5" stepno="4" name="WP5" E="0.3470" B="0.1754" P="0.1884" S="0.1614" Mode="scene" Coherence="0.0588" Uncertainty="0.5" Valence="0.0" Reward="0.0" pos_x="14.50" pos_y="0.00" pos_z="17.10">
+    </Waypoint>
+  </Cultivar>
+</EmotionalArc>

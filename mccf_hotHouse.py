@@ -471,14 +471,12 @@ class EmotionalField:
 
         Returns the environmental signal applied.
         """
-        zone_biases = {
-            "threat":    {"E": 0.15, "B": 0.05, "P": 0.05, "S": -0.15},
-            "intimate":  {"E": 0.15, "B": 0.00, "P": 0.00, "S": 0.10},
-            "authority": {"E":-0.10, "B": 0.15, "P": 0.10, "S":-0.05},
-            "garden":    {"E": 0.10, "B":-0.05, "P": 0.00, "S": 0.10},
-            "library":   {"E":-0.10, "B": 0.05, "P": 0.15, "S": 0.00},
-            "neutral":   {"E": 0.00, "B": 0.00, "P": 0.00, "S": 0.00}
-        }
+        # One table for zone biases: the collapse pipeline's (mccf_collapse.ZONE_PRESETS).
+        # Hot House used its own copy of the same numbers, which lacked forum and sacred,
+        # so those two zones applied no pressure at all (IMPL-I29).
+        from mccf_collapse import ZONE_PRESETS as _ZP
+        zone_biases = {k: {ch: v.get(ch, 0.0) for ch in ["E","B","P","S"]}
+                       for k, v in _ZP.items()}
         bias = zone_biases.get(zone_type, zone_biases["neutral"])
         signal = {ch: bias[ch] * strength for ch in ["E","B","P","S"]}
         return signal

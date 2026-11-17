@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF V5 Scene Wrapper - ConeAndCamera - 2026-11-14T20:44:14 -->
+<Scene xmlns="http://mccf.artistinprocess.com/v1" id="ConeAndCamera" timestamp="2026-11-14T20:44:14" zone_set="ConeAndCamera" mode="improvisation" width="40" depth="40" labelsEnabled="false" stdLights="1" stdCameras="1" dialogueTTYEnabled="true" seed="">
+<SceneSound>
+  <Track id="music" url="X3DAssets/media/music/ragaRiff01.wav" loop="false" gain="0.15"/>
+  <Track id="bed"   url="X3DAssets/media/music/om.wav"   loop="false" gain="0.63"/>
+</SceneSound>
+<Zones>
+  <Zone id="Zone4" name="Z4" zone_type="threat">
+    <Descriptor></Descriptor>
+    <Weights E="0.4" B="0.2" P="0.3" S="0.05"/>
+    <Position x="14.2" y="0" z="19.9"/><Radius value="4"/>
+    <AmbientTheme scale="pentatonic" tempo="medium" drive="1"/>
+    <Chorus llm="stub" tone="sardonic" max_tokens="80" display="overlay">
+    </Chorus>
+    <SoundDesign>
+      <Track id="ambient" url="X3DAssets/media/music/gayatriMantra.wav" loop="false" gain="0.31" spatialize="false" maxFront="60"/>
+      <Track id="dwell" url="X3DAssets/media/soundeffects/4 inch bell.wav" loop="false" gain="0.24"/>
+    </SoundDesign>
+  </Zone>
+  <Zone id="Zone3" name="Z3" zone_type="library">
+    <Descriptor>study contemplation plannin</Descriptor>
+    <Weights E="0.1" B="0.15" P="0.4" S="0.15"/>
+    <Position x="21.37222222222225" y="0" z="14.641666666666708"/><Radius value="1.5"/>
+    <AmbientTheme scale="aeolian" tempo="medium" drive="1"/>
+    <SoundDesign>
+      <Track id="ambient" url="X3DAssets/media/music/sun.wav" loop="false" gain="0.26" spatialize="false" maxFront="60"/>
+    </SoundDesign>
+  </Zone>
+  <Zone id="zone1" name="Z1" zone_type="intimate">
+    <Descriptor></Descriptor>
+    <Weights E="0.4" B="0.1" P="0.2" S="0.3"/>
+    <Position x="21.519444444444414" y="0" z="25.76388888888883"/><Radius value="2"/>
+    <AmbientTheme scale="dorian" tempo="medium"/>
+    <SoundDesign>
+      <Track id="ambient" url="X3DAssets/media/music/shankarBharav02.wav" loop="false" gain="0.13" spatialize="false" maxFront="60"/>
+    </SoundDesign>
+  </Zone>
+  <Zone id="Z2" name="Z2" zone_type="forum">
+    <Descriptor>open conversation</Descriptor>
+    <Weights E="0.28" B="0.63" P="0.78" S="0.89"/>
+    <Position x="25.9" y="0" z="20.7"/><Radius value="4"/>
+    <AmbientTheme scale="major" tempo="medium" drive="1"/>
+    <SoundDesign>
+      <Track id="ambient" url="X3DAssets/media/music/ragaRiff01.wav" loop="true" gain="0.80" spatialize="false" maxFront="60"/>
+      <Track id="dwell" url="X3DAssets/media/soundeffects/Sesame Street - Elmo - Laugh.wav" loop="false" gain="0.85"/>
+    </SoundDesign>
+  </Zone>
+</Zones>
+<AgentPlacement cultivar="Salida" actor="ollama" voice="" think="DefaultTimer_1" hold="Salida Taunt" avatar_scale="1.5" light_set="on" light_key="0.9" light_fill="0.4" light_back="0.7" hanim_src="avatars/Anna.x3d"><StartPosition x="28.98" y="0" z="20.83"/></AgentPlacement>
+<AgentPlacement cultivar="The Witness" actor="ollama" voice="" light_set="on" light_key="0.9" light_fill="0.4" light_back="0.7" hanim_src="/static/avatars/cindy_hanim.x3d"><StartPosition x="31.05" y="0" z="22.55"/></AgentPlacement>
+<AgentPlacement cultivar="The Gardener" actor="ollama" voice=""><StartPosition x="21.9" y="0" z="20.2"/></AgentPlacement>
+<Waypoints>
+  <Waypoint name="WP1" label="WP1" zone="" pos_x="21.65" pos_y="0.00" pos_z="25.80" dwell="3" pace="1.4">
+    <Statement speaker="The Witness">Welcome to the Island.</Statement>
+    <Response speaker="Salida">We are here to get you started creating narrative worlds with MCCF.</Response>
+  </Waypoint>
+  <Waypoint name="WP2" label="WP_2" zone="" pos_x="25.80" pos_y="0.00" pos_z="20.70" dwell="5" pace="1.4">
+    <Question speaker="Salida">Have you created 3D worlds?</Question>
+    <Response speaker="The Witness">Yes.  MCCF is the first complete media eding system for creating worlds that I have used.</Response>
+  </Waypoint>
+  <Waypoint name="WP3" label="WP3" zone="" pos_x="21.30" pos_y="0.00" pos_z="14.70" dwell="3.5" pace="1.4">
+    <Question speaker="Salida">Do you want to use the Getting Started PI Course?</Question>
+    <Statement speaker="The Witness">The Help PI is a guided instruction application that teaches you step by step how to create worlds in MCCF.</Statement>
+  </Waypoint>
+  <Waypoint name="WP4" label="WP4" zone="" pos_x="16.10" pos_y="0.00" pos_z="18.00" dwell="3.5" pace="1.4">
+    <Statement speaker="The Witness">Let&apos;s begin our first lesson.</Statement>
+    <Response speaker="Salida">We will teach you how to make THIS world.</Response>
+    <Question speaker="The Witness">Are you ready to begin?</Question>
+    <Response speaker="Salida">May fortune favor the foolish.</Response>
+  </Waypoint>
+  <Waypoint name="WP5" label="WP5" zone="Zone4" pos_x="14.50" pos_y="0.00" pos_z="17.10" dwell="4" pace="1.4"/>
+</Waypoints>
+<Paths>
+  <Path name="path_Salida4" agent="Salida" waypointOrder="1">
+    <PathWaypoint ref="WP2"/>
+    <PathWaypoint ref="WP3"/>
+    <PathWaypoint ref="WP4"/>
+    <PathWaypoint ref="WP5"/>
+  </Path>
+  <Path name="path_witness" agent="The Witness" waypointOrder="1">
+    <PathWaypoint ref="WP1"/>
+    <PathWaypoint ref="WP2"/>
+    <PathWaypoint ref="WP3"/>
+    <PathWaypoint ref="WP4"/>
+  </Path>
+</Paths>
+<Cameras>
+  <Camera name="CAM_Medium_Salida" x="29.69" y="0.8" z="30.43" hAngle="0" vAngle="-8" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_CloseUp_Salida_2" x="29.402230215827334" y="1.7" z="27.93" hAngle="0" vAngle="-5" roll="0" fieldOfView="1.0821041362364843" nearDistance="-1" farDistance="-1" jump="true"/>
+  <Camera name="CAM_OverShoulder_Salida" x="29.2795758280092" y="1.6" z="26.55763114494309" hAngle="-20" vAngle="-0.24" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_Profile_Salida" x="32.69" y="1.7" z="25.43" hAngle="90" vAngle="-8" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_Overhead_Salida" x="33.546725658119236" y="7" z="30.02626665871387" hAngle="40" vAngle="-47.46" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_Wide_TheWitness" x="28.5" y="3" z="37.36" hAngle="0" vAngle="-21.18" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_Medium_TheWitness" x="28.5" y="1.7" z="30.36" hAngle="0" vAngle="-8" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+  <Camera name="CAM_CloseUp_TheWitness" x="27.843884892086333" y="1.7" z="25.753956834532346" hAngle="0" vAngle="-5" roll="0" fieldOfView="0.7853981633974483" nearDistance="-1" farDistance="-1" jump="false"/>
+</Cameras>
+<Assets>
+  <Asset name="TestObelisk" url="X3DAssets/MCCF_TestObelisk.x3d" x="21.39640287769783" y="0" z="16.878417266186993" rotationX="0" rotationY="0" rotationZ="0" scale="1" isMovie="false"/>
+</Assets>
+<Navigation type="WALK" transitionType="TELEPORT" transitionTime="1"/>
+<Background def="MainBackground">
+  <SkyStop r="0.0392" g="0.0392" b="0.9471" angle="0.8"/>
+  <SkyStop r="0.0588" g="0.0745" b="0.9098" angle="1.3"/>
+  <SkyStop r="0.051" g="0.0667" b="0.9588" angle="1.4"/>
+  <SkyStop r="0.0471" g="0.0627" b="0.9275" angle="1.5708"/>
+  <SkyStop r="0.12" g="0.0902" b="0.09098"/>
+  <GroundStop r="0" g="0" b="0" angle="0.6"/>
+  <GroundStop r="0" g="0" b="0" angle="1.2"/>
+  <GroundStop r="0" g="0" b="0" angle="1.3"/>
+  <GroundStop r="0" g="0" b="0" angle="1.5708"/>
+  <GroundStop r="0" g="0" b="0"/>
+</Background>
+<Lights>
+  <Light name="WP4Overhead" type="point" x="14.2" y="6" z="19.9" rx="1" ry="0" rz="0" angle="0.7853981633974484" on="true" color="0.800 0.098 0.098" intensity="1" ambientIntensity="0.18" attenC="1" attenL="0" attenQ="0" radius="8" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483"/>
+  <Light name="Spotlight1" type="spot" x="28.37409352517984" y="2" z="22.427798561151057" rx="0" ry="1" rz="0" angle="0" on="true" color="0.859 0.592 0.024" intensity="1" ambientIntensity="0.7" attenC="1" attenL="0.11" attenQ="0.08" radius="3" cutOffAngle="0.6108652381980153" beamWidth="0.4886921905584123" follow="The Witness"/>
+  <Light name="WP3OverHead" type="point" x="21.6" y="4" z="14.5" rx="1" ry="0" rz="0" angle="0.7853981633974484" on="true" color="1.000 1.000 1.000" intensity="1" ambientIntensity="0" attenC="1" attenL="0" attenQ="0" radius="100" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483"/>
+  <Light name="WP2Overhead" type="point" x="27.63812949640284" y="4" z="24.543884892086332" rx="1" ry="0" rz="0" angle="0.7853981633974484" on="true" color="1.000 1.000 1.000" intensity="1" ambientIntensity="0" attenC="1" attenL="0" attenQ="0" radius="100" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483"/>
+  <Light name="Spotlight2" type="spot" x="30.6964820143885" y="1.65" z="21.764316546762508" rx="0" ry="1" rz="0" angle="0" on="true" color="0.961 0.961 0.961" intensity="1" ambientIntensity="0.71" attenC="1" attenL="0.05" attenQ="0.03" radius="3" cutOffAngle="0.6806784082777885" beamWidth="0.715584993317675" follow="Salida" followTurns="1"/>
+  <Light name="WP5Verhead" type="point" x="15" y="4" z="16.8" rx="1" ry="0" rz="0" angle="0.7853981633974484" on="true" color="1.000 1.000 1.000" intensity="1" ambientIntensity="0" attenC="1" attenL="0" attenQ="0" radius="100" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483"/>
+  <Light name="Overhead2" type="point" x="29.40863309352518" y="4" z="23.408633093525154" rx="1" ry="0" rz="0" angle="0.7853981633974484" on="true" color="1.000 1.000 1.000" intensity="1" ambientIntensity="0" attenC="1" attenL="0" attenQ="0" radius="10" cutOffAngle="0.7853981633974483" beamWidth="0.7853981633974483" aim="Salida"/>
+</Lights>
+<Network>
+  <Link from="zone1" to="Zone3" strength="0.60" couplers="R,G,T" coupler_params='{"R":{"gain":0.5,"filter":"E,B,P,S","lambda":1},"G":{"threshold":"S>0.5","inner":"R","inner_gain":0.5},"T":{"trigger":"E>0.7","gain":1.2,"filter":"E,B,P,S"}}'/>
+</Network>
+</Scene>

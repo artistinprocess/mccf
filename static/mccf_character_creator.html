@@ -575,6 +575,7 @@
     border-color: var(--accent3);
   }
   .he-drop-zone input[type=file] {
+    pointer-events: none;
     position: absolute;
     inset: 0;
     opacity: 0;
@@ -1132,7 +1133,8 @@
   <div class="header-status">
     <div class="status-dot" id="api-dot"></div>
     <span id="api-label">connecting…</span>
-    <span style="margin-left:12px;color:var(--text-dim);">v1.0</span>
+    <span style="margin-left:12px;color:var(--text-dim);">V5</span>
+    <button style="margin-left:12px" title="Open this character's H-Anim X3D file in the X3D editor (Sunrize by default)" onclick="x3dEditOpen(_hanimPath)">Edit X3D</button>
   </div>
 </header>
 
@@ -1226,10 +1228,10 @@
 
       <hr class="sep">
 
-      <!-- Music: this character's modal scale, a starting suggestion for the Ambient Engine -->
+      <!-- Music: this character's modal scale, a starting suggestion for the Ambient Composer -->
       <div class="section-head">Music</div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">
-        A starting mode for the Ambient Engine (like a zone's Ambient Scale). A suggestion only: it is changed freely there.
+        A starting mode for the Ambient Composer (like a zone's Ambient Scale). A suggestion only: it is changed freely there.
         Empty = the zone's mode is used.
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -1313,13 +1315,11 @@
         <div class="hanim-stub-label">H-Anim / X3D Figure</div>
 
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-          <label class="btn" style="flex:1;text-align:center;cursor:pointer;margin:0;">
+          <button type="button" class="btn" style="flex:1;text-align:center;margin:0;" onclick="hanimPick()" title="Choose a figure already on the server, or one from your computer">
             📂 Browse for H-Anim Figure…
-            <input type="file" id="f-hanim-file" accept=".x3d,.wrl"
-                   onchange="onHAnimFileSelected(event)"
-                   style="display:none;">
-          </label>
-          <button class="btn danger" onclick="clearHAnim()" title="Remove figure" style="padding:4px 8px;">✕</button>
+          </button>
+          <input type="file" id="f-hanim-file" accept=".x3d,.wrl" onchange="onHAnimFileSelected(event)" style="display:none;">
+          <button class="btn danger" onclick="clearHAnim()" title="Remove the figure and use the placeholder cylinder" style="padding:4px 8px;white-space:nowrap;">✕ Placeholder</button>
         </div>
 
         <div id="hanim-file-display" style="display:none;font-size:14px;color:var(--text-dim);margin-bottom:6px;word-break:break-all;"></div>
@@ -1379,11 +1379,10 @@
           <option value="">— default —</option>
         </select>
         <div style="display:flex;gap:6px;">
-          <label class="btn" style="flex:1;text-align:center;cursor:pointer;margin:0;font-size:13px;">
-            📂 Upload…
-            <input type="file" id="f-portrait-file" accept="image/png,image/jpeg,image/webp"
-                   onchange="onPortraitFileSelected(event)" style="display:none;">
-          </label>
+          <button type="button" class="btn" style="flex:1;text-align:center;margin:0;font-size:13px;" onclick="portraitPick()" title="Choose from the icons folder on the server, or from your computer">
+            📂 Choose…
+          </button>
+          <input type="file" id="f-portrait-file" accept="image/png,image/jpeg,image/webp" onchange="onPortraitFileSelected(event)" style="display:none;">
           <button class="btn danger" onclick="clearPortrait()" title="Reset to default" style="padding:4px 8px;">✕</button>
         </div>
       </div>
@@ -1395,28 +1394,28 @@
 
     <div class="preview-field">
       <div class="preview-channel">
-        <div class="preview-channel-label">E — Eros</div>
+        <div class="preview-channel-label">E — Emotion</div>
         <div class="preview-channel-bar">
           <div class="preview-channel-fill" id="prev-E" style="background:var(--E);width:25%;"></div>
         </div>
         <div class="preview-channel-val" style="color:var(--E);" id="prev-E-val">0.25</div>
       </div>
       <div class="preview-channel">
-        <div class="preview-channel-label">B — Boundary</div>
+        <div class="preview-channel-label">B — Behavior</div>
         <div class="preview-channel-bar">
           <div class="preview-channel-fill" id="prev-B" style="background:var(--B);width:25%;"></div>
         </div>
         <div class="preview-channel-val" style="color:var(--B);" id="prev-B-val">0.25</div>
       </div>
       <div class="preview-channel">
-        <div class="preview-channel-label">P — Pathos</div>
+        <div class="preview-channel-label">P — Predictive</div>
         <div class="preview-channel-bar">
           <div class="preview-channel-fill" id="prev-P" style="background:var(--P);width:25%;"></div>
         </div>
         <div class="preview-channel-val" style="color:var(--P);" id="prev-P-val">0.25</div>
       </div>
       <div class="preview-channel">
-        <div class="preview-channel-label">S — Sophia</div>
+        <div class="preview-channel-label">S — Social</div>
         <div class="preview-channel-bar">
           <div class="preview-channel-fill" id="prev-S" style="background:var(--S);width:25%;"></div>
         </div>
@@ -1492,7 +1491,7 @@
 
         <div class="he-section">
           <div class="he-sec-label">current atlas</div>
-          <div class="he-drop-zone" id="he-drop-zone"
+          <div class="he-drop-zone" id="he-drop-zone" onclick="heSkinPick()" title="Click to choose from the server folder, or drop an image here"
                ondragover="event.preventDefault();this.classList.add('drag-over')"
                ondragleave="this.classList.remove('drag-over')"
                ondrop="heDropSkin(event)">
@@ -2013,7 +2012,7 @@
 // Does NOT modify mccf_editor.html (field editor remains unchanged).
 // ══════════════════════════════════════════════════════════════════════════
 
-const API_URL = 'http://localhost:5000';
+const API_URL = (function(){try{var q=new URLSearchParams(location.search).get('api');if(q){localStorage.setItem('mccf_api',q);return q;}if(location.protocol==='file:'){var s=localStorage.getItem('mccf_api');if(s)return s;}}catch(e){}return location.protocol.indexOf('http')===0?location.origin:'http://localhost:5000';})();
 
 // ── State ──────────────────────────────────────────────────────────────
 let _allVoices    = [];         // full speechSynthesis voice list
@@ -2049,6 +2048,58 @@ let _heCameraRigLoaded = false;
 // Used as this character's icon in the Composer's Network/Affect graph.
 // Stored on the cultivar as <Portrait src="..."/>. Empty string = use the
 // generic 👤 placeholder — never a broken image.
+// ---- server file chooser (system rule: the author is shown the server folder, not asked to remember it) ----
+window.MccfPick = window.MccfPick || (function () {
+  var cssDone = false;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function css() {
+    if (cssDone) return; cssDone = true;
+    var st = document.createElement('style');
+    st.textContent = '.mpk-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center}' +
+      '.mpk-box{background:#101821;color:#c8dcea;border:1px solid #2a3545;border-radius:6px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;padding:14px;font-family:inherit}' +
+      '.mpk-box h3{margin:0 0 4px;font-size:18px;color:#e6f2fa}.mpk-sub{font-size:14px;color:#8aa;margin:0 0 8px;word-break:break-all}' +
+      '.mpk-list{overflow:auto;border:1px solid #2a3545;border-radius:4px;min-height:60px;max-height:44vh;margin-bottom:10px}' +
+      '.mpk-row{display:flex;justify-content:space-between;gap:10px;padding:5px 9px;border-bottom:1px solid #1b2634;font-size:15px}' +
+      '.mpk-row.pk{cursor:pointer}.mpk-row.pk:hover{background:#1c2b3c}.mpk-row small{color:#7f98aa;text-align:right}' +
+      '.mpk-row.ro{color:#8aa}.mpk-msg{padding:10px;color:#9ab;font-size:15px}' +
+      '.mpk-f{width:100%;box-sizing:border-box;margin:0 0 8px;padding:4px 6px;background:#0d1520;color:#c8dcea;border:1px solid #2a3545;border-radius:3px;font-size:15px}' +
+      '.mpk-bar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}' +
+      '.mpk-bar button{font-size:15px;padding:4px 12px;background:#16212e;color:#c8dcea;border:1px solid #3a4b60;border-radius:4px;cursor:pointer}.mpk-bar button.pri{border-color:#2b8a84;color:#fff;background:#1d4a48}';
+    document.head.appendChild(st);
+  }
+  // o: {title, folder, mode:'open'|'upload', items:[{name,value,note}] or function returning a Promise of that,
+  //     onPick(item), onComputer(), computerLabel, empty}
+  function choose(o) {
+    css();
+    var up = o.mode === 'upload', ov = document.createElement('div'); ov.className = 'mpk-ov';
+    ov.innerHTML = '<div class="mpk-box"><h3>' + esc(o.title || 'Choose a file') + '</h3>' +
+      '<p class="mpk-sub">' + (up ? 'Already on the server in ' : 'On the server in ') + '<b>' + esc(o.folder || '') + '</b>' + (up ? '. A file with the same name asks before it replaces one.' : '') + '</p>' +
+      '<input class="mpk-f" placeholder="filter" style="display:none"><div class="mpk-list"><div class="mpk-msg">Loading…</div></div>' +
+      '<div class="mpk-bar"></div></div>';
+    document.body.appendChild(ov);
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); document.removeEventListener('keydown', key); }
+    function key(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', key);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var list = ov.querySelector('.mpk-list'), flt = ov.querySelector('.mpk-f'), bar = ov.querySelector('.mpk-bar'), all = [];
+    function draw() {
+      var q = flt.value.trim().toLowerCase(), rows = all.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
+      if (!rows.length) { list.innerHTML = '<div class="mpk-msg">' + esc(all.length ? 'No file matches.' : (o.empty || 'Nothing here yet.')) + '</div>'; return; }
+      list.innerHTML = rows.map(function (i, n) { return '<div class="mpk-row ' + (up ? 'ro' : 'pk') + '" data-n="' + all.indexOf(i) + '"><span>' + esc(i.name) + '</span>' + (i.note ? '<small>' + esc(i.note) + '</small>' : '') + '</div>'; }).join('');
+      if (!up) Array.prototype.forEach.call(list.querySelectorAll('.mpk-row'), function (r) { r.onclick = function () { var it = all[+r.getAttribute('data-n')]; close(); if (o.onPick) o.onPick(it); }; });
+    }
+    flt.oninput = draw;
+    var b = '';
+    if (o.onComputer) b += '<button class="' + (up ? 'pri' : '') + '" data-a="pc">' + esc(o.computerLabel || (up ? 'Choose a file from my computer…' : 'From my computer…')) + '</button>';
+    b += '<button data-a="x">Cancel</button>'; bar.innerHTML = b;
+    bar.onclick = function (e) { var a = e.target.getAttribute && e.target.getAttribute('data-a'); if (a === 'x') close(); else if (a === 'pc') { close(); o.onComputer(); } };
+    Promise.resolve(typeof o.items === 'function' ? o.items() : o.items).then(function (items) {
+      all = items || []; flt.style.display = all.length > 8 ? '' : 'none'; draw();
+    }).catch(function (e) { list.innerHTML = '<div class="mpk-msg">The server list is not available (' + esc(e && e.message || e) + ').' + (o.onComputer ? ' You can still choose a file from your computer.' : '') + '</div>'; });
+  }
+  return { choose: choose };
+})();
+
 var _portraitSrc  = '';   // 'X3DAssets/media/icons/<file>' (registered) or a data URL (just-uploaded, unsaved server-side)
 var _portraitFiles = [];  // filenames returned by /media/list?subdir=icons
 
@@ -2082,6 +2133,37 @@ function _populatePortraitSelect() {
   if (prev) sel.value = prev;
 }
 
+function portraitPick() {
+  MccfPick.choose({ title: 'Character portrait', folder: 'static/x3d/X3DAssets/media/icons/', mode: 'open',
+    items: function () { return apiGet('/media/list?subdir=icons').then(function (d) { return (d.files || []).filter(function (f) { return /\.(png|jpe?g|webp|gif)$/i.test(f); }).map(function (f) { return { name: f.replace(/^icons\//, ''), value: 'X3DAssets/media/' + f }; }); }); },
+    onPick: function (it) { _portraitSrc = it.value; var s = document.getElementById('f-portrait-select'); if (s) s.value = it.value; var fi = document.getElementById('f-portrait-file'); if (fi) fi.value = ''; updatePortraitThumb(); setDirty(); },
+    onComputer: function () { var fi = document.getElementById('f-portrait-file'); if (fi) { fi.value = ''; fi.click(); } } });
+}
+function hanimPick() {
+  MccfPick.choose({ title: 'H-Anim figure', folder: 'static/avatars/', mode: 'open', empty: 'No figure has been uploaded yet.',
+    items: function () { return fetch('/avatar/list').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) { return (d.avatars || []).map(function (f) { return { name: f, value: 'avatars/' + f }; }); }); },
+    onPick: function (it) {
+      var st = document.getElementById('hanim-status'), dp = document.getElementById('hanim-file-display'), em = document.getElementById('hanim-empty-msg');
+      _hanimPath = it.value; _hanimLoa = _hanimLoa || 4; _hePoseJoints = [];
+      heCameraRigLoadManifest(_hanimPath);
+      dp.textContent = _hanimPath; dp.style.display = 'block'; em.style.display = 'none';
+      st.textContent = 'Chosen from the server folder (already stripped). Joints and clips load in the Pose tab.'; st.style.color = 'var(--accent)'; st.style.display = 'block';
+      _renderHAnimClips([]); _launchHAnimPreview(_hanimPath); setDirty();
+    },
+    onComputer: function () { var fi = document.getElementById('f-hanim-file'); if (fi) { fi.value = ''; fi.click(); } } });
+}
+function heSkinPick() {
+  MccfPick.choose({ title: 'Skin atlas', folder: 'static/avatars/', mode: 'open', empty: 'No skin image has been saved yet.',
+    items: function () { return fetch('/avatar/skins').then(function (r) { if (!r.ok) throw new Error(r.status === 404 ? 'update mccf_hanim_api.py to list skins' : 'HTTP ' + r.status); return r.json(); }).then(function (d) { return (d.skins || []).map(function (f) { return { name: f, value: '/static/avatars/' + f }; }); }); },
+    onPick: function (it) {
+      var c = document.getElementById('he-atlas-canvas'), x = c.getContext('2d'), im = new Image();
+      im.onload = function () { x.drawImage(im, 0, 0, 80, 80); }; im.src = it.value;
+      document.getElementById('he-atlas-name').textContent = it.name + ' (chosen, export to save)';
+      _heSkinPending = it.value; document.getElementById('he-skin-url').value = it.value;
+      heMarkDirty('skin chosen from the server folder · export to save');
+    },
+    onComputer: function () { var fi = document.querySelector('#he-drop-zone input[type=file]'); if (fi) { fi.value = ''; fi.click(); } } });
+}
 function onPortraitSelectChange() {
   _portraitSrc = document.getElementById('f-portrait-select').value;
   var fi = document.getElementById('f-portrait-file');
@@ -5116,6 +5198,45 @@ window.addEventListener('message', function(evt) {
     _hePoseSetSliders(msg.rotation || [0, 0, 1, 0]);
   }
 });
+</script>
+
+<!-- X3D editor button (R35): opens a file in the configured X3D editor, default Sunrize. One-way launcher. -->
+<script>
+(function(){
+  var BASE = function(){ return (typeof API_URL !== 'undefined' ? API_URL : ''); };
+  function box(){
+    var b = document.getElementById('x3de-box');
+    if (b) return b;
+    b = document.createElement('div'); b.id = 'x3de-box';
+    b.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:99999;max-width:420px;padding:12px 14px;border-radius:6px;background:#1c2030;color:#dfe3f0;border:1px solid #4a5a8a;font:14px/1.45 system-ui,sans-serif;box-shadow:0 6px 24px #0008;display:none';
+    document.body.appendChild(b); return b;
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function show(html){ var b = box(); b.innerHTML = html + '<div style="margin-top:8px;text-align:right"><button onclick="document.getElementById(\'x3de-box\').style.display=\'none\'">Close</button></div>'; b.style.display = 'block'; }
+  window.x3dEditSetPath = async function(){
+    var v = (document.getElementById('x3de-path')||{}).value || '';
+    try {
+      var r = await fetch(BASE()+'/x3dedit/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:v})});
+      var d = await r.json();
+      if (!r.ok) { show(esc(d.error||'Could not save the path.')); return; }
+      show('Path saved. Press the button again.');
+    } catch(e){ show('Could not reach the server.'); }
+  };
+  window.x3dEditOpen = async function(file){
+    if (!file) { show('There is no X3D file to open yet. Compile or choose a scene first (Send to Launcher in the Composer).'); return; }
+    try {
+      var r = await fetch(BASE()+'/x3dedit/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file})});
+      var d; try { d = await r.json(); } catch(e2) { show('The server answered (HTTP '+r.status+') but has no X3D editor route. Copy mccf_x3dedit.py and the new mccf_api.py into the server folder and restart the server. To test, open <code>'+esc(BASE())+'/x3dedit/config</code> in the browser. It should show a line of JSON.'); return; }
+      if (d.status === 'ok') { show('Opened in the X3D editor:<br><code>'+esc(d.opened)+'</code><br>Save in the editor, then reload the scene here.'); return; }
+      if (d.status === 'notfound') {
+        show(esc(d.error)+'<div style="margin-top:8px"><a style="color:#8fb4ff" target="_blank" rel="noopener" href="'+esc(d.download)+'">Download Sunrize</a></div>'
+          +'<div style="margin-top:8px">Program path: <input id="x3de-path" style="width:100%;margin-top:4px" placeholder="C:\\Users\\you\\AppData\\Local\\Programs\\Sunrize\\Sunrize.exe"> <button onclick="x3dEditSetPath()" style="margin-top:4px">Set</button></div>');
+        return;
+      }
+      show(esc(d.error||'The editor could not be started.'));
+    } catch(e){ show('Could not reach the server at <code>'+esc(BASE()||location.origin)+'</code>. Is mccf_api.py running?'); }
+  };
+})();
 </script>
 </body>
 </html>

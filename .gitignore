@@ -53,7 +53,8 @@ static/x3d/media/convolver/*.zip
 static/x3d/media/convolver/ForestScaleModel.zip
 static/x3d/media/convolver/IMreverbs.zip
 static/x3d/media/convolver/jack-lyons-concert-hall-university-york.zip
-static/avatars/
+static/avatars/*
+!static/avatars/Anna.x3d
 HAnim/
 /HAnim/mixamo/AnnaWarrior.blend
 /HAnim/mixamo/GardenLadies.blend
@@ -65,8 +66,12 @@ HAnim/
 Seeds/
 
 # --- Runtime scene data — created live by Scene Composer / Loader, not source ---
-scenes/
+scenes/*
+!scenes/viewpoints.txt
+!scenes/ConeAndCamera/
+!scenes/ConeAndCamera/**
 zones/*_zones.xml
+!zones/ConeAndCamera_zones.xml
 
 # --- Media assets — large binaries, environment-specific, not source ---
 static/x3d/media/
@@ -80,7 +85,8 @@ stuff/
 
 # --- Generated/test X3D scene exports (per-scene output, not the proto library) ---
 static/x3d/*.x3d
-static/avatars/
+static/avatars/*
+!static/avatars/Anna.x3d
 HAnim/
 cultivars/backups/
 backup_*/
@@ -93,3 +99,30 @@ node_modules/
 *Backup.xml
 Oldcultivar_*.xml
 tests/hanim_test.zip
+
+
+# --- V5 release additions (2026-11-16) ---
+pi_logs/
+x3dedit_config.json
+reaper_config.json
+*.bak_*
+registers/*.bak
+static/pi/lessons/*.bak*
+static/pi/lessons/_backup/
+static/mccf_x3d_demo.html
+MCCF_V5*/
+icn_set_*/
+icn_set_*.zip
+
+# --- removed from the release (kept locally if you still have them) ---
+tests/
+zone_tests/
+arc_midi/tests/
+arc_midi/playtest/
+arc_midi/fixtures/
+static/js/test_*.js
+static/js/worked-manifests.js
+static/*_test*.html
+docs/TEST_PROCEDURE.md
+docs/USERS_GUIDE.md
+mccf_chorusOBS.py

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Getting Started, Module 1. DRAFT: wording is Claude's cleanup of Len's notes; Len's own text replaces it. DM codes are best guesses. -->
+<PILesson xmlns="http://mccf.artistinprocess.com/pi/v1">
+  <Meta>
+    <Title>Getting Started, Module 1: Set Up Scene</Title>
+    <DmCode>MCCF-P-10-01-00-00A-520A-D</DmCode>
+    <Issue>001</Issue><IssueDate>2026-10-29</IssueDate><Issuer>MCCF</Issuer>
+    <Objective>Start the server, open the Scene Composer, set up and export a scene.</Objective>
+  </Meta>
+  <Scene dmCode="MCCF-P-10-01-00-00A-040A-D" issue="001" file="ConeAndCamera.x3d" learnerScene="GettingStarted"/>
+  <Frames>
+    <Step id="f1" title="Start the server" waypoint="W1">
+      <Media kind="image" file="ICN-MCCF-CMP-0062-001.png" role="scene" caption="GitBashStartupLocalserver" callouts="auto"/>
+      <Instruction>Open Git Bash and go to the folder mccf_full. Start the server.</Instruction>
+      <Command>cd mccf_full</Command>
+      <Command>py mccf_api.py</Command>
+      <Guide dmCode="MCCF-A-90-01-00-00A-520A-D" title="Appendix A: Setup and local models"/>
+    </Step>
+    <Step id="f2" title="Open the Launcher" waypoint="W2">
+      <Media kind="image" file="ICN-MCCF-PI-0006-001.png" role="reference" caption="Start Edge Browser to Load MCCF_Laucher"/>
+      <Instruction>Open the Edge browser and enter this address.</Instruction>
+      <Command>http://localhost:5000/static/mccf_launcher.html</Command>
+      <Note>Select Dashboard, run the Diagnostic Reports, then return to the Launcher and select Scene Composer.</Note>
+      <Guide dmCode="MCCF-A-20-04-00-00A-040A-D" title="4. Launcher"/>
+    </Step>
+    <Step id="f3" title="Scene Setup" waypoint="W3">
+      <Media kind="image" file="ICN-MCCF-CMP-0002-001.png" role="reference" caption="Enter name of scene and set attributes of grid.  "/>
+      <Instruction>On the Scene tab: name the scene GettingStarted, set Width and Depth to 40 metres, set Navigation to WALK and the transition time to 2 seconds. Click Apply Grid.</Instruction>
+      <Note>Expect a Grid toast after Apply Grid.</Note>
+      <Guide dmCode="MCCF-A-20-06-00-00A-040A-D" title="6. Scene Composer, Scene tab" section="scene-tab"/>
+    </Step>
+    <Question id="f4" title="Scene grid units" waypoint="W4">
+      <Media kind="image" file="ICN-MCCF-CMP-0053-001.png" role="reference"/>
+      <Prompt>The scene grid is measured in:</Prompt>
+      <Response id="a" text="Feet"><Feedback>Not feet. Every dimension in MCCF is in metres.</Feedback></Response>
+      <Response id="b" text="Metres" correct="true"><Feedback>Right. Width, Depth, positions and radii are all in metres.</Feedback></Response>
+      <Response id="c" text="Yards"><Feedback>Not yards. Every dimension in MCCF is in metres.</Feedback></Response>
+      <Response id="d" text=""><Feedback>Hint:   In X3D, positive Z is out.  negative Z is in.   Y is up/down.  X is side to side.</Feedback></Response>
+      <Guide dmCode="MCCF-A-20-06-00-00A-040A-D" title="6. Scene Composer, Scene tab" section="scene-tab"/>
+      <OnIncorrect kind="review" target="f3" retest="f4"/>
+    </Question>
+    <Question id="f5" title="Transition time" waypoint="W5">
+      <Prompt>Transition Time sets how long a viewpoint change takes. The unit is:</Prompt>
+      <Response id="a" text="Milliseconds"><Feedback>Not milliseconds. Enter seconds, for example 2.</Feedback></Response>
+      <Response id="b" text="Seconds" correct="true"><Feedback>Right. Transition Time is in seconds.</Feedback></Response>
+      <Guide dmCode="MCCF-A-20-06-00-00A-040A-D" title="6. Scene Composer, Scene tab" section="scene-tab"/>
+      <OnIncorrect kind="review" target="f3" retest="f5"/>
+    </Question>
+    <Step id="f6" title="Export the scene" waypoint="W6">
+      <Media kind="image" file="ICN-MCCF-CMP-0020-002.png" role="reference" caption="Export the Scene"/>
+      <Instruction>Go to the Export tab and choose Export Scene. and zones.  
+
+To reopen a scene, Scene.xml MUST be exported   X3D is not the record of authority.  MCCF.XSD is.  Scene.xml and Zone.xml are gospel.</Instruction>
+      <Note>Then go to the Scene tab, press the Load Scene refresh button and check the new file is at the top of the Saved scenes list.</Note>
+      <Guide dmCode="MCCF-A-20-06-00-00A-040A-D" title="6. Scene Composer, Export tab" section="export-tab"/>
+      <Expect path="/Scene/@timestamp" value="*" label="saved scene file"/>
+      <Expect path="/Scene/@id" value="GettingStarted" label="scene name"/>
+      <Expect path="/Scene/@width" value="40" tolerance="0" label="width (m)"/>
+      <Expect path="/Scene/@depth" value="40" tolerance="0" label="depth (m)"/>
+      <Expect path="/Scene/Navigation/@type" value="WALK" label="navigation"/>
+      <Expect path="/Scene/Navigation/@transitionTime" value="2" tolerance="0" label="transition (s)"/>
+      <OnMismatch kind="review" target="f3" retest="f6"/>
+    </Step>
+    <Question id="f7" title="Saving a scene" waypoint="W7">
+      <Media kind="image" file="ICN-MCCF-CMP-0061-001.png" role="reference"/>
+      <Prompt>To save the scene itself, go to the Export tab and choose:</Prompt>
+      <Response id="a" text="Export X3D"><Feedback>Export X3D writes the file the Loader plays. It does not save the scene.</Feedback></Response>
+      <Response id="b" text="Export Zones"><Feedback>Export Zones writes the zones only.</Feedback></Response>
+      <Response id="c" text="Export Scene" correct="true"><Feedback>Export Scene.xml and Export Zone.xml writes the scene file and zone file you load back as a composed scene..</Feedback></Response>
+      <Guide dmCode="MCCF-A-20-06-00-00A-040A-D" title="6. Scene Composer, Export tab" section="export-tab"/>
+      <OnIncorrect kind="review" target="f6" retest="f7"/>
+    </Question>
+  </Frames>
+  <RemediationPolicy scope="module">
+    <Level minMisses="0" action="retest"/>
+    <Level minMisses="2" action="review"/>
+    <Level minMisses="4" action="reteach"/>
+  </RemediationPolicy>
+</PILesson>

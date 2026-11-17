@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCCF Ambient Engine</title>
+<title>MCCF Ambient Composer</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
 
@@ -229,10 +229,18 @@ input[type=number], select {
 /* Theme Workshop mode: a wider right column for the voices table, and a narrower left column (spec decision 4) */
 body.ws-wide { grid-template-columns: 170px 1fr 460px; }
 /* ── Grid view ── */
+#transport { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); z-index:6; display:flex; align-items:center; gap:12px; padding:6px 14px; background:rgba(6,8,16,0.85); border:1px solid var(--border); border-radius:6px; }
+#transport .tclock { display:none; align-items:baseline; }
+#transport.theme .tclock { display:flex; }
+#transport button { font-size:15px; padding:6px 16px; }
 #view-tabs { position:absolute; top:8px; right:12px; z-index:6; gap:0; }
 .vtab { background:var(--s2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:12px; padding:4px 12px; cursor:pointer; }
 .vtab:first-child { border-radius:4px 0 0 4px; } .vtab:last-child { border-radius:0 4px 4px 0; border-left:none; }
 .vtab.on { background:var(--purple); border-color:var(--purple); color:#fff; }
+#scene-panel { position:absolute; inset:0; display:none; flex-direction:column; background:var(--bg); z-index:5; }
+#scene-panel iframe { flex:1; border:0; width:100%; }
+#video-panel { position:absolute; inset:0; display:none; background:var(--bg); z-index:5; overflow:auto; padding-top:34px; box-sizing:border-box; }
+#scene-bar { padding:6px 12px; font-size:12px; color:var(--dim); font-family:var(--mono); }
 #grid-panel { position:absolute; inset:0; display:flex; flex-direction:column; background:var(--bg); z-index:5; }
 #grid-toolbar { display:flex; align-items:center; gap:10px; padding:8px 190px 6px 10px; flex-wrap:wrap; }
 #grid-legend { display:flex; gap:6px; padding:2px 10px 6px; flex-wrap:wrap; min-height:22px; }
@@ -318,10 +326,23 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
       <div class="viz-key-item"><div class="viz-dot" style="background:var(--S)"></div><span>S social</span></div>
     </div>
   </div>
-  <div id="view-tabs" style="display:none">
+  <div id="transport">
+    <div class="tclock"><span id="theme-clock" style="font-family:var(--mono);font-size:38px;letter-spacing:2px;color:var(--accent);font-variant-numeric:tabular-nums">00:00.0</span>
+    <span id="theme-clock-total" style="font-family:var(--mono);font-size:15px;color:var(--dim);margin-left:8px"></span></div>
+    <button class="btn" id="pause-btn" style="display:none" onclick="togglePause()" title="Hold the music where it is; press again to carry on">&#10074;&#10074; Pause</button>
+    <button class="hbtn play btn" id="play-btn2" onclick="toggleEngine()" title="Start or stop the engine">&#9654; Start</button>
+  </div>
+  <div id="view-tabs" style="display:flex">
     <button class="vtab on" id="vtab-anim" onclick="gridUI.setView('anim')">Animation</button>
-    <button class="vtab" id="vtab-grid" onclick="gridUI.setView('grid')">Grid</button>
-    <button class="vtab" id="vtab-notation" onclick="gridUI.setView('notation')">Notation</button>
+    <button class="vtab" id="vtab-grid" style="display:none" onclick="gridUI.setView('grid')">Grid</button>
+    <button class="vtab" id="vtab-notation" style="display:none" onclick="gridUI.setView('notation')">Notation</button>
+    <button class="vtab" id="vtab-scene" onclick="gridUI.setView('scene')" title="The chosen scene in X_ITE (the X3D Loader), beside the sound controls">Scene</button>
+    <button class="vtab" id="vtab-video" onclick="gridUI.setView('video')" title="A video from X3DAssets/media/video, with a bar-and-beat ruler, beside the sound controls">Video</button>
+  </div>
+  <div id="video-panel"></div>
+  <div id="scene-panel">
+    <div id="scene-bar">Choose a scene under Scene audio assets.</div>
+    <iframe id="scene-frame" title="Scene in X_ITE"></iframe>
   </div>
   <div id="notation-panel" style="display:none">
     <div id="nt-toolbar">
@@ -395,7 +416,36 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
 
 <!-- RIGHT: music controls -->
 <div class="panel" id="right-panel">
-  <div class="sh" style="margin-top:0">Engine</div>
+  <div class="sh" style="margin-top:0">Output</div>
+  <!-- Day 90: MIDI-out, toggled against the existing Web Audio path, not
+       combined — same fieldToMusic()/applyMusicState() computation drives
+       either backend, branching only at the point sound actually gets
+       produced. Mapping (channel + CC per layer) is importable/exportable
+       JSON, not hardcoded, so a musician can swap it per synth/patch
+       without touching code. -->
+  <div class="param-row">
+    <span class="param-name">output</span>
+    <select id="output-mode" onchange="setOutputMode(this.value)" style="flex:1">
+      <option value="audio">Web Audio (browser)</option>
+      <option value="midi">MIDI Out</option>
+    </select>
+  </div>
+  <div class="param-row" id="midi-device-row" style="display:none">
+    <span class="param-name">device</span>
+    <select id="midi-device" onchange="setMidiOutputDevice(this.value)" style="flex:1">
+      <option value="">— none —</option>
+    </select>
+  </div>
+  <div id="midi-mapping-row" style="display:none;margin-top:6px">
+    <div id="midi-mapping-summary" style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:6px"></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" style="flex:1" onclick="mccfOpenFile('mapping', importMidiMapping)">Import mapping</button>
+      <button class="btn" style="flex:1" onclick="exportMidiMapping()">Export mapping</button>
+    </div>
+    <input type="file" id="midi-mapping-file" accept="application/json" style="display:none" onchange="importMidiMapping(this.files[0])">
+  </div>
+
+  <div class="sh">Engine</div>
   <div class="param-row">
     <span class="param-name">mode</span>
     <select id="engine-mode" onchange="setEngineMode(this.value)" style="flex:1">
@@ -408,13 +458,28 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
   <button class="btn full" style="margin-top:0;margin-bottom:6px" onclick="midiPanic()"
           title="Sends All Sound Off + All Notes Off on all 16 channels of the selected MIDI output. Use if the synth ever hangs on a note.">All notes off (panic)</button>
 
+  <div class="sh">Scene audio assets</div>
+  <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Wav, mp3 and MIDI files a scene uses. Reaper opens, edits and saves them; this editor does not. To hear one in the scene, use the Events Timeline Editor.</div>
+  <div class="param-row">
+    <span class="param-name">scene</span>
+    <select id="sa-scene" onchange="loadSceneAudio()" style="flex:1"><option value="">(choose a scene)</option></select>
+    <button class="btn" style="padding:2px 8px" onclick="loadSceneNames()" title="Reload the scene list">&#8635;</button>
+  </div>
+  <div id="sa-list" style="max-height:200px;overflow-y:auto;margin:6px 0"></div>
+  <div class="param-row" style="margin-bottom:4px">
+    <span class="param-name">Reaper</span>
+    <input id="sa-reaper" type="text" placeholder="path to reaper.exe (optional)" style="flex:1;font-size:13px">
+    <button class="btn" style="padding:2px 8px" onclick="saveReaperPath()">Set</button>
+  </div>
+  <div id="sa-msg" style="font-size:13px;color:var(--dim);margin-bottom:8px"></div>
+
   <div id="theme-player-panel" style="display:none">
     <input type="file" id="midi-theme-file" accept=".mid,.midi,audio/midi" style="display:none" onchange="loadMidiTheme(this.files[0])">
-    <div style="text-align:center;margin:2px 0 6px;padding:8px 4px;border:1px solid var(--border);border-radius:4px;background:var(--s2)">
-      <span id="theme-clock" style="font-family:var(--mono);font-size:38px;letter-spacing:2px;color:var(--accent);font-variant-numeric:tabular-nums">00:00.0</span>
-      <span id="theme-clock-total" style="font-family:var(--mono);font-size:15px;color:var(--dim);margin-left:8px"></span>
+    <button class="btn full" onclick="mccfOpenFile('midi', loadMidiTheme)">Load MIDI file…</button>
+    <div class="param-row" style="margin-top:4px">
+      <span class="param-name" title="MIDI files used by the scene chosen under Scene audio assets">from scene</span>
+      <select id="sa-midi" style="flex:1" onchange="loadSceneMidiPick(this)"><option value="">(choose a scene first)</option></select>
     </div>
-    <button class="btn full" onclick="document.getElementById('midi-theme-file').click()">Load MIDI file…</button>
     <div id="theme-file-info" style="font-size:12px;color:var(--dim);margin:4px 0"></div>
     <div id="workshop-panel" style="display:none"></div>
     <div id="theme-track-list" style="max-height:calc(100vh - 470px);min-height:160px;overflow-y:auto;margin-bottom:6px"></div>
@@ -464,35 +529,6 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
     <span class="param-val" id="pv-reverb">0.40</span>
   </div>
 
-  <div class="sh">Output</div>
-  <!-- Day 90: MIDI-out, toggled against the existing Web Audio path, not
-       combined — same fieldToMusic()/applyMusicState() computation drives
-       either backend, branching only at the point sound actually gets
-       produced. Mapping (channel + CC per layer) is importable/exportable
-       JSON, not hardcoded, so a musician can swap it per synth/patch
-       without touching code. -->
-  <div class="param-row">
-    <span class="param-name">output</span>
-    <select id="output-mode" onchange="setOutputMode(this.value)" style="flex:1">
-      <option value="audio">Web Audio (browser)</option>
-      <option value="midi">MIDI Out</option>
-    </select>
-  </div>
-  <div class="param-row" id="midi-device-row" style="display:none">
-    <span class="param-name">device</span>
-    <select id="midi-device" onchange="setMidiOutputDevice(this.value)" style="flex:1">
-      <option value="">— none —</option>
-    </select>
-  </div>
-  <div id="midi-mapping-row" style="display:none;margin-top:6px">
-    <div id="midi-mapping-summary" style="font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:6px"></div>
-    <div style="display:flex;gap:6px">
-      <button class="btn" style="flex:1" onclick="document.getElementById('midi-mapping-file').click()">Import mapping</button>
-      <button class="btn" style="flex:1" onclick="exportMidiMapping()">Export mapping</button>
-    </div>
-    <input type="file" id="midi-mapping-file" accept="application/json" style="display:none" onchange="importMidiMapping(this.files[0])">
-  </div>
-
   <div class="sh">Scale</div>
   <label>Base scale mode</label>
   <select id="scale-override" onchange="setScaleOverride(this.value)">
@@ -504,6 +540,9 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
     <option value="pentatonic">Pentatonic</option>
     <option value="whole_tone">Whole Tone</option>
     <option value="chromatic">Chromatic</option>
+    <option value="lydian">Lydian</option>
+    <option value="mixolydian">Mixolydian</option>
+    <option value="locrian">Locrian</option>
   </select>
 
   <label>Root note</label>
@@ -588,12 +627,16 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
 <script src="js/mccf_midi.js"></script>
 <script src="js/mccf_arc.js"></script>
 <script src="js/mccf_theory.js"></script>
+<script src="js/mccf_serial.js"></script>
 <script src="js/mccf_harmony.js"></script>
 <script src="js/mccf_chords.js"></script>
+<script src="js/mccf_progression.js"></script>
 <script src="js/mccf_smf_writer.js"></script>
 <script src="js/mccf_grid.js"></script>
 <script src="js/vexflow-4.2.5.js"></script>
 <script src="js/mccf_notation.js"></script>
+<script src="js/mccf_videosync.js"></script>
+<script src="js/mccf_videotab.js"></script>
 <script>
 // ================================================================
 // MCCF Ambient Music Engine
@@ -601,7 +644,8 @@ body.ws-wide { grid-template-columns: 170px 1fr 460px; }
 // via Web Audio API
 // ================================================================
 
-let API = 'http://localhost:5000';
+let API = (function(){try{var q=new URLSearchParams(location.search).get('api');if(q){localStorage.setItem('mccf_api',q);return q;}if(location.protocol==='file:'){var s=localStorage.getItem('mccf_api');if(s)return s;}}catch(e){}return location.protocol.indexOf('http')===0?location.origin:'http://localhost:5000';})();
+try{var _ae=document.getElementById('api-url');if(_ae)_ae.value=API;}catch(e){}
 let audioCtx = null;
 let masterGain = null;
 let reverbNode = null;
@@ -1364,12 +1408,7 @@ function importMidiMapping(file) {
 }
 
 function exportMidiMapping() {
-  const blob = new Blob([JSON.stringify(midiMapping, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'mccf_midi_mapping.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  mccfSaveFile('mapping', 'mccf_midi_mapping.json', JSON.stringify(midiMapping, null, 2) + '\n');
 }
 
 // ================================================================
@@ -1404,7 +1443,7 @@ async function startEngine() {
   if (audioCtx.state === 'suspended') await audioCtx.resume();
 
   isPlaying = true;
-  document.getElementById('play-btn').textContent = '⏹ Stop';
+  document.getElementById('play-btn').textContent = '⏹ Stop'; { const b2 = document.getElementById('play-btn2'); if (b2) b2.textContent = '⏹ Stop'; }
   document.getElementById('engine-status').textContent = 'playing';
   document.getElementById('viz-panel').classList.add('playing');
 
@@ -1416,7 +1455,7 @@ async function startEngine() {
 
   await refreshAndUpdate();
   updateInterval = setInterval(refreshAndUpdate, P.rate * 1000);
-  toast('Ambient engine started');
+  toast('Ambient Composer started');
 }
 
 function stopEngine() {
@@ -1424,18 +1463,66 @@ function stopEngine() {
   if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
   if (engineMode === 'theme') { stopThemePlayback(); _themeClockStop(); themeEnergy = 0; _themeFooterRender(); }
   if (outputMode === 'midi') midiAllNotesOff(); else stopAllLayers();
-  document.getElementById('play-btn').textContent = '▶ Start';
+  document.getElementById('play-btn').textContent = '▶ Start'; { const b2 = document.getElementById('play-btn2'); if (b2) b2.textContent = '▶ Start'; }
   document.getElementById('engine-status').textContent = 'stopped';
   document.getElementById('viz-panel').classList.remove('playing');
-  toast('Ambient engine stopped');
+  toast('Ambient Composer stopped');
 }
 
 // Embedded in the Scene Composer's tab set: the Composer posts {type:'mccf_tab_hidden'} when its Ambient tab is left, so the music stops.
 // (The frame is KEPT, not reloaded, so the recipe and hand edits survive a tab switch.)  Only the parent window may send it.
 window.addEventListener('message', function (e) {
-  if (!e || e.source !== window.parent || !e.data || e.data.type !== 'mccf_tab_hidden') return;
-  try { if (isPlaying) stopEngine(); } catch (x) {}
-  try { stopThemePlayback(); } catch (x) {}
+  if (!e || e.source !== window.parent || !e.data) return;
+  if (location.origin !== 'null' && e.origin !== location.origin) return;
+  if (e.data.type === 'mccf_tab_hidden') {
+    try { if (isPlaying) stopEngine(); } catch (x) {}
+    try { stopThemePlayback(); } catch (x) {}
+    try { if (window._videoTab) window._videoTab.video.pause(); } catch (x) {}
+  } else if (e.data.type === 'mccf_amb') {
+    try { ambRemote(e.data); } catch (x) { console.warn('ambRemote:', x); }
+  }
+});
+
+// Remote control from a parent page (the Loader's Ambient drawer). Commands:
+//   start | stop | scale (a scale name or 'auto') | root (note name such as C4) | volume (0..1) | query
+// Every command is answered with the current state so the parent can show it.
+function ambRemote(d) {
+  const v = d.value;
+  switch (d.cmd) {
+    case 'start': if (!isPlaying) startEngine(); break;
+    case 'stop':  if (isPlaying) stopEngine(); break;
+    case 'scale': {
+      let m = String(v || 'auto').toLowerCase();
+      if (m === 'aeolian') m = 'minor';
+      if (m !== 'auto' && !SCALES[m]) break;
+      const sel = document.getElementById('scale-override');
+      if (sel) {
+        if (![...sel.options].some(o => o.value === m)) { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); }
+        sel.value = m;
+      }
+      setScaleOverride(m);
+      break;
+    }
+    case 'root': {
+      const rs = document.getElementById('root-note');
+      const opt = rs && [...rs.options].find(o => o.textContent === String(v) || o.value === String(v));
+      if (opt) { rs.value = opt.value; if (isPlaying) refreshAndUpdate(); }
+      break;
+    }
+    case 'volume': {
+      const vv = Math.max(0, Math.min(1, parseFloat(v)));
+      if (isNaN(vv)) break;
+      const sl = document.getElementById('p-master'); if (sl) sl.value = vv;
+      setParam('master', vv);
+      break;
+    }
+  }
+  const rs2 = document.getElementById('root-note');
+  window.parent.postMessage({ type: 'mccf_amb_state', playing: !!isPlaying, scale: P.scaleOverride,
+    root: rs2 ? rs2.options[rs2.selectedIndex].textContent : '', volume: P.master }, '*');
+}
+window.addEventListener('load', function () {
+  if (window.parent !== window) try { window.parent.postMessage({ type: 'mccf_amb_ready' }, '*'); } catch (x) {}
 });
 
 // ================================================================
@@ -1470,7 +1557,7 @@ function setEngineMode(mode) {
   engineMode = mode; workshopOn = ws;
   _setFooterMode(mode === 'theme');
   if (mode === 'theme') _themeFooterRender();
-  document.getElementById('theme-player-panel').style.display = (mode === 'theme') ? 'block' : 'none';
+  document.getElementById('theme-player-panel').style.display = (mode === 'theme') ? 'block' : 'none'; { const tr = document.getElementById('transport'); if (tr) tr.classList.toggle('theme', mode === 'theme'); }
   const wp = document.getElementById('workshop-panel'); if (wp) wp.style.display = ws ? 'block' : 'none';
   document.body.classList.toggle('ws-wide', ws);
   if (window.Workshop) Workshop.onModeChange(ws);
@@ -1481,21 +1568,23 @@ function setEngineMode(mode) {
 function loadMidiTheme(file) {
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
-    if (isPlaying && engineMode === 'theme') stopEngine();
-    let parsed;
-    try { parsed = themePlayer.load(e.target.result); }
-    catch (err) { toast('MIDI file: ' + err.message, true); return; }
-    document.getElementById('theme-file-info').textContent =
-      file.name + ' — format ' + parsed.format + ', ' + parsed.ntrks + ' track(s), ' + parsed.ppq + ' ppq';
-    if (workshopOn && window.Workshop) Workshop.setSource(file.name, e.target.result);   // replaces the Player's data with the arrangement
-    else { renderThemeTrackList(); _themeClockRender(); _themeFooterRender(); }
-    if (window.gridUI) gridUI.reset();   // a different file: fit the whole piece again
-    if (window.notationUI) notationUI.reset();
-    toast('Loaded ' + file.name);
-  };
+  reader.onload = (e) => loadMidiBuffer(e.target.result, file.name);
   reader.onerror = () => toast('Could not read MIDI file', true);
   reader.readAsArrayBuffer(file);
+}
+function loadMidiBuffer(buf, name) {
+  window._videoBarsActive = (String(name).indexOf('Video bars') === 0);
+  if (isPlaying && engineMode === 'theme') stopEngine();
+  let parsed;
+  try { parsed = themePlayer.load(buf); }
+  catch (err) { toast('MIDI file: ' + err.message, true); return; }
+  document.getElementById('theme-file-info').textContent =
+    name + ' — format ' + parsed.format + ', ' + parsed.ntrks + ' track(s), ' + parsed.ppq + ' ppq';
+  if (workshopOn && window.Workshop) Workshop.setSource(name, buf);   // replaces the Player's data with the arrangement
+  else { renderThemeTrackList(); _themeClockRender(); _themeFooterRender(); }
+  if (window.gridUI) gridUI.reset();   // a different file: fit the whole piece again
+  if (window.notationUI) notationUI.reset();
+  toast('Loaded ' + name);
 }
 
 function _esc(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
@@ -1548,8 +1637,19 @@ function startThemePlayback() {
   themePlayer.loop = document.getElementById('theme-loop').checked;
   _themeClockStart();
   themePlayer.start(0);
+  _pauseBtnSync();
 }
-function stopThemePlayback() { themePlayer.stop(); }
+function stopThemePlayback() { themePlayer.stop(); _pauseBtnSync(); }
+function togglePause() {
+  if (!isPlaying || engineMode !== 'theme') return;
+  if (themePlayer.paused) themePlayer.resume(); else themePlayer.pause();
+  _pauseBtnSync();
+}
+function _pauseBtnSync() {
+  const b = document.getElementById('pause-btn'); if (!b) return;
+  b.style.display = (isPlaying && engineMode === 'theme') ? '' : 'none';
+  b.innerHTML = themePlayer.paused ? '&#9654; Resume' : '&#10074;&#10074; Pause';
+}
 
 // ---- Footer panels in theme mode --------------------------------------
 // The footer normally shows the generative engine's state. During theme
@@ -2051,20 +2151,84 @@ function snapshotScore() {
     agents: musicState.agentCount,
     coherence: musicState.avgCoherence
   };
-  const json = JSON.stringify(snap, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'mccf_score_' + Date.now() + '.json';
-  a.click();
-  toast('Score snapshot saved');
+  mccfSaveFile('score', 'mccf_score_' + Date.now() + '.json', JSON.stringify(snap, null, 2) + '\n');
 }
 
 // ================================================================
 // API
 // ================================================================
 
+
+// ── Scene audio assets (Reaper) ─────────────────────────────────────────
+function _saEsc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+async function loadSceneNames(){
+  var sel=document.getElementById('sa-scene'); if(!sel) return;
+  try{
+    var r=await fetch(API+'/scene/names'); var d=await r.json(); var keep=sel.value;
+    sel.innerHTML='<option value="">(choose a scene)</option>'+(d.scenes||[]).map(function(n){return '<option>'+_saEsc(n)+'</option>'}).join('');
+    if(keep) sel.value=keep;
+    var c=await (await fetch(API+'/reaper/config')).json();
+    var m=document.getElementById('sa-msg'), inp=document.getElementById('sa-reaper');
+    if(inp && !inp.value) inp.value=c.path||'';
+    if(m) m.textContent=c.found?'Reaper found: '+c.found:'Reaper program not found. Set its path above, or Windows will use the program associated with the file type.';
+  }catch(e){ var m2=document.getElementById('sa-msg'); if(m2) m2.textContent='Server not reachable.'; }
+}
+var _sceneTabFor = '';
+function refreshSceneTab(){
+  var n=(document.getElementById('sa-scene')||{}).value||'', f=document.getElementById('scene-frame'), b=document.getElementById('scene-bar');
+  if(!f) return;
+  if(!n){ if(b) b.textContent='Choose a scene under Scene audio assets.'; return; }
+  if(n===_sceneTabFor) return;   // already showing it
+  _sceneTabFor=n; if(b) b.textContent='Scene: '+n+'  (X_ITE, the X3D Loader)';
+  f.src='mccf_x3d_loader.html?scene='+encodeURIComponent(n);
+}
+async function loadSceneAudio(){
+  if(document.getElementById('scene-panel') && document.getElementById('scene-panel').style.display==='flex') refreshSceneTab();
+  var n=document.getElementById('sa-scene').value, box=document.getElementById('sa-list');
+  if(!n){box.innerHTML='';return;}
+  try{
+    var r=await fetch(API+'/scene/audio_assets?scene='+encodeURIComponent(n)); var d=await r.json();
+    if(d.status==='error'){box.textContent=d.error;return;}
+    var rows=(d.assets||[]).map(function(a,i){
+      return '<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="font-size:11px;padding:1px 6px;border-radius:9px;background:var(--s2);color:var(--accent)">'+_saEsc(a.kind)+'</span>'
+        +'<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px" title="'+_saEsc(a.url)+' (from '+_saEsc(a.from)+(a.name?' '+_saEsc(a.name):'')+')">'+_saEsc(a.url.split('/').pop())+(a.name?' <span style="color:var(--dim)">'+_saEsc(a.name)+'</span>':'')+'</span>'
+        +(!a.exists?'<span style="font-size:12px;color:var(--danger)">missing</span>'
+          :a.kind==='midi'?'<button class="btn" style="padding:1px 8px;font-size:12px" onclick="loadSceneMidi(\''+encodeURIComponent(a.url)+'\')">Load in editor</button> <button class="btn" style="padding:1px 8px;font-size:12px" onclick="openInReaper(\''+encodeURIComponent(a.url)+'\')">Open in Reaper</button>'
+          :'<button class="btn" style="padding:1px 8px;font-size:12px" onclick="openInReaper(\''+encodeURIComponent(a.url)+'\')">Open in Reaper</button>')+'</div>';
+    });
+    if(d.project) rows.unshift('<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)"><span style="font-size:11px;padding:1px 6px;border-radius:9px;background:var(--s2);color:var(--accent)">project</span><span style="flex:1;font-size:13px">'+_saEsc(d.project.file.split('/').pop())+'</span><button class="btn" style="padding:1px 8px;font-size:12px" onclick="openInReaper(\''+encodeURIComponent(d.project.file)+'\')">Open in Reaper</button></div>');
+    var ms=document.getElementById('sa-midi');
+    if(ms){ var mids=(d.assets||[]).filter(function(a){return a.kind==='midi'&&a.exists;});
+      ms.innerHTML='<option value="">'+(mids.length?'— MIDI in '+_saEsc(n)+' ('+mids.length+') —':'no MIDI in this scene')+'</option>'
+        +mids.map(function(a){return '<option value="'+_saEsc(a.url)+'">'+_saEsc(a.url.split('/').pop())+(a.name?' — '+_saEsc(a.name):'')+'</option>';}).join(''); }
+    if(d.dm){ rows.unshift('<div style="font-size:12px;color:var(--dim);padding:2px 0">DM code '+_saEsc(d.dm)+'</div>'); }
+    box.innerHTML=rows.length?rows.join(''):'<div style="font-size:13px;color:var(--dim)">This scene references no wav, mp3 or MIDI files.</div>';
+  }catch(e){box.textContent='Could not read the scene.';}
+}
+function loadSceneMidiPick(sel){ if(sel.value){ loadSceneMidi(encodeURIComponent(sel.value)); sel.selectedIndex=0; } }
+async function loadSceneMidi(enc){
+  var m=document.getElementById('sa-msg'); var u=decodeURIComponent(enc);
+  try{ var r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
+    var b=await r.blob(); loadMidiTheme(new File([b],u.split('/').pop(),{type:'audio/midi'}));
+    if(m) m.textContent='Loaded '+u.split('/').pop()+' into the editor.';
+  }catch(e){ if(m) m.textContent='Could not load the MIDI file: '+e.message; }
+}
+async function openInReaper(enc){
+  var m=document.getElementById('sa-msg');
+  try{
+    var r=await fetch(API+'/reaper/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:decodeURIComponent(enc)})});
+    var d=await r.json(); if(m) m.textContent=(d.status==='ok')?'Opened with '+d.with+'.':(d.error||'Could not open.');
+  }catch(e){ if(m) m.textContent='Server not reachable.'; }
+}
+async function saveReaperPath(){
+  var m=document.getElementById('sa-msg');
+  try{
+    var r=await fetch(API+'/reaper/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:document.getElementById('sa-reaper').value})});
+    var d=await r.json(); if(m) m.textContent=d.status==='error'?d.error:(d.found?'Reaper found: '+d.found:'Path cleared.');
+  }catch(e){ if(m) m.textContent='Server not reachable.'; }
+}
+window.addEventListener('load',function(){ setTimeout(loadSceneNames,600); });
 function setApi(url) { API = url.trim(); ping(); }
 
 async function ping() {
@@ -2107,17 +2271,22 @@ const Workshop = (function () {
   const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const TONICS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
   const SCALE_NAMES = Object.keys(T.SCALES);
-  const TYPES = ['transpose', 'invert', 'retrograde', 'retrogradeInversion', 'augment', 'diminish', 'sequence', 'fragment', 'rotate', 'octaveShift'];
+  const TYPES = ['transpose', 'invert', 'retrograde', 'retrogradeInversion', 'augment', 'diminish', 'sequence', 'repeat', 'fragment', 'rotate', 'octaveShift'];
   const LABEL = { transpose: 'Transpose', invert: 'Invert', retrograde: 'Retrograde', retrogradeInversion: 'Retrograde-inversion',
-                  augment: 'Augment', diminish: 'Diminish', sequence: 'Sequence', fragment: 'Fragment', rotate: 'Rotate', octaveShift: 'Octave shift' };
+                  augment: 'Augment', diminish: 'Diminish', sequence: 'Sequence', repeat: 'Repeat', fragment: 'Fragment', rotate: 'Rotate', octaveShift: 'Octave shift' };
   // which parameters the UI offers for each transform ('n' number, 'mode', 'axis', 'range' = bar pair)
   const PARAMS = {
     transpose: [['steps', 'n', 'steps']], invert: [['axis', 'axis', 'axis'], ['mode', 'mode', '']],
     retrograde: [], retrogradeInversion: [['axis', 'axis', 'axis'], ['mode', 'mode', '']],
     augment: [['p', 'n', 'p'], ['q', 'n', 'q']], diminish: [['p', 'n', 'p'], ['q', 'n', 'q']],
     sequence: [['copies', 'n', 'copies'], ['step', 'n', 'step'], ['mode', 'mode', '']],
+    repeat: [['copies', 'n', 'copies'], ['gaps', 'text', 'beats apart'], ['shifts', 'text', 'steps'], ['ops', 'text', 'transform'], ['velocity', 'n', 'louder +/-'], ['mode', 'mode', '']],
     fragment: [['bars', 'range', 'bars']], rotate: [['k', 'n', 'note k']], octaveShift: [['octaves', 'n', 'octaves']]
   };
+  const REPEAT_HELP = { gaps: 'Beats (quarter notes) from the start of one copy to the start of the next. One number, or a list such as 2,3,5; the last number repeats. 0 stacks the copies.',
+    shifts: 'Scale steps (or semitones in chromatic mode) for repeat 1, 2, 3 ... For example 2,4 puts the first repeat a third up and the second a fifth up. 0 or empty = same pitch.',
+    ops: 'One code per repeat: - none, i invert, r retrograde, ri retrograde-inversion, a augment 2:1, d diminish 2:1. For example -,i,r' };
+  const REPEAT_HINT = { gaps: '4 or 2,3,5', shifts: '0 or 2,4', ops: '-,i,r' };
   const PRESETS = [
     ['retroinv', 'Retrograde-inversion'], ['canon3', 'Canon: third below, 2 bars later'],
     ['canon8', 'Canon: octave below, 4 bars later'], ['canon5', 'Canon at the fifth (diatonic), 2 bars later'],
@@ -2259,8 +2428,7 @@ const Workshop = (function () {
   // ---------- recipe in / out ----------
   function saveRecipe() {
     if (!S.recipe) return;
-    download(JSON.stringify(T.normalizeRecipe(S.recipe), null, 2) + '\n', outBase() + '.recipe.json', 'application/json');
-    toast('Recipe saved');
+    mccfSaveFile('recipe', outBase() + '.recipe.json', JSON.stringify(T.normalizeRecipe(S.recipe), null, 2) + '\n');
   }
   function applyRecipe(obj) {
     const errs = T.validateRecipe(obj);
@@ -2327,6 +2495,7 @@ const Workshop = (function () {
 
   // ---------- edits ----------
   const V = () => S.recipe.voices;
+  const FO = { inversion: 'root', spacing: 'close', rhythm: 'mixed', chromatic: 0, seed: 1 };
   function num(v, lo, hi, fallback) { let x = parseFloat(v); if (!isFinite(x)) x = fallback; return Math.max(lo, Math.min(hi, x)); }
   function setTrack(idx) {
     S.recipe.source.tracks = [parseInt(idx, 10)];
@@ -2471,7 +2640,7 @@ const Workshop = (function () {
   function stepType(i, k, type) { chainOf(i)[k] = T.normalizeStep({ type: type, params: type === 'fragment' ? { bars: [1, 1] } : {} }); edited(i); }
   function stepParam(i, k, key, val, sub) {
     const p = chainOf(i)[k].params;
-    if (key === 'mode' || key === 'axis') p[key] = val;
+    if (key === 'mode' || key === 'axis' || key === 'gaps' || key === 'shifts' || key === 'ops') p[key] = String(val).trim();
     else if (key === 'bars') { const b = (p.bars || [1, 1]).slice(); b[sub] = Math.max(1, Math.round(num(val, 1, 999, b[sub]))); if (b[1] < b[0]) b[1] = b[0]; p.bars = b; p.notes = null; }
     else {
       const x = Math.round(num(val, -999, 999, p[key] || 0));
@@ -2518,6 +2687,7 @@ const Workshop = (function () {
     PARAMS[s.type].forEach((q) => {
       const key = q[0], kind = q[1], lab = q[2], val = s.params[key];
       if (kind === 'n') h += '<label class="ws-l">' + lab + '<input type="number" class="ws-n" value="' + esc(val) + '" onchange="Workshop.stepParam(' + i + ',' + k + ',\'' + key + '\',this.value)"></label>';
+      else if (kind === 'text') h += '<label class="ws-l" title="' + esc(REPEAT_HELP[key] || '') + '">' + lab + '<input type="text" class="ws-t" style="width:84px" value="' + esc(val === undefined || val === null ? '' : val) + '" placeholder="' + esc(REPEAT_HINT[key] || '') + '" onchange="Workshop.stepParam(' + i + ',' + k + ',\'' + key + '\',this.value)"></label>';
       else if (kind === 'mode') h += '<select class="ws-sel" onchange="Workshop.stepParam(' + i + ',' + k + ',\'mode\',this.value)">' + selOpts([['diatonic', 'diatonic'], ['chromatic', 'chromatic']], val) + '</select>';
       else if (kind === 'axis') h += '<label class="ws-l">axis<select class="ws-sel" onchange="Workshop.stepParam(' + i + ',' + k + ',\'axis\',this.value)">' + selOpts([['first', 'first note'], ['tonic', 'tonic']], typeof val === 'string' ? val : 'first') + '</select></label>';
       else if (kind === 'range') { const b = val || [1, 1];
@@ -2559,7 +2729,7 @@ const Workshop = (function () {
   }
   function handHtml(v, i) {
     const fp = S.build && S.build.voices.find((x) => x.id === v.id), prog = MM.GM_PROGRAMS || [], chOpts = []; for (let c = 1; c <= 16; c++) chOpts.push([c, c]);
-    const from = v.frozenFrom ? (v.frozenFrom.kind === 'harmony' ? 'frozen from generated ' + v.frozenFrom.style + ' harmony' : v.frozenFrom.kind === 'drums' ? 'frozen from generated ' + v.frozenFrom.style + ' drums' : 'frozen from ' + (v.frozenFrom.source === 'theme' ? 'the theme' : 'another voice') + (v.frozenFrom.chain.length ? ' + ' + v.frozenFrom.chain.map((x) => LABEL[x.type] || x.type).join(', ') : '')) : (v.channel === 10 ? 'drum hits drawn by hand' : 'drawn by hand');
+    const from = v.frozenFrom ? (v.frozenFrom.kind === 'harmony' ? 'frozen from generated ' + v.frozenFrom.style + ' harmony' : v.frozenFrom.kind === 'drums' ? 'frozen from generated ' + v.frozenFrom.style + ' drums' : v.frozenFrom.kind === 'serial' ? 'serial line · row ' + (window.MccfSerial && MccfSerial.isRow(v.frozenFrom.row) ? MccfSerial.rowText(v.frozenFrom.row) : '?') + ' · ' + v.frozenFrom.forms : 'frozen from ' + (v.frozenFrom.source === 'theme' ? 'the theme' : 'another voice') + (v.frozenFrom.chain.length ? ' + ' + v.frozenFrom.chain.map((x) => LABEL[x.type] || x.type).join(', ') : '')) : (v.channel === 10 ? 'drum hits drawn by hand' : 'drawn by hand');
     return '<div class="ws-voice' + (v.enabled ? '' : ' off') + '" style="border-left:2px solid var(--cool)">' +
       '<div class="ws-row"><input type="checkbox" ' + (v.enabled ? 'checked' : '') + ' onchange="Workshop.vf(' + i + ',\'enabled\',this.checked)">' +
         '<span class="ws-dot" style="background:' + MM.trackColor(i) + '"></span>' +
@@ -2599,19 +2769,33 @@ const Workshop = (function () {
       (fp ? '<div class="ws-fp">' + esc(T.describeFingerprint(fp.fingerprint)) + '</div>' : '') +
     '</div>';
   }
+  function saveHtml() {
+    const autoName = safeMidName(exportName()), fileName = S.saveName ? safeMidName(S.saveName) : exportName() + '.mid';
+    return '<div class="sh">Save</div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">file name<input type="text" id="ws-save-name" class="ws-t" placeholder="' + esc(autoName.replace(/\.mid$/, '')) + '" value="' + esc(S.saveName) + '" title="leave empty for an automatic name (source, track, bars, recipe code). Letters, digits, . _ - only; anything else becomes _." onchange="Workshop.setSaveName(this.value)"></label></div>' +
+      '<div class="ws-fp" id="ws-save-preview" style="margin:0 0 4px">saves as <b>' + esc(fileName) + '</b></div>' +
+      '<div class="ws-row"><button class="btn" style="flex:1" onclick="Workshop.exportMid()"' + (S.build ? '' : ' disabled') + ' title="download the file to your computer">Export .mid</button>' +
+        '<button class="btn" style="flex:1" id="ws-save-media" onclick="Workshop.saveToMedia()"' + (S.build ? '' : ' disabled') + ' title="save the file straight into the scene media folder (x3d/X3DAssets/media/music) so the Scene Composer can use it">Save to scene media</button></div>' +
+      '<label class="ws-chk"><input type="checkbox" id="ws-save-recipe" ' + (S.alsoRecipe ? 'checked' : '') + ' onchange="Workshop.setAlsoRecipe(this.checked)"> also save the recipe next to it</label>' +
+      (S.lastSave ? '<div class="ws-fp" id="ws-save-status" style="color:' + (/^Not saved/.test(S.lastSave.text) ? 'var(--warm)' : '#8ee6b0') + '">' + esc(S.lastSave.text) + '</div>' : '') +
+      '<div class="ws-row" style="margin-top:4px"><button class="btn" style="flex:1" onclick="Workshop.saveRecipe()" title="download the recipe (the settings, not the music)">Save recipe</button>' +
+      '<button class="btn" style="flex:1" onclick="mccfOpenFile(\'recipe\', Workshop.loadRecipe)">Load recipe…</button></div>' +
+      '<input type="file" id="ws-recipe-file" accept=".json,application/json" style="display:none" onchange="Workshop.loadRecipe(this.files[0])">';
+  }
   function render() {
     const el = $('workshop-panel'); if (!el) return;
     if (!S.parsed) {
       el.innerHTML = '<div class="sh">Theme Workshop</div><div class="ws-note">Load a MIDI file (button below) and choose a theme: a track and a bar range. ' +
         'Add voices, give each a chain of transforms, then Play to hear it and Export .mid to keep it.' +
         (S.pending ? '<br><br><b>Recipe loaded</b> — load <b>' + esc(S.pending.source.file) + '</b> to apply it.' : '') + '</div>' +
-        '<button class="btn full" onclick="document.getElementById(\'ws-recipe-file\').click()">Load recipe…</button>' +
+        '<button class="btn full" onclick="mccfOpenFile(\'recipe\', Workshop.loadRecipe)">Load recipe…</button>' +
         '<input type="file" id="ws-recipe-file" accept=".json,application/json" style="display:none" onchange="Workshop.loadRecipe(this.files[0])">';
       return;
     }
     const r = S.recipe, p = S.parsed, nBars = totalBars(p);
     const trOpts = p.tracks.filter((t) => t.noteCount).map((t) => [t.index, t.index + ' · ' + t.name + ' · ' + (isDrum(t) ? 'Drums' : ((MM.GM_PROGRAMS || [])[trackProgram(t)] || '')) + ' · ' + t.noteCount]);
     let h = '<div class="sh">Theme Workshop</div>';
+    h += saveHtml();
     h += S.notes.map((n) => '<div class="ws-warn">' + esc(n) + '</div>').join('');
     if (S.notes.some((n) => /SHA-256/.test(n))) h += '<button class="btn full" style="margin-top:0" onclick="Workshop.adoptSource()">Use this file for the recipe from now on</button>';
     h += '<div class="sh">Source and key</div>' +
@@ -2626,6 +2810,7 @@ const Workshop = (function () {
     h += '<div class="sh">Voices</div>' + V().map(voiceHtml).join('') +
       '<div class="ws-row"><button class="btn" onclick="Workshop.addVoice()">+ Voice</button><button class="btn" onclick="Workshop.addDrums()">+ Drums</button><button class="btn" onclick="Workshop.addHandVoice()" title="an empty voice to draw into on the grid">+ Hand</button><button class="btn" onclick="Workshop.addHarmony()" title="chords and a bass chosen to fit the melody">+ Harmony</button>' +
       '<select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.addPreset(this.value);this.value=\'\'"><option value="">+ preset…</option>' + selOpts(PRESETS, '') + '</select></div>';
+    h += fieldRowHtml();
     h += '<div class="ws-row" style="margin-top:6px"><span class="ws-fp" style="margin:0">parallel</span>' +
       '<select id="ws-par-dist" class="ws-sel" title="distance in steps of the scale: 3rd = 2 steps" onchange="Workshop.parNote()">' + selOpts([[2, '3rd'], [3, '4th'], [4, '5th'], [5, '6th'], [6, '7th'], [7, 'octave']], 2) + '</select>' +
       '<select id="ws-par-n" class="ws-sel">' + selOpts([[1, '1 voice'], [2, '2 voices'], [3, '3 voices']], 1) + '</select>' +
@@ -2633,6 +2818,7 @@ const Workshop = (function () {
       '<label class="ws-chk" style="margin:0"><input type="checkbox" id="ws-par-dbl"> octave</label>' +
       '<button class="btn ws-b" onclick="Workshop.addParallel()" title="add voices that follow the melody at a fixed distance in scale steps (Kubik\'s span process)">add</button></div>' +
       '<div class="ws-warn" id="ws-par-note" style="margin-top:0">' + esc(parallelNote()) + '</div>';
+    h += serHtml();
     h += xformHtml();
     h += arcHtml();
     h += '<div class="sh">Playback</div>' +
@@ -2660,18 +2846,7 @@ const Workshop = (function () {
     }
     h += '<div class="ws-row" style="margin-top:8px"><button class="btn" style="flex:1" onclick="Workshop.undo()"' + (S.hi > 0 ? '' : ' disabled') + ' title="Ctrl+Z">↶ undo</button>' +
       '<button class="btn" style="flex:1" onclick="Workshop.redo()"' + (S.hi < S.hist.length - 1 ? '' : ' disabled') + ' title="Ctrl+Shift+Z">↷ redo</button></div>';
-    const autoName = safeMidName(exportName()), fileName = S.saveName ? safeMidName(S.saveName) : exportName() + '.mid';
-    h += '<div class="sh">Save</div>' +
-      '<div class="ws-row"><label class="ws-l" style="flex:1">file name<input type="text" id="ws-save-name" class="ws-t" placeholder="' + esc(autoName.replace(/\.mid$/, '')) + '" value="' + esc(S.saveName) + '" title="leave empty for an automatic name (source, track, bars, recipe code). Letters, digits, . _ - only; anything else becomes _." onchange="Workshop.setSaveName(this.value)"></label></div>' +
-      '<div class="ws-fp" id="ws-save-preview" style="margin:0 0 4px">saves as <b>' + esc(fileName) + '</b></div>' +
-      '<div class="ws-row"><button class="btn" style="flex:1" onclick="Workshop.exportMid()"' + (S.build ? '' : ' disabled') + ' title="download the file to your computer">Export .mid</button>' +
-        '<button class="btn" style="flex:1" id="ws-save-media" onclick="Workshop.saveToMedia()"' + (S.build ? '' : ' disabled') + ' title="save the file straight into the scene media folder (x3d/X3DAssets/media/music) so the Scene Composer can use it">Save to scene media</button></div>' +
-      '<label class="ws-chk"><input type="checkbox" id="ws-save-recipe" ' + (S.alsoRecipe ? 'checked' : '') + ' onchange="Workshop.setAlsoRecipe(this.checked)"> also save the recipe next to it</label>' +
-      (S.lastSave ? '<div class="ws-fp" id="ws-save-status" style="color:' + (/^Not saved/.test(S.lastSave.text) ? 'var(--warm)' : '#8ee6b0') + '">' + esc(S.lastSave.text) + '</div>' : '') +
-      '<div class="ws-row" style="margin-top:4px"><button class="btn" style="flex:1" onclick="Workshop.saveRecipe()" title="download the recipe (the settings, not the music)">Save recipe</button>' +
-      '<button class="btn" style="flex:1" onclick="document.getElementById(\'ws-recipe-file\').click()">Load recipe…</button></div>' +
-      '<input type="file" id="ws-recipe-file" accept=".json,application/json" style="display:none" onchange="Workshop.loadRecipe(this.files[0])">' +
-      '<div class="sh">Arrangement tracks</div>';
+      h += '<div class="sh">Arrangement tracks</div>';
     el.innerHTML = h;
   }
 
@@ -2750,11 +2925,11 @@ const Workshop = (function () {
     let h = '<div class="sh">Emotional arc → MIDI</div>';
     if (!a) {
       return h + '<div class="ws-fp">Load an arc from the emotion-arc tool and its curves (emotion, coherence, perception, behavior) will ride MIDI controllers — expression, reverb, brightness, modulation — through the whole piece.</div>' +
-        '<div class="ws-row"><button class="btn" style="flex:1" id="ws-arc-load" onclick="document.getElementById(\'ws-arc-file\').click()">Load arc…</button></div>' + file +
+        '<div class="ws-row"><button class="btn" style="flex:1" id="ws-arc-load" onclick="mccfOpenFile(\'arc\', Workshop.arcLoad)">Load arc…</button></div>' + file +
         (S.arcErr ? '<div class="ws-warn">' + esc(S.arcErr) + '</div>' : '');
     }
     h += '<div class="ws-row"><label class="ws-chk"><input type="checkbox" id="ws-arc-on" ' + (a.enabled ? 'checked' : '') + ' onchange="Workshop.arcSet(\'enabled\',this.checked)"> Use the arc</label>' +
-      '<button class="btn ws-b" onclick="document.getElementById(\'ws-arc-file\').click()" title="load a different arc file">change…</button>' +
+      '<button class="btn ws-b" onclick="mccfOpenFile(\'arc\', Workshop.arcLoad)" title="load a different arc file">change…</button>' +
       '<button class="btn ws-b" onclick="Workshop.arcRemove()" title="take the arc out of this recipe">remove</button></div>' + file;
     h += '<div class="ws-fp" id="ws-arc-file-info">' + esc(a.file || '(arc)') + (S.arc ? '' : ' — not loaded in this session: load <b>' + esc(a.file || 'the arc') + '</b> to apply it') + '</div>';
     if (S.arc) {
@@ -2811,9 +2986,190 @@ const Workshop = (function () {
     S.recipe.voices[vi] = r.voice; changed(); return { select: r.select };
   }
 
+  // ---------- serial / twelve-tone ----------
+  // A tool panel (settings are not part of the recipe).  "Add serial line" writes a hand-edited voice whose notes ARE the
+  // recipe, with the row and settings kept in its provenance (frozenFrom).  Nothing here changes the other engine code.
+  const SER_MOODS = [
+    ['', 'mood presets…'],
+    ['box', 'Music box, creepy (slow, quiet, close)'],
+    ['points', 'Pointillist (wide leaps, rests)'],
+    ['lyric', 'Lyrical line (close, flowing)'],
+    ['march', 'Insistent (even, repeated rows)']
+  ];
+  const SER_MOOD_SET = {
+    box:    { program: 10, unit: 'eighth', rhythmMode: 'cell', cellText: '3 1 2 2 1 3', placement: 'closest', low: 60, high: 90, base: 46, accent: 10, restAfter: 4, volume: 90, formsText: 'P0 R0 I0 RI0' },
+    points: { program: 11, unit: 'eighth', rhythmMode: 'cell', cellText: '1 -1 2 -2 1 -3', placement: 'wide', low: 48, high: 88, maxLeap: 19, base: 62, accent: 14, restAfter: 2, volume: 100, formsText: 'P0 I0' },
+    lyric:  { program: 40, unit: 'eighth', rhythmMode: 'cell', cellText: '2 1 1 2 2 4', placement: 'closest', low: 55, high: 84, base: 66, accent: 8, restAfter: 2, volume: 100, formsText: 'P0 I0 R0 RI0' },
+    march:  { program: 19, unit: 'quarter', rhythmMode: 'even', cellText: '1', placement: 'fixed', low: 48, high: 59, base: 74, accent: 16, restAfter: 0, volume: 100, formsText: 'P0 P0 P0 P0' }
+  };
+  const SER = {
+    open: false, rowSrc: 'op25', row: window.MccfSerial ? SerialPresetRow('op25') : [], rowErr: '', rowNote: '', rowSeed: 1, allInt: false, noTri: false, showMatrix: false,
+    formsText: 'P0 I0 R0 RI0', count: 4, unit: 'eighth', rhythmMode: 'even', cellText: '2 1 1 2', restAfter: 2,
+    placement: 'closest', low: 48, high: 84, maxLeap: 14, base: 70, accent: 12, seed: 1, program: 10, volume: 100, entryBar: 1, name: 'Serial line',
+    scanId: '', strictRow: true, allowRep: true, flagTri: true, flagOct: false, result: null, msg: ''
+  };
+  function SerialPresetRow(id) { const P = window.MccfSerial.PRESETS, p = P.find((x) => x.id === id); return (p || P[0]).row.slice(); }
+  const SM = () => window.MccfSerial;
+  function serSet(field, val) {
+    const s = SER, N = (lo, hi, d) => Math.round(num(val, lo, hi, d));
+    if (field === 'open') { s.open = !!val; return; }
+    if (field === 'rowSrc') {
+      s.rowSrc = val; s.rowErr = ''; s.rowNote = '';
+      const pre = SM().PRESETS.find((x) => x.id === val);
+      if (pre) s.row = pre.row.slice();
+      else if (val === 'theme') { const th = S.build ? S.build.theme : null; if (!th) { s.rowErr = 'load a MIDI file and choose a theme first'; } else { const r = SM().rowFromTheme(th.notes, s.rowSeed); s.row = r.row; s.rowNote = r.note; } }
+      else if (val === 'random') { const g = SM().generateRow({ seed: s.rowSeed, allInterval: s.allInt, noTriads: s.noTri }); s.row = g.row; s.rowNote = g.note; }
+    } else if (field === 'reroll') {
+      s.rowSeed = Math.floor(Math.random() * 1000000); s.rowSrc = s.rowSrc === 'theme' ? 'theme' : 'random'; serSet('rowSrc', s.rowSrc); return;
+    } else if (field === 'rowText') {
+      const r = SM().parseRow(val); if (r.error) s.rowErr = r.error; else { s.row = r.row; s.rowErr = ''; s.rowSrc = 'own'; s.rowNote = ''; }
+    } else if (field === 'allInt' || field === 'noTri') { s[field] = !!val; if (s.rowSrc === 'random') serSet('rowSrc', 'random'); return; }
+    else if (field === 'mood') { const m = SER_MOOD_SET[val]; if (m) Object.assign(s, m); }
+    else if (['formsText', 'cellText', 'unit', 'rhythmMode', 'placement', 'name', 'scanId'].includes(field)) s[field] = String(val);
+    else if (['strictRow', 'allowRep', 'flagTri', 'flagOct', 'showMatrix'].includes(field)) s[field] = !!val;
+    else if (field === 'count') s.count = N(1, 48, 4);
+    else if (field === 'restAfter') s.restAfter = Math.max(0, Math.min(32, num(val, 0, 32, 0)));
+    else if (['low', 'high'].includes(field)) { s[field] = N(0, 127, s[field]); if (s.high < s.low) { if (field === 'low') s.high = s.low; else s.low = s.high; } }
+    else if (field === 'maxLeap') s.maxLeap = N(1, 60, 14);
+    else if (['base', 'accent'].includes(field)) s[field] = N(0, 127, s[field]);
+    else if (['seed', 'program', 'volume'].includes(field)) s[field] = N(0, field === 'seed' ? 4294967295 : 127, s[field]);
+    else if (field === 'entryBar') s.entryBar = Math.max(1, num(val, 1, 999, 1));
+    render();
+  }
+  function serBuildLine(voiceTheme) {
+    const s = SER, f = SM().parseForms(s.formsText); if (f.error) return { error: f.error };
+    if (!SM().isRow(s.row)) return { error: 'the row is not a valid twelve-note row' };
+    const th = S.build ? S.build.theme : null; if (!th) return { error: 'load a MIDI file and choose a theme first (the tempo and bar length come from it)' };
+    const cell = SM().parseCell(s.cellText); if (s.rhythmMode === 'cell' && cell.error) return { error: cell.error };
+    const rhythm = { mode: s.rhythmMode, cell: cell.cell || [1], theme: s.rhythmMode === 'theme' ? th.notes.slice().sort((a, b) => a.startTick - b.startTick).map((n) => n.durTicks) : [] };
+    if (s.rhythmMode === 'theme' && !rhythm.theme.length) return { error: 'the theme has no notes to borrow rhythm from' };
+    const line = SM().makeLine({ row: s.row, forms: f.forms, count: s.count, ppq: th.ppq, unit: s.unit, rhythm: rhythm, restAfter: s.restAfter,
+      register: { low: s.low, high: s.high, placement: s.placement, maxLeap: s.maxLeap, start: Math.round((s.low + s.high) / 2) }, velocity: { base: s.base, accent: s.accent }, seed: s.seed });
+    return { line: line, forms: f.forms };
+  }
+  function serAdd() {
+    const r = serBuildLine(); if (r.error) { SER.msg = r.error; render(); toast(r.error); return; }
+    const s = SER, spec = baseVoice(s.name || 'Serial line');
+    spec.kind = 'notes'; spec.notes = r.line.notes; delete spec.chain; spec.program = s.program; spec.volume = s.volume; spec.entryBar = s.entryBar;
+    spec.frozenFrom = { kind: 'serial', source: 'theme', chain: [], entryBar: s.entryBar, row: s.row.slice(), forms: s.formsText, count: s.count, seed: s.seed, placement: s.placement, rhythm: s.rhythmMode, unit: s.unit };
+    addVoiceSpec(spec); SER.scanId = spec.id; SER.msg = '';
+    changed(); serScan();
+    toast('Serial line added: ' + r.line.statements.length + ' row statement' + (r.line.statements.length > 1 ? 's' : '') + ', ' + r.line.notes.length + ' notes. It is a hand-edited voice, so you can change notes on the grid.');
+  }
+  function serScan() {
+    const s = SER, v = V().find((x) => x.id === s.scanId && x.kind === 'notes') || V().find((x) => x.kind === 'notes');
+    if (!v) { s.result = { none: true }; render(); return; }
+    s.scanId = v.id;
+    const th = S.build ? S.build.theme : null, bt = th ? th.barTicks : 1920;
+    const row = s.strictRow ? s.row : null;
+    s.result = { voice: v.name, res: SM().scan(v.notes, { row: row, barTicks: bt, barOffset: Math.floor(v.entryBar - 1), allowRepeat: s.allowRep, flagTriads: s.flagTri, flagOctaves: s.flagOct }) };
+    render();
+  }
+  function serHtml() {
+    const s = SER, M = SM(); if (!M) return '';
+    const rowOk = M.isRow(s.row), prog = MM.GM_PROGRAMS || [];
+    const handVoices = V().filter((x) => x.kind === 'notes');
+    const srcOpts = M.PRESETS.map((p) => [p.id, p.name]).concat([['theme', 'From the theme (first 12 different notes)'], ['random', 'Random (seeded)'], ['own', 'My own row']]);
+    const iv = rowOk ? M.intervals(s.row).join(' ') : '', tri = rowOk ? M.triadsIn(s.row) : 0;
+    let mat = '';
+    if (s.showMatrix && rowOk) {
+      const m = M.matrix(s.row);
+      mat = '<div style="overflow:auto;margin:4px 0"><table style="border-collapse:collapse;font-size:10px;color:#c8cfe0"><tr><td></td>' + m.cols.map((c) => '<td style="padding:1px 3px;color:#7f93b4">' + c + '</td>').join('') + '</tr>' +
+        m.rows.map((r) => '<tr><td style="padding:1px 3px;color:#7f93b4">' + r.label + '</td>' + r.notes.map((p, j) => '<td style="padding:1px 3px;text-align:center;' + (r.label === 'P0' ? 'color:#ffcc66;' : '') + '">' + M.NAMES[p] + '</td>').join('') + '</tr>').join('') + '</table></div>' +
+        '<div class="ws-fp">Rows are P forms, columns are I forms. Read a row backwards for R, a column upwards for RI. The number is semitones above the row as written.</div>';
+    }
+    const resHtml = (function () {
+      const r = s.result; if (!r) return '';
+      if (r.none) return '<div class="ws-fp">No hand-edited or serial voice to scan yet. Add a serial line first.</div>';
+      const stm = r.res.statements.map((x) => '<span style="color:' + (x.ok ? '#7fd49a' : '#ff8a7a') + '">' + esc(x.form || '✗') + '</span>').join(' · ');
+      return '<div class="ws-fp" style="color:#c8cfe0">“' + esc(r.voice) + '”: ' + r.res.noteCount + ' notes, ' + r.res.statements.length + ' statement' + (r.res.statements.length === 1 ? '' : 's') + ': ' + stm + '</div>' +
+        (r.res.violations.length ? r.res.violations.slice(0, 12).map((x) => '<div class="ws-warn">bar ' + x.bar + ': ' + esc(x.msg) + '</div>').join('') + (r.res.violations.length > 12 ? '<div class="ws-fp">… and ' + (r.res.violations.length - 12) + ' more</div>' : '') : '<div class="ws-fp">no serial rule violations</div>');
+    })();
+    return '<details class="ws-why" id="ws-serial"' + (s.open ? ' open' : '') + ' ontoggle="Workshop.ser(\'open\',this.open)"><summary class="sh" style="cursor:pointer">Serial / twelve-tone</summary>' +
+      '<div class="ws-fp">Build a line from a tone row, then check it against the rules. The line is added as an editable voice. For no tonal centre, set the key scale above to <b>chromatic</b>.</div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" onchange="Workshop.ser(\'mood\',this.value);this.value=\'\'">' + selOpts(SER_MOODS, '') + '</select></div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">row<select class="ws-sel" style="width:100%" onchange="Workshop.ser(\'rowSrc\',this.value)">' + selOpts(srcOpts, s.rowSrc) + '</select></label></div>' +
+      '<div class="ws-row"><input type="text" class="ws-t" style="flex:1" title="type 12 notes (C Db E …) or numbers 0-11, then press Enter" value="' + esc(rowOk ? M.rowText(s.row) : '') + '" onchange="Workshop.ser(\'rowText\',this.value)">' +
+        '<button class="btn ws-b" title="a new random row (or re-fill from the theme with a new order for any missing notes)" onclick="Workshop.ser(\'reroll\')">new</button></div>' +
+      '<div class="ws-row"><label class="ws-chk"><input type="checkbox" ' + (s.allInt ? 'checked' : '') + ' onchange="Workshop.ser(\'allInt\',this.checked)"> all-interval</label>' +
+        '<label class="ws-chk"><input type="checkbox" ' + (s.noTri ? 'checked' : '') + ' onchange="Workshop.ser(\'noTri\',this.checked)"> no triads</label>' +
+        '<label class="ws-chk"><input type="checkbox" ' + (s.showMatrix ? 'checked' : '') + ' onchange="Workshop.ser(\'showMatrix\',this.checked)"> matrix</label></div>' +
+      (s.rowErr ? '<div class="ws-warn">' + esc(s.rowErr) + '</div>' : '') +
+      (rowOk ? '<div class="ws-fp">intervals (semitones up): ' + iv + (M.isAllInterval(s.row) ? ' · all-interval' : '') + ' · triads in the row: ' + tri + (s.rowNote ? ' · ' + esc(s.rowNote) : '') + '</div>' : '') + mat +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">forms<input type="text" class="ws-t" style="width:100%" title="P0 I3 R0 RI7: P prime, I inversion, R retrograde, RI retrograde-inversion; the number is semitones above the row as written" value="' + esc(s.formsText) + '" onchange="Workshop.ser(\'formsText\',this.value)"></label>' +
+        '<label class="ws-l">statements<input type="number" class="ws-n" min="1" max="48" value="' + s.count + '" title="how many row statements; the forms repeat in order" onchange="Workshop.ser(\'count\',this.value)"></label></div>' +
+      '<div class="ws-row"><label class="ws-l">unit<select class="ws-sel" onchange="Workshop.ser(\'unit\',this.value)">' + selOpts([['half', 'half note'], ['quarter', 'quarter'], ['eighth', 'eighth'], ['sixteenth', 'sixteenth'], ['triplet', 'triplet quarter']], s.unit) + '</select></label>' +
+        '<label class="ws-l">rhythm<select class="ws-sel" onchange="Workshop.ser(\'rhythmMode\',this.value)">' + selOpts([['even', 'even'], ['cell', 'repeating pattern'], ['random', 'random from pattern'], ['theme', 'borrowed from the theme']], s.rhythmMode) + '</select></label></div>' +
+      (s.rhythmMode === 'cell' || s.rhythmMode === 'random' ? '<div class="ws-row"><label class="ws-l" style="flex:1">pattern<input type="text" class="ws-t" style="width:100%" title="lengths in units; a minus sign is a rest: 2 1 1 -1 2" value="' + esc(s.cellText) + '" onchange="Workshop.ser(\'cellText\',this.value)"></label></div>' : '') +
+      '<div class="ws-row"><label class="ws-l">rest after row<input type="number" class="ws-n" min="0" max="32" step="0.5" value="' + s.restAfter + '" title="units of silence after each statement" onchange="Workshop.ser(\'restAfter\',this.value)"></label></div>' +
+      '<div class="ws-row"><label class="ws-l">register<select class="ws-sel" onchange="Workshop.ser(\'placement\',this.value)">' + selOpts([['closest', 'closest (smooth)'], ['wide', 'wide leaps'], ['fixed', 'fixed octave']], s.placement) + '</select></label>' +
+        '<label class="ws-l">low<input type="number" class="ws-n" min="0" max="127" value="' + s.low + '" onchange="Workshop.ser(\'low\',this.value)"></label>' +
+        '<label class="ws-l">high<input type="number" class="ws-n" min="0" max="127" value="' + s.high + '" onchange="Workshop.ser(\'high\',this.value)"></label></div>' +
+      (s.placement === 'wide' ? '<div class="ws-row"><label class="ws-l">largest leap<input type="number" class="ws-n" min="1" max="60" value="' + s.maxLeap + '" title="semitones, a guide for wide leaps" onchange="Workshop.ser(\'maxLeap\',this.value)"></label></div>' : '') +
+      '<div class="ws-row"><label class="ws-l">velocity<input type="number" class="ws-n" min="0" max="127" value="' + s.base + '" onchange="Workshop.ser(\'base\',this.value)"></label>' +
+        '<label class="ws-l">row-start accent<input type="number" class="ws-n" min="0" max="127" value="' + s.accent + '" onchange="Workshop.ser(\'accent\',this.value)"></label>' +
+        '<label class="ws-l">seed<input type="number" class="ws-n" style="width:70px" value="' + s.seed + '" onchange="Workshop.ser(\'seed\',this.value)"></label></div>' +
+      '<div class="ws-row"><select class="ws-sel" style="flex:1;min-width:0" title="instrument" onchange="Workshop.ser(\'program\',this.value)">' + selOpts(prog.map((n, p) => [p, p + ' · ' + n]), s.program) + '</select></div>' +
+      '<div class="ws-row"><label class="ws-l">enters bar<input type="number" class="ws-n" step="0.5" min="1" value="' + s.entryBar + '" onchange="Workshop.ser(\'entryBar\',this.value)"></label>' +
+        '<label class="ws-l" style="flex:1">name<input type="text" class="ws-t" style="width:100%" value="' + esc(s.name) + '" onchange="Workshop.ser(\'name\',this.value)"></label></div>' +
+      '<div class="ws-row"><button class="btn" style="flex:1" onclick="Workshop.serAdd()"' + (rowOk ? '' : ' disabled') + ' title="write a new voice of notes from these settings">Add serial line</button></div>' +
+      (s.msg ? '<div class="ws-warn">' + esc(s.msg) + '</div>' : '') +
+      '<div class="sh" style="margin-top:8px">Serial rule check</div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">voice<select class="ws-sel" style="width:100%" onchange="Workshop.ser(\'scanId\',this.value)">' + (handVoices.length ? selOpts(handVoices.map((x) => [x.id, x.name]), s.scanId || handVoices[0].id) : '<option value="">(no hand-edited voices)</option>') + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-chk"><input type="checkbox" ' + (s.strictRow ? 'checked' : '') + ' onchange="Workshop.ser(\'strictRow\',this.checked)"> must be forms of this row</label>' +
+        '<label class="ws-chk"><input type="checkbox" ' + (s.allowRep ? 'checked' : '') + ' onchange="Workshop.ser(\'allowRep\',this.checked)"> allow repeated note</label></div>' +
+      '<div class="ws-row"><label class="ws-chk"><input type="checkbox" ' + (s.flagTri ? 'checked' : '') + ' onchange="Workshop.ser(\'flagTri\',this.checked)"> flag triads</label>' +
+        '<label class="ws-chk"><input type="checkbox" ' + (s.flagOct ? 'checked' : '') + ' onchange="Workshop.ser(\'flagOct\',this.checked)"> flag octave leaps</label>' +
+        '<button class="btn ws-b" onclick="Workshop.serScan()">check</button></div>' + resHtml +
+    '</details>';
+  }
+
   // ---------- harmony ----------
   const HNAMES = { functional: 'Functional', plagal: 'Plagal-leaning' };
   function harmonyInfo(id) { const b = S.build; return b ? b.voices.find((x) => x.id === id) : null; }
+  // The progression harvested from the harmony engine (the field chord over time): chords + bass voices, and a theme (melody) derived from it.
+  function fieldOpt(k, v) { if (k === 'chromatic') FO[k] = Math.max(0, Math.min(1, (+v || 0) / 100)); else if (k === 'seed') FO[k] = Math.max(0, Math.round(+v || 0)); else FO[k] = v; const l = document.getElementById('ws-fo-chrom'); if (l && k === 'chromatic') l.textContent = chromLabel(FO.chromatic); }
+  function chromLabel(c) { return c <= 0.05 ? 'consonant: chord tones and diatonic passing notes' : c < 0.35 ? 'colour tones, a few accidentals' : c < 0.7 ? 'chromatic passing notes and accidentals' : c < 0.98 ? 'mostly twelve-tone, chord-anchored' : 'twelve-tone row'; }
+  function fieldRowHtml() {
+    const o = (a, cur) => selOpts(a, cur);
+    return '<div class="sh">Field chords and theme</div>' +
+      '<div class="ws-row"><label class="ws-l">inversion<select class="ws-sel" onchange="Workshop.fieldOpt(\'inversion\',this.value)">' + o([['root', 'root position'], ['first', '1st inversion'], ['second', '2nd inversion'], ['third', '3rd (7ths)'], ['smooth', 'smooth voice-leading']], FO.inversion) + '</select></label>' +
+      '<label class="ws-l">spacing<select class="ws-sel" onchange="Workshop.fieldOpt(\'spacing\',this.value)">' + o([['close', 'close'], ['open', 'open (spread)']], FO.spacing) + '</select></label></div>' +
+      '<div class="ws-row"><label class="ws-l">theme rhythm<select class="ws-sel" onchange="Workshop.fieldOpt(\'rhythm\',this.value)">' + o([['quarter', 'quarters'], ['eighth', 'eighths'], ['mixed', 'mixed']], FO.rhythm) + '</select></label>' +
+      '<label class="ws-l">seed<input type="number" class="ws-n" style="width:60px" value="' + FO.seed + '" onchange="Workshop.fieldOpt(\'seed\',this.value)"></label></div>' +
+      '<div class="ws-row"><label class="ws-l" style="flex:1">consonant<input type="range" min="0" max="100" value="' + Math.round(FO.chromatic * 100) + '" style="flex:1" oninput="Workshop.fieldOpt(\'chromatic\',this.value)">12-tone</label></div>' +
+      '<div class="ws-fp" id="ws-fo-chrom" style="margin:0 0 4px">' + chromLabel(FO.chromatic) + '</div>' +
+      '<div class="ws-row"><button class="btn" onclick="Workshop.importProgression()" title="the chord progression the scene characters have produced (Dashboard, Ambient Sound), as a chord voice and a bass voice, with the chosen inversion and spacing. Replaces earlier Field chords / Field bass voices.">+ Field chords</button>' +
+      '<button class="btn" onclick="Workshop.importTheme()" title="a melody derived from that progression: chord tones on the beat, passing notes and accidentals between, up to a twelve-tone row. Replaces an earlier Field theme; change the seed for another.">+ Field theme</button></div>';
+  }
+  async function fetchProgression() {
+    const th = S.build && S.build.theme;
+    if (!th) { toast('Load a theme first: the progression is written at the theme tempo and meter.'); return null; }
+    if (!window.MccfProgression) { toast('js/mccf_progression.js is not installed.'); return null; }
+    let d; try { const r = await fetch(API + '/neoriemannian/progression?format=json'); d = await r.json(); } catch (e) { toast('Could not reach the server.'); return null; }
+    if (!d || !d.progression || !d.progression.length) { toast('No progression yet: play a scene first. The harmony is recorded while a scene runs.'); return null; }
+    return { d: d, beatTicks: Math.round(th.ppq * 4 / th.timeSig.den) };
+  }
+  function dropFieldVoices(names) { const vs = V(); for (let i = vs.length - 1; i >= 0; i--) if (vs[i].frozenFrom && vs[i].frozenFrom.kind === 'field-progression' && names.indexOf(vs[i].name) >= 0) vs.splice(i, 1); }
+  async function importProgression() {
+    const g = await fetchProgression(); if (!g) return;
+    const d = g.d, out = MccfProgression.toVoices(d, { beatTicks: g.beatTicks, inversion: FO.inversion, spacing: FO.spacing });
+    if (!out.chords.length) { toast('The progression has no nameable chords yet.'); return; }
+    const from = { kind: 'field-progression', seed: d.seed, chords: out.runs, pulse: (d.config && d.config.pulse) || 'sustain', inversion: FO.inversion, spacing: FO.spacing };
+    dropFieldVoices(['Field chords', 'Field bass']);
+    const ch = baseVoice('Field chords'); delete ch.chain; ch.kind = 'notes'; ch.notes = out.chords; ch.program = 19; ch.volume = 90; ch.frozenFrom = from; addVoiceSpec(ch);
+    const bs = baseVoice('Field bass'); delete bs.chain; bs.kind = 'notes'; bs.notes = out.bass; bs.program = 32; bs.volume = 100; bs.frozenFrom = from; addVoiceSpec(bs);
+    changed(); toast('Field chords: ' + out.runs + ' chords, ' + FO.inversion + ' / ' + FO.spacing + (out.skipped ? ' (' + out.skipped + ' unnameable skipped)' : '') + '. Editable on the grid.');
+  }
+  async function importTheme() {
+    const g = await fetchProgression(); if (!g) return;
+    const d = g.d, out = MccfProgression.toTheme(d, { beatTicks: g.beatTicks, chromatic: FO.chromatic, seed: FO.seed, rhythm: FO.rhythm });
+    if (!out.notes.length) { toast('The progression has no nameable chords yet.'); return; }
+    const st = out.stats, from = { kind: 'field-progression', seed: d.seed, chords: out.runs, theme: true, chromatic: FO.chromatic, themeSeed: FO.seed, rhythm: FO.rhythm };
+    dropFieldVoices(['Field theme']);
+    const th = baseVoice('Field theme'); delete th.chain; th.kind = 'notes'; th.notes = out.notes; th.program = 73; th.volume = 100; th.frozenFrom = from; addVoiceSpec(th);
+    changed(); toast('Field theme: ' + st.notes + ' notes (' + st.chordTones + ' chord tones, ' + st.diatonic + ' passing, ' + st.accidentals + ' accidentals' + (st.row ? ', ' + st.row + ' row' : '') + '). Same seed gives the same theme; change the seed for another.');
+  }
   function addHarmony() {
     const lead = baseVoice('Chords'), bass = freeChannel(); lead.kind = 'harmony'; lead.source = 'theme'; delete lead.chain; lead.name = 'Chordal harmony'; lead.program = 19; lead.volume = 90;
     lead.bassChannel = (() => { const used = {}; V().forEach((v) => { used[v.channel] = true; if (v.bassChannel) used[v.bassChannel] = true; }); used[lead.channel] = true; for (let c = 1; c <= 16; c++) if (c !== 10 && !used[c]) return c; return bass; })();
@@ -2889,7 +3245,7 @@ const Workshop = (function () {
   function ghostFor(ti) {
     const b = liveBuild(); if (!b) return null;
     const t = b.arrangement.tracks[ti - 1]; if (!t || !t.voiceId) return null;
-    const v = b.recipe.voices.find((x) => x.id === t.voiceId); if (!v || v.kind === 'drums' || v.kind === 'harmony' || (v.kind === 'notes' && (!v.frozenFrom || v.frozenFrom.kind === 'drums' || v.frozenFrom.kind === 'harmony'))) return null;
+    const v = b.recipe.voices.find((x) => x.id === t.voiceId); if (!v || v.kind === 'drums' || v.kind === 'harmony' || (v.kind === 'notes' && (!v.frozenFrom || v.frozenFrom.kind === 'drums' || v.frozenFrom.kind === 'harmony' || v.frozenFrom.kind === 'serial'))) return null;
     const off = Math.round((v.entryBar - 1) * b.theme.barTicks) + (b.shiftTicks || 0);   // the original, laid where this voice sits
     return { label: 'original theme', notes: b.theme.notes.map((n) => ({ pitch: n.pitch, startTick: n.startTick + off, durTicks: n.durTicks })) };
   }
@@ -2920,7 +3276,7 @@ const Workshop = (function () {
     setTrack: setTrack, setBars: setBars, setKey: setKey, estimateKey: estimateKey, sfPick: sfPick, sfLoad: sfLoad, _SF: SF, setRule: setRule, setSeed: setSeed,
     setBacking: setBacking, arcLoad: arcLoad, arcSet: arcSet, arcLane: arcLane, arcLaneAdd: arcLaneAdd, arcLaneDel: arcLaneDel, arcReset: arcReset, arcRemove: arcRemove, setListen: setListen, vf: vf, vvolLabel: vvolLabel, addVoice: addVoice, addDrums: addDrums, df: df, reroll: reroll, dlabel: dlabel, addPreset: addPreset, delVoice: delVoice,
     stepAdd: stepAdd, stepDel: stepDel, stepMove: stepMove, stepType: stepType, stepParam: stepParam,
-    ghostFor: ghostFor, suggestTrack: suggestTrack, addHarmony: addHarmony, hf: hf, harmonyPath: harmonyPath, harmonyReroll: harmonyReroll, addParallel: addParallel, parNote: parallelNoteUpdate, getChords: getChords, solo: solo, pin: pin, clearPin: clearPin, exportMid: exportMid, xformPreset: xformPreset, xformClear: xformClear, setSelPlace: setSelPlace, setSelJoin: setSelJoin, selSettings: selSettings, saveToMedia: saveToMedia, setSaveName: setSaveName, setAlsoRecipe: setAlsoRecipe, setOmit: setOmit, safeMidName: safeMidName, saveRecipe: saveRecipe, undo: undo, redo: redo, canUndo: () => S.hi > 0, canRedo: () => S.hi < S.hist.length - 1, freeze: freeze, freezeTrack: freezeTrack, addHandVoice: addHandVoice, getEdit: getEdit, applyEdit: applyEdit, voiceIdOfTrack: voiceIdOfTrack, trackOfVoice: trackOfVoice, loadRecipe: loadRecipe, applyRecipe: applyRecipe, adoptSource: adoptSource
+    ser: serSet, serAdd: serAdd, serScan: serScan, ghostFor: ghostFor, suggestTrack: suggestTrack, addHarmony: addHarmony, importProgression: importProgression, importTheme: importTheme, fieldOpt: fieldOpt, hf: hf, harmonyPath: harmonyPath, harmonyReroll: harmonyReroll, addParallel: addParallel, parNote: parallelNoteUpdate, getChords: getChords, solo: solo, pin: pin, clearPin: clearPin, exportMid: exportMid, xformPreset: xformPreset, xformClear: xformClear, setSelPlace: setSelPlace, setSelJoin: setSelJoin, selSettings: selSettings, saveToMedia: saveToMedia, setSaveName: setSaveName, setAlsoRecipe: setAlsoRecipe, setOmit: setOmit, safeMidName: safeMidName, saveRecipe: saveRecipe, undo: undo, redo: redo, canUndo: () => S.hi > 0, canRedo: () => S.hi < S.hist.length - 1, freeze: freeze, freezeTrack: freezeTrack, addHandVoice: addHandVoice, getEdit: getEdit, applyEdit: applyEdit, voiceIdOfTrack: voiceIdOfTrack, trackOfVoice: trackOfVoice, loadRecipe: loadRecipe, applyRecipe: applyRecipe, adoptSource: adoptSource
   };
 })();
 window.Workshop = Workshop;
@@ -2932,6 +3288,25 @@ Workshop.render();
 // In Workshop mode that is the arrangement; in Theme Player mode, the loaded file.
 // Drawing and layout live in js/mccf_grid.js (tested in Node); this block is the DOM glue.
 // ================================================================
+// The Video view (js/mccf_videotab.js): built the first time its tab is opened. The video runs on its own clock; "Play together" also starts the engine.
+function ensureVideoTab() {
+  if (window._videoTab) return;
+  if (!window.MccfVideoTab) { try { toast('js/mccf_videotab.js is not installed.'); } catch (x) {} return; }
+  try {
+    window._videoTab = MccfVideoTab.init({ container: document.getElementById('video-panel'), api: API, music: {
+      start: function () { if (!isPlaying) return startEngine(); },
+      stop: function () { if (isPlaying) stopEngine(); },
+      isPlaying: function () { return isPlaying; },
+      tempoScale: function () { return themePlayer.tempoScale; },
+      loadBars: function (buf, name, auto) {
+        if (auto && (isPlaying || (themePlayer.data && !window._videoBarsActive))) return false;   // never replace a real theme or interrupt playing music
+        if (engineMode !== 'theme') { const sel = document.getElementById('engine-mode'); if (sel) sel.value = 'theme'; setEngineMode('theme'); }
+        loadMidiBuffer(buf, name); return true;
+      },
+      bpm: function () { try { return themePlayer.data ? themePlayer.currentBpm() : NaN; } catch (x) { return NaN; } }
+    } });
+  } catch (x) { console.warn('video tab:', x); }
+}
 const gridUI = (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -2945,7 +3320,7 @@ const gridUI = (function () {
       getData:   () => themePlayer.data,
       isEnabled: (i) => themePlayer.enabled[i],
       color:     (i) => MccfMidi.trackColor(i),
-      getClock:  () => (isPlaying && engineMode === 'theme' && themePlayer.playing) ? themePlayer.elapsed() * themePlayer.playScale : null,
+      getClock:  () => (isPlaying && engineMode === 'theme' && (themePlayer.playing || themePlayer.paused)) ? themePlayer.elapsed() * themePlayer.playScale : null,
       getGhost:  (i) => { const w = WS(); return w ? w.ghostFor(i) : null; },
       getEdit:   (i) => { const w = WS(); return w ? w.getEdit(i) : null; },
       getChords: () => { const w = WS(); return w ? w.getChords() : null; },
@@ -3006,17 +3381,25 @@ const gridUI = (function () {
   }
   function reset() { lastData = null; selVoice = null; if (view) { view.selected = null; view.sel = {}; } refresh(true); }   // a different file: fit everything again
   function setView(v) {
-    current = v; visible = (v === 'grid'); const nt = (v === 'notation');
+    current = v; visible = (v === 'grid'); const nt = (v === 'notation'); const sc = (v === 'scene'); const vd = (v === 'video');
+    { const tr = document.getElementById('transport'); if (tr) tr.style.display = (sc || vd) ? 'none' : 'flex'; } const vdp = $('video-panel'); if (vdp) vdp.style.display = vd ? 'block' : 'none'; const vtv = $('vtab-video'); if (vtv) vtv.classList.toggle('on', vd); if (vd) ensureVideoTab();
+    const spn = $('scene-panel'); if (spn) spn.style.display = sc ? 'flex' : 'none';
+    const vs = $('vtab-scene'); if (vs) vs.classList.toggle('on', sc);
+    if (sc && window.refreshSceneTab) refreshSceneTab();
     $('grid-panel').style.display = visible ? 'flex' : 'none';
     const np = $('notation-panel'); if (np) np.style.display = nt ? 'flex' : 'none';
-    $('main-canvas').style.visibility = (visible || nt) ? 'hidden' : 'visible';
-    const ov = document.querySelector('.viz-overlay'); if (ov) ov.style.visibility = (visible || nt) ? 'hidden' : 'visible';
+    $('main-canvas').style.visibility = (visible || nt || sc || vd) ? 'hidden' : 'visible';
+    const ov = document.querySelector('.viz-overlay'); if (ov) ov.style.visibility = (visible || nt || sc || vd) ? 'hidden' : 'visible';
     $('vtab-anim').classList.toggle('on', v === 'anim'); $('vtab-grid').classList.toggle('on', visible); const vn = $('vtab-notation'); if (vn) vn.classList.toggle('on', nt);
     if (visible) { ensure(); size(); lastData = null; refresh(true); view.start(); }
     else if (view) view.stop();
     if (window.notationUI) notationUI.show(nt);
   }
-  function showTabs(on) { $('view-tabs').style.display = on ? 'flex' : 'none'; if (!on && current !== 'anim') setView('anim'); }
+  function showTabs(on) {   // the tab row is always there (Scene is useful in every mode); Grid and Notation only in theme mode
+    $('view-tabs').style.display = 'flex';
+    ['vtab-grid', 'vtab-notation'].forEach(function (id) { const b = $(id); if (b) b.style.display = on ? '' : 'none'; });
+    if (!on && (current === 'grid' || current === 'notation')) setView('anim');
+  }
   function select(i) { ensure(); view.select(i); }
   // ---- editing ----
   function audition(pitch, ti, vel) {
@@ -3183,7 +3566,9 @@ const notationUI = (function () {
   }
   function shownTracks() {
     const d = themePlayer.data; if (!d) return [];
-    return d.tracks.filter((t) => t.noteCount && themePlayer.enabled[t.index]).map((t) => t.index);
+    const on = d.tracks.filter((t) => t.noteCount && themePlayer.enabled[t.index]).map((t) => t.index);
+    if (!on.length && !d.tracks.some((t) => t.noteCount) && d.tracks.length) return [d.tracks[0].index];   // a score with no notes at all (video bars): one empty staff
+    return on;
   }
   function width() { const s = $('nt-scroll'); return Math.max(360, (s && s.clientWidth ? s.clientWidth : 900) - 24); }
   function layoutParams(nTracks) {
@@ -3219,7 +3604,7 @@ const notationUI = (function () {
     $('nt-cursor').style.display = 'none';
   }
   function invalidate() { dirty = true; if (shown && !raf) loop(); }
-  function songSeconds() { return (isPlaying && engineMode === 'theme' && themePlayer.playing) ? themePlayer.elapsed() * themePlayer.playScale : null; }
+  function songSeconds() { return (isPlaying && engineMode === 'theme' && (themePlayer.playing || themePlayer.paused)) ? themePlayer.elapsed() * themePlayer.playScale : null; }
   function tickOf(sec) {
     const d = themePlayer.data; if (!d || !window.MccfGrid) return 0;
     if (secToTickFor !== d) { secToTick = MccfGrid.makeSecToTick(d.ppq, d.tempoEvents); secToTickFor = d; }
@@ -3262,6 +3647,106 @@ const notationUI = (function () {
   return { show, refresh, reset, step, setFrom, setKey, setFollow, setGrand, render, syncClock, detectKey, _state: () => ({ from, winBars, layout, score, follow }) };
 })();
 window.notationUI = notationUI;
+</script>
+<!-- Folder pickers: every open and save control lists the server folder for its content type, so nobody has to remember the file tree. -->
+<style>
+#mf-pop{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:99990}
+#mf-pop[hidden]{display:none}
+#mf-box{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:16px;max-width:640px;width:92%;max-height:80vh;overflow:auto;color:var(--text);font-size:14px}
+#mf-box h3{margin:0 0 4px;font-size:15px;color:#d0dcea}
+#mf-box .mf-sub{color:#7c8aa4;font-size:12px;margin-bottom:8px}
+#mf-box .mf-row{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;background:var(--s1);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 9px;margin:3px 0;cursor:pointer;font:inherit;font-size:13px}
+#mf-box .mf-row:hover{border-color:var(--accent)}
+#mf-box .mf-row small{color:#7c8aa4;margin-left:auto;white-space:nowrap}
+#mf-box .mf-grp{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7c8aa4;margin:8px 0 2px}
+#mf-box .mf-act{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#mf-box input[type=text]{width:100%;padding:6px 8px;background:var(--s1);color:var(--text);border:1px solid var(--border);border-radius:5px;font:inherit}
+</style>
+<div id="mf-pop" hidden><div id="mf-box"></div></div>
+<script>
+(function () {
+  var TYPES = {
+    midi:    { open: 'Open a MIDI file',        what: 'MIDI files',              accept: '.mid,.midi' },
+    recipe:  { open: 'Open a recipe',           what: 'recipes',                 accept: '.json', save: 'Save the recipe' },
+    mapping: { open: 'Open a MIDI mapping',     what: 'MIDI mapping files',      accept: '.json', save: 'Save the MIDI mapping' },
+    score:   { open: 'Open a score snapshot',   what: 'score snapshots',         accept: '.json', save: 'Save the score snapshot' },
+    arc:     { open: 'Open an emotional arc',   what: 'recorded arcs (by scene and take)', accept: '.xml' }
+  };
+  function E(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function box(h) { document.getElementById('mf-box').innerHTML = h; document.getElementById('mf-pop').hidden = false; }
+  function close() { document.getElementById('mf-pop').hidden = true; }
+  document.getElementById('mf-pop').addEventListener('mousedown', function (e) { if (e.target === this) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  window.mccfPopClose = close;
+  function when(t) { return t ? new Date(t * 1000).toISOString().slice(0, 10) : ''; }
+  function list(type) {
+    return fetch(API + '/ambient/files?type=' + type).then(function (r) { if (!r.ok) throw 0; return r.json(); });
+  }
+  function fromComputer(type, cb) {
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = TYPES[type].accept;
+    inp.onchange = function () { if (inp.files[0]) cb(inp.files[0]); }; inp.click();
+  }
+  // Open: lists the folder, loads the chosen file through the same loader the old button used.
+  window.mccfOpenFile = function (type, cb) {
+    var T = TYPES[type];
+    box('<h3>' + T.open + '</h3><div class="mf-sub" id="mf-sub">Looking in the server folder for ' + T.what + '…</div><div id="mf-list"></div>' +
+        '<div class="mf-act"><button class="btn" id="mf-pc">A file from my computer…</button><button class="btn" id="mf-x">Close</button></div>');
+    document.getElementById('mf-x').onclick = close;
+    document.getElementById('mf-pc').onclick = function () { close(); fromComputer(type, cb); };
+    list(type).then(function (d) {
+      document.getElementById('mf-sub').textContent = 'Server folder: ' + d.folder + ' (' + d.files.length + ' file' + (d.files.length === 1 ? '' : 's') + ').';
+      var h = '', g = null;
+      d.files.forEach(function (f, i) {
+        if (f.group !== g) { g = f.group; if (g) h += '<div class="mf-grp">' + E(g) + '</div>'; }
+        h += '<button class="mf-row" data-i="' + i + '"><span>' + E(f.label || f.name) + '</span><small>' + Math.max(1, Math.round(f.bytes / 1024)) + ' KB · ' + when(f.modified) + '</small></button>';
+      });
+      document.getElementById('mf-list').innerHTML = h || '<div class="mf-sub">Nothing in that folder yet.</div>';
+      Array.prototype.forEach.call(document.querySelectorAll('#mf-list .mf-row'), function (b) {
+        b.onclick = function () {
+          var f = d.files[+b.getAttribute('data-i')];
+          fetch(API + '/ambient/file?type=' + type + '&name=' + encodeURIComponent(f.name)).then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+            .then(function (blob) { close(); cb(new File([blob], f.label || f.name, { type: blob.type })); })
+            .catch(function () { toast('Could not read ' + f.name + ' from the server'); });
+        };
+      });
+    }).catch(function () { document.getElementById('mf-sub').textContent = 'The server is not reachable, so the folder cannot be listed. Use "A file from my computer".'; });
+  };
+  // Save: shows what is already in the folder, saves to the server (asks before replacing), or downloads as before.
+  window.mccfSaveFile = function (type, name, text) {
+    var T = TYPES[type];
+    box('<h3>' + (T.save || 'Save') + '</h3><div class="mf-sub" id="mf-sub">Saves into the server folder for ' + T.what + '.</div>' +
+        '<label style="font-size:12px;color:#7c8aa4">File name</label><input type="text" id="mf-name" value="' + E(name) + '">' +
+        '<div class="mf-grp">Already in the folder</div><div id="mf-list" class="mf-sub">…</div>' +
+        '<div class="mf-act"><button class="btn" id="mf-save" style="border-color:var(--accent);color:var(--accent)">Save to server</button><button class="btn" id="mf-dl">Download to my computer</button><button class="btn" id="mf-x">Cancel</button><span class="mf-sub" id="mf-msg"></span></div>');
+    var msg = function (t) { document.getElementById('mf-msg').textContent = t; };
+    document.getElementById('mf-x').onclick = close;
+    list(type).then(function (d) {
+      document.getElementById('mf-sub').textContent = 'Saves into the server folder: ' + d.folder + '.';
+      document.getElementById('mf-list').innerHTML = d.files.length ? d.files.map(function (f) { return '<button class="mf-row" data-n="' + E(f.name) + '"><span>' + E(f.name) + '</span><small>' + when(f.modified) + '</small></button>'; }).join('') : 'Nothing yet.';
+      Array.prototype.forEach.call(document.querySelectorAll('#mf-list .mf-row'), function (b) { b.onclick = function () { document.getElementById('mf-name').value = b.getAttribute('data-n'); }; });
+    }).catch(function () { document.getElementById('mf-list').textContent = 'The server is not reachable. Use Download.'; });
+    document.getElementById('mf-dl').onclick = function () {
+      var nm = document.getElementById('mf-name').value.trim() || name, a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = nm; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); close(); toast('Downloaded ' + nm);
+    };
+    document.getElementById('mf-save').onclick = function () {
+      var nm = document.getElementById('mf-name').value.trim();
+      if (type === 'recipe' && !/\.recipe\.json$/.test(nm)) nm = nm.replace(/\.json$/, '').replace(/\.recipe$/, '') + '.recipe.json';
+      if (type !== 'recipe' && !/\.json$/.test(nm)) nm += '.json';
+      var url = type === 'recipe' ? '/ambient/save_recipe?name=' : '/ambient/save_file?type=' + type + '&name=';
+      function go(over) {
+        return fetch(API + url + encodeURIComponent(nm) + (over ? '&overwrite=1' : ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text })
+          .then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); });
+      }
+      go(false).then(function (x) {
+        if (x.r.status === 409) { if (!window.confirm(nm + ' is already in the folder.\n\nReplace it with this version?')) { msg('Not saved.'); return; } return go(true).then(done); }
+        done(x);
+      }).catch(function () { msg('The server did not answer. Use Download.'); });
+      function done(x) { if (!x) return; if (!x.r.ok) { msg('Not saved: ' + (x.j.error || x.r.status)); return; } close(); toast('Saved ' + nm + ' to the server folder'); }
+    };
+  };
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,53 @@
+{
+  "pack_id": "elevenlabs_v3",
+  "kind": "engine_tags",
+  "engine": "elevenlabs",
+  "label": "ElevenLabs v3 delivery tags",
+  "description": "Square-bracket delivery tags for the ElevenLabs voice engine (Eleven v3 and v4 take natural-language tags, so this is a vocabulary to start from, not a fixed list). A tag before a segment changes how that segment is delivered. Free-form tags such as [quietly, with profound conviction] work too.",
+  "placement": "prefix",
+  "groups": {
+    "Emotion": [
+      "happy",
+      "sad",
+      "excited",
+      "angry",
+      "whisper",
+      "annoyed",
+      "appalled",
+      "thoughtful",
+      "surprised",
+      "cute",
+      "dismissive"
+    ],
+    "Non-verbal": [
+      "laughs",
+      "chuckles",
+      "sighs",
+      "clears throat",
+      "exhales sharply",
+      "inhales deeply",
+      "muttering",
+      "gasp",
+      "swallows",
+      "short pause",
+      "long pause"
+    ],
+    "From the ElevenLabs help page": [
+      "curious",
+      "crying",
+      "mischievously",
+      "whispers",
+      "shouts"
+    ],
+    "Reported in an ElevenLabs chat, not yet confirmed in their documentation": [
+      "nervously",
+      "panicking",
+      "deadpan",
+      "giggling",
+      "applause",
+      "gentle footsteps",
+      "leaves rustling"
+    ]
+  },
+  "tag_map": {}
+}

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF Annotation record - lives in the V6 trace namespace. Records what an annotator said; never an engine input. DRAFT 1, 2026-11-10 -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://mccf.artistinprocess.com/trace/v1"
+           targetNamespace="http://mccf.artistinprocess.com/trace/v1"
+           elementFormDefault="qualified">
+  <xs:simpleType name="Target"><xs:restriction base="xs:string">
+    <xs:enumeration value="expression"/><xs:enumeration value="situation"/><xs:enumeration value="intent"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Annotator"><xs:restriction base="xs:string">
+    <xs:enumeration value="lexicon"/><xs:enumeration value="llm"/><xs:enumeration value="author"/><xs:enumeration value="generator"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Blind"><xs:restriction base="xs:string">
+    <xs:enumeration value="true"/><xs:enumeration value="false"/><xs:enumeration value="na"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Confidence"><xs:restriction base="xs:string">
+    <xs:enumeration value="low"/><xs:enumeration value="medium"/><xs:enumeration value="high"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="DimStatus"><xs:restriction base="xs:string">
+    <xs:enumeration value="unknown"/><xs:enumeration value="notApplicable"/><xs:enumeration value="conflict"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Validation"><xs:restriction base="xs:string">
+    <xs:enumeration value="ok"/><xs:enumeration value="clamped"/><xs:enumeration value="rejected"/>
+  </xs:restriction></xs:simpleType>
+
+  <xs:element name="Evidence"><xs:complexType>
+    <xs:attribute name="form" type="xs:string" use="required"/>
+    <xs:attribute name="term" type="xs:NCName" use="required"/>
+    <xs:attribute name="dimension" type="xs:NCName" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Cue"><xs:complexType>
+    <xs:attribute name="kind" type="xs:NCName" use="required"/>
+    <xs:attribute name="word" type="xs:string" use="required"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Rationale"><xs:complexType><xs:simpleContent><xs:extension base="xs:string">
+    <xs:attribute name="kind" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="stated"/></xs:restriction></xs:simpleType></xs:attribute>
+  </xs:extension></xs:simpleContent></xs:complexType></xs:element>
+  <xs:element name="Context"><xs:complexType>
+    <xs:attribute name="level" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="utterance"/><xs:enumeration value="dialogue"/><xs:enumeration value="character"/>
+      <xs:enumeration value="relationship"/><xs:enumeration value="narrative"/></xs:restriction></xs:simpleType></xs:attribute>
+    <!-- narrative facts may be supplied; computed EBPS state never is. The value is fixed so a record cannot claim otherwise. -->
+    <xs:attribute name="computedState" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="none"/></xs:restriction></xs:simpleType></xs:attribute>
+    <xs:attribute name="inputsRef" type="xs:string" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Conflict"><xs:complexType>
+    <xs:attribute name="dimensions" type="xs:NMTOKENS" use="required"/>
+    <xs:attribute name="terms" type="xs:NMTOKENS" use="required"/>
+    <xs:attribute name="resolved" type="xs:boolean" use="required"/>
+    <xs:attribute name="resolvedBy" type="xs:string" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Dim"><xs:complexType>
+    <xs:sequence><xs:element ref="Evidence" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="level" type="xs:integer" use="optional"/>
+    <xs:attribute name="category" type="xs:NMTOKENS" use="optional"/>
+    <xs:attribute name="status" type="DimStatus" use="optional"/>
+    <xs:attribute name="confidence" type="Confidence" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Annotation"><xs:complexType>
+    <xs:sequence>
+      <xs:element ref="Context" minOccurs="0" maxOccurs="1"/>
+      <xs:element ref="Dim" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element ref="Conflict" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element ref="Cue" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element ref="Rationale" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="annotates" type="xs:string" use="required"/>
+    <xs:attribute name="target" type="Target" use="required"/>
+    <xs:attribute name="annotator" type="Annotator" use="required"/>
+    <xs:attribute name="blind" type="Blind" use="required"/>
+    <xs:attribute name="speaker" type="xs:string" use="required"/>
+    <xs:attribute name="lexicon" type="xs:string" use="required"/>
+    <xs:attribute name="sequence" type="xs:nonNegativeInteger" use="required"/>
+    <xs:attribute name="validation" type="Validation" use="required"/>
+    <xs:attribute name="model" type="xs:string" use="optional"/>
+    <xs:attribute name="promptTemplate" type="xs:string" use="optional"/>
+    <xs:attribute name="rawRef" type="xs:string" use="optional"/>
+    <xs:attribute name="ablation" type="xs:string" use="optional"/>
+    <xs:attribute name="takeTime" type="xs:decimal" use="optional"/>
+    <xs:attribute name="sourceSequence" type="xs:nonNegativeInteger" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Annotations"><xs:complexType>
+    <xs:sequence><xs:element ref="Annotation" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="scene" type="xs:string" use="required"/>
+    <xs:attribute name="lexicon" type="xs:string" use="required"/>
+    <xs:attribute name="schemaVersion" type="xs:string" use="required"/>
+  </xs:complexType></xs:element>
+</xs:schema>

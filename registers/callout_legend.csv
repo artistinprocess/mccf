@@ -1,0 +1,333 @@
+icn,number,control,description
+ICN-MCCF-CMP-0002-001,1,scene-load-select,
+ICN-MCCF-CMP-0002-001,2,↺,Refresh list
+ICN-MCCF-CMP-0002-001,3,Load Scene,
+ICN-MCCF-CMP-0002-001,4,Scene Name,
+ICN-MCCF-CMP-0002-001,5,Scene Name,Open this scene's compiled X3D file in the X3D editor (Sunrize by default)
+ICN-MCCF-CMP-0002-001,6,Width (m),
+ICN-MCCF-CMP-0002-001,7,Depth (m),
+ICN-MCCF-CMP-0002-001,8,Description,
+ICN-MCCF-CMP-0002-001,9,Seed (blank = randomize each take),
+ICN-MCCF-CMP-0002-001,10,"DM code (optional; the scene's data module code, info code 0",
+ICN-MCCF-CMP-0002-001,11,DEF name (optional),
+ICN-MCCF-CMP-0002-001,12,,
+ICN-MCCF-CMP-0002-001,13,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,14,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,15,×,
+ICN-MCCF-CMP-0002-001,16,,
+ICN-MCCF-CMP-0002-001,17,,
+ICN-MCCF-CMP-0002-001,18,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,19,×,
+ICN-MCCF-CMP-0002-001,20,×,
+ICN-MCCF-CMP-0002-001,21,,
+ICN-MCCF-CMP-0002-001,22,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,23,×,
+ICN-MCCF-CMP-0002-001,24,,
+ICN-MCCF-CMP-0002-001,25,×,
+ICN-MCCF-CMP-0002-001,26,DEF name (optional),
+ICN-MCCF-CMP-0002-001,27,,
+ICN-MCCF-CMP-0002-001,28,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,29,×,
+ICN-MCCF-CMP-0002-001,30,,
+ICN-MCCF-CMP-0002-001,31,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,32,×,
+ICN-MCCF-CMP-0002-001,33,,
+ICN-MCCF-CMP-0002-001,34,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,35,×,
+ICN-MCCF-CMP-0002-001,36,,
+ICN-MCCF-CMP-0002-001,37,angle (radians) where this band ends,angle (radians) where this band ends
+ICN-MCCF-CMP-0002-001,38,×,
+ICN-MCCF-CMP-0002-001,39,,
+ICN-MCCF-CMP-0002-001,40,DEF name (optional),
+ICN-MCCF-CMP-0002-001,41,×,
+ICN-MCCF-CMP-0002-001,42,↺ reset to default gradient,
+ICN-MCCF-CMP-0002-001,43,Default navigation type,
+ICN-MCCF-CMP-0002-001,44,Viewpoint transition,
+ICN-MCCF-CMP-0002-001,45,Transition time (s),
+ICN-MCCF-CMP-0002-001,46,↺ media/,Reload media/ directory
+ICN-MCCF-CMP-0002-001,47,Music (Track 1 — global),
+ICN-MCCF-CMP-0002-001,48,loop,
+ICN-MCCF-CMP-0002-001,49,Music (Track 1 — global),
+ICN-MCCF-CMP-0002-001,50,Bed (Track 3 — atmosphere),
+ICN-MCCF-CMP-0002-001,51,loop,
+ICN-MCCF-CMP-0002-001,52,Music (Track 1 — global),
+ICN-MCCF-CMP-0002-001,53,Apply Grid,
+ICN-MCCF-CMP-0003-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0023-001,1,+ Place Zone,
+ICN-MCCF-CMP-0023-001,2,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0023-001,3,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0023-001,4,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0023-001,5,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0023-001,6,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0023-001,7,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0023-001,8,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0023-001,9,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0023-001,10,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0023-001,11,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0024-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0026-001,1,1WP1Start,
+ICN-MCCF-CMP-0026-001,2,2WP2Middle,
+ICN-MCCF-CMP-0026-001,3,3WP3End,
+ICN-MCCF-CMP-0026-001,4,+ Place Waypoint,
+ICN-MCCF-CMP-0026-001,5,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0026-001,6,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0026-001,7,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0026-001,8,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0026-001,9,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0026-001,10,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0026-001,11,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0026-001,12,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0026-001,13,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0026-001,14,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0027-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0028-001,1,1WP1Start,
+ICN-MCCF-CMP-0028-001,2,2WP2Middle,
+ICN-MCCF-CMP-0028-001,3,3WP3End,
+ICN-MCCF-CMP-0028-001,4,+ Place Waypoint,
+ICN-MCCF-CMP-0028-001,5,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0028-001,6,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0028-001,7,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0028-001,8,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0028-001,9,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0028-001,10,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0028-001,11,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0028-001,12,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0028-001,13,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0028-001,14,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0029-001,1,Copy,"Copy this position (X, Y, Z) to the clipboard, then Paste it into a camera, light, agent or asset"
+ICN-MCCF-CMP-0029-001,2,Edit,
+ICN-MCCF-CMP-0029-001,3,Delete,
+ICN-MCCF-CMP-0031-001,1,Path Name,The path's unique name (for example path_witness).
+ICN-MCCF-CMP-0031-001,2,Agent,The actor that follows this path.
+ICN-MCCF-CMP-0031-001,3,Waypoint Order (required),A whole number. Paths with the same number run together; a higher number waits for the lower group to finish. Required: a path without it will not run.
+ICN-MCCF-CMP-0031-001,4,WP1,
+ICN-MCCF-CMP-0031-001,5,WP2,
+ICN-MCCF-CMP-0031-001,6,WP3,
+ICN-MCCF-CMP-0031-001,7,Create Path,"Saves the path with the waypoints you have clicked, in order."
+ICN-MCCF-CMP-0031-001,8,Clear,
+ICN-MCCF-CMP-0031-001,9,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0031-001,10,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0031-001,11,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0031-001,12,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0031-001,13,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0031-001,14,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0031-001,15,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0031-001,16,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0031-001,17,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0031-001,18,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0032-001,1,Paths,Select one or more paths (Ctrl or Cmd click). Paths with the same Waypoint Order run together; higher orders wait.
+ICN-MCCF-CMP-0032-001,2,LLM Adapter,"The language model that writes the actors' lines: ollama (local), stub (no model), anthropic or openai."
+ICN-MCCF-CMP-0032-001,3,API Key (if needed),The key for anthropic or openai. Leave blank for ollama.
+ICN-MCCF-CMP-0032-001,4,▶ Record Arc,Runs the selected paths and records the arc.
+ICN-MCCF-CMP-0032-001,5,▮ Stop,
+ICN-MCCF-CMP-0032-001,6,↻ Reset,
+ICN-MCCF-CMP-0032-001,7,optional take label,A name for the next take.
+ICN-MCCF-CMP-0032-001,8,New Take,
+ICN-MCCF-CMP-0032-001,9,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0034-001,1,"Center_120.0, 1.7, 27.0",
+ICN-MCCF-CMP-0034-001,2,"Center_227.0, 1.7, 20.0",
+ICN-MCCF-CMP-0034-001,3,"Center_320.0, 1.7, 13.0",
+ICN-MCCF-CMP-0034-001,4,"Center_413.0, 1.7, 20.0",
+ICN-MCCF-CMP-0034-001,5,"CAM_Wide20.0, 1.7, 38.1",
+ICN-MCCF-CMP-0034-001,6,"CAM_Close11.2, 1.7, 22.2",
+ICN-MCCF-CMP-0034-001,7,Set,
+ICN-MCCF-CMP-0034-001,8,Around,
+ICN-MCCF-CMP-0034-001,9,Add set,"Adds the set in one step, framed on the chosen character. Names are CAM_Shot_Character. Each camera can be edited afterwards."
+ICN-MCCF-CMP-0034-001,10,Undo last set,
+ICN-MCCF-CMP-0034-001,11,Add four centre cameras,"Adds four cameras around the middle of the grid, at face height, all looking at the centre. Names are Center_1 to Center_4."
+ICN-MCCF-CMP-0034-001,12,+ Place Free Camera,
+ICN-MCCF-CMP-0034-001,13,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0034-001,14,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0034-001,15,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0034-001,16,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0034-001,17,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0034-001,18,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0034-001,19,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0034-001,20,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0034-001,21,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0034-001,22,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0035-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0036-001,1,"Center_120.0, 1.7, 27.0",
+ICN-MCCF-CMP-0036-001,2,"Center_227.0, 1.7, 20.0",
+ICN-MCCF-CMP-0036-001,3,"Center_320.0, 1.7, 13.0",
+ICN-MCCF-CMP-0036-001,4,"Center_413.0, 1.7, 20.0",
+ICN-MCCF-CMP-0036-001,5,"CAM_Wide20.0, 1.7, 38.1",
+ICN-MCCF-CMP-0036-001,6,"CAM_Close11.2, 1.7, 22.2",
+ICN-MCCF-CMP-0036-001,7,Set,
+ICN-MCCF-CMP-0036-001,8,Around,
+ICN-MCCF-CMP-0036-001,9,Add set,"Adds the set in one step, framed on the chosen character. Names are CAM_Shot_Character. Each camera can be edited afterwards."
+ICN-MCCF-CMP-0036-001,10,Undo last set,
+ICN-MCCF-CMP-0036-001,11,Add four centre cameras,"Adds four cameras around the middle of the grid, at face height, all looking at the centre. Names are Center_1 to Center_4."
+ICN-MCCF-CMP-0036-001,12,+ Place Free Camera,
+ICN-MCCF-CMP-0036-001,13,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0036-001,14,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0036-001,15,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0036-001,16,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0036-001,17,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0036-001,18,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0036-001,19,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0036-001,20,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0036-001,21,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0036-001,22,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0037-001,1,Copy,"Copy this position (X, Y, Z) to the clipboard"
+ICN-MCCF-CMP-0037-001,2,Paste XYZ,"Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box."
+ICN-MCCF-CMP-0037-001,3,Paste XZ,"Paste X and Z only, keeping this object's own height (Y)"
+ICN-MCCF-CMP-0037-001,4,X,
+ICN-MCCF-CMP-0037-001,5,Y,
+ICN-MCCF-CMP-0037-001,6,Z,
+ICN-MCCF-CMP-0037-001,7,cd-pos-x-slider,
+ICN-MCCF-CMP-0037-001,8,cd-pos-z-slider,
+ICN-MCCF-CMP-0037-001,9,Yaw,
+ICN-MCCF-CMP-0037-001,10,Pitch,
+ICN-MCCF-CMP-0037-001,11,Roll,
+ICN-MCCF-CMP-0037-001,12,Edit,
+ICN-MCCF-CMP-0037-001,13,Delete,
+ICN-MCCF-CMP-0039-001,1,"Key_Lightpoint20.0, 4.0, 10.9",
+ICN-MCCF-CMP-0039-001,2,+ Place Light,
+ICN-MCCF-CMP-0039-001,3,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0039-001,4,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0039-001,5,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0039-001,6,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0039-001,7,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0039-001,8,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0039-001,9,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0039-001,10,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0039-001,11,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0039-001,12,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0040-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0041-001,1,"Key_Lightpoint20.0, 4.0, 10.9",
+ICN-MCCF-CMP-0041-001,2,+ Place Light,
+ICN-MCCF-CMP-0041-001,3,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0041-001,4,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0041-001,5,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0041-001,6,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0041-001,7,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0041-001,8,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0041-001,9,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0041-001,10,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0041-001,11,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0041-001,12,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0042-001,1,Copy,"Copy this position (X, Y, Z) to the clipboard"
+ICN-MCCF-CMP-0042-001,2,Paste XYZ,"Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box."
+ICN-MCCF-CMP-0042-001,3,Paste XZ,"Paste X and Z only, keeping this object's own height (Y)"
+ICN-MCCF-CMP-0042-001,4,X,
+ICN-MCCF-CMP-0042-001,5,Y,
+ICN-MCCF-CMP-0042-001,6,Z,
+ICN-MCCF-CMP-0042-001,7,ld-pos-x-slider,
+ICN-MCCF-CMP-0042-001,8,ld-pos-z-slider,
+ICN-MCCF-CMP-0042-001,9,Edit,
+ICN-MCCF-CMP-0042-001,10,Delete,
+ICN-MCCF-CMP-0044-001,1,+ Place Audio Source,
+ICN-MCCF-CMP-0044-001,2,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0044-001,3,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0044-001,4,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0044-001,5,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0044-001,6,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0044-001,7,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0044-001,8,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0044-001,9,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0044-001,10,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0044-001,11,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0045-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0047-001,1,+ Register MIDI Source,
+ICN-MCCF-CMP-0047-001,2,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0047-001,3,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0047-001,4,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0047-001,5,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0047-001,6,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0047-001,7,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0047-001,8,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0047-001,9,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0047-001,10,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0047-001,11,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0048-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0050-001,1,+ Place Asset,
+ICN-MCCF-CMP-0050-001,2,+ Register Effect Target,
+ICN-MCCF-CMP-0050-001,3,Show (Terrain overlay),Shows the captured terrain as a layer under the map. Capture it with the Events tab's Capture Terrain button.
+ICN-MCCF-CMP-0050-001,4,opacity (Terrain overlay),"How strongly the terrain layer shows, 0 to 1. Default 0.50."
+ICN-MCCF-CMP-0050-001,5,Zones,Shows or hides zones on the map.
+ICN-MCCF-CMP-0050-001,6,Waypoints,Shows or hides waypoints on the map.
+ICN-MCCF-CMP-0050-001,7,Paths,Shows or hides paths on the map.
+ICN-MCCF-CMP-0050-001,8,Cameras,Shows or hides cameras on the map.
+ICN-MCCF-CMP-0050-001,9,Lights,Shows or hides lights on the map.
+ICN-MCCF-CMP-0050-001,10,Audio,Shows or hides audio sources on the map.
+ICN-MCCF-CMP-0050-001,11,Assets,Shows or hides placed assets on the map.
+ICN-MCCF-CMP-0050-001,12,Agents,Shows or hides placed actors on the map.
+ICN-MCCF-CMP-0051-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0005-001,1,The Witnessplaced,
+ICN-MCCF-CMP-0005-001,2,The Stewardagent,
+ICN-MCCF-CMP-0005-001,3,The Archivistagent,
+ICN-MCCF-CMP-0005-001,4,Refresh from API,
+ICN-MCCF-CMP-0005-001,5,Agent Voice (for arc playback),The voice used to speak this actor's lines during arc playback.
+ICN-MCCF-CMP-0005-001,6,"The Witness5.4, 0.0, 29.0",
+ICN-MCCF-CMP-0006-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0007-001,1,The Witnessplaced,
+ICN-MCCF-CMP-0007-001,2,The Stewardagent,
+ICN-MCCF-CMP-0007-001,3,The Archivistagent,
+ICN-MCCF-CMP-0007-001,4,Refresh from API,
+ICN-MCCF-CMP-0007-001,5,Agent Voice (for arc playback),The voice used to speak this actor's lines during arc playback.
+ICN-MCCF-CMP-0007-001,6,"The Witness5.4, 0.0, 29.0",
+ICN-MCCF-CMP-0008-001,1,Agent colour,The actor's colour swatch and portrait.
+ICN-MCCF-CMP-0008-001,2,Copy,"Copy this position (X, Y, Z) to the clipboard"
+ICN-MCCF-CMP-0008-001,3,Paste XYZ,"Paste X, Y, Z from the clipboard. You can also Ctrl+V a triple straight into any X/Y/Z box."
+ICN-MCCF-CMP-0008-001,4,Paste XZ,"Paste X and Z only, keeping this object's own height (Y)"
+ICN-MCCF-CMP-0008-001,5,Position X,East-west position in metres.
+ICN-MCCF-CMP-0008-001,6,Position Y,Height in metres.
+ICN-MCCF-CMP-0008-001,7,Position Z,North-south position in metres.
+ICN-MCCF-CMP-0008-001,8,Apply Position,Moves the actor to the typed position.
+ICN-MCCF-CMP-0008-001,9,Rotation X,"Start rotation about X, in degrees."
+ICN-MCCF-CMP-0008-001,10,Rotation Y,"Start rotation about Y (turning left and right), in degrees."
+ICN-MCCF-CMP-0008-001,11,Rotation Z,"Start rotation about Z, in degrees."
+ICN-MCCF-CMP-0008-001,12,Copy rot,"Copies the X, Y, Z rotation to the clipboard."
+ICN-MCCF-CMP-0008-001,13,Paste rot,"Pastes X, Y, Z rotation from the clipboard."
+ICN-MCCF-CMP-0008-001,14,Face... (turn to face),Turns the actor to face another object. A flat turn about Y unless Tilt is ticked. Zero rotation faces +Z.
+ICN-MCCF-CMP-0008-001,15,Tilt,"When ticked, Face also tilts up or down, not just a flat turn."
+ICN-MCCF-CMP-0008-001,16,Apply Rotation,Sets the actor's start rotation.
+ICN-MCCF-CMP-0008-001,17,Avatar scale (this scene),Resizes the avatar in this scene only. 1 means as authored. The avatar file is not changed.
+ICN-MCCF-CMP-0008-001,18,Apply Scale,Saves the scale for this scene.
+ICN-MCCF-CMP-0008-001,19,Character lights (light set),"Key, fill and back lights that move and turn with this actor. Scene default follows the Export tab checkbox."
+ICN-MCCF-CMP-0008-001,20,Key light,Intensity of the key light.
+ICN-MCCF-CMP-0008-001,21,Fill light,Intensity of the fill light.
+ICN-MCCF-CMP-0008-001,22,Back light,Intensity of the back light.
+ICN-MCCF-CMP-0008-001,23,Apply Lights,Saves the light set for this actor.
+ICN-MCCF-CMP-0008-001,24,Swap Avatar,"Replaces this actor's avatar. To assign a new H-Anim figure, use Character Creator."
+ICN-MCCF-CMP-0008-001,25,Waiting pose: thinking,Pose played while waiting for a live reply. Pick from this character's own clips. None means no change.
+ICN-MCCF-CMP-0008-001,26,Waiting pose: hold,Pose played while waiting for the user. Pick from this character's own clips. None means no change.
+ICN-MCCF-CMP-0008-001,27,Remove,Removes the actor from the scene.
+ICN-MCCF-CMP-0015-001,1,Show links on Place/Scene map,Draws coupler links on the Assets and Scene maps. The Affects tab always shows them.
+ICN-MCCF-CMP-0015-001,2,Characters (graph layer),Shows characters in the Affects graph.
+ICN-MCCF-CMP-0015-001,3,Zones (graph layer),Shows zones in the Affects graph.
+ICN-MCCF-CMP-0015-001,4,Settling trails,Shows the trails nodes leave as the graph settles.
+ICN-MCCF-CMP-0015-001,5,Settling trails,Nodes are positioned by coupler links and by how alike their E/B/P/S profiles are — not by scene placement. Re-run if it looks tangled.
+ICN-MCCF-CMP-0015-001,6,Saved paths (user),A saved path to preview over the graph.
+ICN-MCCF-CMP-0015-001,7,Load,
+ICN-MCCF-CMP-0015-001,8,Clear,Remove the preview overlay
+ICN-MCCF-CMP-0015-001,9,↻,Reload the list
+ICN-MCCF-CMP-0015-001,10,From Agent,The actor the link starts from.
+ICN-MCCF-CMP-0015-001,11,To Agent,The actor the link points to.
+ICN-MCCF-CMP-0015-001,12,Strength,"How strongly the link couples the two actors, 0 to 1. Default 0.60."
+ICN-MCCF-CMP-0015-001,13,R Resonance,Coupler: aligns and amplifies the dimensions the two actors share.
+ICN-MCCF-CMP-0015-001,14,D Damping,Coupler: pulls ε toward baseline.
+ICN-MCCF-CMP-0015-001,15,I Inversion,Coupler: counterbalance or conflict.
+ICN-MCCF-CMP-0015-001,16,G Gated,Coupler: an inner coupler that acts only when a condition holds (for example S>0.5).
+ICN-MCCF-CMP-0015-001,17,T Threshold,Coupler: a nonlinear phase transition that triggers on a condition (for example E>0.7).
+ICN-MCCF-CMP-0015-001,18,L Delay,Coupler: a time-shifted response with a lag in ticks.
+ICN-MCCF-CMP-0015-001,19,∫ Integration,Coupler: slow bonding or habituation.
+ICN-MCCF-CMP-0015-001,20,Add Link,
+ICN-MCCF-CMP-0015-001,21,Add Bidirectional,
+ICN-MCCF-CMP-0016-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0018-001,1,Recorded Paths: 0 (click to view),
+ICN-MCCF-CMP-0020-001,1,Export,
+ICN-MCCF-CMP-0020-001,2,Export,
+ICN-MCCF-CMP-0020-001,3,Export,
+ICN-MCCF-CMP-0020-001,4,Open,
+ICN-MCCF-CMP-0020-001,5,Check,
+ICN-MCCF-CMP-0020-001,6,Sound node stubs,Adds placeholder Sound nodes to the X3D export.
+ICN-MCCF-CMP-0020-001,7,Inline PROTOs,Writes the PROTO definitions inside the X3D file.
+ICN-MCCF-CMP-0020-001,8,PositionInterpolators,Writes position interpolators for the paths.
+ICN-MCCF-CMP-0020-001,9,MCCFMaster Script stub,Adds the MCCFMaster script stub to the export.
+ICN-MCCF-CMP-0020-001,10,"Standard character lights (key, fill, back)",
+ICN-MCCF-CMP-0020-001,11,"Standard actor cameras (Front, Side, Back)",
+ICN-MCCF-CMP-0020-001,12,Name labels & zone markers,Draws name labels and zone markers in the export. Uncheck for a clean movie export.
+ICN-MCCF-CMP-0020-001,13,Per-line dialogue / TTY,Lets the Loader fire each dialogue line. Uncheck if you use a single pre-mixed audio track.
+ICN-MCCF-CMP-0021-001,1,Recorded Paths: 0 (click to view),

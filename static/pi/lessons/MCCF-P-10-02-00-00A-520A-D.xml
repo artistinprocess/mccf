@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PILesson xmlns="http://mccf.artistinprocess.com/pi/v1">
+  <Meta>
+    <Title>Getting Started, Module 2: Create Scene</Title>
+    <DmCode>MCCF-P-10-02-00-00A-520A-D</DmCode>
+    <Issue>001</Issue><IssueDate>2026-11-14</IssueDate><Issuer>MCCF</Issuer>
+    <Objective>Write the objective here.</Objective>
+  </Meta>
+  <Scene dmCode="MCCF-P-10-02-00-00A-040A-D" issue="001" file="ConeAndCamera.x3d" learnerScene="NewScene"/>
+  <Frames>
+    <Step id="f1" title="Welcome to MCCF">
+      <Media kind="video" file="ICN-MCCF-PI-0005-001.mp4" role="reference" caption="Introduction to MCCF Overview.  Presented by len bullard."/>
+      <Instruction>Welcome to MCCF.  We will learn how to make worlds by making the one in the X3D panel on the left.  This panel is the MCCF X3D Viewer with the scene you will build there as a live example.  Use it to animate the characters through a series of waypoints in zones.    Explore the scene as you follow the steps.   The reference panel on the right shows the controls you use to create each layer of the scene.   Have fun,
+
+cheers,
+len</Instruction>
+    </Step>
+    <Step id="w1" title="In Git Bash, go to your mccf_full folder">
+      <Media kind="image" file="ICN-MCCF-CMP-0062-001.png" role="reference" caption="Open Git Bash.  Set directory locations and start MCCF server."/>
+      <Instruction>In Git Bash, go to your mccf_full folder and run: py mccf_api.py. Leave the window open.</Instruction>
+      <Command>cd mccf_full  py mccf_api.py</Command>
+    </Step>
+    <Step id="w2" title="In Edge, open http://localhost:5000/stat">
+      <Media kind="image" file="ICN-MCCF-PI-0006-001.png" role="reference" caption="Start EDGE browser."/>
+      <Instruction>In Edge, open http://localhost:5000/static/mccf_launcher.html and select Scene Composer. The status light is green.</Instruction>
+    </Step>
+    <Step id="w3" title="On the Scene tab name the scene ConeAndC">
+      <Media kind="image" file="ICN-MCCF-CMP-0002-001.png" role="reference" caption="Scene Tab Pane"/>
+      <Instruction>On the Scene tab name the scene ConeAndCamera and set Width and Depth to 40 metres.</Instruction>
+    </Step>
+    <Question id="w4" title="The scene grid is measured in:">
+      <Prompt>The scene grid is measured in:</Prompt>
+      <Response id="a" text="Feet"><Feedback>Not that one.</Feedback></Response>
+      <Response id="b" text="Metres" correct="true"><Feedback>Right.</Feedback></Response>
+      <Response id="c" text="Yards"><Feedback>Not that one.</Feedback></Response>
+    </Question>
+    <Step id="w5" title="Set Navigation to WALK, the transition t">
+      <Media kind="image" file="ICN-MCCF-CMP-0002-001.png" role="reference"/>
+      <Instruction>Set Navigation to WALK, the transition to TELEPORT and the transition time to 1 second.</Instruction>
+    </Step>
+    <Step id="w6" title="Set the sky to a deep blue and the groun">
+      <Media kind="image" file="ICN-MCCF-CMP-0002-001.png" role="reference"/>
+      <Instruction>Set the sky to a deep blue and the ground to black.</Instruction>
+    </Step>
+    <Step id="w7" title="In Assets, Assets, place TestObelisk at ">
+      <Media kind="image" file="ICN-MCCF-CMP-0053-001.png" role="reference" caption="Assets tab: TestObelisk placed"/>
+      <Instruction>In Assets, Assets, place TestObelisk at x 21.4, z 16.9. The map shows the 40 m square with the obelisk in it.</Instruction>
+    </Step>
+    <Step id="w8" title="In Assets, Zones, place four zones and n">
+      <Media kind="image" file="ICN-MCCF-CMP-0023-002.png" role="reference" caption="Zones Z1 to Z4 on the map"/>
+      <Media kind="image" file="ICN-MCCF-CMP-0054-001.png" role="reference"/>
+      <Instruction>In Assets, Zones, place four zones and name them Z1, Z2, Z3 and Z4. 
+
+Z1 is at x 21.5, z 25.8; 
+Z2 at 25.9, 20.7; 
+Z3 at 21.4, 14.6; 
+Z4 at 14.2, 19.9.</Instruction>
+    </Step>
+    <Step id="w9" title="Set the types and radii: Z1 intimate, ra">
+      <Media kind="image" file="ICN-MCCF-CMP-0023-002.png" role="reference"/>
+      <Instruction>Set the types and radii: 
+
+Z1 intimate, radius 2. 
+Z2 forum, radius 4.
+Z3 library, radius 1.5. 
+Z4 threat, radius 4.</Instruction>
+    </Step>
+    <Question id="w10" title="What does a zone give a place?">
+      <Media kind="image" file="ICN-MCCF-CMP-0054-001.png" role="reference"/>
+      <Prompt>What does a zone give a place?</Prompt>
+      <Response id="a" text="A camera position"><Feedback>Not that one.</Feedback></Response>
+      <Response id="b" text="Its character: weights for E, B, P and S, and a sound" correct="true"><Feedback>Right.</Feedback></Response>
+      <Response id="c" text="A path for an actor"><Feedback>Not that one.</Feedback></Response>
+    </Question>
+    <Step id="w11" title="Set the E, B, P, S Zone weights ">
+      <Media kind="image" file="ICN-MCCF-CMP-0072-001.png" role="reference"/>
+      <Instruction>Set the Zone weights 
+E, B, P, S: 
+
+Z1 0.40, 0.10, 0.20, 0.30.
+Z2 0.28, 0.63, 0.78, 0.89. 
+Z3 0.10, 0.15, 0.40, 0.15. 
+Z4 0.40, 0.20, 0.30, 0.05.</Instruction>
+    </Step>
+    <Step id="w12" title="Set the ambient scales: Z1 dorian, Z2 ma">
+      <Media kind="image" file="ICN-MCCF-CMP-0071-001.png" role="reference" caption="Set Ambient Properties."/>
+      <Instruction>Set the ambient scales: Z1 dorian, Z2 major, Z3 aeolian, Z4 pentatonic. The Dashboard lists each zone with its type.</Instruction>
+    </Step>
+    <Step id="w13" title="Place Agent/Actors">
+      <Media kind="image" file="ICN-MCCF-CMP-0065-001.png" role="reference" caption="Place Agent/Actors on Grid"/>
+      <Instruction>In Actors, choose The Witness from the roster and click the map at x 31.05, z 22.55. She appears as a placeholder, a cylinder with a sphere head.</Instruction>
+    </Step>
+    <Question id="w14" title="Until an avatar is assigned, an actor ap">
+      <Media kind="image" file="ICN-MCCF-LDR-0001-001.png" role="reference" caption="Two kinds of Agent/Actors.   Placeholders and Characters."/>
+      <Prompt>Until an avatar is assigned, an actor appears as:</Prompt>
+      <Response id="a" text="A cylinder body with a sphere head, about 1.75 m tall" correct="true"><Feedback>Right.</Feedback></Response>
+      <Response id="b" text="Nothing at all"><Feedback>Not that one.</Feedback></Response>
+      <Response id="c" text="A random avatar"><Feedback>Not that one.</Feedback></Response>
+    </Question>
+    <Step id="w15" title="Choose Salida from the roster and click ">
+      <Media kind="image" file="ICN-MCCF-CMP-0065-001.png" role="reference" caption="Place Agent/Actors"/>
+      <Instruction>Choose Salida from the roster and click the map at x 29, z 20.8.</Instruction>
+    </Step>
+    <Step id="w16" title="Select The Witness. In the Actor Edit pa">
+      <Media kind="image" file="ICN-MCCF-CMP-0066-001.png" role="reference" caption="Select the Agent Avatar"/>
+      <Instruction>Select The Witness. In the Actor Edit pane, under Avatar, choose cindy_hanim.x3d and click Apply.</Instruction>
+    </Step>
+    <Step id="w17" title="Select Salida, choose Anna.x3d and click">
+      <Media kind="image" file="ICN-MCCF-CMP-0066-001.png" role="reference" caption="Select Avatar for Salida"/>
+      <Instruction>Select Salida, choose Anna.x3d and click Apply.</Instruction>
+    </Step>
+    <Step id="w18" title="Set Avatar Scale">
+      <Media kind="image" file="ICN-MCCF-CMP-0066-001.png" role="reference" caption="Set Avatar Scale"/>
+      <Instruction>Under Avatar scale (this scene), set Salida to 1.5 and click Apply Scale. Export and view the scene in the X3D Loader: both characters appear as avatars, Salida larger than The Witness.</Instruction>
+    </Step>
+    <Question id="w19" title="Does Avatar scale change the avatar file">
+      <Media kind="image" file="ICN-MCCF-CMP-0066-001.png" role="reference" caption="Set Avatar Scale"/>
+      <Prompt>Does Avatar scale change the avatar file?</Prompt>
+      <Response id="a" text="Yes"><Feedback>Not that one.</Feedback></Response>
+      <Response id="b" text="No, it changes the avatar in this scene only" correct="true"><Feedback>Right.</Feedback></Response>
+    </Question>
+    <Step id="w20" title="In Assets, Waypoints, place WP1 at x 21.">
+      <Media kind="image" file="ICN-MCCF-CMP-0056-001.png" role="reference" caption="Waypoints WP1 to WP5 placed"/>
+      <Instruction>In Assets, Waypoints, place WP1 at x 21.65, z 25.8 (dwell 3). WP2 at 25.8, 20.7 (dwell 5). WP3 at 21.3, 14.7 (dwell 3.5). WP4 at 16.1, 18.0 (dwell 3.5). WP5 at 14.5, 17.1 (dwell 4, zone Z4). Set pace 1.4 on each.</Instruction>
+    </Step>
+    <Question id="w21" title="A waypoint's dwell is:">
+      <Media kind="image" file="ICN-MCCF-CMP-0070-001.png" role="reference" caption="Set Waypoint Dwell."/>
+      <Prompt>A waypoint's dwell is:</Prompt>
+      <Response id="a" text="The speed of the actor"><Feedback>Not that one.</Feedback></Response>
+      <Response id="b" text="How long the actor waits there, in seconds" correct="true"><Feedback>Right.</Feedback></Response>
+      <Response id="c" text="The radius of its zone"><Feedback>Not that one.</Feedback></Response>
+    </Question>
+    <Step id="w22" title="In Paths, make path_witness for The Witn">
+      <Media kind="image" file="ICN-MCCF-CMP-0064-001.png" role="reference" caption="Create Waypoint Paths"/>
+      <Instruction>In Paths, make path_witness for The Witness through WP1, WP2, WP3, WP4 in that order.  Select WP names in desired order.   List appears below selection.</Instruction>
+    </Step>
+    <Step id="w23" title="Make path_Salida4 for Salida through WP2">
+      <Media kind="image" file="ICN-MCCF-CMP-0064-001.png" role="reference" caption="Set Salida to Path"/>
+      <Instruction>Make path_Salida4 for Salida through WP2, WP3, WP4, WP5. Both paths are drawn on the map.</Instruction>
+    </Step>
+    <Step id="w24" title="On the Dialogue tab, at WP1 add: The Wit">
+      <Media kind="image" file="ICN-MCCF-CMP-0058-001.png" role="reference" caption="Dialogue lines at WP1"/>
+      <Instruction>On the Dialogue tab, at WP1 add: The Witness says "Welcome to the Island." Salida answers "We are here to get you started creating narrative worlds with MCCF."</Instruction>
+    </Step>
+    <Step id="w25" title="At WP2: Salida asks &quot;Have you created 3D">
+      <Media kind="image" file="ICN-MCCF-CMP-0058-001.png" role="reference" caption="Write dialogue."/>
+      <Instruction>At WP2: Salida asks "Have you created 3D worlds?" The Witness answers "Yes."</Instruction>
+    </Step>
+    <Step id="w26" title="At WP3: Salida asks &quot;Do you want to use ">
+      <Media kind="image" file="ICN-MCCF-CMP-0058-001.png" role="reference" caption="Write dialogue."/>
+      <Instruction>At WP3: Salida asks "Do you want to use the Getting Started PI Course?" The Witness says "The Help PI is a guided instruction application that teaches you step by step how to create worlds in MCCF."</Instruction>
+    </Step>
+    <Step id="w27" title="At WP4: The Witness says &quot;Let's begin ou">
+      <Media kind="image" file="ICN-MCCF-CMP-0058-001.png" role="reference" caption="Write Dialogue"/>
+      <Instruction>At WP4: The Witness says "Let's begin our first lesson." Salida answers "We will teach you how to make THIS world." The Witness asks "Are you ready to begin?" Salida answers "May fortune favor the foolish."</Instruction>
+    </Step>
+    <Question id="w28" title="Which waypoint has the closing line &quot;May">
+      <Prompt>Which waypoint has the closing line?</Prompt>
+      <Response id="a" text="WP1"><Feedback>Not that one.</Feedback></Response>
+      <Response id="b" text="WP3"><Feedback>Not that one.</Feedback></Response>
+      <Response id="c" text="WP4" correct="true"><Feedback>Right.</Feedback></Response>
+    </Question>
+    <Step id="w29" title="In Assets, Cameras, capture eight camera">
+      <Media kind="image" file="ICN-MCCF-CMP-0059-001.png" role="reference" caption="Cameras captured for both characters"/>
+      <Instruction>In Assets, Cameras, capture eight cameras. For Salida: CAM_Medium_Salida (29.7, 0.8, 30.4), CAM_CloseUp_Salida_2 (29.4, 1.7, 27.9, jump), CAM_OverShoulder_Salida (29.3, 1.6, 26.6, heading -20), CAM_Profile_Salida (32.7, 1.7, 25.4, heading 90), CAM_Overhead_Salida (33.5, 7, 30.0, heading 40, pitch -47).</Instruction>
+    </Step>
+    <Step id="w30" title="For The Witness: CAM_Wide_TheWitness (28">
+      <Media kind="image" file="ICN-MCCF-CMP-0059-001.png" role="reference" caption="Create Cameras."/>
+      <Instruction>For The Witness: CAM_Wide_TheWitness (28.5, 3, 37.4, pitch -21), CAM_Medium_TheWitness (28.5, 1.7, 30.4), CAM_CloseUp_TheWitness (27.8, 1.7, 25.8). Each camera shows in the Loader's viewpoint buttons.</Instruction>
+    </Step>
+    <Step id="w31" title="In Assets, Lights, add white point light">
+      <Media kind="image" file="ICN-MCCF-CMP-0060-001.png" role="reference" caption="Lights placed in the scene"/>
+      <Instruction>In Assets, Lights, add white point lights WP2Overhead (27.6, 4, 24.5), WP3OverHead (21.6, 4, 14.5) and WP5Verhead (15, 4, 16.8), radius 100.</Instruction>
+    </Step>
+    <Step id="w32" title="Add a red point light WP4Overhead at (14">
+      <Media kind="image" file="ICN-MCCF-CMP-0060-001.png" role="reference" caption="Add point light."/>
+      <Instruction>Add a red point light WP4Overhead at (14.2, 6, 19.9), radius 8, and Overhead2 at (29.4, 4, 23.4), radius 10, with Aim at actor set to Salida.</Instruction>
+    </Step>
+    <Step id="w33" title="Add Spotlight1 (amber, follows The Witne">
+      <Media kind="image" file="ICN-MCCF-CMP-0060-001.png" role="reference" caption="Add Spotlight."/>
+      <Instruction>Add Spotlight1 (amber, follows The Witness) and Spotlight2 (white, follows Salida, tick Follow turns). Set Aim at actor on each to the character it follows.</Instruction>
+    </Step>
+    <Question id="w34" title="What does Aim at actor do?">
+      <Media kind="image" file="ICN-MCCF-CMP-0063-001.png" role="reference"/>
+      <Prompt>What does Aim at actor do?</Prompt>
+      <Response id="a" text="Points the light at the middle of that actor" correct="true"><Feedback>Right.</Feedback></Response>
+      <Response id="b" text="Makes the actor face the light"><Feedback>Not that one.</Feedback></Response>
+      <Response id="c" text="Turns the light off"><Feedback>Not that one.</Feedback></Response>
+    </Question>
+    <Step id="w35" title="On the Export tab tick Standard characte">
+      <Media kind="image" file="ICN-MCCF-CMP-0061-001.png" role="reference"/>
+      <Instruction>On the Export tab tick Standard character lights. In the Actor Edit pane, Character lights can switch the set on or off for one actor. Both characters are lit in the Loader.</Instruction>
+    </Step>
+    <Step id="w36" title="In Assets, Audio and MIDI, add the scene">
+      <Media kind="image" file="ICN-MCCF-CMP-0067-001.png" role="reference" caption="Select and place audio sources in scene."/>
+      <Instruction>In Assets, Audio and MIDI, add the scene tracks.</Instruction>
+    </Step>
+    <Step id="w37" title="Add zone sounds: Z1 shankarBharav02.wav ">
+      <Media kind="image" file="ICN-MCCF-CMP-0068-001.png" role="reference" caption="Select and set Zone Sounds."/>
+      <Instruction>Add zone sounds.</Instruction>
+    </Step>
+    <Step id="w38" title="On the Network tab link Z1 to Z3 with st">
+      <Media kind="image" file="ICN-MCCF-CMP-0069-001.png" role="reference"/>
+      <Instruction>On the Network tab link Z1 to Z3 with strength 0.6 and couplers R, G and T.</Instruction>
+    </Step>
+    <Step id="w39" title="On the Export tab untick Name labels and">
+      <Media kind="image" file="ICN-MCCF-CMP-0061-001.png" role="reference" caption="Export tab options"/>
+      <Instruction>On the Export tab untick Name labels and zone markers. Leave Standard character lights and Standard actor cameras ticked, then Export.</Instruction>
+    </Step>
+    <Step id="w40" title="Open the X3D Loader, choose ConeAndCamer">
+      <Media kind="image" file="ICN-MCCF-LDR-0001-001.png" role="reference" caption="X3D Loader with ConeAndCamera.x3d, both characters as avatars"/>
+      <Instruction>Open the X3D Loader, choose ConeAndCamera.x3d and press All. Both characters walk their paths, speak at each waypoint and the zone music changes as they move.</Instruction>
+    </Step>
+  </Frames>
+  <RemediationPolicy scope="module">
+    <Level minMisses="0" action="retest"/>
+    <Level minMisses="2" action="review"/>
+    <Level minMisses="4" action="reteach"/>
+  </RemediationPolicy>
+</PILesson>

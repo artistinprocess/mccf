@@ -318,10 +318,12 @@
       Scene Composer's OWN save/load working format
       (_doExportSceneXML() in mccf_scene_composer.html) — DIFFERENT
       from the compiled X3D geometry file the same tool also produces
-      (real X3D, not schematized here). Element order below follows
-      the writer's actual block-by-block order.
+      (real X3D, not schematized here). Elements may appear in any order, so a change in the
+      writer's block order does not break a saved scene. The rules file
+      (mccf_rules.sch) checks that each element appears at most once
+      (AgentPlacement may repeat).
     </xs:documentation></xs:annotation>
-    <xs:sequence>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="SceneSound" type="mccf:SceneSoundType" minOccurs="0"/>
       <xs:element name="Zones" type="mccf:ZonesType" minOccurs="0"/>
       <xs:element name="AgentPlacement" type="mccf:AgentPlacementType" minOccurs="0" maxOccurs="unbounded">
@@ -386,7 +388,11 @@
           record any, for whatever reason.
         </xs:documentation></xs:annotation>
       </xs:element>
-    </xs:sequence>
+    
+      <xs:element name="EffectTargets" type="mccf:EffectTargetsType" minOccurs="0"/>
+      <xs:element name="Navigation" type="mccf:NavigationType" minOccurs="0"/>
+      <xs:element name="MidiSources" type="mccf:MidiSourcesType" minOccurs="0"/>
+    </xs:choice>
     <xs:attribute name="id" type="xs:string" use="required">
       <xs:annotation><xs:documentation>Scene name/identifier.</xs:documentation></xs:annotation>
     </xs:attribute>
@@ -396,6 +402,12 @@
     <xs:attribute name="width" type="xs:decimal" use="required"/>
     <xs:attribute name="depth" type="xs:decimal" use="required"/>
     <xs:attribute name="labelsEnabled" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="stdLights" type="xs:boolean" use="optional" default="false">
+      <xs:annotation><xs:documentation>V5. Export three-point standard lights (key, fill, back) for every actor. Absent = off.</xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stdCameras" type="xs:boolean" use="optional" default="true">
+      <xs:annotation><xs:documentation>V5. Export the standard Front, Side and Back cameras on placeholder actors. Absent = on.</xs:documentation></xs:annotation>
+    </xs:attribute>
     <xs:attribute name="dialogueTTYEnabled" type="xs:boolean" use="optional" default="true"/>
     <xs:attribute name="seed" type="xs:string" use="optional">
       <xs:annotation><xs:documentation>
@@ -407,7 +419,83 @@
         this is only the scene-level default.
       </xs:documentation></xs:annotation>
     </xs:attribute>
+    <xs:attribute name="dm" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        Data module code of this scene (S1000D-style, info code 040A for a
+        scene). Optional. The scene asset registry (GET /scene/registry)
+        reports it beside the audio, MIDI and project files the scene uses.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
   </xs:complexType>
+
+    <xs:complexType name="NavigationType">
+    <xs:annotation><xs:documentation>
+      How the viewer moves and how it changes viewpoints. Written by the
+      Composer's Scene tab (Navigation section) and read back on reload.
+    </xs:documentation></xs:annotation>
+    <xs:attribute name="type" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="WALK"/><xs:enumeration value="FLY"/>
+        <xs:enumeration value="EXAMINE"/><xs:enumeration value="NONE"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="transitionType" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="TELEPORT"/><xs:enumeration value="LINEAR"/>
+        <xs:enumeration value="ANIMATE"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="transitionTime" use="required">
+      <xs:simpleType><xs:restriction base="xs:decimal"><xs:minInclusive value="0"/></xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="EffectTargetsType">
+    <xs:annotation><xs:documentation>
+      Effect targets registered in the Composer's Assets tab. Authoring
+      data only; used when the X3D is exported.
+    </xs:documentation></xs:annotation>
+    <xs:sequence>
+      <xs:element name="EffectTarget" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="kind" type="xs:string" use="required"/>
+          <xs:attribute name="ownerName" type="xs:string" use="required"/>
+          <xs:attribute name="exportedDEF" type="xs:string" use="optional"/>
+          <xs:attribute name="field" type="xs:string" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="MidiSourcesType">
+    <xs:annotation><xs:documentation>
+      MIDI sources placed in the Composer's Assets tab. The Loader plays
+      them on 'midi' cues.
+    </xs:documentation></xs:annotation>
+    <xs:sequence>
+      <xs:element name="MidiSource" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="Track" minOccurs="0" maxOccurs="unbounded">
+              <xs:complexType>
+                <xs:attribute name="index" type="xs:integer" use="required"/>
+                <xs:attribute name="enabled" type="xs:boolean" use="required"/>
+                <xs:attribute name="channel" type="xs:integer" use="required"/>
+                <xs:attribute name="volume" type="xs:decimal" use="required"/>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+          <xs:attribute name="name" type="xs:string" use="required"/>
+          <xs:attribute name="url" type="xs:string" use="required"/>
+          <xs:attribute name="device" type="xs:string" use="optional"/>
+          <xs:attribute name="tempo" type="xs:decimal" use="required"/>
+          <xs:attribute name="loop" type="xs:boolean" use="required"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
 
   <xs:complexType name="SceneSoundType">
     <xs:sequence>
@@ -453,6 +541,7 @@
         <xs:complexType>
           <xs:attribute name="scale" type="xs:string" use="required"/>
           <xs:attribute name="tempo" type="xs:string" use="optional" default="medium"/>
+          <xs:attribute name="drive" type="xs:boolean" use="optional" default="false"/>
         </xs:complexType>
       </xs:element>
       <xs:element name="Chorus" minOccurs="0">
@@ -498,7 +587,9 @@
           <xs:attribute name="offsetX" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="offsetY" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="offsetZ" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="rotationX" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="rotationY" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="rotationZ" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="scale" type="xs:decimal" use="optional" default="1"/>
         </xs:complexType>
       </xs:element>
@@ -518,6 +609,13 @@
           <xs:attribute name="z" type="xs:decimal" use="required"/>
         </xs:complexType>
       </xs:element>
+      <xs:element name="StartRotation" minOccurs="0">
+        <xs:complexType>
+          <xs:attribute name="x" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="y" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="z" type="xs:decimal" use="optional" default="0"/>
+        </xs:complexType>
+      </xs:element>
     </xs:sequence>
     <xs:attribute name="cultivar" type="xs:string" use="required">
       <xs:annotation><xs:documentation>
@@ -531,7 +629,29 @@
       <xs:annotation><xs:documentation>Client-side default when unset is "ollama".</xs:documentation></xs:annotation>
     </xs:attribute>
     <xs:attribute name="voice" type="xs:string" use="optional"/>
+    <xs:attribute name="think" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        V5. Name of one of this character's behavior clips, played while the character
+        waits for a live (LLM) reply. Author's choice per scene; absent = no change.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="hold" type="xs:string" use="optional">
+      <xs:annotation><xs:documentation>
+        V5. Name of one of this character's behavior clips, played while the character
+        holds for the user to answer. Absent = no change.
+      </xs:documentation></xs:annotation>
+    </xs:attribute>
     <xs:attribute name="hanim_src" type="xs:string" use="optional"/>
+    <xs:attribute name="light_set" use="optional">
+      <xs:annotation><xs:documentation>V5. Standard character lights for this actor: "on" or "off". Absent = follow the Scene stdLights setting.</xs:documentation></xs:annotation>
+      <xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="on"/><xs:enumeration value="off"/></xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="light_key" type="xs:decimal" use="optional"/>
+    <xs:attribute name="light_fill" type="xs:decimal" use="optional"/>
+    <xs:attribute name="light_back" type="xs:decimal" use="optional"/>
+    <xs:attribute name="avatar_scale" type="xs:decimal" use="optional" default="1">
+      <xs:annotation><xs:documentation>V5. Avatar size in this scene only; 1 = as authored. The avatar file is not changed.</xs:documentation></xs:annotation>
+    </xs:attribute>
   </xs:complexType>
 
   <xs:complexType name="WaypointsType">
@@ -629,7 +749,9 @@
           <xs:attribute name="x" type="xs:decimal" use="required"/>
           <xs:attribute name="y" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="z" type="xs:decimal" use="required"/>
+          <xs:attribute name="rotationX" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="rotationY" type="xs:decimal" use="optional" default="0"/>
+          <xs:attribute name="rotationZ" type="xs:decimal" use="optional" default="0"/>
           <xs:attribute name="scale" type="xs:decimal" use="optional" default="1"/>
           <xs:attribute name="isMovie" type="xs:boolean" use="optional" default="false"/>
         </xs:complexType>
@@ -675,6 +797,11 @@
           <xs:attribute name="radius" type="xs:decimal" use="optional" default="100"/>
           <xs:attribute name="cutOffAngle" type="xs:decimal" use="optional" default="0.785398"/>
           <xs:attribute name="beamWidth" type="xs:decimal" use="optional" default="0.785398"/>
+          <xs:attribute name="follow" type="xs:string" use="optional"/>
+          <xs:attribute name="followTurns" type="xs:boolean" use="optional" default="false"/>
+          <xs:attribute name="aim" type="xs:string" use="optional">
+            <xs:annotation><xs:documentation>V5. Name of an actor the light points at (the middle of the actor, 1.2 m up). Spot and directional lights only; overrides the rotation.</xs:documentation></xs:annotation>
+          </xs:attribute>
         </xs:complexType>
       </xs:element>
     </xs:sequence>
@@ -767,9 +894,22 @@
           <xs:enumeration value="animation"/>
           <xs:enumeration value="path"/>
           <xs:enumeration value="turn"/>
+          <xs:enumeration value="face"/>
+          <xs:enumeration value="effect"/>
+          <xs:enumeration value="audio"/>
+          <xs:enumeration value="midi"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
+    <xs:attribute name="expression" type="xs:string" use="optional"><xs:annotation><xs:documentation>face: expression name.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="fadeIn" type="xs:decimal" use="optional"><xs:annotation><xs:documentation>face: seconds.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="fadeOut" type="xs:decimal" use="optional"><xs:annotation><xs:documentation>face: seconds.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="intensity" type="xs:decimal" use="optional"><xs:annotation><xs:documentation>face: 0 to 1.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="weights" type="xs:string" use="optional"><xs:annotation><xs:documentation>face: AU weights embedded at export.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="key" type="xs:string" use="optional"><xs:annotation><xs:documentation>effect: comma-separated key fractions.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="keyValue" type="xs:string" use="optional"><xs:annotation><xs:documentation>effect: comma-separated key values.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="paceCurve" type="xs:string" use="optional"><xs:annotation><xs:documentation>path: speed curve u:v,u:v.</xs:documentation></xs:annotation></xs:attribute>
+    <xs:attribute name="paceEbps" type="xs:string" use="optional"><xs:annotation><xs:documentation>path: channel,depth,neutral,smooth,min,max.</xs:documentation></xs:annotation></xs:attribute>
     <xs:attribute name="target" type="xs:string" use="optional"/>
     <xs:attribute name="label" type="xs:string" use="optional"/>
     <xs:attribute name="t0" type="xs:decimal" use="required">
@@ -924,6 +1064,41 @@
             elsewhere in a merged document.
           </xs:documentation></xs:annotation>
         </xs:attribute>
+        <xs:attribute name="gesture" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            V5. Optional acting on a line: the name of one of the speaker's behavior
+            clips, played when the line starts (plus gestureAt seconds).
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="gestureAt" type="xs:decimal" use="optional"/>
+        <xs:attribute name="awaits" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            V5. "user": after this line is spoken the scene holds for the user's typed answer
+            (the speaker plays the hold pose of its AgentPlacement). Lines chained with
+            sensed:&lt;id&gt; then continue. Absent = no wait.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="awaitsTimeout" type="xs:decimal" use="optional">
+          <xs:annotation><xs:documentation>Seconds to hold before moving on without an answer. Default 90.</xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="reply" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            V5. "live": the line text is the speaker's aim, not the spoken words. The model
+            writes the spoken line in answer to the user's last typed answer. If that fails,
+            the authored text is spoken instead.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="expression" type="xs:string" use="optional">
+          <xs:annotation><xs:documentation>
+            V5. Optional facial expression (a name from the speaker's expressions file),
+            faded in at expressionAt seconds after the line starts and held for
+            expressionDur seconds. expressionWeights carries its AU weights,
+            embedded at export, so the Loader needs no server round trip.
+          </xs:documentation></xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="expressionAt" type="xs:decimal" use="optional"/>
+        <xs:attribute name="expressionDur" type="xs:decimal" use="optional"/>
+        <xs:attribute name="expressionWeights" type="xs:string" use="optional"/>
         <xs:attribute name="audioFile" type="xs:string" use="optional"/>
         <xs:attribute name="audioSource" type="xs:string" use="optional">
           <xs:annotation><xs:documentation>

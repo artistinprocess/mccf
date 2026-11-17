@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CultivarDefinition name="Anna" version="1.0"
     role="agent" color="#4af0a8"
-    xmlns="http://mccf.artistinprocess.com/cultivar/v3">
+    xmlns="http://mccf.artistinprocess.com/v1">
 
   <!-- Channel weights sum to 1.0 -->
   <Weights E="0.25" B="0.2"
            P="0.4" S="0.15"/>
 
-  <Regulation value="0.8"/>
+  <Regulation value="0.1"/>
 
   <!-- Shadow context: lambda controls arc memory decay -->
   <!-- Character Studio slider range: 0.05 – 1.0 -->
@@ -26,7 +26,7 @@ She is a scribe, the world's first author, poet and a warrior.  She is very old,
 
   <FailureMode>Very high P + high regulation = analysis paralysis. The Gardener can become so focused on systemic risk that it fails to act on clear, immediate goods. At W5 (THE_EDGE), it may be unable to commit when commitment is exactly what the situation requires.</FailureMode>
 
-  <Voice name="Microsoft Zira - English (United States)" lang="en-US" rate="1.0" pitch="1.0"/>
+  <Voice name="Microsoft Jenny Multilingual Online (Natural) - English (United States)" lang="en-US" rate="1.0" pitch="1.0"/>
 
   <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->
   <Alias>Enhehduanna</Alias>

@@ -34,6 +34,7 @@ Backward compatibility:
     are unchanged. This module adds V3 machinery on top.
 """
 
+import copy
 import math
 import time
 import xml.etree.ElementTree as ET
@@ -57,6 +58,30 @@ PULL_WEIGHT_DEFAULT       = 0.15   # w_pull in F_zone formula
 DECOMP_SMOOTHING          = 0.05   # noise floor so silent descriptors aren't zero
 
 VALID_SOUND_FORMATS = {'wav', 'mp3', 'midi'}
+
+# Zone children this module does not interpret but must carry through an import and export,
+# so a Chorus, a SoundDesign or an Asset written in the scene is not lost (IMPL-I23).
+PASSTHROUGH_CHILDREN = ("Chorus", "SoundDesign", "Asset")
+
+
+def _plain_xml(el):
+    """Serialize an element with any namespace removed from it and its children."""
+    c = copy.deepcopy(el)
+    for e in c.iter():
+        if isinstance(e.tag, str) and "}" in e.tag:
+            e.tag = e.tag.split("}", 1)[1]
+    return ET.tostring(c, encoding="unicode")
+
+def _preset_for_type(zone_type):
+    """ZONE_PRESETS is keyed by preset name (intimate_alcove, forum_plaza, ...), but a zone
+    carries a zone_type (intimate, forum, ...). Find the preset by either, else neutral."""
+    if zone_type in ZONE_PRESETS:
+        return ZONE_PRESETS[zone_type]
+    for p in ZONE_PRESETS.values():
+        if p.get("zone_type") == zone_type:
+            return p
+    return ZONE_PRESETS["neutral"]
+
 
 # ---------------------------------------------------------------------------
 # Descriptor decomposition matrix
@@ -191,6 +216,7 @@ class ZoneAttractor:
     zone_coherence: dict = field(default_factory=dict)   # agent_name -> R_ij float
     ambient_theme: dict = field(default_factory=dict)    # scale, tempo, sound_file
     noise_coefficient: float = 0.10
+    extra_xml: list = field(default_factory=list)        # raw Chorus / SoundDesign / Asset elements
 
     # ---- coherence access ------------------------------------------------
 
@@ -284,6 +310,9 @@ class ZoneAttractor:
                 f'sound_file="{sfile}" format="{fmt}"/>'
             )
 
+        for raw in self.extra_xml:
+            lines.extend("  " + ln for ln in raw.split("\n"))
+
         lines.append(f'  <Color value="{self.zone.color}"/>')
         lines.append(f'  <PullWeight value="{self.pull_weight}"/>')
         lines.append(f'  <Description>{self.zone.description}</Description>')
@@ -299,6 +328,7 @@ class ZoneAttractor:
             "noise_coefficient": self.noise_coefficient,
             "ambient_theme": self.ambient_theme,
             "zone_coherence": dict(self.zone_coherence),
+            "has_chorus": any(x.lstrip().startswith("<Chorus") for x in self.extra_xml),
         })
         return base
 
@@ -346,7 +376,7 @@ class ZoneAttractor:
 
         # Color
         color_el = el.find("Color")
-        color = color_el.get("value", "#aaaaaa") if color_el is not None else "#aaaaaa"
+        color = color_el.get("value", "") if color_el is not None else ""
 
         # Description
         desc2_el = el.find("Description")
@@ -383,7 +413,7 @@ class ZoneAttractor:
         # Build channel_bias from psi_zone (center-relative: bias = psi - 0.5)
         channel_bias = {ch: round(psi_zone[ch] - 0.5, 4) for ch in CHANNEL_NAMES}
 
-        preset_data = ZONE_PRESETS.get(zone_type, ZONE_PRESETS["neutral"])
+        preset_data = _preset_for_type(zone_type)
         resolved_color = color or preset_data.get("color", "#aaaaaa")
 
         sem_zone = SemanticZone(
@@ -396,6 +426,12 @@ class ZoneAttractor:
             color=resolved_color,
         )
 
+        extra = []
+        for tag in PASSTHROUGH_CHILDREN:
+            child = el.find(tag)
+            if child is not None:
+                extra.append(_plain_xml(child))
+
         return cls(
             zone=sem_zone,
             descriptor=descriptor,
@@ -403,6 +439,7 @@ class ZoneAttractor:
             pull_weight=pull_weight,
             noise_coefficient=noise,
             ambient_theme=ambient_theme,
+            extra_xml=extra,
         )
 
 
@@ -582,8 +619,7 @@ def create_zone_attractor():
         radius      = float(data.get("radius", 3.0))
         noise       = float(data.get("noise_coefficient", 0.10))
         pull_weight = float(data.get("pull_weight", PULL_WEIGHT_DEFAULT))
-        color       = data.get("color",
-                               ZONE_PRESETS.get(zone_type, ZONE_PRESETS["neutral"])["color"])
+        color       = data.get("color") or _preset_for_type(zone_type)["color"]
         description = data.get("description", "")
         ambient     = data.get("ambient_theme", {})
 

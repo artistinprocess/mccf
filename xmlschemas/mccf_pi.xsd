@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MCCF Programmed Instruction (PI) schema, draft 1.
+  Two document types:
+    PILesson        one lesson (a data module): frames, expected scene state, remedial chains.
+    PIPerformanceLog   what the system records while a learner works a lesson.
+  A lesson uses one scene file. The check compares the learner's saved scene XML
+  against the Expect elements in the lesson. All distances are metres.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://mccf.artistinprocess.com/pi/v1"
+           xmlns="http://mccf.artistinprocess.com/pi/v1"
+           elementFormDefault="qualified">
+
+  <!-- Data module code: ISSUER-TYPE-CC-NN-00-00A-INFO-D, e.g. MCCF-P-10-01-00-00A-520A-D -->
+  <xs:simpleType name="DmCodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z0-9]{3,5}-[A-Z]-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}[A-Z]-[0-9]{3}[A-Z]-[A-Z]"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="IdType"><xs:restriction base="xs:ID"/></xs:simpleType>
+
+  <xs:simpleType name="RemedialKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="review"/>   <!-- show the earlier frame, then retest -->
+      <xs:enumeration value="retest"/>   <!-- ask again, same or alternate question -->
+      <xs:enumeration value="reteach"/>  <!-- reload the module scene and repeat the steps -->
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TextType"><xs:simpleContent><xs:extension base="xs:string">
+    <xs:attribute name="lang" type="xs:language" use="optional"/>
+  </xs:extension></xs:simpleContent></xs:complexType>
+
+  <!-- A property of the saved scene XML that must hold a stated value.
+       path is a simple XPath into the scene file (for example /Scene/@width).
+       tolerance applies to numeric values only. A value of * means only that the node must exist.
+       The Navigation values are not stored on the X3D; the saved scene file carries them in
+       /Scene/Navigation/@type and /Scene/Navigation/@transitionTime. -->
+  <xs:complexType name="ExpectType">
+    <xs:attribute name="path" type="xs:string" use="required"/>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:attribute name="tolerance" type="xs:decimal" use="optional"/>
+    <xs:attribute name="label" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="RemedialType">
+    <xs:attribute name="kind" type="RemedialKind" use="required"/>
+    <xs:attribute name="target" type="xs:IDREF" use="required"/>   <!-- frame to show -->
+    <xs:attribute name="retest" type="xs:IDREF" use="optional"/>   <!-- question to ask after -->
+  </xs:complexType>
+
+  <!-- What the viewer pane shows for a frame. x3d loads a scene, image and video load the file directly.
+       role: "scene" (the learner's working scene), "target" (the finished result to compare with),
+       "reference" (supporting picture). dmCode names the data module the file belongs to, if it is one. -->
+  <xs:complexType name="MediaType">
+    <xs:attribute name="kind" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="x3d"/><xs:enumeration value="image"/><xs:enumeration value="video"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="file" type="xs:string" use="required"/>
+    <xs:attribute name="role" use="optional" default="reference">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="scene"/><xs:enumeration value="target"/><xs:enumeration value="reference"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="dmCode" type="DmCodeType" use="optional"/>
+    <xs:attribute name="caption" type="xs:string" use="optional"/>
+    <!-- callouts: which numbered boxes (from the picture's .callouts.json) the learner sees. "auto" (default) = only the
+         controls named in this step's text; "all"; "none"; or a list of numbers, ranges, group names or control names,
+         e.g. "3-8,12". -->
+    <xs:attribute name="callouts" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <!-- A User's Guide data module that explains the frame. section is an anchor inside that module. -->
+  <xs:complexType name="GuideRefType">
+    <xs:attribute name="dmCode" type="DmCodeType" use="required"/>
+    <xs:attribute name="title" type="xs:string" use="required"/>
+    <xs:attribute name="section" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="StepType">
+    <xs:sequence>
+      <xs:element name="Media" type="MediaType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Instruction" type="TextType"/>
+      <xs:element name="Command" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Note" type="TextType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Guide" type="GuideRefType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Expect" type="ExpectType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="OnMismatch" type="RemedialType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="IdType" use="required"/>
+    <xs:attribute name="title" type="xs:string" use="required"/>
+    <xs:attribute name="waypoint" type="xs:string" use="optional"/>
+    <xs:attribute name="dmCode" type="DmCodeType" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="ResponseType">
+    <xs:sequence><xs:element name="Feedback" type="TextType"/></xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+    <xs:attribute name="correct" type="xs:boolean" default="false"/>
+    <xs:attribute name="text" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="QuestionType">
+    <xs:sequence>
+      <xs:element name="Media" type="MediaType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Prompt" type="TextType"/>
+      <xs:element name="Response" type="ResponseType" minOccurs="2" maxOccurs="8"/>
+      <xs:element name="Guide" type="GuideRefType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="OnIncorrect" type="RemedialType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="IdType" use="required"/>
+    <xs:attribute name="title" type="xs:string" use="required"/>
+    <xs:attribute name="waypoint" type="xs:string" use="optional"/>
+    <xs:attribute name="dmCode" type="DmCodeType" use="optional"/>
+    <xs:attribute name="note" type="xs:string" use="optional"/>      <!-- author note, not shown -->
+  </xs:complexType>
+
+  <!-- How the performance data selects the remediation path. -->
+  <xs:complexType name="LevelType">
+    <xs:attribute name="minMisses" type="xs:nonNegativeInteger" use="required"/>
+    <xs:attribute name="action" type="RemedialKind" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="PolicyType">
+    <xs:sequence><xs:element name="Level" type="LevelType" minOccurs="1" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="scope" use="optional" default="module">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="frame"/><xs:enumeration value="module"/><xs:enumeration value="course"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:element name="PILesson">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Meta">
+          <xs:complexType><xs:sequence>
+            <xs:element name="Title" type="xs:string"/>
+            <xs:element name="DmCode" type="DmCodeType"/>
+            <xs:element name="Issue" type="xs:string"/>
+            <xs:element name="IssueDate" type="xs:date"/>
+            <xs:element name="Issuer" type="xs:string"/>
+            <xs:element name="Objective" type="TextType" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="Prerequisite" type="DmCodeType" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence></xs:complexType>
+        </xs:element>
+        <xs:element name="Scene">
+          <xs:complexType>
+            <xs:attribute name="dmCode" type="DmCodeType" use="optional"/>   <!-- the scene is itself a data module -->
+            <xs:attribute name="issue" type="xs:string" use="optional"/>     <!-- scene issue this lesson was written against -->
+            <xs:attribute name="file" type="xs:string" use="required"/>      <!-- module scene (X3D) -->
+            <xs:attribute name="learnerScene" type="xs:string" use="optional"/> <!-- name of the learner's saved scene (the file NAME_scene.xml) to check -->
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="Frames">
+          <xs:complexType><xs:choice minOccurs="1" maxOccurs="unbounded">
+            <xs:element name="Step" type="StepType"/>
+            <xs:element name="Question" type="QuestionType"/>
+          </xs:choice></xs:complexType>
+        </xs:element>
+        <xs:element name="RemediationPolicy" type="PolicyType" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- ===== Performance log ===== -->
+  <xs:complexType name="AttemptType">
+    <xs:attribute name="frame" type="xs:string" use="required"/>
+    <xs:attribute name="kind" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="question"/><xs:enumeration value="check"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="response" type="xs:string" use="optional"/>
+    <xs:attribute name="correct" type="xs:boolean" use="required"/>
+    <xs:attribute name="seconds" type="xs:decimal" use="required"/>
+    <xs:attribute name="at" type="xs:dateTime" use="required"/>
+    <xs:attribute name="remedial" type="RemedialKind" use="optional"/>
+  </xs:complexType>
+
+  <xs:element name="PIPerformanceLog">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Session" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence><xs:element name="Attempt" type="AttemptType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+            <xs:attribute name="learner" type="xs:string" use="required"/>
+            <xs:attribute name="lesson" type="DmCodeType" use="required"/>
+            <xs:attribute name="issue" type="xs:string" use="required"/>
+            <xs:attribute name="start" type="xs:dateTime" use="required"/>
+            <xs:attribute name="end" type="xs:dateTime" use="optional"/>
+            <xs:attribute name="path" type="RemedialKind" use="optional"/>   <!-- highest remediation used -->
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
