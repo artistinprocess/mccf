@@ -1,0 +1,38 @@
+MCCF - Multi-Channel Coherence Field
+Copyright 2026 Len Bullard (artistinprocess)
+
+This product includes work by Len Bullard and contributors, released under the
+Apache License, Version 2.0 (see LICENSE). Documentation, lessons, diagrams and
+images are released under Creative Commons Attribution 4.0 (see LICENSE-DOCS.md).
+
+The name "MCCF" and the project's data module code issuer "MCCF" identify this
+project. The licences above do not grant permission to present other work as
+the MCCF project. Use your own name and your own issuer code for your own work.
+
+MCCF is an experimental narrative and research tool. It is not a psychological,
+clinical or diagnostic instrument, and its numerical states are not measurements
+of human emotion.
+
+If you redistribute this work, keep this NOTICE and the LICENSE files, and mark
+the files you changed.
+
+Third-party software and media
+- X_ITE, the X3D browser by Holger Seelig, loaded from the jsDelivr CDN
+  (https://cdn.jsdelivr.net/npm/x_ite@16.7.1). Licence: MIT.
+- VexFlow 4.2.5 (music notation), included as static/js/vexflow-4.2.5.js.
+  Licence: MIT.
+- IBM Plex Mono, IBM Plex Sans and Syne, loaded from Google Fonts.
+  Licence: SIL Open Font License 1.1.
+- Python packages (Flask, flask-cors and others) are installed separately by
+  the user and are not redistributed here.
+- static/avatars/Anna.x3d and the ConeAndCamera example scene are by Len Bullard,
+  released with the project under the same terms as the documentation
+  (CC BY 4.0).
+- The Cindy avatar (cindy_hanim.x3d, used in the Getting Started lessons) is
+  based on the Jin avatar from the Web3D Consortium (W3DC) archives. It is
+  licensed under the Web3D Consortium's BSD open-source licence
+  (https://www.web3d.org/x3d/content/examples/license.html); the original
+  authors keep their copyright. It is NOT covered by this project's licences and
+  is not included in this repository. Download it from the Web3D Consortium
+  and keep its licence notice with it.
+- Avatars, skins and audio that you add yourself keep their own licences.

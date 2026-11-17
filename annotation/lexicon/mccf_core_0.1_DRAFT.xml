@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF core lexicon, v0.1 DRAFT. Dimensions and anchors: Kate, 2026-11-10 (verbatim).
+     Term profiles and surface forms: PROPOSED BY CLAUDE for Kate to correct. Profiles describe typical semantics; they do not prescribe EBPS transitions
+     and must not dictate a contextual annotation. An unspoken dimension in a profile means "not typically specified", not neutral. -->
+<Lexicon xmlns="http://mccf.artistinprocess.com/lexicon/v2" schemaVersion="2.0" id="mccf_core" version="0.1.0" language="en" status="draft">
+  <Dimension id="valence" scope="coreAffect" type="bipolar" unknown="true" notApplicable="true">
+    <Level value="-2" label="strongly unpleasant" anchor="Strongly unpleasant or aversive."/>
+    <Level value="-1" label="moderately unpleasant" anchor="Moderately unpleasant or unfavorable."/>
+    <Level value="0" label="neutral" anchor="Neither appreciably pleasant nor unpleasant." neutral="true"/>
+    <Level value="1" label="moderately pleasant" anchor="Moderately pleasant or favorable."/>
+    <Level value="2" label="strongly pleasant" anchor="Strongly pleasant or rewarding."/>
+  </Dimension>
+  <Dimension id="arousal" scope="coreAffect" type="unipolar" unknown="true" notApplicable="true">
+    <Level value="0" label="very low" anchor="Very low activation; calm or subdued."/>
+    <Level value="1" label="low" anchor="Low activation; mildly engaged."/>
+    <Level value="2" label="moderate" anchor="Moderate activation; attentive or emotionally engaged."/>
+    <Level value="3" label="high" anchor="High activation; strongly stimulated or agitated."/>
+    <Level value="4" label="very high" anchor="Very high activation; intense physiological or behavioral readiness."/>
+  </Dimension>
+  <Dimension id="goalCongruence" scope="eventAppraisal" type="bipolar" unknown="true" notApplicable="true">
+    <Level value="-2" label="strongly obstructs" anchor="Strongly obstructs or threatens an important goal."/>
+    <Level value="-1" label="moderately obstructs" anchor="Moderately obstructs a goal."/>
+    <Level value="0" label="neutral" anchor="Neither supports nor obstructs a relevant goal." neutral="true"/>
+    <Level value="1" label="moderately supports" anchor="Moderately supports a goal."/>
+    <Level value="2" label="strongly advances" anchor="Strongly advances or fulfills an important goal."/>
+  </Dimension>
+  <Dimension id="certainty" scope="eventAppraisal" type="unipolar" unknown="true" notApplicable="true" gloss="Strength of the appraisal evidence, not the annotator's confidence in its own answer.">
+    <Level value="0" label="none" anchor="No meaningful basis for prediction."/>
+    <Level value="1" label="low" anchor="Low certainty; substantial ambiguity."/>
+    <Level value="2" label="somewhat uncertain" anchor="Somewhat uncertain; competing interpretations remain."/>
+    <Level value="3" label="high" anchor="High certainty; interpretation is well supported."/>
+    <Level value="4" label="very high" anchor="Very high certainty; little meaningful ambiguity remains."/>
+  </Dimension>
+  <Dimension id="control" scope="eventAppraisal" type="bipolar" unknown="true" notApplicable="true" gloss="Perceived control over the event or its consequences, not control as a personality characteristic.">
+    <Level value="-2" label="essentially none" anchor="Essentially no perceived control."/>
+    <Level value="-1" label="limited" anchor="Limited influence."/>
+    <Level value="0" label="not established" anchor="Neither control nor lack of control is established." neutral="true"/>
+    <Level value="1" label="substantial" anchor="Substantial influence."/>
+    <Level value="2" label="strong" anchor="Strong control over the relevant outcome."/>
+  </Dimension>
+  <Dimension id="novelty" scope="eventAppraisal" type="unipolar" unknown="true" notApplicable="true">
+    <Level value="0" label="expected" anchor="Entirely familiar or expected."/>
+    <Level value="1" label="minor variation" anchor="Minor variation on familiar experience."/>
+    <Level value="2" label="unfamiliar" anchor="Noticeably unfamiliar."/>
+    <Level value="3" label="highly unexpected" anchor="Highly unexpected or unfamiliar."/>
+    <Level value="4" label="unprecedented" anchor="Completely unprecedented in the relevant context."/>
+  </Dimension>
+  <Dimension id="normCompatibility" scope="eventAppraisal" type="bipolar" unknown="true" notApplicable="true" use="optional">
+    <Level value="-2" label="strong violation" anchor="Strong violation of an important established norm."/>
+    <Level value="-1" label="moderate departure" anchor="Moderate departure from an established norm."/>
+    <Level value="0" label="not established" anchor="No meaningful compatibility or conflict established." neutral="true"/>
+    <Level value="1" label="generally consistent" anchor="Generally consistent with established norms."/>
+    <Level value="2" label="strongly reinforces" anchor="Strongly reinforces an important established norm."/>
+  </Dimension>
+  <Dimension id="agency" scope="eventAppraisal" type="categorical" unknown="true" notApplicable="true">
+    <Category id="self"/>
+    <Category id="other"/>
+    <Category id="circumstance"/>
+  </Dimension>
+  <Dimension id="trust" scope="relationship" type="unipolar" unknown="true" annotate="false">
+    <Level value="0" label="low" anchor="Maintained by EBPS; never annotated from an event."/>
+    <Level value="4" label="high" anchor="Maintained by EBPS; never annotated from an event."/>
+  </Dimension>
+  <Dimension id="attachment" scope="relationship" type="unipolar" unknown="true" annotate="false">
+    <Level value="0" label="low" anchor="Maintained by EBPS; never annotated from an event."/>
+    <Level value="4" label="high" anchor="Maintained by EBPS; never annotated from an event."/>
+  </Dimension>
+  <!-- Kate, 10 Nov: describe the manifestation separately from the emotional interpretation; do not collapse emotion, appraisal, stance,
+       delivery and spatial manifestation into one lexicon; categories are not mutually exclusive (multi). Category lists below are PROPOSED BY CLAUDE
+       from the tags actually present in the Garden scene; Kate owns them. Pride and awe are candidate emotion terms for a later increment, not in v0.1. -->
+  <Dimension id="manner" scope="delivery" type="categorical" unknown="true" multi="true" gloss="How something is expressed. May inform arousal; does not determine it.">
+    <Category id="quiet"/><Category id="forceful"/><Category id="gentle"/><Category id="hesitant"/><Category id="measured"/><Category id="intimate"/><Category id="solemn"/><Category id="warm"/><Category id="slow"/><Category id="rapid"/><Category id="sarcastic"/>
+  </Dimension>
+  <Dimension id="nonverbal" scope="delivery" type="categorical" unknown="true" multi="true" gloss="Timing and non-speech events: silence, breath.">
+    <Category id="pause"/><Category id="breath"/><Category id="vocalisation"/>
+  </Dimension>
+  <Dimension id="conviction" scope="stance" type="categorical" unknown="true" multi="true" gloss="Strength of belief or assertion; not necessarily emotion. Anchors pending from Kate.">
+    <Category id="assertive"/><Category id="tentative"/>
+  </Dimension>
+  <Dimension id="spatial" scope="spatial" type="categorical" unknown="true" multi="true" gloss="Spatial or social arrangement. Context, not an emotion label.">
+    <Category id="proximity"/><Category id="distance"/><Category id="orientation"/><Category id="movement"/>
+  </Dimension>
+  <Term id="joy" label="Joy" gloss="Positive affect">
+    <Profile dimension="valence" level="2" spread="1"/>
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="goalCongruence" level="2" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="control" level="1" spread="1"/>
+  </Term>
+  <Term id="sadness" label="Sadness" gloss="Loss and negative affect">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="1" spread="1"/>
+    <Profile dimension="goalCongruence" level="-2" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="control" level="-1" spread="1"/>
+  </Term>
+  <Term id="anger" label="Anger" gloss="Frustration and perceived injustice">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="goalCongruence" level="-2" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="control" level="1" spread="1"/>
+    <Profile dimension="agency" category="other"/>
+  </Term>
+  <Term id="fear" label="Fear" gloss="Threat and anticipated harm">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="goalCongruence" level="-2" spread="1"/>
+    <Profile dimension="certainty" level="1" spread="1"/>
+    <Profile dimension="control" level="-2" spread="1"/>
+    <Profile dimension="novelty" level="2" spread="2"/>
+  </Term>
+  <Term id="disgust" label="Disgust" gloss="Aversion and rejection">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="2" spread="1"/>
+    <Profile dimension="goalCongruence" level="-1" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="normCompatibility" level="-2" spread="1"/>
+  </Term>
+  <Term id="surprise" label="Surprise" gloss="Unexpected change">
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="certainty" level="1" spread="1"/>
+    <Profile dimension="novelty" level="4" spread="1"/>
+  </Term>
+  <Term id="relief" label="Relief" gloss="Reduction of anticipated threat">
+    <Profile dimension="valence" level="1" spread="1"/>
+    <Profile dimension="arousal" level="1" spread="1"/>
+    <Profile dimension="goalCongruence" level="1" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+  </Term>
+  <Term id="hope" label="Hope" gloss="Anticipated positive possibility">
+    <Profile dimension="valence" level="1" spread="1"/>
+    <Profile dimension="arousal" level="2" spread="1"/>
+    <Profile dimension="goalCongruence" level="1" spread="1"/>
+    <Profile dimension="certainty" level="1" spread="1"/>
+  </Term>
+  <Term id="anxiety" label="Anxiety" gloss="Uncertain anticipated threat">
+    <Profile dimension="valence" level="-1" spread="1"/>
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="goalCongruence" level="-1" spread="1"/>
+    <Profile dimension="certainty" level="1" spread="1"/>
+    <Profile dimension="control" level="-1" spread="1"/>
+  </Term>
+  <Term id="guilt" label="Guilt" gloss="Perceived responsibility for wrongdoing">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="2" spread="1"/>
+    <Profile dimension="goalCongruence" level="-1" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="agency" category="self"/>
+    <Profile dimension="normCompatibility" level="-2" spread="1"/>
+  </Term>
+  <Term id="shame" label="Shame" gloss="Negative evaluation of self">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="2" spread="1"/>
+    <Profile dimension="goalCongruence" level="-1" spread="1"/>
+    <Profile dimension="control" level="-1" spread="1"/>
+    <Profile dimension="agency" category="self"/>
+    <Profile dimension="normCompatibility" level="-1" spread="1"/>
+  </Term>
+  <Term id="gratitude" label="Gratitude" gloss="Recognition of beneficial action">
+    <Profile dimension="valence" level="2" spread="1"/>
+    <Profile dimension="arousal" level="1" spread="1"/>
+    <Profile dimension="goalCongruence" level="2" spread="1"/>
+    <Profile dimension="certainty" level="3" spread="1"/>
+    <Profile dimension="agency" category="other"/>
+  </Term>
+  <Term id="affection" label="Affection" gloss="Positive interpersonal attachment">
+    <Profile dimension="valence" level="2" spread="1"/>
+    <Profile dimension="arousal" level="1" spread="1"/>
+    <Profile dimension="goalCongruence" level="1" spread="1"/>
+  </Term>
+  <Term id="jealousy" label="Jealousy" gloss="Perceived threat to a valued relationship">
+    <Profile dimension="valence" level="-2" spread="1"/>
+    <Profile dimension="arousal" level="3" spread="1"/>
+    <Profile dimension="goalCongruence" level="-2" spread="1"/>
+    <Profile dimension="certainty" level="2" spread="1"/>
+    <Profile dimension="agency" category="other"/>
+  </Term>
+  <Term id="curiosity" label="Curiosity" gloss="Information seeking and uncertainty">
+    <Profile dimension="valence" level="1" spread="1"/>
+    <Profile dimension="arousal" level="2" spread="1"/>
+    <Profile dimension="certainty" level="1" spread="1"/>
+    <Profile dimension="novelty" level="3" spread="1"/>
+  </Term>
+  <Term id="m_quiet" label="quiet delivery"><Profile dimension="manner" category="quiet"/></Term>
+  <Term id="m_forceful" label="forceful delivery"><Profile dimension="manner" category="forceful"/></Term>
+  <Term id="m_gentle" label="gentle delivery"><Profile dimension="manner" category="gentle"/></Term>
+  <Term id="m_hesitant" label="hesitant delivery"><Profile dimension="manner" category="hesitant"/></Term>
+  <Term id="m_measured" label="measured delivery"><Profile dimension="manner" category="measured"/></Term>
+  <Term id="m_intimate" label="intimate delivery"><Profile dimension="manner" category="intimate"/></Term>
+  <Term id="m_solemn" label="solemn delivery"><Profile dimension="manner" category="solemn"/></Term>
+  <Term id="m_warm" label="warm delivery"><Profile dimension="manner" category="warm"/></Term>
+  <Term id="m_slow" label="slow delivery"><Profile dimension="manner" category="slow"/></Term>
+  <Term id="m_rapid" label="rapid delivery"><Profile dimension="manner" category="rapid"/></Term>
+  <Term id="m_sarcastic" label="sarcastic delivery"><Profile dimension="manner" category="sarcastic"/></Term>
+  <Term id="m_pause" label="pause"><Profile dimension="nonverbal" category="pause"/></Term>
+  <Term id="m_breath" label="breath"><Profile dimension="nonverbal" category="breath"/></Term>
+  <Term id="m_assertive" label="assertive stance"><Profile dimension="conviction" category="assertive"/></Term>
+  <Term id="m_tentative" label="tentative stance"><Profile dimension="conviction" category="tentative"/></Term>
+  <Term id="m_orientation" label="orientation"><Profile dimension="spatial" category="orientation"/></Term>
+  <Term id="m_proximity" label="proximity"><Profile dimension="spatial" category="proximity"/></Term>
+  <Term id="m_distance" label="distance"><Profile dimension="spatial" category="distance"/></Term>
+  <Term id="m_movement" label="movement"><Profile dimension="spatial" category="movement"/></Term>
+  <Form text="joy" match="stem" term="joy"/>
+  <Form text="happ" match="stem" term="joy"/>
+  <Form text="delight" match="stem" term="joy"/>
+  <Form text="glad" match="stem" term="joy"/>
+  <Form text="elated" match="stem" term="joy"/>
+  <Form text="sad" match="word" term="sadness"/>
+  <Form text="sadly" match="word" term="sadness"/>
+  <Form text="sorrow" match="stem" term="sadness"/>
+  <Form text="mourn" match="stem" term="sadness"/>
+  <Form text="grie" match="stem" term="sadness"/>
+  <Form text="weep" match="stem" term="sadness"/>
+  <Form text="anger" match="stem" term="anger"/>
+  <Form text="angry" match="stem" term="anger"/>
+  <Form text="angri" match="stem" term="anger"/>
+  <Form text="furi" match="stem" term="anger"/>
+  <Form text="rage" match="stem" term="anger"/>
+  <Form text="outrag" match="stem" term="anger"/>
+  <Form text="fear" match="stem" term="fear"/>
+  <Form text="afraid" match="stem" term="fear"/>
+  <Form text="terrif" match="stem" term="fear"/>
+  <Form text="dread" match="stem" term="fear"/>
+  <Form text="frighten" match="stem" term="fear"/>
+  <Form text="disgust" match="stem" term="disgust"/>
+  <Form text="revolt" match="stem" term="disgust"/>
+  <Form text="repuls" match="stem" term="disgust"/>
+  <Form text="loath" match="stem" term="disgust"/>
+  <Form text="surpris" match="stem" term="surprise"/>
+  <Form text="astonish" match="stem" term="surprise"/>
+  <Form text="startl" match="stem" term="surprise"/>
+  <Form text="suddenly" match="word" term="surprise"/>
+  <Form text="unexpected" match="stem" term="surprise"/>
+  <Form text="relief" match="word" term="relief"/>
+  <Form text="relieved" match="word" term="relief"/>
+  <Form text="relieve" match="word" term="relief"/>
+  <Form text="hope" match="word" term="hope"/>
+  <Form text="hopes" match="word" term="hope"/>
+  <Form text="hoped" match="word" term="hope"/>
+  <Form text="hopeful" match="word" term="hope"/>
+  <Form text="hoping" match="word" term="hope"/>
+  <Form text="anxi" match="stem" term="anxiety"/>
+  <Form text="worr" match="stem" term="anxiety"/>
+  <Form text="uneas" match="stem" term="anxiety"/>
+  <Form text="nervous" match="stem" term="anxiety"/>
+  <Form text="guilt" match="stem" term="guilt"/>
+  <Form text="guilty" match="stem" term="guilt"/>
+  <Form text="remorse" match="stem" term="guilt"/>
+  <Form text="shame" match="stem" term="shame"/>
+  <Form text="ashamed" match="stem" term="shame"/>
+  <Form text="humiliat" match="stem" term="shame"/>
+  <Form text="grateful" match="stem" term="gratitude"/>
+  <Form text="gratitude" match="stem" term="gratitude"/>
+  <Form text="thank" match="stem" term="gratitude"/>
+  <Form text="affection" match="stem" term="affection"/>
+  <Form text="fond" match="stem" term="affection"/>
+  <Form text="love" match="word" term="affection"/>
+  <Form text="loved" match="word" term="affection"/>
+  <Form text="loving" match="word" term="affection"/>
+  <Form text="dear" match="word" term="affection"/>
+  <Form text="jealous" match="stem" term="jealousy"/>
+  <Form text="envy" match="word" term="jealousy"/>
+  <Form text="envious" match="stem" term="jealousy"/>
+  <Form text="curious" match="stem" term="curiosity"/>
+  <Form text="curiosity" match="word" term="curiosity"/>
+  <Form text="puzzl" match="stem" term="curiosity"/>
+  <Form text="intrigu" match="stem" term="curiosity"/>
+  <!-- Delivery-tag forms (source="tag"): matched only inside [bracket] cues, never in spoken words. Proposed by Claude. Tags with no form here are recorded as deliveryTag cues: vocabulary candidates, not errors. -->
+  <Form text="sorrow" match="stem" term="sadness" source="tag"/>
+  <Form text="grief" match="stem" term="sadness" source="tag"/>
+  <Form text="griev" match="stem" term="sadness" source="tag"/>
+  <Form text="sad" match="stem" term="sadness" source="tag"/>
+  <Form text="wonder" match="stem" term="curiosity" source="tag"/>
+  <Form text="curious" match="stem" term="curiosity" source="tag"/>
+  <Form text="fear" match="stem" term="fear" source="tag"/>
+  <Form text="anger" match="stem" term="anger" source="tag"/>
+  <Form text="angry" match="stem" term="anger" source="tag"/>
+  <Form text="joy" match="stem" term="joy" source="tag"/>
+  <Form text="hope" match="stem" term="hope" source="tag"/>
+  <Form text="relie" match="stem" term="relief" source="tag"/>
+  <Form text="grate" match="stem" term="gratitude" source="tag"/>
+  <Form text="affection" match="stem" term="affection" source="tag"/>
+  <Form text="tender" match="stem" term="affection" source="tag"/>
+  <Form text="worr" match="stem" term="anxiety" source="tag"/>
+  <Form text="anxi" match="stem" term="anxiety" source="tag"/>
+  <Form text="shame" match="stem" term="shame" source="tag"/>
+  <Form text="guilt" match="stem" term="guilt" source="tag"/>
+  <Form text="surpris" match="stem" term="surprise" source="tag"/>
+  <!-- Delivery, non-verbal, stance and spatial tag forms (source="tag"). -->
+  <Form text="quiet" match="stem" term="m_quiet" source="tag"/>
+  <Form text="soft" match="stem" term="m_quiet" source="tag"/>
+  <Form text="whisper" match="stem" term="m_quiet" source="tag"/>
+  <Form text="gentl" match="stem" term="m_gentle" source="tag"/>
+  <Form text="tender" match="stem" term="m_gentle" source="tag"/>
+  <Form text="firm" match="stem" term="m_forceful" source="tag"/>
+  <Form text="intens" match="stem" term="m_forceful" source="tag"/>
+  <Form text="forceful" match="stem" term="m_forceful" source="tag"/>
+  <Form text="hesitat" match="stem" term="m_hesitant" source="tag"/>
+  <Form text="measured" match="word" term="m_measured" source="tag"/>
+  <Form text="intimate" match="stem" term="m_intimate" source="tag"/>
+  <Form text="solemn" match="stem" term="m_solemn" source="tag"/>
+  <Form text="somber" match="stem" term="m_solemn" source="tag"/>
+  <Form text="warm" match="stem" term="m_warm" source="tag"/>
+  <Form text="slow" match="stem" term="m_slow" source="tag"/>
+  <Form text="rapid" match="stem" term="m_rapid" source="tag"/>
+  <Form text="quick" match="stem" term="m_rapid" source="tag"/>
+  <Form text="sarcas" match="stem" term="m_sarcastic" source="tag"/>
+  <Form text="pause" match="stem" term="m_pause" source="tag"/>
+  <Form text="inhal" match="stem" term="m_breath" source="tag"/>
+  <Form text="exhal" match="stem" term="m_breath" source="tag"/>
+  <Form text="breath" match="stem" term="m_breath" source="tag"/>
+  <Form text="sigh" match="stem" term="m_breath" source="tag"/>
+  <Form text="convict" match="stem" term="m_assertive" source="tag"/>
+  <Form text="tentativ" match="stem" term="m_tentative" source="tag"/>
+  <Form text="toward" match="stem" term="m_orientation" source="tag"/>
+  <Form text="turning" match="stem" term="m_orientation" source="tag"/>
+  <Form text="closer" match="stem" term="m_proximity" source="tag"/>
+  <Form text="near" match="stem" term="m_proximity" source="tag"/>
+  <Form text="away" match="word" term="m_distance" source="tag"/>
+  <Form text="distant" match="stem" term="m_distance" source="tag"/>
+  <Form text="footstep" match="stem" term="m_movement" source="tag"/>
+  <Form text="steps" match="word" term="m_movement" source="tag"/>
+</Lexicon>

@@ -16,7 +16,7 @@
   window._mccfMediaMute = function (on) { window._mccfMediaMuted = !!on; seen.forEach(function (el) { try { el.muted = !!on; } catch (e) {} }); };
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/x_ite@11.6.0/dist/x_ite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/x_ite@16.7.1/dist/x_ite.min.js"></script>
 <!-- Day 78, V5 Tasklist Phase 2: path-recorder.js's RDP decimation + the
      independent recorded-path data structure. Same /static/js/ absolute-path
      convention established in mccf_scene_composer.html (Phase 1 task 1). -->
@@ -797,7 +797,7 @@ x3d-canvas {
     <div class="x3d-corner tl">PERSP · CAM</div>
     <div class="x3d-corner tr" id="vp-frame-label">FRAME —</div>
     <div class="x3d-corner bl" id="vp-wp-label">—</div>
-    <div class="x3d-corner br">X_ITE 11.6.0</div>
+    <div class="x3d-corner br">X_ITE</div>
 
     <!-- Placeholder when no scene loaded -->
     <div class="x3d-placeholder" id="vp-placeholder">
@@ -2359,7 +2359,7 @@ function _paceHtml(c) {
     '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"><button class="pace-b" onclick="_pacePreset(\'flat\')">Flat</button><button class="pace-b" onclick="_pacePreset(\'inout\')">Slow–fast–slow</button><button class="pace-b" onclick="_pacePreset(\'slowstart\')">Slow start</button><button class="pace-b" onclick="_pacePreset(\'slowend\')">Slow finish</button><button class="pace-b" onclick="_pacePreset(\'pause\')">Pause mid-way</button><button class="pace-b" onclick="_pacePreview()" title="animate a dot along the distance curve">▶ Preview</button></div>' +
     '<label style="font-size:12px;color:var(--dim);display:block">Live EBPS pace (the Loader changes the speed as this character’s field changes)</label>' +
     '<select onchange="_paceEbpsSet(\'channel\',this.value);" style="width:100%"><option value=""' + (e.channel ? '' : ' selected') + '>— off —</option>' +
-    [['E', 'E — Eros'], ['B', 'B — Boundary'], ['P', 'P — Pathos'], ['S', 'S — Sophia']].map(function(o) { return '<option value="' + o[0] + '"' + (e.channel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+    [['E', 'E — Emotion'], ['B', 'B — Behavior'], ['P', 'P — Predictive'], ['S', 'S — Social']].map(function(o) { return '<option value="' + o[0] + '"' + (e.channel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
     '<div id="pace-ebps-rows" style="display:' + (e.channel ? 'grid' : 'none') + ';grid-template-columns:repeat(3,1fr);gap:4px;margin-top:4px">' +
     [['depth', 'effect', -3, 3, 0.1], ['neutral', 'neutral', 0, 1, 0.05], ['smooth', 'smooth s', 0, 10, 0.5], ['min', 'min ×', 0.05, 1, 0.05], ['max', 'max ×', 1, 4, 0.1]].map(function(r) { return '<label style="font-size:11px;color:var(--dim)">' + r[1] + '<input type="number" data-pf="' + r[0] + '" min="' + r[2] + '" max="' + r[3] + '" step="' + r[4] + '" value="' + e[r[0]] + '" oninput="_paceEbpsSet(\'' + r[0] + '\',this.value)" style="width:100%;box-sizing:border-box"></label>'; }).join('') + '</div>' +
     '<div id="pace-ebps-ex" style="font-size:11px;color:var(--dim);margin-top:3px">' + _paceEbpsExample(pace.ebps) + '</div></div>';
@@ -3649,7 +3649,7 @@ async function tpRewind() {
 // ================= Export settings + Versions (dropdowns) =================
 var VM_OPTS = [
   ['sounds', 'Sounds (audio nodes)'], ['protos', 'Prototypes'], ['interps', 'Interpolators'],
-  ['script', 'Script node'], ['labels', 'Labels'], ['dialogueTTY', 'Dialogue TTY']
+  ['script', 'Script node'], ['labels', 'Labels'], ['dialogueTTY', 'Dialogue (browser voice)']
 ];
 var _vm = { opts: {}, open: null, ver: null, busy: false, confirm: null, hosted: !!(window.parent && window.parent !== window), opened: [], current: '' };
 function vmStatus(msg, bad) { var s = document.getElementById('vm-status'); if (s) { s.textContent = msg || ''; s.style.color = bad ? 'var(--accent2)' : 'var(--accent4)'; } }

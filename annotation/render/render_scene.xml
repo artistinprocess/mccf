@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scene id="render_fixture">
+<Dialogue>
+  <Line id="r1" actor="Anna" type="Statement" ttsText="[softly] The work is beautiful." tagSource="authored" audioFile="Dialog/r1.mp3">The work is beautiful.</Line>
+  <Line id="r2" actor="Anna" type="Statement" ttsText="[long pause] Come with me." tagSource="authored" audioFile="Dialog/r2.mp3">Come with me.</Line>
+  <Line id="r3" actor="Anna" type="Statement" ttsText="[inhales deeply] I will tell you." tagSource="authored" audioFile="Dialog/r3.mp3">I will tell you.</Line>
+  <Line id="r4" actor="Jack" type="Statement" ttsText="He wept in sorrow for the garden." tagSource="algorithmic" audioFile="Dialog/r4.mp3">He wept in sorrow for the garden.</Line>
+  <Line id="r5" actor="Jack" type="Statement" ttsText="Come to the gate at dusk." tagSource="algorithmic" audioFile="Dialog/r5.mp3">Come to the gate at dusk.</Line>
+</Dialogue>
+</Scene>

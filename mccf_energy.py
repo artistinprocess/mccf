@@ -65,7 +65,8 @@ def score_action(
     agent,
     field_state: dict,
     position: list,
-    weights: EnergyWeights
+    weights: EnergyWeights,
+    rng=None
 ) -> dict:
     """
     Estimate the energy of a candidate action for a given agent.
@@ -79,18 +80,19 @@ def score_action(
     exploration without LLM calls.
     """
     w = agent.weights if hasattr(agent, 'weights') else {'E':0.35,'B':0.25,'P':0.20,'S':0.20}
+    rng = rng or random      # a seeded random.Random gives repeatable scores
 
     # Valence: E-channel weight × regulation proxy
     # High E-weight agents prefer emotionally resonant actions
     reg = getattr(agent, '_affect_regulation', 1.0)
-    valence = round(w.get('E', 0.35) * reg + random.gauss(0, 0.05), 4)
+    valence = round(w.get('E', 0.35) * reg + rng.gauss(0, 0.05), 4)
     valence = max(0.0, min(1.0, valence))
 
     # Salience: P-channel (predictive) × action text length proxy
     # Longer/more specific actions score higher salience for analytical agents
     words = len(action_text.split())
     salience_base = w.get('P', 0.20) + min(0.3, words / 30.0)
-    salience = round(max(0.0, min(1.0, salience_base + random.gauss(0, 0.04))), 4)
+    salience = round(max(0.0, min(1.0, salience_base + rng.gauss(0, 0.04))), 4)
 
     # Coherence: from field matrix — average coherence toward known agents
     matrix = field_state.get('matrix', {})
@@ -98,9 +100,9 @@ def score_action(
     row = matrix.get(agent_name, {})
     scores = [v for k, v in row.items() if k != agent_name and v > 0]
     if scores:
-        coherence = round(sum(scores) / len(scores) + random.gauss(0, 0.03), 4)
+        coherence = round(sum(scores) / len(scores) + rng.gauss(0, 0.03), 4)
     else:
-        coherence = round(w.get('B', 0.25) + random.gauss(0, 0.05), 4)
+        coherence = round(w.get('B', 0.25) + rng.gauss(0, 0.05), 4)
     coherence = max(0.0, min(1.0, coherence))
 
     # Zone proximity bonus — actions near zone centers get salience boost
@@ -250,6 +252,7 @@ def make_energy_api(field):
           agent_name: str
           actions:    list of action text strings
           position:   [x, y, z] — agent's current scene position
+          seed:       optional; the same seed gives the same scores
 
         Response:
           ranked_actions: list of scored+ranked action dicts
@@ -260,6 +263,8 @@ def make_energy_api(field):
         agent_name = data.get('agent_name', '')
         actions    = data.get('actions', [])
         position   = data.get('position', [0, 0, 0])
+        seed       = data.get('seed')          # optional: same seed, same scores
+        rng        = random.Random(seed) if seed is not None else None
 
         if not agent_name or agent_name not in field.agents:
             return jsonify({"error": f"Agent '{agent_name}' not found"}), 404
@@ -275,7 +280,7 @@ def make_energy_api(field):
 
         # Score each action
         scored = [
-            score_action(a, agent, field_state, position, _weights)
+            score_action(a, agent, field_state, position, _weights, rng)
             for a in actions
         ]
 

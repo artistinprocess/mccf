@@ -65,7 +65,19 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Optional
 
+from xml.sax.saxutils import escape as _esc, quoteattr as _qa
+import logging
 from flask import Blueprint, request, jsonify, Response
+
+_log = logging.getLogger(__name__)
+
+def _x(v):
+    """Escape text content for XML."""
+    return _esc(str(v))
+
+def _a(v):
+    """Escape an attribute value for XML, without the surrounding quotes."""
+    return _esc(str(v), {'"': '&quot;'})
 
 # ---------------------------------------------------------------------------
 # Lambda defaults
@@ -86,7 +98,7 @@ LAMBDA_DEFAULT_LADIES = 0.20   # reserved for The Ladies when defined
 LAMBDA_MIN            = 0.05
 LAMBDA_MAX            = 1.00
 
-MCCF_CULTIVAR_NS = "http://mccf.artistinprocess.com/cultivar/v3"
+MCCF_CULTIVAR_NS = "http://mccf.artistinprocess.com/v1"   # V5: schema namespace. Files written by V3/V4 used .../cultivar/v3 and still load (readers ignore the namespace).
 SCHEMA_VERSION   = "1.0"
 
 # ---------------------------------------------------------------------------
@@ -152,7 +164,7 @@ class ShadowContext:
     def to_xml_element(self) -> str:
         """Full XML element form for CultivarDefinition."""
         return (f'<ShadowContext lambda="{self.lambda_val}" '
-                f'note="{self.note}"/>')
+                f'note="{_a(self.note)}"/>')
 
     def to_dict(self) -> dict:
         return {"lambda": self.lambda_val, "note": self.note}
@@ -220,12 +232,12 @@ def _serialize_behavior_clips(behavior_default: str, clips: list) -> list:
         '  <!-- HAnim behavior clip selection table -->',
         '  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->',
         '  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->',
-        f'  <Behaviors default="{behavior_default}">',
+        f'  <Behaviors default="{_a(behavior_default)}">',
     ]
     for clip in clips:
         parts = [
-            f'name="{clip["name"]}"',
-            f'timerDEF="{clip["timerDEF"]}"',
+            f'name="{_a(clip["name"])}"',
+            f'timerDEF="{_a(clip["timerDEF"])}"',
         ]
         for ch in _BEHAVIOR_CHANNELS:
             for bound in ("min", "max"):
@@ -346,8 +358,8 @@ class CultivarDefinition:
         w = self.weights
         lines = [
             f'<?xml version="1.0" encoding="UTF-8"?>',
-            f'<CultivarDefinition name="{self.name}" version="{self.version}"',
-            f'    role="{self.role}" color="{self.color}"',
+            f'<CultivarDefinition name="{_a(self.name)}" version="{_a(self.version)}"',
+            f'    role="{_a(self.role)}" color="{_a(self.color)}"',
             f'    xmlns="{MCCF_CULTIVAR_NS}">',
             f'',
             f'  <!-- Channel weights sum to 1.0 -->',
@@ -364,17 +376,17 @@ class CultivarDefinition:
         if self.zone_affinity:
             zones = " ".join(self.zone_affinity)
             lines.append(f'')
-            lines.append(f'  <ZoneAffinity zones="{zones}"/>')
+            lines.append(f'  <ZoneAffinity zones="{_a(zones)}"/>')
 
         if self.description:
             lines.append(f'')
-            lines.append(f'  <Description>{self.description.strip()}</Description>')
+            lines.append(f'  <Description>{_x(self.description.strip())}</Description>')
 
         if self.constitutional_notes:
             lines.append(f'')
             lines.append(
                 f'  <ConstitutionalNotes>'
-                f'{self.constitutional_notes.strip()}'
+                f'{_x(self.constitutional_notes.strip())}'
                 f'</ConstitutionalNotes>'
             )
 
@@ -382,31 +394,31 @@ class CultivarDefinition:
             lines.append(f'')
             lines.append(f'  <SignaturePhrases>')
             for phrase in self.signature_phrases:
-                lines.append(f'    <Phrase>{phrase}</Phrase>')
+                lines.append(f'    <Phrase>{_x(phrase)}</Phrase>')
             lines.append(f'  </SignaturePhrases>')
 
         if self.failure_mode:
             lines.append(f'')
-            lines.append(f'  <FailureMode>{self.failure_mode.strip()}</FailureMode>')
+            lines.append(f'  <FailureMode>{_x(self.failure_mode.strip())}</FailureMode>')
 
         if self.voice_name:
             lines.append(f'')
-            lines.append(f'  <Voice name="{self.voice_name}" lang="{self.voice_lang}" rate="{self.voice_rate}" pitch="{self.voice_pitch}"/>')
+            lines.append(f'  <Voice name="{_a(self.voice_name)}" lang="{_a(self.voice_lang)}" rate="{self.voice_rate}" pitch="{self.voice_pitch}"/>')
 
         if self.alias:
             lines.append(f'')
             lines.append(f'  <!-- Alias: narrative name used in story context, e.g. Cherokee name vs family name -->')
-            lines.append(f'  <Alias>{self.alias}</Alias>')
+            lines.append(f'  <Alias>{_x(self.alias)}</Alias>')
 
         if self.portrait:
             lines.append(f'')
             lines.append(f'  <!-- Portrait: node icon in the Composer Affects graph -->')
-            lines.append(f'  <Portrait src="{self.portrait}"/>')
+            lines.append(f'  <Portrait src="{_a(self.portrait)}"/>')
 
         if self.hanim_src:
             lines.append(f'')
             lines.append(f'  <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->')
-            lines.append(f'  <HAnimFigure src="{self.hanim_src}" loa="{self.hanim_loa}"/>')
+            lines.append(f'  <HAnimFigure src="{_a(self.hanim_src)}" loa="{self.hanim_loa}"/>')
 
         # Receptivity — after HAnimFigure, before Behaviors
         default_rec = {'E': 1.0, 'B': 1.0, 'P': 1.0, 'S': 1.0}
@@ -427,7 +439,7 @@ class CultivarDefinition:
             lines.append(f'')
             lines.append(f'  <Metadata>')
             for k, v in self.metadata.items():
-                lines.append(f'    <Meta key="{k}" value="{v}"/>')
+                lines.append(f'    <Meta key="{_a(k)}" value="{_a(v)}"/>')
             lines.append(f'  </Metadata>')
 
         lines.append(f'')
@@ -736,8 +748,9 @@ class CultivarRegistry:
                     )
                     self._cultivars[name] = defn
 
-            except Exception:
-                pass  # malformed file — skip silently
+            except Exception as _e:
+                # V5: a character that fails to load must not vanish without a trace.
+                _log.warning("cultivar file %s skipped: %s", fname, _e)
 
     def _save_to_disk(self, defn: CultivarDefinition):
         """Persist a CultivarDefinition to cultivars/<slug>.xml."""

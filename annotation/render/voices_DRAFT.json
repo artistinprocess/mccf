@@ -1,0 +1,5 @@
+{
+  "_note": "Fill in the ElevenLabs voice and model for each actor. Anything here is part of the render hash, so changing it marks that actor's lines stale.",
+  "Anna": {"voice_name": "FILL-IN", "model_id": "eleven_v3", "stability": null, "speed": null},
+  "default": {"voice_name": "FILL-IN", "model_id": "eleven_v3"}
+}

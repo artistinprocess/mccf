@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CultivarDefinition name="Salida" version="1.0"
     role="agent" color="#c8a840"
-    xmlns="http://mccf.artistinprocess.com/cultivar/v3">
+    xmlns="http://mccf.artistinprocess.com/v1">
 
   <!-- Channel weights sum to 1.0 -->
   <Weights E="0.33" B="0.23"
@@ -29,6 +29,27 @@
   <Alias>Cindy Jenkins</Alias>
 
   <!-- H-Anim figure: stripped X3D, inlined at agent placement in scene -->
-  <HAnimFigure src="avatars/cindy_hanim.x3d" loa="4"/>
+  <HAnimFigure src="avatars/Anna.x3d" loa="4"/>
+
+  <!-- HAnim behavior clip selection table -->
+  <!-- timerDEF names correspond to TimeSensor DEF values in the HAnim X3D file -->
+  <!-- Loader suffixes each timerDEF with _AgentSafeName for multi-agent scenes -->
+  <Behaviors default="Default">
+    <Clip name="Mixamo.Com" timerDEF="Timer1" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Capoeira" timerDEF="Timer2" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Defeated" timerDEF="Timer3" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Fight" timerDEF="Timer4" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Fistfight" timerDEF="Timer5" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Jumppushup" timerDEF="Timer6" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Mmakick" timerDEF="Timer7" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Praying" timerDEF="Timer8" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Rhumbadance" timerDEF="Timer9" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Shovedreactionwithspin" timerDEF="Timer10" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Standingwalkright" timerDEF="Timer11" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="Salida Taunt" timerDEF="Timer12" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="DefaultTimer_1" timerDEF="DefaultTimer_1" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="DefaultTimer_2" timerDEF="DefaultTimer_2" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+    <Clip name="DefaultTimer" timerDEF="DefaultTimer" E_min="0" E_max="1" B_min="0" B_max="1" P_min="0" P_max="1" S_min="0" S_max="1" loop="true" priority="0"/>
+  </Behaviors>
 
 </CultivarDefinition>

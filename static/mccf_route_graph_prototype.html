@@ -544,6 +544,11 @@ var NODE_TYPES = {
 // always available) vs. dynamic (only exist because an import pass
 // registered them, and won't exist again on a fresh page load unless
 // persisted separately — see saveRouteGraph's own comment on this).
+// Seed instance names above (Cindy, Jack, crane_shot_1, ...) are sample data
+// from the first prototype. They must never reach an author: every instance
+// list is filled from the open scene, and is empty until the scene says
+// what exists.
+Object.keys(NODE_TYPES).forEach(function(k){ NODE_TYPES[k].instances = []; });
 var _STATIC_NODE_TYPE_KEYS = new Set(Object.keys(NODE_TYPES));
 
 // Live data from Composer (mccf_scene_data) — falls back to each type's
@@ -551,30 +556,57 @@ var _STATIC_NODE_TYPE_KEYS = new Set(Object.keys(NODE_TYPES));
 // discipline documented on the manifest itself.
 var TIMELINE_CUES = []; // [{id, track, target, label, t0}, ...] relayed from the Timeline tab via Composer
 function _refreshInstancesFromLiveData() {
-  if (window.AGENTS && (AGENTS.length || CAMERAS.length)) {
-    NODE_TYPES.Transform.instances = AGENTS.concat(CAMERAS.map(function(c){ return c.name; }));
-  }
-  if (window.ZONES && ZONES.length) {
-    NODE_TYPES.ProximitySensor.instances = ZONES.map(function(z) { return z + ' · zone'; });
-  }
-  if (window.RECORDED_PATHS_RG && RECORDED_PATHS_RG.length) {
-    NODE_TYPES.RecordedPath.instances = RECORDED_PATHS_RG.map(function(p) { return p.id; });
-  }
+  // Lists always come from the live scene, even when empty (an empty list
+  // reads "none available", which is true), so sample names cannot linger.
+  NODE_TYPES.Transform.instances = AGENTS.concat(CAMERAS.map(function(c){ return c.name; }));
+  NODE_TYPES.ProximitySensor.instances = ZONES.map(function(z) { return z + ' \u00b7 zone'; });
+  NODE_TYPES.RecordedPath.instances = RECORDED_PATHS_RG.map(function(p) { return p.id; });
   // Day 82: LIGHTS carries {name, type} per placed light — type distinguishes
-  // which of the three node types below it belongs under, since a single
-  // flat name list (like AGENTS) can't do that on its own.
-  if (window.LIGHTS && LIGHTS.length) {
-    NODE_TYPES.BasicPointLight.instances       = LIGHTS.filter(function(l){ return l.type==='point'; }).map(function(l){ return l.name; });
-    NODE_TYPES.BasicSpotLight.instances        = LIGHTS.filter(function(l){ return l.type==='spot'; }).map(function(l){ return l.name; });
-    NODE_TYPES.BasicDirectionalLight.instances = LIGHTS.filter(function(l){ return l.type==='directional'; }).map(function(l){ return l.name; });
-  }
-  if (window.AUDIO_SOURCES && AUDIO_SOURCES.length) {
-    NODE_TYPES.BasicAudioSource.instances = AUDIO_SOURCES.map(function(a){ return a.name; });
-  }
+  // which of the three node types below it belongs under.
+  NODE_TYPES.BasicPointLight.instances       = LIGHTS.filter(function(l){ return l.type==='point'; }).map(function(l){ return l.name; });
+  NODE_TYPES.BasicSpotLight.instances        = LIGHTS.filter(function(l){ return l.type==='spot'; }).map(function(l){ return l.name; });
+  NODE_TYPES.BasicDirectionalLight.instances = LIGHTS.filter(function(l){ return l.type==='directional'; }).map(function(l){ return l.name; });
+  NODE_TYPES.BasicAudioSource.instances = AUDIO_SOURCES.map(function(a){ return a.name; });
   NODE_TYPES.TimelineTrigger.instances = TIMELINE_CUES.map(function(c) {
-    return c.id + ' — ' + c.track + ':' + (c.target||'?') + ' @' + c.t0.toFixed(2) + 's';
+    return c.id + ' \u2014 ' + c.track + ':' + (c.target||'?') + ' @' + c.t0.toFixed(2) + 's';
   });
   populateInstanceDropdown();
+}
+
+// TouchSensors live inside avatar and asset files, not in the Composer's own
+// lists, so the Composer sends the files that can hold them (sensorSources:
+// [{name, url}]) and this reads each one and collects the TouchSensor DEFs.
+var _touchFileCache = {}; // url -> Promise of DEF names (one fetch per file)
+function _touchDefsInFile(url) {
+  if (!_touchFileCache[url]) {
+    _touchFileCache[url] = fetch(url).then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function(text) {
+      var doc = new DOMParser().parseFromString(text, 'text/xml');
+      var defs = [];
+      Array.prototype.forEach.call(doc.getElementsByTagName('TouchSensor'), function(el) {
+        var d = el.getAttribute('DEF');
+        if (d) defs.push(d);
+      });
+      return defs;
+    }).catch(function(e) {
+      console.warn('[RouteGraph] could not read ' + url + ' for TouchSensors: ' + e.message);
+      delete _touchFileCache[url]; // let a later refresh retry
+      return [];
+    });
+  }
+  return _touchFileCache[url];
+}
+function _refreshTouchSensors(sources) {
+  var urls = [];
+  (sources || []).forEach(function(s) { if (s && s.url && urls.indexOf(s.url) < 0) urls.push(s.url); });
+  Promise.all(urls.map(_touchDefsInFile)).then(function(lists) {
+    var seen = {}, all = [];
+    lists.forEach(function(l) { l.forEach(function(d) { if (!seen[d]) { seen[d] = 1; all.push(d); } }); });
+    NODE_TYPES.TouchSensor.instances = all;
+    populateInstanceDropdown();
+  });
 }
 
 // ── Graph state ──────────────────────────────────────────────────────────
@@ -1593,6 +1625,10 @@ function saveSubsystemAsAsset() {
   if (!name) return;
   var safeName = name.trim().replace(/[^A-Za-z0-9_]/g, '_');
   if (!safeName) { alert('Name needs at least one letter, digit, or underscore.'); return; }
+  var category = prompt('Category for the assembly\u2019s DM code:\n10 timing and triggers\n20 camera\n30 light\n40 audio\n50 movement and paths\n90 other', '90');
+  if (!category) return;
+  category = category.trim();
+  if (['10','20','30','40','50','90'].indexOf(category) === -1) { alert('Category must be one of 10, 20, 30, 40, 50 or 90.'); return; }
 
   var chainNodes = nodes.filter(function(n){ return _highlightedChain.nodeIds.has(n.id); });
   var chainConns = connections.filter(function(c){ return _highlightedChain.connIds.has(c.id); });
@@ -1622,34 +1658,38 @@ function saveSubsystemAsAsset() {
   });
   x += '</Scene>\n</X3D>\n';
 
-  var blob = new Blob([x], { type: 'model/x3d+xml' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = safeName + '.x3d';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  console.log('[RouteGraph] saved subsystem "' + name + '" \u2014 ' + chainNodes.length + ' nodes, ' + chainConns.length +
-    ' routes' + (externalRefs.length ? ', ' + externalRefs.length + ' external reference(s)' : '') + '.');
-
-  // Also reach the server library — the local download alone was never
-  // enough for "browse and load one back in" to mean anything, since a
-  // file that only lands in the author's Downloads folder can't be
-  // listed or reloaded by anyone, including the same session next time.
-  // Always the 'user' tier from here — 'rich'/'common' are populated
-  // deliberately, not by this live save flow (see /effects/save's own
-  // comment on the same three-tier plan).
+  // The server issues the DM code and stamps it into the file, so the file
+  // that is downloaded is the stamped one. If the server cannot be reached,
+  // the unstamped file is still downloaded, with a warning.
+  function _downloadAsset(text) {
+    var blob = new Blob([text], { type: 'model/x3d+xml' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = safeName + '.x3d';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  var summary = chainNodes.length + ' nodes, ' + chainConns.length + ' routes' +
+    (externalRefs.length ? ', ' + externalRefs.length + ' external reference(s)' : '');
   fetch('/effects/save', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: safeName + '.x3d', content: x }),
-  }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function(res) { console.log('[RouteGraph] also saved to server library:', res); })
-    .catch(function(e) { console.warn('[RouteGraph] server save failed (' + e.message + ') — local download still succeeded, just not added to the browsable library'); });
+    body: JSON.stringify({ filename: safeName + '.x3d', content: x, category: category }),
+  }).then(function(r) { return r.json().then(function(j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+    .then(function(res) {
+      _downloadAsset(res.content || x);
+      console.log('[RouteGraph] saved subsystem "' + name + '" \u2014 ' + summary + '. DM code ' + res.code);
+      alert('Saved "' + name + '" (' + summary + ').\nDM code: ' + res.code + (res.reused_code ? '\n(this file already had a code; it was kept)' : ''));
+    })
+    .catch(function(e) {
+      _downloadAsset(x);
+      console.warn('[RouteGraph] server save failed (' + e.message + ') \u2014 downloaded without a DM code, not added to the library');
+      alert('The file was downloaded, but the server did not save it, so it has no DM code yet: ' + e.message);
+    });
 }
 
-// ── Load Effect Asset — the reverse of saveSubsystemAsAsset ─────────────
 // Browses the server-side three-tier library (/effects/list) and merges a
 // chosen file's nodes/routes into the current graph, reusing the exact
 // same parsing/layout pipeline as scene import (_importGraphFromXmlText)
@@ -1672,7 +1712,9 @@ function loadEffectAsset() {
     .then(function(data) {
       var files = data.files || [];
       if (!files.length) { alert('No saved effects in the "' + tier + '" tier yet.'); return; }
-      var choice = prompt('Available in "' + tier + '":\n' + files.join('\n') + '\n\nType the exact filename to load:', files[0]);
+      var codes = data.codes || {};
+      var shown = files.map(function(f) { return codes[f] ? f + '   [' + codes[f] + ']' : f; });
+      var choice = prompt('Available in "' + tier + '":\n' + shown.join('\n') + '\n\nType the exact filename to load (without the code):', files[0]);
       if (!choice) return;
       choice = choice.trim();
       if (files.indexOf(choice) === -1) { alert('"' + choice + '" isn\u2019t in the list \u2014 check spelling and try again.'); return; }
@@ -1900,6 +1942,7 @@ window.addEventListener('message', function(evt) {
     if (d.recordedPaths) RECORDED_PATHS_RG = d.recordedPaths;
     if (d.timelineCues) TIMELINE_CUES = d.timelineCues;
     _refreshInstancesFromLiveData();
+    _refreshTouchSensors(d.sensorSources || []);
     // Restore a previously-saved graph exactly once — only when this
     // graph is still empty (a fresh load), so a scene-data refresh mid-
     // session (e.g. after placing a new agent) never clobbers in-progress

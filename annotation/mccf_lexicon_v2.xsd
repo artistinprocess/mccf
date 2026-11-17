@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MCCF Lexicon v2 - structure only. Declarative and static: describes semantics, never field dynamics. DRAFT 1, 2026-11-10 -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="http://mccf.artistinprocess.com/lexicon/v2"
+           targetNamespace="http://mccf.artistinprocess.com/lexicon/v2"
+           elementFormDefault="qualified">
+  <xs:simpleType name="Scope"><xs:restriction base="xs:string">
+    <xs:enumeration value="coreAffect"/><xs:enumeration value="eventAppraisal"/><xs:enumeration value="relationship"/>
+    <xs:enumeration value="delivery"/><xs:enumeration value="stance"/><xs:enumeration value="spatial"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="DimType"><xs:restriction base="xs:string">
+    <xs:enumeration value="bipolar"/><xs:enumeration value="unipolar"/><xs:enumeration value="categorical"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="Match"><xs:restriction base="xs:string">
+    <xs:enumeration value="word"/><xs:enumeration value="stem"/><xs:enumeration value="phrase"/>
+  </xs:restriction></xs:simpleType>
+
+  <xs:element name="Level"><xs:complexType>
+    <xs:attribute name="value" type="xs:integer" use="required"/>
+    <xs:attribute name="label" type="xs:string" use="required"/>
+    <xs:attribute name="anchor" type="xs:string" use="required"/>
+    <xs:attribute name="neutral" type="xs:boolean" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Category"><xs:complexType>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="anchor" type="xs:string" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Dimension"><xs:complexType>
+    <xs:sequence><xs:element ref="Level" minOccurs="0" maxOccurs="unbounded"/>
+                 <xs:element ref="Category" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="scope" type="Scope" use="required"/>
+    <xs:attribute name="type" type="DimType" use="required"/>
+    <xs:attribute name="unknown" type="xs:boolean" use="required"/>
+    <xs:attribute name="notApplicable" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="annotate" type="xs:boolean" use="optional" default="true"/>
+    <xs:attribute name="multi" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="use" use="optional" default="core"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="core"/><xs:enumeration value="optional"/></xs:restriction></xs:simpleType></xs:attribute>
+    <xs:attribute name="gloss" type="xs:string" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Profile"><xs:complexType>
+    <xs:attribute name="dimension" type="xs:NCName" use="required"/>
+    <xs:attribute name="level" type="xs:integer" use="optional"/>
+    <xs:attribute name="category" type="xs:NCName" use="optional"/>
+    <xs:attribute name="spread" type="xs:nonNegativeInteger" use="optional" default="0"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Term"><xs:complexType>
+    <xs:sequence><xs:element ref="Profile" minOccurs="1" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="label" type="xs:string" use="required"/>
+    <xs:attribute name="gloss" type="xs:string" use="optional"/>
+  </xs:complexType></xs:element>
+  <xs:element name="Form"><xs:complexType>
+    <xs:attribute name="text" type="xs:string" use="required"/>
+    <xs:attribute name="match" type="Match" use="required"/>
+    <xs:attribute name="term" type="xs:NCName" use="required"/>
+    <xs:attribute name="source" use="optional" default="text"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="text"/><xs:enumeration value="tag"/></xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType></xs:element>
+  <xs:element name="Lexicon"><xs:complexType>
+    <xs:sequence>
+      <xs:element ref="Dimension" minOccurs="1" maxOccurs="unbounded"/>
+      <xs:element ref="Term" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element ref="Form" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="schemaVersion" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="xs:NCName" use="required"/>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+    <xs:attribute name="language" type="xs:language" use="required"/>
+    <xs:attribute name="status" type="xs:string" use="required"/>
+  </xs:complexType></xs:element>
+</xs:schema>

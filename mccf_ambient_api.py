@@ -480,6 +480,136 @@ def media_midi():
     return jsonify({"ok": True, "files": files})
 
 
+# ---- folder pickers: list and read the files of one content type, so an author never has to remember where they live ----------------------------
+# Folders (all under the server's static folder unless noted):
+#   midi     static/x3d/X3DAssets/media/music/            *.mid
+#   recipe   static/x3d/X3DAssets/media/music/recipes/    *.json
+#   mapping  static/x3d/X3DAssets/media/music/mappings/   *.json   (MIDI mapping files)
+#   score    static/x3d/X3DAssets/media/music/scores/     *.json   (score snapshots)
+#   arc      scenes/<scene>/arcs/<take>/arc_*.xml and scenes/_unscoped_arcs/*.xml   (beside this file, not under static)
+_SAFE_PART = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._ -]{0,100}$")
+_SAFE_JSON = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,90}\.json$")
+_FILE_TYPES = {
+    "midi":    {"sub": (), "ext": (".mid", ".midi")},
+    "recipe":  {"sub": ("recipes",), "ext": (".json",)},
+    "mapping": {"sub": ("mappings",), "ext": (".json",)},
+    "score":   {"sub": ("scores",), "ext": (".json",)},
+}
+
+
+def _arc_root():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes")
+
+
+def _list_arcs():
+    root = _arc_root()
+    out = []
+    if not os.path.isdir(root):
+        return out
+    for scene in sorted(os.listdir(root)):
+        sdir = os.path.join(root, scene)
+        if not os.path.isdir(sdir):
+            continue
+        if scene == "_unscoped_arcs":
+            groups = [("", sdir)]
+        else:
+            adir = os.path.join(sdir, "arcs")
+            groups = [(t, os.path.join(adir, t)) for t in sorted(os.listdir(adir))] if os.path.isdir(adir) else []
+        for take, tdir in groups:
+            if not os.path.isdir(tdir):
+                continue
+            for f in os.listdir(tdir):
+                full = os.path.join(tdir, f)
+                if f.lower().endswith(".xml") and os.path.isfile(full):
+                    st = os.stat(full)
+                    rel = "/".join(p for p in (scene, "arcs" if take else "", take, f) if p) if scene != "_unscoped_arcs" else "_unscoped_arcs/" + f
+                    out.append({"name": rel, "label": f, "group": (scene + (" / " + take if take else "")) if scene != "_unscoped_arcs" else "unscoped arcs",
+                                "bytes": st.st_size, "modified": int(st.st_mtime)})
+    out.sort(key=lambda e: -e["modified"])
+    return out
+
+
+@ambient_bp.route("/ambient/files", methods=["GET"])
+def ambient_files():
+    """GET ?type=midi|recipe|mapping|score|arc -> {files:[{name,label,group,bytes,modified}], folder}."""
+    t = request.args.get("type", "")
+    if t == "arc":
+        return jsonify({"ok": True, "type": t, "folder": "scenes/<scene>/arcs/<take>", "files": _list_arcs()})
+    spec = _FILE_TYPES.get(t)
+    if not spec or not current_app.static_folder:
+        return _err("unknown file type", 400)
+    folder = _media_dir(*spec["sub"])
+    files = []
+    if os.path.isdir(folder):
+        for entry in os.listdir(folder):
+            full = os.path.join(folder, entry)
+            if os.path.isfile(full) and entry.lower().endswith(spec["ext"]) and not entry.startswith("."):
+                st = os.stat(full)
+                files.append({"name": entry, "label": entry, "group": "", "bytes": st.st_size, "modified": int(st.st_mtime)})
+    files.sort(key=lambda e: -e["modified"])
+    return jsonify({"ok": True, "type": t, "folder": "x3d/X3DAssets/media/music" + ("/" + "/".join(spec["sub"]) if spec["sub"] else ""), "files": files})
+
+
+@ambient_bp.route("/ambient/file", methods=["GET"])
+def ambient_file():
+    """GET ?type=...&name=... -> the file's bytes. Names are checked part by part; nothing outside the type's folder is served."""
+    t, name = request.args.get("type", ""), request.args.get("name", "")
+    if t == "arc":
+        root, ext = _arc_root(), (".xml",)
+        parts = name.split("/")
+        if not 1 <= len(parts) <= 4 or not all(_SAFE_PART.match(p) and p not in (".", "..") for p in parts):
+            return _err("bad file name", 400)
+    else:
+        spec = _FILE_TYPES.get(t)
+        if not spec or not current_app.static_folder:
+            return _err("unknown file type", 400)
+        root, ext = _media_dir(*spec["sub"]), spec["ext"]
+        parts = [name]
+        if not _SAFE_PART.match(name) or "/" in name or "\\" in name:
+            return _err("bad file name", 400)
+    if not name.lower().endswith(ext):
+        return _err("wrong kind of file", 400)
+    real_root = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(real_root, *parts))
+    if not target.startswith(real_root + os.sep) or not os.path.isfile(target):
+        return _err("no such file", 404)
+    with open(target, "rb") as fh:
+        data = fh.read(8 * 1024 * 1024 + 1)
+    if len(data) > 8 * 1024 * 1024:
+        return _err("that file is too large to open here", 413)
+    mime = "application/json" if target.endswith(".json") else ("text/xml" if target.endswith(".xml") else "application/octet-stream")
+    return current_app.response_class(data, mimetype=mime)
+
+
+@ambient_bp.route("/ambient/save_file", methods=["POST"])
+def save_file():
+    """POST JSON. Query: type=mapping|score  name=<file>.json  overwrite=1 (optional). Same rules as save_recipe."""
+    denied = _save_guard()
+    if denied:
+        return denied
+    t, name = request.args.get("type", ""), request.args.get("name") or ""
+    if t not in ("mapping", "score"):
+        return _err("type must be mapping or score", 400)
+    if not _SAFE_JSON.match(name):
+        return _err("the name must be letters, digits, '.', '_' or '-', and end in .json", 400)
+    data = request.get_data(cache=False)
+    if len(data) > MAX_RECIPE_BYTES:
+        return _err("that file is too large (limit %d bytes)" % MAX_RECIPE_BYTES, 413)
+    try:
+        doc = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return _err("that is not valid JSON", 400)
+    if not isinstance(doc, dict):
+        return _err("that does not look like a %s file" % t, 400)
+    try:
+        result = _write_atomic(_media_dir(*_FILE_TYPES[t]["sub"]), name, data, request.args.get("overwrite") == "1")
+    except (OSError, ValueError) as e:
+        return _err("could not save: %s" % e, 500)
+    if result == "exists":
+        return _err("%s already exists" % name, 409, name=name, exists=True)
+    return jsonify({"ok": True, "name": name, "bytes": len(data), "overwritten": result == "overwritten"}), (200 if result == "overwritten" else 201)
+
+
 # ---- emotional arc -> MIDI state (what the Ambient page is using; read by the dashboard) -------------------------------------------------------
 _ARC_STATE = {"state": None, "updated": None}
 _ARC_CURVES = ("E", "B", "P", "S", "Coherence")

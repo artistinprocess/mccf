@@ -485,61 +485,84 @@ class OllamaAdapter(LLMAdapter):
         p = self._default_params(params)
         injected = self._inject_affective_context(messages, affective_context, persona, delta_context=delta_context)
 
-        # Flatten to Ollama format
+        # Flatten to Ollama format. V5: copy each message before editing; the injected list
+        # shares message dicts with the caller's conversation history, so editing in place
+        # re-prepended the system prompt to the stored history on every turn.
         system = next((m["content"] for m in injected if m["role"] == "system"), "")
-        convo  = [m for m in injected if m["role"] != "system"]
+        convo  = [dict(m) for m in injected if m["role"] != "system"]
         if convo and convo[0]["role"] == "user":
             convo[0]["content"] = system + "\n\n" + convo[0]["content"]
 
-        payload = _json.dumps({
-            "model":    self.model or "llama3.2:latest",
-            "messages": convo,
-            "stream":   False,
-            "options": {
-                "temperature": p.get("temperature", 0.75),
-                "num_predict": p["max_tokens"]
-            }
-        }).encode("utf-8")
+        # V5 (P3): budgets and timeouts are configurable; an empty reply is retried once
+        # with a larger budget and then reported, never passed on silently.
+        import os as _os
+        def _ollama_payload(n_predict):
+            return _json.dumps({
+                "model":    self.model or "llama3.2:latest",
+                "messages": convo,
+                "stream":   False,
+                "options": {
+                    "temperature": p.get("temperature", 0.75),
+                    "num_predict": n_predict
+                }
+            }).encode("utf-8")
 
-        # Synchronous urllib call — avoids Windows asyncio/aiohttp issues
-        content = ""
-        # v2.0 — Increased timeout + retry for constitutional arc waypoints.
-        # Waypoint prompts are longer than conversational turns.
-        # Timeout ladder: try 180s first, retry once at 240s on timeout.
-        TIMEOUTS = [180, 240]
-        last_error = None
-        for timeout_secs in TIMEOUTS:
-            try:
-                req = urllib.request.Request(
-                    f"{self.host}/api/chat",
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                with urllib.request.urlopen(req, timeout=timeout_secs) as resp:
-                    raw = resp.read().decode("utf-8")
-                    for line in raw.strip().split("\n"):
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            data = _json.loads(line)
-                            chunk = data.get("message", {}).get("content", "")
-                            if chunk:
-                                content += chunk
-                        except _json.JSONDecodeError:
-                            pass
-                last_error = None
-                break  # success — stop retry loop
-            except urllib.error.URLError as e:
-                last_error = e
-                if "timed out" in str(e).lower() or "timeout" in str(e).lower():
-                    continue  # retry with longer timeout
-                else:
-                    break  # non-timeout error — don't retry
-            except Exception as e:
-                last_error = e
-                break
+        try:
+            TIMEOUTS = [int(x) for x in _os.environ.get("MCCF_OLLAMA_TIMEOUTS", "180,240").split(",") if x.strip()]
+        except ValueError:
+            TIMEOUTS = [180, 240]
+        try:
+            retry_factor = float(_os.environ.get("MCCF_EMPTY_RETRY_FACTOR", "3"))
+        except ValueError:
+            retry_factor = 3.0
+
+        def _call_once(n_predict):
+            content = ""
+            last_error = None
+            payload = _ollama_payload(n_predict)
+            for timeout_secs in TIMEOUTS:
+                try:
+                    req = urllib.request.Request(
+                        f"{self.host}/api/chat",
+                        data=payload,
+                        headers={"Content-Type": "application/json"},
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=timeout_secs) as resp:
+                        raw = resp.read().decode("utf-8")
+                        for line in raw.strip().split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                data = _json.loads(line)
+                                chunk = data.get("message", {}).get("content", "")
+                                if chunk:
+                                    content += chunk
+                            except _json.JSONDecodeError:
+                                pass
+                    last_error = None
+                    break  # success — stop retry loop
+                except urllib.error.URLError as e:
+                    last_error = e
+                    if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+                        continue  # retry with longer timeout
+                    else:
+                        break  # non-timeout error — don't retry
+                except Exception as e:
+                    last_error = e
+                    break
+            return content, last_error
+
+        content, last_error = _call_once(p["max_tokens"])
+        if not last_error and not content.strip():
+            bigger = int(p["max_tokens"] * retry_factor)
+            print(f"[MCCF] Ollama returned an empty reply (model={self.model}, num_predict={p['max_tokens']}); "
+                  f"retrying once with num_predict={bigger}. Reasoning models can spend the whole budget thinking.")
+            content, last_error = _call_once(bigger)
+            if not last_error and not content.strip():
+                content = (f"[Empty reply from {self.model} even at num_predict={bigger}. "
+                           "Raise the token budget, or use a non-reasoning model.]")
 
         if last_error:
             if "timed out" in str(last_error).lower() or "timeout" in str(last_error).lower():
@@ -618,13 +641,23 @@ class AdapterRegistry:
     Central registry for LLM adapters.
     Supports runtime registration of custom adapters.
     """
+    # V5: MCCF is a localhost system and the only supported model server is Ollama.
+    # The hosted adapters stay defined in this file but are not registered, so
+    # /voice/configure and /voice/adapters cannot select them.
     _adapters: dict = {
         "stub":      StubAdapter,
+        "ollama":    OllamaAdapter,
+    }
+    _HOSTED: dict = {
         "anthropic": AnthropicAdapter,
         "openai":    OpenAIAdapter,
-        "ollama":    OllamaAdapter,
         "google":    GoogleAdapter,
     }
+
+    @classmethod
+    def enable_hosted(cls):
+        """Register the hosted adapters. Not called anywhere in V5."""
+        cls._adapters.update(cls._HOSTED)
 
     @classmethod
     def register(cls, adapter_id: str, adapter_class):

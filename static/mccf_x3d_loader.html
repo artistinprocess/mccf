@@ -14,7 +14,7 @@
   };
 })();
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/x_ite@16.1.3/dist/x_ite.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/x_ite@16.7.1/dist/x_ite.min.js"></script>
 <!-- Bumped from 11.6.0 → 16.1.3 (verified latest release as of Sept 2026).
      cycleComplete swap for _wirePathTimerBehavior's fraction_changed>=0.99
      workaround (line ~4241) intentionally NOT made yet — pending confirmation
@@ -56,6 +56,19 @@ button.active { background: #4af0a8; color: #111; }
   transform: translateX(100%); transition: transform 0.15s ease;
 }
 #field-overlay.open { transform: translateX(0); }
+#amb-drawer { position: absolute; right: 0; top: 150px; z-index: 125; display: flex; align-items: flex-start; transition: right 0.15s ease; }
+#field-overlay.open ~ #amb-drawer { right: 220px; }
+#amb-tab { writing-mode: vertical-rl; background: rgba(6,8,14,0.94); color: #4af0a8; border: 1px solid #2a3545; border-right: none;
+  border-radius: 4px 0 0 4px; padding: 8px 4px; font-size: 11px; cursor: pointer; letter-spacing: 1px; user-select: none; }
+#amb-tab.playing { color: #111; background: #4af0a8; }
+#amb-panel { display: none; width: 196px; background: rgba(6,8,14,0.94); border: 1px solid #2a3545; border-right: none;
+  padding: 8px 10px; font-size: 10px; color: #8aa0b0; }
+#amb-drawer.open #amb-panel { display: block; }
+#amb-panel label { display: block; margin-top: 6px; color: #6a8090; }
+#amb-panel select { width: 100%; background: #0a0f18; color: #a0c0d0; border: 1px solid #2a3545; font-family: monospace; font-size: 11px; }
+#amb-panel input[type=range] { width: 100%; }
+#amb-panel .amb-row { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: #8aa0b0; }
+#amb-note { margin-top: 6px; color: #f0c060; min-height: 12px; }
 #field-overlay .row { display: flex; justify-content: space-between; margin: 2px 0; }
 #field-overlay .val { color: #a0c0d0; }
 .tension-low { color: #4a8adf; }
@@ -297,8 +310,32 @@ button.active { background: #4af0a8; color: #111; }
     </div>
     <!-- Trust panel -->
     <div id="trust-panel">
-      <span id="trust-toggle" onclick="toggleTrust()">▶ trust</span>
+      <span id="trust-toggle" onclick="toggleTrust()">▶ trust / honor</span>
       <div id="trust-rows" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Ambient drawer: the Ambient Composer runs in a hidden frame; zones with "Drive the Ambient Composer" set its scale on enter/exit -->
+  <div id="amb-drawer">
+    <div id="amb-tab" onclick="ambToggleDrawer()" title="Ambient Composer">&#9834; AMBIENT</div>
+    <div id="amb-panel">
+      <button id="amb-start" onclick="ambStartStop()" style="width:100%">&#9654; Start</button>
+      <label>Base scale (outside driven zones)</label>
+      <select id="amb-scale" onchange="ambScalePick(this.value)">
+        <option value="auto">Auto (from field)</option><option value="major">Major</option><option value="minor">Minor</option>
+        <option value="dorian">Dorian</option><option value="phrygian">Phrygian</option><option value="pentatonic">Pentatonic</option>
+        <option value="whole_tone">Whole tone</option><option value="chromatic">Chromatic</option><option value="lydian">Lydian</option>
+        <option value="mixolydian">Mixolydian</option><option value="locrian">Locrian</option>
+      </select>
+      <label>Root note</label>
+      <select id="amb-root" onchange="ambRootPick(this.value)">
+        <option>A3</option><option>B3</option><option selected>C4</option><option>D4</option><option>E4</option><option>F4</option><option>G4</option>
+      </select>
+      <label>Volume</label>
+      <input type="range" id="amb-vol" min="0" max="1" step="0.01" value="0.6" oninput="ambVolumePick(this.value)">
+      <div class="amb-row"><input type="checkbox" id="amb-follow" checked><span>Follow zones</span></div>
+      <div class="amb-row"><input type="checkbox" id="amb-autostart" checked><span>Start with Play</span></div>
+      <div id="amb-note"></div>
     </div>
   </div>
 
@@ -323,6 +360,13 @@ button.active { background: #4af0a8; color: #111; }
   <div id="pb-qr">
     <div id="pb-question"></div>
     <div id="pb-response"></div>
+    <canvas id="dlg-arc" width="560" height="96" style="display:none;width:100%;max-width:560px;margin-top:6px"></canvas>
+    <div id="dlg-answer" style="display:none;gap:6px;align-items:center;margin-top:6px">
+      <input id="dlg-answer-input" type="text" placeholder="Type your answer and press Enter" style="flex:1;background:#0c1220;color:#e0ecf8;border:1px solid #2a3858;border-radius:4px;padding:5px 8px;font-size:13px">
+      <button id="dlg-answer-send" class="btn" style="padding:4px 10px">Send</button>
+      <button id="dlg-answer-skip" class="btn" style="padding:4px 10px">Skip</button>
+      <span id="dlg-answer-note" style="font-size:11px;opacity:.6"></span>
+    </div>
   </div>
 </div>
 
@@ -369,6 +413,7 @@ button.active { background: #4af0a8; color: #111; }
       <option value="">— select scene —</option>
     </select>
     <button onclick="x3dLoadFiles()" title="Refresh scene list">&#8635;</button>
+    <button onclick="x3dEditOpen(document.getElementById('x3d-file').value)" title="Open this scene's X3D file in the X3D editor (Sunrize by default)">Edit X3D</button>
   </div>
   <div class="tdiv"></div>
   <div class="tgroup">
@@ -407,12 +452,14 @@ button.active { background: #4af0a8; color: #111; }
          visibility while placing/aiming real lights, matching the same
          "temporary crutch, never in the shipped file" role headlight
          always played back in VRML days. -->
+    <label title="Steady coupler/zone tick while a scene plays (zones and characters influence each other between events)"><input type="checkbox" id="pb-livetick" checked/>live tick</label>
+    <select id="pb-livetick-ms" title="Live tick interval" style="width:62px"><option value="250">0.25s</option><option value="500" selected>0.5s</option><option value="1000">1s</option><option value="2000">2s</option></select>
     <label title="Live-only debug light — never affects the exported scene"><input type="checkbox" id="pb-headlight" onchange="pbHeadlightChanged()"/>headlight</label>
     <label title="Toggles the facial EBPS driver poll entirely — for isolating whether it contributes to frame-rate drops, independent of gestures/event cues. Live-only, never affects the exported scene."><input type="checkbox" id="pb-facial-ebps" checked onchange="pbFacialEBPSChanged()"/>FACS EBPS</label>
   </div>
   <div class="tdiv"></div>
-  <div class="tgroup" title="Teleports to a dialogue/arc step position, not a spatial jump — in an EventCue-only scene (no Path elements) every step sits at the same (0,0) origin.">
-    <span class="tlabel">Waypoints:</span>
+  <div class="tgroup" title="WPPath controls: act on waypoint paths (WPPath) only. They do not apply to other path types such as RecordedPath. Teleports to a dialogue/arc step position, not a spatial jump — in an EventCue-only scene (no Path elements) every step sits at the same (0,0) origin.">
+    <span class="tlabel">WPPath:</span>
     <select id="jump-agent" style="width:100px;" onfocus="populateJumpAgents()"></select>
     <input id="jump-step" type="number" min="1" value="1" style="width:40px;">
     <button onclick="pbJumpToWaypoint(document.getElementById('jump-agent').value, document.getElementById('jump-step').value)"
@@ -441,7 +488,7 @@ button.active { background: #4af0a8; color: #111; }
 
 <script src="js/mccf_midi.js"></script>
 <script>
-const API = 'http://localhost:5000';
+const API = (function(){try{var q=new URLSearchParams(location.search).get('api');if(q){localStorage.setItem('mccf_api',q);return q;}if(location.protocol==='file:'){var s=localStorage.getItem('mccf_api');if(s)return s;}}catch(e){}return location.protocol.indexOf('http')===0?location.origin:'http://localhost:5000';})();
 const POLL_MS     = 750;
 const HOTHOUSE_MS = 1000;
 
@@ -495,6 +542,46 @@ function toggleAudioDrawer() {
   }
   requestAnimationFrame(tick);
 })();
+
+// ---------------------------------------------------------------------------
+// mccfPerf(): frame-rate isolation test. Type  mccfPerf()  in the console (F12) with the scene loaded and playing.
+// It measures frames per second for about 3 s, switches one suspect off at a time (live tick, avatar animation,
+// the movie, shading quality), measures again, then puts everything back and prints a table.
+// ---------------------------------------------------------------------------
+window.mccfPerf = function (opts) {
+  opts = opts || {};
+  var settleMs = opts.settleMs || 1500, runMs = opts.runMs || 3000, out = [];
+  function measure() {
+    return new Promise(function (res) {
+      setTimeout(function () {
+        var n = 0, t0 = performance.now();
+        (function f() { n++; if (performance.now() - t0 < runMs) requestAnimationFrame(f); else res(Math.round(n * 1000 / (performance.now() - t0) * 10) / 10); })();
+      }, settleMs);
+    });
+  }
+  function scene() { try { return canvas.browser.currentScene; } catch (e) { return null; } }
+  function allTimers() { var a = []; try { Object.keys(_behaviorTimerMap).forEach(function (sn) { Object.keys(_behaviorTimerMap[sn]).forEach(function (b) { a.push(_behaviorTimerMap[sn][b]); }); }); } catch (e) {} return a; }
+  function movie() { var sc = scene(), m = null; try { m = sc.getImportedNode('TheSceneMovie'); } catch (e) {} if (!m) { try { m = sc.getNamedNode('TheSceneMovie'); } catch (e) {} } return m; }
+  var tests = [
+    { name: 'baseline (nothing changed)', on: function () {}, off: function () {} },
+    { name: 'live tick off', on: function () { liveTickStop(); }, off: function () { liveTickStart(); } },
+    { name: 'avatar animation off (all timers)', on: function () { var self = this; self.saved = allTimers().map(function (n) { var e; try { e = n.enabled; } catch (x) {} try { n.enabled = false; } catch (x) {} return [n, e]; }); },
+      off: function () { (this.saved || []).forEach(function (p) { try { p[0].enabled = p[1]; } catch (x) {} }); } },
+    { name: 'movie off', on: function () { var m = movie(); this.m = m; if (m) { try { this.e = m.enabled; m.enabled = false; } catch (x) {} } }, off: function () { if (this.m) { try { this.m.enabled = this.e; } catch (x) {} } } },
+    { name: 'movie stopped (stopTime now)', on: function () { var m = movie(); this.m = m; if (m) { try { this.st = m.stopTime; this.sa = m.startTime; m.stopTime = (canvas.browser.currentTime || 0) + 0.001; } catch (x) {} } }, off: function () { if (this.m) { try { var t = (canvas.browser.currentTime || 0); this.m.stopTime = t - 0.01; this.m.startTime = t + 0.05; } catch (x) {} } } },
+    { name: 'movie shape hidden', on: function () { var sc = scene(); this.n = null; try { this.n = sc.getNamedNode('MovieShape'); } catch (x) {} if (!this.n) { try { this.n = sc.getImportedNode('MovieShape'); } catch (x) {} } if (this.n) { try { this.v = this.n.visible; this.n.visible = false; } catch (x) {} } }, off: function () { if (this.n) { try { this.n.visible = this.v; } catch (x) {} } } },
+    { name: 'sound hushed', on: function () { try { window._mccfMediaHush(true); } catch (x) {} }, off: function () { try { window._mccfMediaHush(false); } catch (x) {} } },
+    { name: 'canvas half size (fill-rate test)', on: function () { try { this.w = canvas.style.width; this.h = canvas.style.height; canvas.style.width = Math.round(canvas.offsetWidth / 2) + 'px'; canvas.style.height = Math.round(canvas.offsetHeight / 2) + 'px'; } catch (x) {} }, off: function () { try { canvas.style.width = this.w; canvas.style.height = this.h; } catch (x) {} } },
+    { name: 'shading FLAT (renderer cost)', on: function () { try { this.o = canvas.browser.getBrowserOption('Shading'); canvas.browser.setBrowserOption('Shading', 'FLAT'); } catch (x) {} }, off: function () { try { canvas.browser.setBrowserOption('Shading', this.o || 'PHONG'); } catch (x) {} } },
+    { name: 'primitive quality LOW', on: function () { try { this.o = canvas.browser.getBrowserOption('PrimitiveQuality'); canvas.browser.setBrowserOption('PrimitiveQuality', 'LOW'); } catch (x) {} }, off: function () { try { canvas.browser.setBrowserOption('PrimitiveQuality', this.o || 'MEDIUM'); } catch (x) {} } }
+  ];
+  var info = { avatars: Object.keys(_behaviorTimerMap || {}), timers: allTimers().length, movie: !!movie(), pixels: (canvas && canvas.offsetWidth ? canvas.offsetWidth + 'x' + canvas.offsetHeight : '?'), dpr: window.devicePixelRatio };
+  console.log('[perf] start', JSON.stringify(info));
+  return tests.reduce(function (p, t) {
+    return p.then(function () { try { t.on(); } catch (e) { console.warn('[perf]', t.name, e); } return measure(); })
+            .then(function (fps) { try { t.off(); } catch (e) {} out.push({ test: t.name, fps: fps }); console.log('[perf]', t.name, fps, 'fps'); });
+  }, Promise.resolve()).then(function () { console.table(out); console.log('[perf] done. Copy these lines.'); return out; });
+};
 
 let canvas = document.getElementById('x3d');
 // x3dFileChanged() replaces this element on every genuine scene switch (see there
@@ -651,6 +738,7 @@ let _runtimeExpanded = false;
 let _trustExpanded   = false;
 // Last trust data from couplers/tick response — updated each tick call
 window._lastTrustData = {};
+window._lastHonorData = {};   // per-character honor (read-only, derived from phi/epsilon drift)
 
 function toggleRuntime() {
   _runtimeExpanded = !_runtimeExpanded;
@@ -663,15 +751,16 @@ function toggleTrust() {
   _trustExpanded = !_trustExpanded;
   document.getElementById('trust-rows').style.display = _trustExpanded ? 'block' : 'none';
   document.getElementById('trust-toggle').textContent =
-    (_trustExpanded ? '▼' : '▶') + ' trust';
-  if (_trustExpanded) renderTrust(window._lastTrustData || {});
+    (_trustExpanded ? '▼' : '▶') + ' trust / honor';
+  if (_trustExpanded) renderTrust(window._lastTrustData || {}, window._lastHonorData || {});
 }
 
-function renderTrust(trustData) {
+function renderTrust(trustData, honorData) {
   var container = document.getElementById('trust-rows');
   if (!container) return;
+  honorData = honorData || window._lastHonorData || {};
   var links = Object.keys(trustData);
-  if (!links.length) {
+  if (!links.length && !Object.keys(honorData).length) {
     container.innerHTML = '<div style="color:#2a3a4a;font-size:9px;margin-top:2px;">no trust data yet — play an arc</div>';
     return;
   }
@@ -690,6 +779,24 @@ function renderTrust(trustData) {
       + '<div class="tr-bar-wrap"><div class="tr-bar" style="width:' + pct + '%;background:' + barColor + '"></div></div>'
       + '<span class="tr-mu">' + modStr + '</span>'
       + '<span class="tr-ticks">' + (t.ticks || 0) + 'T</span>'
+      + '</div>';
+  });
+  // Honor: one row per character. Read-only. Promise = own constitutional vector (phi);
+  // keeps its word while coupler drift (epsilon) stays within half its allowed range.
+  Object.keys(honorData).forEach(function(name) {
+    var h = honorData[name];
+    var hm = h.mu !== undefined ? h.mu : 0.5;
+    var hpct = Math.round(hm * 100);
+    var hcol = hm > 0.55 ? '#4af0a8' : hm < 0.45 ? '#f06060' : '#f0a060';
+    var hmod = Math.round((hm - 0.5) * 100);
+    var hstr = hmod === 0 ? '±0%' : (hmod > 0 ? '+' + hmod + '%' : hmod + '%');
+    var rep = (h.reputation === null || h.reputation === undefined) ? 'none (no incoming links)' : Math.round(h.reputation * 100) + '%';
+    var tip = 'honor of ' + name + ' — keeps its word while drift stays within half its allowed range. Reputation (mean incoming trust): ' + rep + '. Drift now: ' + Math.round((h.drift_ratio || 0) * 100) + '% of allowed.';
+    html += '<div class="tr-row" title="' + tip + '">'
+      + '<span class="tr-label">honor ' + name + '</span>'
+      + '<div class="tr-bar-wrap"><div class="tr-bar" style="width:' + hpct + '%;background:' + hcol + '"></div></div>'
+      + '<span class="tr-mu">' + hstr + '</span>'
+      + '<span class="tr-ticks">' + (h.ticks || 0) + 'T</span>'
       + '</div>';
   });
   container.innerHTML = html;
@@ -1053,9 +1160,26 @@ function applyHotHouseData(data) {
               AU12:   Er,
               AU26:   Sr
             };
+            // Day 97: caps and smoothing, so the face cannot be driven to a grimace and does not twitch.
+            // Each AU's 0..1 driver is SCALED to its cap (not clipped), so the full range of E/B/P/S still
+            // shows as movement. Then eased toward the target (about 0.35 s), so a jump in the field becomes a
+            // quick, soft move. Caps live in window.MCCF_AU_CAPS and can be changed from the console; set
+            // window.MCCF_AU_SMOOTH_S = 0 to turn smoothing off.
+            var caps = window.MCCF_AU_CAPS = window.MCCF_AU_CAPS || { AU1: 0.8, AU2: 0.8, AU4: 0.8, AU5: 0.6, AU6: 0.85, AU12: 0.85, AU26: 0.4 };
+            var tau = (window.MCCF_AU_SMOOTH_S === undefined) ? 0.35 : window.MCCF_AU_SMOOTH_S;
+            var st = (window._auState = window._auState || {});
+            var sf = (st[suffix] = st[suffix] || { t: 0 });
+            var nowS = Date.now() / 1000, dt = sf.t ? Math.min(1, nowS - sf.t) : 1;
+            sf.t = nowS;
+            var alpha = tau > 0 ? 1 - Math.exp(-dt / tau) : 1;
             Object.keys(auWeights).forEach(function(key) {
               var node = displacers[key];
-              if (node) { node.weight = auWeights[key]; applied++; }
+              if (!node) return;
+              var cap = caps[key.split('_')[0]]; if (cap === undefined) cap = 1;
+              var target = Math.min(1, Math.max(0, auWeights[key])) * cap;
+              var prev = (sf[key] === undefined) ? target : sf[key];
+              var w = prev + (target - prev) * alpha;
+              sf[key] = w; node.weight = w; applied++;
             });
             // Throttled diagnostic — once per ~5s, not every tick, so this
             // is legible in the console instead of scrolling past. Real
@@ -1070,7 +1194,7 @@ function applyHotHouseData(data) {
                 E.toFixed(2), B.toFixed(2), P.toFixed(2), S.toFixed(2),
                 '| rescaled=', Er.toFixed(2), Br.toFixed(2), Pr.toFixed(2), Sr.toFixed(2),
                 '| AU12/AU6(E)=', Er.toFixed(2), 'AU4(1-B)=', (1-Br).toFixed(2),
-                'AU1/2/5(P)=', Pr.toFixed(2), 'AU26(S)=', Sr.toFixed(2));
+                'AU1/2/5(P)=', Pr.toFixed(2), 'AU26(S)=', Sr.toFixed(2), '| caps', JSON.stringify(caps));
             }
           }
         } catch(facialErr) { /* facial driver is non-critical — skip silently */ }
@@ -1277,7 +1401,8 @@ function runSAITest() {
     if (!scene) { out.textContent = 'SAI test: no scene'; return; }
 
     // Use first registered avatar node for SAI test — KeyLight may not exist in all scenes
-    var testNodeName = (window._avatarNodeNames && window._avatarNodeNames[0]) || 'Avatar_Cindy';
+    var testNodeName = (window._avatarNodeNames && window._avatarNodeNames[0]) || null;
+    if (!testNodeName) { out.textContent = 'SAI test: no avatar in this scene to test'; return; }
     const key = scene.getNamedNode(testNodeName);
     if (!key) { out.textContent = 'SAI test ERROR: Named node \'' + testNodeName + '\' not found'; return; }
 
@@ -1329,7 +1454,8 @@ window.addEventListener('message', (e) => {
     // audioFile= just landed on a line that fired as TTY before) actually
     // re-fires with the updated data instead of hitting the fire-once guard.
     _dialogueLines = [];
-    _dialogueFiredIds = {};
+    _dialogueFiredIds = {}; _lastUserAnswer = ''; _dlgArcReset();
+    if (typeof _dialogueHoldActive !== 'undefined' && _dialogueHoldActive) { try { _dialogueHoldActive.finish(''); } catch (e) {} }
     _dialoguePendingDeclared.forEach(function(tid){ clearTimeout(tid); });
     _dialoguePendingDeclared = [];
     window._dialogueSceneStartFiredFor = null;
@@ -1474,13 +1600,20 @@ function _pbCurrentSceneName() {
   return sel.value.replace(/\.x3d$/i, '');
 }
 
+var _pbLoadGen = 0;
 async function pbLoadFiles() {
   try {
+    var myGen = ++_pbLoadGen;
     var sceneName = _pbCurrentSceneName();
-    var url = API + '/arc/playback';
-    if (sceneName) url += '?scene_name=' + encodeURIComponent(sceneName);
-    const r = await fetch(url);
-    const data = await r.json();
+    // The Arc list is always scoped to the loaded scene. With no scene chosen
+    // yet (startup, before the scene list fills) it stays empty rather than
+    // listing every scene's arcs.
+    var data = {files: []};
+    if (sceneName) {
+      const r = await fetch(API + '/arc/playback?scene_name=' + encodeURIComponent(sceneName));
+      data = await r.json();
+    }
+    if (myGen !== _pbLoadGen) return;   // a newer request superseded this one
     _pbSceneArcFiles = data.files || [];
 
     // Populate the Take dropdown from distinct take_name values, newest-first
@@ -1595,16 +1728,16 @@ function pbFileChanged() {
     .then(function(txt){
       // Store the raw response — we need the scene XML not the parsed JSON
       // Re-fetch as raw XML from scenes/ dir via a direct file fetch isn't available
-      // Instead: rebuild EmotionalArc XML fragment from JSON response for voice/position use
+      // Instead: rebuild AgentPlacement XML fragment from JSON response for voice/position use
       try {
         var data = JSON.parse(txt);
         // Reconstruct minimal scene def XML from placedAgents for voice map + start positions
         var frag = '<Scene>';
         Object.values(data.placedAgents || {}).forEach(function(a) {
           var pos = a.position || [0,0,0];
-          frag += '<EmotionalArc cultivar="'+_xe(a.name)+'" voice="'+_xe(a.voice||'')+'">'
+          frag += '<AgentPlacement cultivar="'+_xe(a.name)+'" voice="'+_xe(a.voice||'')+'">'
                 + '<StartPosition x="'+pos[0]+'" y="'+pos[1]+'" z="'+pos[2]+'"/>'
-                + '</EmotionalArc>';
+                + '</AgentPlacement>';
         });
         frag += '</Scene>';
         window._loadedSceneDefXml = frag;
@@ -1655,6 +1788,17 @@ function pbFacialEBPSChanged() {
   // baseline should be neutral -- not frozen at whatever E/B/P/S pose the driver last wrote.
   if (!cb.checked) _faceNeutralizeAll();
 }
+
+// Voice fallback: online voices (e.g. Edge "... Online (Natural)") can fail with
+// 'synthesis-failed' when the service is unreachable. Remember them and use a local voice.
+var _pbBadVoices = {};
+function _pbLocalVoice() {
+  var all = (window.speechSynthesis ? speechSynthesis.getVoices() : []).filter(function(v){ return v.lang && v.lang.startsWith('en'); });
+  var loc = all.filter(function(v){ return v.localService; });
+  var pick = loc.filter(function(v){ return v.lang === 'en-US'; })[0] || loc[0];
+  return pick || null;
+}
+function _pbVoiceUsable(v) { return !(v && _pbBadVoices[v.name]); }
 
 function pbLoadVoices() {
   if (!window.speechSynthesis) return;
@@ -1729,14 +1873,14 @@ async function _buildSceneVoiceMapFromCultivars() {
 }
 
 function _buildSceneVoiceMap() {
-  // Fallback path: parse <EmotionalArc cultivar="X" voice="Y"> from loaded scene XML
+  // Fallback path: parse <AgentPlacement cultivar="X" voice="Y"> (older scenes: <EmotionalArc>) from loaded scene XML
   // Used when /cultivars/xml is unavailable or returns no voice data.
   var map = {};
   var src = window._loadedSceneDefXml || window._loadedSceneXml;
   if (!src || !_pbVoices.length) return map;
   try {
     var doc = new DOMParser().parseFromString(src, 'text/xml');
-    doc.querySelectorAll('EmotionalArc').forEach(function(el) {
+    doc.querySelectorAll('AgentPlacement, EmotionalArc').forEach(function(el) {
       var name = el.getAttribute('cultivar');
       var voiceName = el.getAttribute('voice');
       if (!name || !voiceName) return;
@@ -1755,6 +1899,48 @@ function _buildSceneVoiceMap() {
 }
 
 var _pbSceneVoiceMap = null;  // built once per scene load
+
+// ── Waiting poses (author's choice per character, per scene) ───────────────
+// <AgentPlacement think="clip" hold="clip">. Thinking plays while a live (LLM) reply is awaited;
+// hold plays while the character waits for the user. A clip is a behavior clip of that character.
+// No clip named = nothing changes; nothing here assumes a clip name.
+var _agentPoses = {};        // cultivar -> {think, hold}
+var _poseActive = {};        // cultivar -> 'think' | 'hold' while a pose is being held
+function _loadAgentPoses() {
+  _agentPoses = {};
+  var src = window._loadedSceneDefXml || window._loadedSceneXml;
+  if (!src) return;
+  try {
+    var doc = new DOMParser().parseFromString(src, 'text/xml');
+    doc.querySelectorAll('AgentPlacement, EmotionalArc').forEach(function(el) {
+      var n = el.getAttribute('cultivar'); if (!n) return;
+      var t = el.getAttribute('think'), h = el.getAttribute('hold');
+      if (t || h) _agentPoses[n] = { think: t || '', hold: h || '' };
+    });
+  } catch (e) { console.warn('_loadAgentPoses error:', e); }
+}
+var _agentPosesSrc = null, _poseReturn = {};
+function _poseBegin(cultivar, kind) {
+  var src = window._loadedSceneDefXml || window._loadedSceneXml || '';
+  if (_agentPosesSrc !== src) { _loadAgentPoses(); _agentPosesSrc = src; }
+  var p = _agentPoses[cultivar]; if (!p || !p[kind]) return;
+  var safe = String(cultivar).replace(/[^A-Za-z0-9_]/g, '_');
+  if (!_poseActive[cultivar]) _poseReturn[cultivar] = _agentLastLoopClip[safe] || 'Default';   // what to go back to
+  _poseActive[cultivar] = kind;
+  _fireGestureEventCue({ target: cultivar, clip: p[kind] });
+}
+function _poseEnd(cultivar, kind) {
+  if (_poseActive[cultivar] !== kind) return;   // another pose has taken over, or already ended
+  delete _poseActive[cultivar];
+  _fireGestureEventCue({ target: cultivar, clip: _poseReturn[cultivar] || 'Default' });
+}
+// A step does not say whose reply is awaited until it returns. When exactly one character in the
+// scene is live-model driven, that character is the one thinking; otherwise nobody is posed.
+function _stepThinker() { var l = _liveActors(); return l.length === 1 ? l[0] : ''; }
+// Characters whose replies come from a live model; used when a step does not say whose reply it is.
+function _liveActors() {
+  return Object.keys(_cultivarActors || {}).filter(function(c) { var a = _cultivarActors[c]; return a === 'ollama' || a === 'llm'; });
+}
 
 // Pending onComplete callback for in-progress TTS — keyed by TTS content key.
 // When pbSpeakQALines is called with the same lines (duplicate key), the new onComplete
@@ -1845,7 +2031,7 @@ function pbSpeakQALines(qaLines, onComplete, cultivarKey) {
     var capturedCk    = ck;
     var capturedToken = myToken;
     var rotationCount = 0;
-    function speakNext(i) {
+    function speakNext(i, forceLocal) {
       if ((_pbSpeakToken[capturedCk] || 0) !== capturedToken) {
         console.log('pbSpeakQALines: [' + capturedCk + '] cancelled (token mismatch) — suppressing onComplete');
         _pbSpeechLock = false;
@@ -1876,6 +2062,10 @@ function pbSpeakQALines(qaLines, onComplete, cultivarKey) {
         }
         if (_pbVoices[_pbSpeakerVoiceMap[speaker]]) utt.voice = _pbVoices[_pbSpeakerVoiceMap[speaker]];
       }
+      if (utt.voice && !utt.voice.localService && (forceLocal || !_pbVoiceUsable(utt.voice))) {
+        var _lv = _pbLocalVoice();
+        if (_lv) utt.voice = _lv;
+      }
       // Timeout fallback: if browser blocks speech (no user gesture, AudioContext issue),
       // utt.onend never fires. After 8s per line, force advance so arc doesn't stall.
       var _uttDone = false;
@@ -1892,7 +2082,13 @@ function pbSpeakQALines(qaLines, onComplete, cultivarKey) {
         }
       }, 8000);
       utt.onend  = function() { if (!_uttDone) { _uttDone = true; clearTimeout(_uttTimeout); speakNext(i+1); } };
-      utt.onerror = function(e) { if (!_uttDone) { _uttDone = true; clearTimeout(_uttTimeout); console.warn('pbSpeakQALines: [' + capturedCk + '] line ' + i + ' ERRORED —', e && e.error, '— advancing:', line.text.substring(0,40)); speakNext(i+1); } };
+      utt.onerror = function(e) { if (!_uttDone) { _uttDone = true; clearTimeout(_uttTimeout);
+        if (e && e.error === 'synthesis-failed' && !forceLocal && utt.voice && !utt.voice.localService && _pbLocalVoice()) {
+          _pbBadVoices[utt.voice.name] = true;
+          console.warn('pbSpeakQALines: voice "' + utt.voice.name + '" failed (synthesis-failed) — retrying line with local voice "' + _pbLocalVoice().name + '"');
+          speakNext(i, true); return;
+        }
+        console.warn('pbSpeakQALines: [' + capturedCk + '] line ' + i + ' ERRORED —', e && e.error, '— advancing:', line.text.substring(0,40)); speakNext(i+1); } };
       if (speechSynthesis.paused) {
         speechSynthesis.resume();
         console.log('pbSpeakQALines: resumed paused speechSynthesis before speak');
@@ -2556,6 +2752,15 @@ function _parseDialogueLines(doc) {
       text:      (el.textContent || '').trim(),
       ttsText:   el.hasAttribute('ttsText')   ? el.getAttribute('ttsText')   : null,
       audioFile: el.hasAttribute('audioFile') ? el.getAttribute('audioFile') : null,
+      awaits:        el.getAttribute('awaits') || null,
+      awaitsTimeout: parseFloat(el.getAttribute('awaitsTimeout')) || 90,
+      reply:         el.getAttribute('reply') || null,
+      gesture:       el.getAttribute('gesture') || null,
+      gestureAt:     parseFloat(el.getAttribute('gestureAt')) || 0,
+      expression:    el.getAttribute('expression') || null,
+      expressionAt:  parseFloat(el.getAttribute('expressionAt')) || 0,
+      expressionDur: parseFloat(el.getAttribute('expressionDur')) || 2,
+      expressionWeights: el.getAttribute('expressionWeights') || '',
     });
   });
   return out;
@@ -2598,16 +2803,179 @@ function _dialogueUpdateDisplay(actor, text) {
   if (rEl) rEl.textContent = '';
 }
 
+// Optional acting on a Dialogue Line: a body gesture and/or a facial expression, started relative
+// to the line's own start, so a line and its acting stay together when the line moves.
+function _dialogueActing(line) {
+  var gen = _pbCbGeneration;
+  if (line.gesture && line.actor) {
+    setTimeout(function() {
+      if (gen !== _pbCbGeneration) return;
+      _fireGestureEventCue({ target: line.actor, clip: line.gesture });
+    }, Math.max(0, line.gestureAt || 0) * 1000);
+  }
+  if (line.expression && line.actor) {
+    setTimeout(function() {
+      if (gen !== _pbCbGeneration) return;
+      _fireFaceEventCue({ target: line.actor, expression: line.expression, weights: line.expressionWeights,
+                          dur: line.expressionDur || 2, fadeIn: 0.5, fadeOut: 0.5, intensity: 1 });
+    }, Math.max(0, line.expressionAt || 0) * 1000);
+  }
+}
+
+// ── Text-derived arc: what the word lists find in each spoken line and each typed answer ──
+// One point per line, drawn live under the viewer. E/B/P/S come from the EBPS word weights
+// (/voice/tag, 'ebps' packs). An estimate of the affect expressed in the text: not a
+// measure of what anyone feels, and unvalidated. Nothing is written to disk.
+var _dialogueArc = [];     // [{i, speaker, user, label, text, E,B,P,S, sentiment}]
+var _dlgArcSeq = 0;
+function _dlgArcReset() { _dialogueArc = []; _dlgArcSeq = 0; _dlgArcDraw(); }
+function _dlgArcAdd(speaker, label, text, isUser) {
+  if (!text) return;
+  var i = _dlgArcSeq++;
+  fetch(API + '/voice/tag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d || !d.ebps) return;
+      var s = d.ebps.sum;
+      _dialogueArc.push({ i: i, speaker: speaker, user: !!isUser, label: label, text: text,
+                          E: s.E, B: s.B, P: s.P, S: s.S, sentiment: d.sentiment, hits: d.ebps.hits.length });
+      _dialogueArc.sort(function(a, b) { return a.i - b.i; });
+      _dlgArcDraw();
+      console.log('[dialogue arc]', label, JSON.stringify(s), 'sentiment', d.sentiment);
+    }).catch(function() {});
+}
+function _dlgArcDraw() {
+  var cv = document.getElementById('dlg-arc'); if (!cv) return;
+  if (_dialogueArc.length < 1) { cv.style.display = 'none'; return; }
+  cv.style.display = 'block';
+  var g = cv.getContext('2d'), W = cv.width, H = cv.height, padL = 26, padR = 8, padT = 14, padB = 14;
+  g.clearRect(0, 0, W, H);
+  var chans = [['E', '#f07060'], ['B', '#60a8f0'], ['P', '#f0c060'], ['S', '#60f0a8']];
+  var m = 1.5; _dialogueArc.forEach(function(p) { chans.forEach(function(c) { m = Math.max(m, Math.abs(p[c[0]])); }); });
+  var n = _dialogueArc.length;
+  function X(k) { return n === 1 ? (padL + (W - padL - padR) / 2) : padL + k * (W - padL - padR) / (n - 1); }
+  function Y(v) { return padT + (H - padT - padB) * (1 - (v + m) / (2 * m)); }
+  g.strokeStyle = '#2a3858'; g.lineWidth = 1; g.beginPath(); g.moveTo(padL, Y(0)); g.lineTo(W - padR, Y(0)); g.stroke();
+  g.fillStyle = '#7080a0'; g.font = '10px sans-serif'; g.fillText('+' + m.toFixed(1), 2, padT + 3); g.fillText('0', 12, Y(0) + 3);
+  chans.forEach(function(c) {
+    g.strokeStyle = c[1]; g.lineWidth = 1.6; g.beginPath();
+    _dialogueArc.forEach(function(p, k) { var x = X(k), y = Y(p[c[0]]); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+    g.stroke();
+  });
+  _dialogueArc.forEach(function(p, k) {   // one marker per line along the bottom: filled = character, ring = the user
+    g.beginPath(); g.arc(X(k), H - 6, 3.2, 0, 6.2832);
+    if (p.user) { g.strokeStyle = '#e0ecf8'; g.lineWidth = 1.4; g.stroke(); } else { g.fillStyle = '#8aa0c8'; g.fill(); }
+  });
+  g.font = '10px sans-serif'; var lx = W - padR - 200;
+  chans.forEach(function(c, k) { g.fillStyle = c[1]; g.fillText(c[0], lx + k * 16, 10); });
+  g.fillStyle = '#7080a0'; g.fillText('word lists, unvalidated', lx + 70, 10);
+}
+
+var _lastUserAnswer = '';          // the user's most recent typed answer in a held dialogue
+var _dialogueHoldActive = null;    // {line, finish} while the scene is waiting on the user
+
 function _fireDialogueLine(line) {
   if (!line || _dialogueFiredIds[line.id]) return;   // fire-once — a Line only ever completes once per scene run
   if (!_dialogueTTYEnabled) return;   // Day 86: whole scene has per-line dialogue/TTY turned off — see _dialogueTTYEnabled's own declaration comment
   _dialogueFiredIds[line.id] = true;
 
-  var displayText = line.text;                        // clean text always shown on screen
-  var spokenText  = line.ttsText || line.text;         // tagged delivery text preferred for TTS when present
+  // Live reply: the line's text is the speaker's aim; the model writes the spoken line from the
+  // user's last answer. Anything short of a real reply falls back to the authored text.
+  if (line.reply === 'live' && _lastUserAnswer) {
+    _dialogueLiveReply(line, function(spoken) { _dialogueSpeakLine(line, spoken || line.text, spoken || line.ttsText || line.text); });
+    return;
+  }
+  _dialogueSpeakLine(line, line.text, line.ttsText || line.text);
+}
 
+// Reads the /voice/speak stream (SSE) and returns the full reply text.
+async function _readVoiceStream(resp) {
+  var reader = resp.body.getReader(), dec = new TextDecoder(), buf = '', out = '';
+  for (;;) {
+    var r = await reader.read(); if (r.done) break;
+    buf += dec.decode(r.value, { stream: true });
+    var parts = buf.split('\n\n'); buf = parts.pop();
+    parts.forEach(function(p) {
+      if (p.indexOf('data: ') !== 0) return;
+      try { var m = JSON.parse(p.slice(6)); if (m.type === 'token') out += m.content; } catch (e) {}
+    });
+  }
+  return out.trim();
+}
+
+async function _dialogueLiveReply(line, cb) {
+  var gen = _pbCbGeneration;
+  _poseBegin(line.actor, 'think');
+  var spoken = '';
+  try {
+    var resp = await fetch(API + '/voice/speak', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: _lastUserAnswer, agent_name: line.actor, intent: line.text,
+                             max_sentences: 2, max_tokens: 120 })
+    });
+    if (resp.ok) spoken = await _readVoiceStream(resp);
+    else console.warn('[dialogue] live reply: server returned', resp.status);
+  } catch (e) { console.warn('[dialogue] live reply failed:', e); }
+  _poseEnd(line.actor, 'think');
+  if (gen !== _pbCbGeneration) return;                       // Reset while waiting
+  if (!spoken || /^\[(Error|Ollama|Empty)/i.test(spoken)) {
+    console.warn('[dialogue] live reply for', line.id, 'gave nothing usable (' + spoken.slice(0, 60) + ') — speaking the authored text');
+    spoken = '';
+  }
+  cb(spoken);
+}
+
+// Hold for the user's typed answer. done() runs when an answer is sent, skipped or times out.
+function _dialogueHold(line, done) {
+  var box = document.getElementById('dlg-answer'), inp = document.getElementById('dlg-answer-input');
+  var note = document.getElementById('dlg-answer-note');
+  if (!box || !inp) { done(); return; }
+  var gen = _pbCbGeneration, finished = false, tid = null;
+  _poseBegin(line.actor, 'hold');
+  box.style.display = 'flex'; note.textContent = ''; inp.value = ''; inp.focus();
+  var qr = document.getElementById('pb-qr'); if (qr) qr.style.display = 'block';
+  function finish(text) {
+    if (finished) return; finished = true; clearTimeout(tid);
+    _dialogueHoldActive = null;
+    box.style.display = 'none';
+    _poseEnd(line.actor, 'hold');
+    if (gen !== _pbCbGeneration) return;
+    if (text) {
+      _lastUserAnswer = text;
+      if (typeof _chorusTranscript !== 'undefined') _chorusTranscript.push({ label: line.id + '-answer', speaker: 'You', text: text });
+      _dialogueTagAnswer(text);
+    }
+    done();
+  }
+  _dialogueHoldActive = { line: line, finish: finish };
+  document.getElementById('dlg-answer-send').onclick = function() { var v = inp.value.trim(); if (v) finish(v); };
+  document.getElementById('dlg-answer-skip').onclick = function() { finish(''); };
+  inp.onkeydown = function(ev) { if (ev.key === 'Enter') { var v = inp.value.trim(); if (v) finish(v); } };
+  tid = setTimeout(function() { finish(''); }, Math.max(5, line.awaitsTimeout || 90) * 1000);
+}
+
+// What the word lists find in the user's answer. A word-count estimate of expressed affect,
+// shown small and labelled as such; it does not measure what the person feels.
+function _dialogueTagAnswer(text) {
+  fetch(API + '/voice/tag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d || !d.channels) return;
+      window._lastAnswerTag = d;
+      _dlgArcAdd('You', 'answer', text, true);
+      var c = d.channels;
+      var rEl = document.getElementById('pb-response');
+      if (rEl) rEl.innerHTML = '<span style="opacity:.75">You: ' + _xe(text) + '</span> <span style="opacity:.5;font-size:11px">· word lists: E ' + c.E + ' B ' + c.B + ' P ' + c.P + ' S ' + c.S +
+        ' · sentiment ' + d.sentiment + ' (a word count, not a measure of feeling)</span>';
+      console.log('[dialogue] answer tagged:', JSON.stringify(d));
+    }).catch(function() {});
+}
+
+function _dialogueSpeakLine(line, displayText, spokenText) {
   console.log('[dialogue] firing', line.id, '(' + line.actor + '):', displayText.slice(0, 60));
   _dialogueUpdateDisplay(line.actor, displayText);
+  _dialogueActing(line);
+  _dlgArcAdd(line.actor, line.id, displayText, false);
 
   // Same accumulator waypoint-triggered dialogue already feeds — Dialogue-
   // Line-sourced speech now participates in the same end-of-scene Chorus
@@ -2624,6 +2992,8 @@ function _fireDialogueLine(line) {
       }
     });
   }
+  // A line that waits for the user completes only after the answer (or skip or timeout).
+  var afterSpeech = (line.awaits === 'user') ? function() { _dialogueHold(line, onLineComplete); } : onLineComplete;
 
   if (line.audioFile) {
     // Real audio path. Day 83: deliberately plain HTML5 Audio, NOT the X3D
@@ -2635,19 +3005,19 @@ function _fireDialogueLine(line) {
     // assumption, not confirmed against a real server route — verify once
     // real ElevenLabs output actually lands and needs playing.
     var audio = new Audio('/static/' + line.audioFile);
-    audio.addEventListener('ended', onLineComplete);
+    audio.addEventListener('ended', afterSpeech);
     audio.addEventListener('error', function() {
       console.warn('[dialogue] audio failed for', line.id, '— falling back to TTY');
-      pbSpeakQALines([{ text: spokenText, speaker: line.actor }], onLineComplete, line.actor);
+      pbSpeakQALines([{ text: spokenText, speaker: line.actor }], afterSpeech, line.actor);
     });
     audio.play().catch(function(e) {
       console.warn('[dialogue] audio.play() rejected for', line.id, '—', (e && e.message) || e, '— falling back to TTY');
-      pbSpeakQALines([{ text: spokenText, speaker: line.actor }], onLineComplete, line.actor);
+      pbSpeakQALines([{ text: spokenText, speaker: line.actor }], afterSpeech, line.actor);
     });
   } else {
     // TTY fallback — real per-actor voice resolution and a real completion
     // callback, both needed for the sensed-chain to actually advance.
-    pbSpeakQALines([{ text: spokenText, speaker: line.actor }], onLineComplete, line.actor);
+    pbSpeakQALines([{ text: spokenText, speaker: line.actor }], afterSpeech, line.actor);
   }
 }
 
@@ -5407,6 +5777,8 @@ function pbPushPosition(wp) {
 }
 
 async function pbPlay() {
+  try { liveTickStart(); } catch (e) {}
+  try { _ambAutoStart(); } catch (e) {}
   console.log('pbPlay: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
   const file = document.getElementById('pb-file');
   if (!file || !file.value) { alert('Select an arc file first.'); return; }
@@ -5441,6 +5813,7 @@ async function pbPlay() {
   _pbLastStepKey = {};
   _x3dLastArrivedSeg = {};   // reset segment tracking — prevents stale seg from previous run
   _zoneCommandQueue = [];
+  _zoneCommandsClosed = false;   // new run: zone commands may fire again
   _zoneCommandInFlight = false;
   _chorusLastTimestamp = 0;  // reset so poll always picks up the next response
   stopChorusPoll();
@@ -5643,7 +6016,49 @@ function _pbWaitForGroup(groupSafeNames) {
 // HARD STOP: if any Path in _scene.xml is missing waypointOrder, the scene
 // does not run. The validator logs the specific path name and halts.
 
+// Live tick: while a scene plays, tick the coupler/zone engine on a clock as well as on events.
+var _liveTickTimer = null;
+function liveTickStart() {
+  liveTickStop();
+  try {
+    var cb = document.getElementById('pb-livetick');
+    if (!cb || !cb.checked) return;
+    var ms = parseInt((document.getElementById('pb-livetick-ms') || {}).value, 10) || 500;
+    _liveTickTimer = setInterval(function() { try { _fireCouplerTick(); } catch (e) {} }, ms);
+  } catch (e) {}
+}
+function liveTickStop() { if (_liveTickTimer) { clearInterval(_liveTickTimer); _liveTickTimer = null; } }
+
+// Idle for every placed avatar: an agent with no path never reaches pbActivateX3DTimers, so its DefaultTimer
+// (the idle loop) was never started and the avatar stood frozen. Starts DefaultTimer_<Agent> for each AgentPlacement.
+// Safe to call repeatedly: an avatar whose timers are already mapped (a path agent) is left to the path code.
+function _startIdleAllAvatars(tries) {
+  tries = tries || 0;
+  try {
+    var scene = canvas && canvas.browser && canvas.browser.currentScene;
+    var names = Object.keys(window._cultivarActors || (typeof _cultivarActors !== 'undefined' ? _cultivarActors : {}) || {});
+    if (!scene || !names.length) { if (tries < 10) setTimeout(function () { _startIdleAllAvatars(tries + 1); }, 600); return; }
+    var missing = 0;
+    window._idleStarted = window._idleStarted || {};
+    names.forEach(function (n) {
+      var sn = String(n).replace(/[^A-Za-z0-9_]/g, '_');
+      if (window._idleStarted[sn] === scene) return;
+      if (typeof _behaviorTimerMap !== 'undefined' && _behaviorTimerMap[sn]) return;   // path agent: handled there
+      var node = null;
+      try { node = scene.getImportedNode('DefaultTimer_' + sn); } catch (e) {}
+      if (!node) { missing++; return; }
+      try { node.enabled = true; window._idleStarted[sn] = scene;
+            if (typeof _agentCurrentClip !== 'undefined') _agentCurrentClip[sn] = 'Default';
+            console.log('idle: DefaultTimer started for', sn); } catch (e) { console.warn('idle: DefaultTimer start failed for', sn, e); }
+    });
+    if (missing && tries < 10) setTimeout(function () { _startIdleAllAvatars(tries + 1); }, 600);
+  } catch (e) { console.warn('_startIdleAllAvatars:', e); }
+}
+
 async function pbPlayAll() {
+  try { _startIdleAllAvatars(); } catch (e) {}
+  try { liveTickStart(); } catch (e) {}
+  try { _ambAutoStart(); } catch (e) {}
   console.log('pbPlayAll: called — _pbCbGeneration=', _pbCbGeneration, '_x3dTimerActive keys:', Object.keys(_x3dTimerActive));
 
   // Guard: prevent concurrent calls (e.g. Reset fires pbPlayAll while Play All button also fired)
@@ -5704,6 +6119,7 @@ async function _pbPlayAllInner() {
   _pbLastStepKey = {};
   _x3dLastArrivedSeg = {};
   _zoneCommandQueue = [];
+  _zoneCommandsClosed = false;   // new run: zone commands may fire again
   _zoneCommandInFlight = false;
   _chorusLastTimestamp = 0;
   stopChorusPoll();
@@ -6084,6 +6500,7 @@ async function pbStepSession(sessionId) {
     return;
   }
   _pbStepInFlight[flagKey] = true;
+  var _thinker = _stepThinker(); if (_thinker) _poseBegin(_thinker, 'think');
   try {
     var body = sessionId ? JSON.stringify({session_id: sessionId}) : '{}';
     var r = await fetch(API + '/arc/playback/step', {
@@ -6124,7 +6541,7 @@ async function pbStepSession(sessionId) {
     _fireWpArrivalEventCues(_stepWp);
     _fireCouplerTick();
   } catch(e) { console.warn('pbStepSession error:', e); }
-  finally { _pbStepInFlight[flagKey] = false; }
+  finally { _pbStepInFlight[flagKey] = false; if (_thinker) _poseEnd(_thinker, 'think'); }
 }
 
 // ─────────────────────────────────────────────
@@ -6318,7 +6735,66 @@ var _agentZone = {};
 // Each entry: {cultivar, zoneId, eventType, step}
 // Commands are drained one at a time; next fires only when current completes/fails.
 var _zoneCommandQueue = [];
+var _zoneCommandsClosed = false;   // true once the arc has finished: queued zone commands are dropped
+var _ZONE_CMD_MAX_AGE_MS = 25000;  // a queued command older than this is stale (actor has moved on)
 var _zoneCommandInFlight = false;
+
+// ---------------------------------------------------------------------------
+// Ambient drawer. The Ambient Composer page runs in a hidden same-origin frame and
+// is driven by postMessage. A zone with <AmbientTheme drive="1"> sets the engine's
+// scale when an actor enters it and returns to the base scale when it leaves.
+// ---------------------------------------------------------------------------
+var _zoneAmbient = {};            // {zoneId: {scale, drive}} from the scene XML
+var _ambFrame = null, _ambReady = false, _ambQueue = [], _ambRevert = null, _ambPlaying = false;
+function _ambOrigin() { return location.origin === 'null' ? '*' : location.origin; }
+function _ambEnsure() {
+  if (_ambFrame) return;
+  var f = document.createElement('iframe');
+  f.id = 'amb-frame'; f.src = '/static/mccf_ambient.html'; f.setAttribute('allow', 'autoplay');
+  f.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;height:700px;border:0;';
+  f.addEventListener('load', function() { _ambReady = true; _ambFlush(); });
+  document.body.appendChild(f); _ambFrame = f;
+}
+function _ambFlush() {
+  if (!_ambReady || !_ambFrame || !_ambFrame.contentWindow) return;
+  while (_ambQueue.length) _ambFrame.contentWindow.postMessage(_ambQueue.shift(), _ambOrigin());
+}
+function _ambSend(cmd, value) { _ambEnsure(); _ambQueue.push({type: 'mccf_amb', cmd: cmd, value: value}); _ambFlush(); }
+function _ambNote(t) { var n = document.getElementById('amb-note'); if (n) n.textContent = t || ''; }
+window.addEventListener('message', function(e) {
+  var d = e.data;
+  if (!d || !_ambFrame || e.source !== _ambFrame.contentWindow) return;
+  if (d.type === 'mccf_amb_ready') { _ambReady = true; _ambFlush(); }
+  else if (d.type === 'mccf_amb_state') {
+    _ambPlaying = !!d.playing;
+    var b = document.getElementById('amb-start'); if (b) b.innerHTML = _ambPlaying ? '&#9632; Stop' : '&#9654; Start';
+    var t = document.getElementById('amb-tab'); if (t) t.classList.toggle('playing', _ambPlaying);
+  }
+});
+function ambToggleDrawer() { _ambEnsure(); document.getElementById('amb-drawer').classList.toggle('open'); }
+function ambStartStop() { _ambSend(_ambPlaying ? 'stop' : 'start'); }
+function ambScalePick(v) { _ambSend('scale', v); }
+function ambRootPick(v) { _ambSend('root', v); }
+function ambVolumePick(v) { _ambSend('volume', v); }
+function _ambAnyDriven() { return Object.keys(_zoneAmbient).some(function(k) { return _zoneAmbient[k].drive; }); }
+function _ambAutoStart() {
+  var a = document.getElementById('amb-autostart'), f = document.getElementById('amb-follow');
+  if (a && a.checked && f && f.checked && _ambAnyDriven() && !_ambPlaying) { _ambSend('scale', document.getElementById('amb-scale').value); _ambSend('start'); }
+}
+function _ambZoneEvent(zoneId, evt) {
+  var f = document.getElementById('amb-follow'); if (f && !f.checked) return;
+  var za = _zoneAmbient[zoneId] || _zoneAmbient[String(zoneId).toLowerCase()];
+  if (!za || !za.drive) return;
+  if (_ambRevert) { clearTimeout(_ambRevert); _ambRevert = null; }
+  if (evt === 'OnEnter') {
+    _ambSend('scale', za.scale); _ambNote(zoneId + ' \u2192 ' + za.scale);
+  } else if (evt === 'OnExit') {
+    _ambRevert = setTimeout(function() {      // an immediate OnEnter elsewhere cancels this
+      _ambRevert = null; var base = document.getElementById('amb-scale').value;
+      _ambSend('scale', base); _ambNote('left ' + zoneId + ' \u2192 ' + base);
+    }, 600);
+  }
+}
 
 function _parseSceneZoneData() {
   // Parse <Zone><Commands> and <EmotionalArc actor="..."> from the scene XML.
@@ -6340,9 +6816,15 @@ function _parseSceneZoneData() {
         // then assign atomically — preserves last-good data if new parse is empty.
         var _newZoneCommands = {};
         var _newZoneDescriptors = {};
+        var _newZoneAmbient = {};
         doc.querySelectorAll('Zone').forEach(function(zEl) {
           var zid = zEl.getAttribute('id');
           if (!zid) return;
+          var _atEl = zEl.querySelector('AmbientTheme');
+          if (_atEl) {
+            var _za = {scale: (_atEl.getAttribute('scale') || 'auto').toLowerCase(), drive: _atEl.getAttribute('drive') === '1'};
+            _newZoneAmbient[zid] = _za; _newZoneAmbient[zid.toLowerCase()] = _za;
+          }
           var descEl = zEl.querySelector('Descriptor');
           _zoneDescriptors[zid] = descEl ? (descEl.textContent||'').trim() : '';
           var cmds = [];
@@ -6362,6 +6844,8 @@ function _parseSceneZoneData() {
           if (cmds.length) _newZoneCommands[zid] = cmds;
         });
 
+        _zoneAmbient = _newZoneAmbient;
+
         // Only assign if we got real data — preserve last-good values otherwise
         if (Object.keys(_newZoneCommands).length > 0) {
           _zoneCommands   = _newZoneCommands;
@@ -6370,7 +6854,7 @@ function _parseSceneZoneData() {
 
         // Parse cultivar actors from <EmotionalArc actor="ollama">
         var _newCultivarActors = {};
-        doc.querySelectorAll('EmotionalArc[cultivar]').forEach(function(el) {
+        doc.querySelectorAll('AgentPlacement[cultivar], EmotionalArc[cultivar]').forEach(function(el) {
           var name  = el.getAttribute('cultivar');
           var actor = (el.getAttribute('actor')||'scripted').toLowerCase();
           if (name) _newCultivarActors[name] = actor;
@@ -6382,7 +6866,7 @@ function _parseSceneZoneData() {
         // Parse cultivar start positions from <EmotionalArc cultivar="X"><StartPosition x y z/>
         // Used by _resolveSubjectPos for camera shot framing when agent cache is empty.
         var _newCultivarStartPos = {};
-        doc.querySelectorAll('EmotionalArc[cultivar]').forEach(function(el) {
+        doc.querySelectorAll('AgentPlacement[cultivar], EmotionalArc[cultivar]').forEach(function(el) {
           var name = el.getAttribute('cultivar');
           var sp   = el.querySelector('StartPosition');
           if (name && sp) {
@@ -6466,6 +6950,7 @@ function _matchZoneCommand(zoneId, cultivar, eventType) {
 }
 
 function _fireZoneCommand(cultivar, zoneId, eventType, step) {
+  try { _ambZoneEvent(zoneId, eventType); } catch (e) { console.warn('ambient zone hook:', e); }
   // Enqueue a zone command. Commands are dispatched serially — one Ollama call
   // at a time — so concurrent arc arrivals don't cause simultaneous 30s timeout races.
   if (!zoneId) return;
@@ -6479,21 +6964,31 @@ function _fireZoneCommand(cultivar, zoneId, eventType, step) {
                      :                           'attend';
       console.log('_fireZoneCommand: no scene XML command — using default', defaultCmd,
                   'for', cultivar, eventType, zoneId);
-      cmd = {event: eventType, cultivar: cultivar, command: defaultCmd};
+      // Default exit is silent: it still writes the zone memory (no LLM call, no speech).
+      // A scene XML command on OnExit still speaks as authored.
+      cmd = {event: eventType, cultivar: cultivar, command: defaultCmd, silent: (eventType === 'OnExit')};
     } else {
       console.log('_fireZoneCommand: no command for', cultivar, eventType, zoneId,
                   '(scripted agent, no default)');
       return;
     }
   }
+  if (_zoneCommandsClosed) { console.log('_fireZoneCommand: arc finished — ignoring', cultivar, eventType, zoneId); return; }
   _zoneCommandQueue.push({cultivar: cultivar, zoneId: zoneId,
-                           eventType: eventType, step: step, cmd: cmd});
+                           eventType: eventType, step: step, cmd: cmd, t: Date.now()});
   _drainZoneCommandQueue();
 }
 
 function _drainZoneCommandQueue() {
   if (_zoneCommandInFlight || _zoneCommandQueue.length === 0) return;
+  if (_zoneCommandsClosed) { _zoneCommandQueue = []; return; }
   var item = _zoneCommandQueue.shift();
+  if (item.t && (Date.now() - item.t) > _ZONE_CMD_MAX_AGE_MS) {
+    console.log('_fireZoneCommand: dropped stale command (' + Math.round((Date.now() - item.t)/1000) + ' s old):',
+                item.cultivar, item.eventType, item.zoneId);
+    _drainZoneCommandQueue();
+    return;
+  }
   var cultivar  = item.cultivar;
   var zoneId    = item.zoneId;
   var eventType = item.eventType;
@@ -6503,7 +6998,7 @@ function _drainZoneCommandQueue() {
   var xSel = document.getElementById('x3d-file');
   var fname = xSel ? xSel.value : '';
   var sceneName = fname.replace(/\.x3d$/i, '');
-  var actor    = _cultivarActors[cultivar] || 'scripted';
+  var actor    = cmd.silent ? 'scripted' : (_cultivarActors[cultivar] || 'scripted');
   var zoneDesc = _zoneDescriptors[zoneId] || '';
 
   console.log('_fireZoneCommand (queued):', cultivar, eventType, zoneId, cmd.command,
@@ -6526,6 +7021,7 @@ function _drainZoneCommandQueue() {
   }
 
   _zoneCommandInFlight = true;
+  _poseBegin(cultivar, 'think');
   fetch(API + '/zone/command', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -6560,22 +7056,42 @@ function _drainZoneCommandQueue() {
         if (voice) utt.voice = voice;
         utt.rate = 0.95;
         utt.pitch = 1.0;
-        if (speechSynthesis.paused) {
-        speechSynthesis.resume();
-        console.log('pbSpeakQALines: resumed paused speechSynthesis before speak');
-      }
-      console.log('pbSpeakQALines: speak()', line.text.substring(0,40),
-                  'voice=', utt.voice ? utt.voice.name : 'default',
-                  'pending=', speechSynthesis.pending,
-                  'paused=', speechSynthesis.paused);
-      speechSynthesis.speak(utt);
+        if (utt.voice && !utt.voice.localService && !_pbVoiceUsable(utt.voice) && _pbLocalVoice()) utt.voice = _pbLocalVoice();
+        utt.onerror = function(ev) {
+          if (ev && ev.error === 'synthesis-failed' && utt.voice && !utt.voice.localService && _pbLocalVoice()) {
+            _pbBadVoices[utt.voice.name] = true;
+            var u2 = new SpeechSynthesisUtterance(d.response);
+            u2.voice = _pbLocalVoice(); u2.rate = 0.95; u2.pitch = 1.0;
+            speechSynthesis.speak(u2);
+          }
+        };
+        if (speechSynthesis.paused) speechSynthesis.resume();
+        console.log('_fireZoneCommand: speak()', d.response.substring(0,40), 'voice=', utt.voice ? utt.voice.name : 'default');
+        speechSynthesis.speak(utt);
       }
     })
     .catch(function(e) { console.warn('_fireZoneCommand fetch error:', e); })
     .finally(function() {
+      _poseEnd(cultivar, 'think');
       _zoneCommandInFlight = false;
       _drainZoneCommandQueue();
     });
+}
+
+// Zones <-> characters: live avatar positions for /couplers/tick (names come from the previous tick's reply;
+// the first tick falls back to AgentPlacement start positions on the server). Never throws.
+function _zoneAvatarPositions() {
+  var out = {};
+  try {
+    var sc = canvas.browser.currentScene;
+    (window._zoneChars || []).forEach(function(n) {
+      var nm = String(n).replace(/^character::/, '');
+      var node = sc.getNamedNode('Avatar_' + nm.replace(/[^A-Za-z0-9_]/g, '_'));
+      var t = node && node.translation;
+      if (t && typeof t.x === 'number' && typeof t.z === 'number') out[nm] = [t.x, t.y, t.z];
+    });
+  } catch (e) {}
+  return out;
 }
 
 function _fireCouplerTick(sceneName) {
@@ -6588,17 +7104,22 @@ function _fireCouplerTick(sceneName) {
   fetch(API + '/couplers/tick', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({scene: sceneName})
+    body: JSON.stringify({scene: sceneName, positions: _zoneAvatarPositions()})
   }).then(function(r) { return r.json(); })
     .then(function(d) {
-      console.log('couplers/tick ts=' + d.timestep
-        + ' links=' + d.network_links
-        + ' agents=' + d.agents_ticked
-        + (d.phase && d.phase.transition ? ' PHASE TRANSITION mean_sim=' + d.phase.mean_similarity : ''));
+      if (d && d.runtime) window._zoneChars = Object.keys(d.runtime);
+      if (d && d.zones) window._liveZones = d.zones;
+      if (!d.timestep || d.timestep % 10 === 1 || (d.phase && d.phase.transition)) {
+        console.log('couplers/tick ts=' + d.timestep
+          + ' links=' + d.network_links
+          + ' agents=' + d.agents_ticked
+          + (d.phase && d.phase.transition ? ' PHASE TRANSITION mean_sim=' + d.phase.mean_similarity : ''));
+      }
       // Capture trust data for panel display
-      if (d.trust && Object.keys(d.trust).length) {
-        window._lastTrustData = d.trust;
-        if (_trustExpanded) renderTrust(d.trust);
+      if (d.honor && Object.keys(d.honor).length) window._lastHonorData = d.honor;
+      if (d.trust && Object.keys(d.trust).length) window._lastTrustData = d.trust;
+      if ((d.trust && Object.keys(d.trust).length) || (d.honor && Object.keys(d.honor).length)) {
+        if (_trustExpanded) renderTrust(window._lastTrustData || {}, window._lastHonorData || {});
       }
     })
     .catch(function() {});
@@ -6695,6 +7216,7 @@ async function pbJumpToWaypoint(agentSafeName, stepNo) {
 async function pbStep() {
   if (_pbStepInFlight['__single__']) { console.log('pbStep: SKIPPED — already in flight (double-fire guard)'); return; }
   _pbStepInFlight['__single__'] = true;
+  var _thinker = _stepThinker(); if (_thinker) _poseBegin(_thinker, 'think');
   try {
     const r = await fetch(API+'/arc/playback/step', {method:'POST',
       headers:{'Content-Type':'application/json'}, body:'{}'});
@@ -6729,9 +7251,10 @@ async function pbStep() {
     _fireWpArrivalEventCues(_stepWp);
     _fireCouplerTick();      // then run one field tick — ϵ drifts from ϕ
   } catch(e) { console.warn('pbStep: request failed:', e.message); }
-  finally { _pbStepInFlight['__single__'] = false; }
+  finally { _pbStepInFlight['__single__'] = false; if (_thinker) _poseEnd(_thinker, 'think'); }
 }
 async function pbStop() {
+  try { liveTickStop(); } catch (e) {}
   _agentZone = {};  // reset zone tracking on stop
   pbStopPolling();
   pbStopX3DTimers();
@@ -7026,6 +7549,10 @@ function pbUpdateDisplay(state) {
 // Called from pbReleaseDwell when the last dwell expires and no next timer exists.
 // Does NOT call pbReleaseDwell after TTS — arc is already complete.
 function pbUpdateDisplayFinal(state, fireChorus) {
+  // The arc is over: drop any zone commands still waiting so the actor does not
+  // keep talking about zones it has already left.
+  _zoneCommandsClosed = true;
+  _zoneCommandQueue = [];
   if (!state || state.status === 'idle') return;
   var wp = state.current_waypoint || {};
   if (!wp.cultivar && state.cultivars && state.cultivars.length) {
@@ -7168,7 +7695,7 @@ function _applyStartPosition(xmlText) {
   var doc = parser.parseFromString(xmlText, 'text/xml');
   // Each <EmotionalArc cultivar="X"> has its own <StartPosition x y z>
   // Move each avatar to its own start, not all to the same point.
-  var arcs = doc.querySelectorAll('EmotionalArc[cultivar]');
+  var arcs = doc.querySelectorAll('AgentPlacement[cultivar], EmotionalArc[cultivar]');
   if (!arcs.length) {
     // Fallback: single <StartPosition> moves all avatars
     var sp = doc.querySelector('StartPosition');
@@ -7194,12 +7721,25 @@ function _applyStartPosition(xmlText) {
       var node = scene.getNamedNode('Avatar_' + suffix);
       if (node) {
         node.translation = new X3D.SFVec3f(x, y, z);
+        var sr = arc.querySelector('StartRotation');
+        var rr = sr ? _eulerToAxisAngle(parseFloat(sr.getAttribute('x')||0), parseFloat(sr.getAttribute('y')||0), parseFloat(sr.getAttribute('z')||0)) : [0,1,0,0];
+        node.rotation = new X3D.SFRotation(rr[0], rr[1], rr[2], rr[3]);
         console.log('resetToStartPosition:', 'Avatar_'+suffix, '->', x, y, z);
       } else {
         console.warn('resetToStartPosition: node not found for cultivar:', cultivar);
       }
     });
   } catch(e) { console.warn('_applyStartPosition error:', e); }
+}
+
+// Rotation about X, Y, Z in degrees (Y first, then X, then Z) as one axis-angle; same order as the Composer.
+function _eulerToAxisAngle(xDeg, yDeg, zDeg) {
+  function q(ax, deg) { var h = deg * Math.PI / 360, c = Math.cos(h), sn = Math.sin(h); return [c, ax[0]*sn, ax[1]*sn, ax[2]*sn]; }
+  function mul(a, b) { return [a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3], a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2], a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1], a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]]; }
+  var r = mul(mul(q([0,1,0], yDeg||0), q([1,0,0], xDeg||0)), q([0,0,1], zDeg||0));
+  var sn = Math.sqrt(r[1]*r[1] + r[2]*r[2] + r[3]*r[3]);
+  if (sn < 1e-9) return [0,1,0,0];
+  return [r[1]/sn, r[2]/sn, r[3]/sn, 2*Math.atan2(sn, r[0])];
 }
 
 function _snapAvatarsToOrigin() {
@@ -7271,6 +7811,19 @@ async function x3dLoadFiles() {
       sel.appendChild(opt);
     });
     // Restore previous selection or auto-select first file
+    var _want = '';
+    try { _want = new URLSearchParams(location.search).get('scene') || ''; } catch (e) {}
+    if (_want && !window._wantDone) {   // opened with ?scene=Name (the Ambient Editor's scene tab and the PI viewer do this)
+      // Compare loosely: case, a .x3d ending and punctuation do not matter (the server writes file names with
+      // spaces and symbols turned into underscores).
+      var _norm = function (n) { return String(n || '').toLowerCase().replace(/\.x3d$/, '').replace(/[^a-z0-9]+/g, '_'); };
+      var _w = [...sel.options].find(o => o.value && _norm(o.value) === _norm(_want));
+      if (_w) { window._wantDone = true; sel.value = _w.value; x3dFileChanged(); return; }
+      // Not found: say so, and do not fall back to the newest scene (that is how a module opened the wrong scene).
+      console.warn('x3dLoadFiles: ?scene=' + _want + ' is not in the scene list. Export that scene first, or choose one.');
+      var _hn = document.getElementById('hdr-scene-name'); if (_hn) _hn.textContent = 'Scene "' + _want + '" not found. Export it, then press the refresh button.';
+      return;
+    }
     if (current && [...sel.options].some(o => o.value === current)) {
       sel.value = current;
     } else if (sel.options.length > 1) {
@@ -7295,6 +7848,7 @@ function x3dFileChanged() {
   var fname = sel.value;
   if (!fname) return;
   var myGen = ++_x3dLoadGen;
+  setTimeout(function () { if (myGen === _x3dLoadGen) _startIdleAllAvatars(); }, 2500);   // idle for avatars with no path
   _silenceSceneAudio();            // old scene's wind/waves/cues must not outlive it
   window._sceneLoadedAt = 0; window._fpsHist = [];   // new scene: not ready until its own 'load' + settle
   var hdrName = document.getElementById('hdr-scene-name');
@@ -7363,6 +7917,8 @@ function x3dFileChanged() {
   _dialogueFiredIds   = {};
   _dialoguePendingDeclared.forEach(function(tid){ clearTimeout(tid); });
   _dialoguePendingDeclared = [];
+  if (_dialogueHoldActive) { try { _dialogueHoldActive.finish(''); } catch (e) {} }
+  _dlgArcReset();
   window._dialogueSceneStartFiredFor = null;
   // Notify server so ChorusManager can load config from matching scene XML.
   var sceneName = fname.replace(/\.x3d$/i, '');
@@ -8238,6 +8794,45 @@ function spTriggerDwell(zoneKey) {
   setTimeout(function() { spSetFader('dwell_' + zoneKey, 0.0); }, 200);
 }
 
+</script>
+
+<!-- X3D editor button (R35): opens a file in the configured X3D editor, default Sunrize. One-way launcher. -->
+<script>
+(function(){
+  var BASE = function(){ return (typeof API !== 'undefined' ? API : ''); };
+  function box(){
+    var b = document.getElementById('x3de-box');
+    if (b) return b;
+    b = document.createElement('div'); b.id = 'x3de-box';
+    b.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:99999;max-width:420px;padding:12px 14px;border-radius:6px;background:#1c2030;color:#dfe3f0;border:1px solid #4a5a8a;font:14px/1.45 system-ui,sans-serif;box-shadow:0 6px 24px #0008;display:none';
+    document.body.appendChild(b); return b;
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function show(html){ var b = box(); b.innerHTML = html + '<div style="margin-top:8px;text-align:right"><button onclick="document.getElementById(\'x3de-box\').style.display=\'none\'">Close</button></div>'; b.style.display = 'block'; }
+  window.x3dEditSetPath = async function(){
+    var v = (document.getElementById('x3de-path')||{}).value || '';
+    try {
+      var r = await fetch(BASE()+'/x3dedit/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:v})});
+      var d = await r.json();
+      if (!r.ok) { show(esc(d.error||'Could not save the path.')); return; }
+      show('Path saved. Press the button again.');
+    } catch(e){ show('Could not reach the server.'); }
+  };
+  window.x3dEditOpen = async function(file){
+    if (!file) { show('There is no X3D file to open yet. Compile or choose a scene first (Send to Launcher in the Composer).'); return; }
+    try {
+      var r = await fetch(BASE()+'/x3dedit/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:file})});
+      var d; try { d = await r.json(); } catch(e2) { show('The server answered (HTTP '+r.status+') but has no X3D editor route. Copy mccf_x3dedit.py and the new mccf_api.py into the server folder and restart the server. To test, open <code>'+esc(BASE())+'/x3dedit/config</code> in the browser. It should show a line of JSON.'); return; }
+      if (d.status === 'ok') { show('Opened in the X3D editor:<br><code>'+esc(d.opened)+'</code><br>Save in the editor, then reload the scene here.'); return; }
+      if (d.status === 'notfound') {
+        show(esc(d.error)+'<div style="margin-top:8px"><a style="color:#8fb4ff" target="_blank" rel="noopener" href="'+esc(d.download)+'">Download Sunrize</a></div>'
+          +'<div style="margin-top:8px">Program path: <input id="x3de-path" style="width:100%;margin-top:4px" placeholder="C:\\Users\\you\\AppData\\Local\\Programs\\Sunrize\\Sunrize.exe"> <button onclick="x3dEditSetPath()" style="margin-top:4px">Set</button></div>');
+        return;
+      }
+      show(esc(d.error||'The editor could not be started.'));
+    } catch(e){ show('Could not reach the server at <code>'+esc(BASE()||location.origin)+'</code>. Is mccf_api.py running?'); }
+  };
+})();
 </script>
 </body>
 </html>

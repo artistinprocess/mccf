@@ -33,6 +33,7 @@ Web Audio synthesis parameters:
 
 import math
 import random
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -226,7 +227,7 @@ def compute_plr_probabilities(
     }
 
 
-def sample_operation(probs: dict, temperature: float = 1.0) -> Optional[str]:
+def sample_operation(probs: dict, temperature: float = 1.0, rng=None) -> Optional[str]:
     """
     Sample a PLR operation from probability distribution.
     Temperature > 1 = more random; < 1 = more deterministic.
@@ -238,7 +239,7 @@ def sample_operation(probs: dict, temperature: float = 1.0) -> Optional[str]:
     if total < 0.01:
         return None
 
-    r = random.random() * total
+    r = (rng.random() if rng is not None else random.random()) * total
     cumulative = 0.0
     for op, w in scaled.items():
         cumulative += w
@@ -317,6 +318,121 @@ def compute_audio_params(
 
 
 # ---------------------------------------------------------------------------
+# Field chord and progression: the agents' triads stacked into one vertical sonority, named as one chord
+# ---------------------------------------------------------------------------
+
+CHORD_TEMPLATES = [            # (suffix, intervals) -- suffixes are the ones the Theme Workshop chord box reads (Am7, F#m7b5 ...)
+    ('',     (0, 4, 7)),
+    ('m',    (0, 3, 7)),
+    ('7',    (0, 4, 7, 10)),
+    ('maj7', (0, 4, 7, 11)),
+    ('m7',   (0, 3, 7, 10)),
+    ('dim',  (0, 3, 6)),
+    ('m7b5', (0, 3, 6, 10)),
+    ('aug',  (0, 4, 8)),
+]
+
+
+def triad_pcs(t: Triad) -> set:
+    r = _note_idx(t.root)
+    return {r % 12, (r + (4 if t.quality == 'major' else 3)) % 12, (r + 7) % 12}
+
+
+def field_chord(triads: list) -> dict:
+    """Name the chord formed by stacking the given triads: the best-fitting root + quality for the union of their pitch classes.
+    Returns {symbol, root, suffix, pcs (the chord's pitch classes), exact (every sounding note is in the chord and the chord has no missing note)}."""
+    if not triads:
+        return {'symbol': None, 'root': None, 'suffix': None, 'pcs': [], 'exact': False}
+    sounding = set()
+    for t in triads:
+        sounding |= triad_pcs(t)
+    roots = {_note_idx(t.root) for t in triads}
+    best = None
+    for r in range(12):
+        for k, (suf, iv) in enumerate(CHORD_TEMPLATES):
+            C = {(r + i) % 12 for i in iv}
+            matched, missing, extra = len(sounding & C), len(C - sounding), len(sounding - C)
+            score = matched * 2.0 - missing * 1.5 - extra * 2.5
+            key = (score, 1 if r in roots else 0, -len(iv), -k)
+            if best is None or key > best[0]:
+                best = (key, r, suf, iv, C, missing, extra)
+    _, r, suf, iv, C, missing, extra = best
+    root = _note_from_idx(r)
+    return {'symbol': root + suf, 'root': root, 'suffix': suf, 'pcs': sorted(C), 'exact': missing == 0 and extra == 0}
+
+
+def chord_pitches(root: str, suffix: str, octave_shift: int = 0) -> list:
+    """MIDI notes of a named chord (root in the octave of middle C)."""
+    iv = dict(CHORD_TEMPLATES).get(suffix, (0, 4, 7))
+    base = NOTE_MIDI[root] + 12 * octave_shift
+    return [base + i for i in iv]
+
+
+def _vlq(n: int) -> bytes:
+    out = [n & 0x7F]
+    n >>= 7
+    while n:
+        out.append(0x80 | (n & 0x7F))
+        n >>= 7
+    return bytes(reversed(out))
+
+
+PULSE_PATTERNS = ('sustain', 'quarter', 'eighth', 'offbeat', 'arp')
+# sustain: one held block chord per chord change      quarter: the chord struck on every beat
+# eighth:  struck every half beat                     offbeat: struck on the off-beats only (a reggae/ska lift)
+# arp:     the chord tones rolled up in eighth notes
+
+
+def pulse_hits(pattern: str, notes: list, beats: float, ppq: int) -> list:
+    """[(start_tick, length_ticks, [midi notes])] for one chord lasting `beats` beats."""
+    total = max(1, int(round(beats * ppq)))
+    if pattern == 'quarter':
+        step, offs, ln = ppq, 0, int(ppq * 0.9)
+    elif pattern == 'eighth':
+        step, offs, ln = ppq // 2, 0, int(ppq * 0.45)
+    elif pattern == 'offbeat':
+        step, offs, ln = ppq, ppq // 2, int(ppq * 0.45)
+    elif pattern == 'arp':
+        out, t, k = [], 0, 0
+        while t < total:
+            out.append((t, min(int(ppq * 0.45), total - t), [notes[k % len(notes)]])); t += ppq // 2; k += 1
+        return out
+    else:
+        return [(0, total, list(notes))]
+    out, t = [], offs
+    while t < total:
+        out.append((t, max(1, min(ln, total - t)), list(notes))); t += step
+    return out or [(0, total, list(notes))]
+
+
+def progression_to_midi(runs: list, bpm: float = 60.0, ppq: int = 480, pulse: str = 'sustain') -> bytes:
+    """Standard MIDI File (format 0, one track). Each run of the field progression is a chord lasting its real duration at the given
+    tempo (one quarter note per second at 60 bpm), played as a held block or in a pulse pattern (see PULSE_PATTERNS)."""
+    bpm = max(20.0, float(bpm)); pulse = pulse if pulse in PULSE_PATTERNS else 'sustain'
+    events = []                                  # (tick, order, status bytes); order 0 = off before on at the same tick
+    t0 = 0
+    for r in runs:
+        if not r.get('root'):
+            continue
+        beats = max(0.25, r['seconds'] * bpm / 60.0)
+        notes = chord_pitches(r['root'], r['suffix'])
+        for st, ln, ns in pulse_hits(pulse, notes, beats, ppq):
+            for n in ns:
+                events.append((t0 + st, 1, bytes([0x90, n, 84 if st == 0 else 72])))
+                events.append((t0 + st + ln, 0, bytes([0x80, n, 0])))
+        t0 += max(1, int(round(beats * ppq)))
+    events.sort(key=lambda e: (e[0], e[1]))
+    track = bytearray()
+    track += _vlq(0) + b'\xFF\x51\x03' + int(60_000_000 / bpm).to_bytes(3, 'big')
+    track += _vlq(0) + b'\xFF\x03' + bytes([len(b'MCCF field progression')]) + b'MCCF field progression'
+    last = 0
+    for tick, _, data in events:
+        track += _vlq(tick - last) + data; last = tick
+    track += _vlq(max(0, t0 - last)) + b'\xFF\x2F\x00'
+    return b'MThd' + (6).to_bytes(4, 'big') + (0).to_bytes(2, 'big') + (1).to_bytes(2, 'big') + ppq.to_bytes(2, 'big') + b'MTrk' + len(track).to_bytes(4, 'big') + bytes(track)
+
+
+# ---------------------------------------------------------------------------
 # NeoRiemannianTransformer — the main class
 # ---------------------------------------------------------------------------
 
@@ -333,6 +449,75 @@ class NeoRiemannianTransformer:
         self.default_triad = default_triad or Triad('C', 'major')
         self._agents: dict[str, HarmonicAgent] = {}
         self._prev_e: dict[str, float] = {}   # track E-channel for delta
+        self.bpm = 60.0                       # tempo: with beats_per_chord it sets how often the harmony steps
+        self.beats_per_chord = 2.0            # (60 bpm, 2 beats = the old fixed 2 s)
+        self.pulse = 'sustain'                # rhythmic pattern of the exported chords and of the pulse a synth can lock to
+        self.seed = 0
+        self.rng = random.Random(self.seed)   # seeded: the same inputs give the same harmonic path
+        self.log: list = []                   # one entry per harmonic step: {step, t, triads, ops, chord}
+        self._t0 = None
+
+    @property
+    def step_seconds(self) -> float:
+        return round(min(30.0, max(0.25, self.beats_per_chord * 60.0 / self.bpm)), 4)
+
+    def configure(self, bpm=None, beats_per_chord=None, pulse=None) -> dict:
+        """Set tempo, chord length (in beats) and pulse pattern; values are clamped to sane ranges. Returns the settings."""
+        if bpm is not None:
+            self.bpm = min(240.0, max(20.0, float(bpm)))
+        if beats_per_chord is not None:
+            self.beats_per_chord = min(32.0, max(0.5, float(beats_per_chord)))
+        if pulse is not None and pulse in PULSE_PATTERNS:
+            self.pulse = pulse
+        return self.config()
+
+    def config(self) -> dict:
+        return {'bpm': self.bpm, 'beats_per_chord': self.beats_per_chord, 'pulse': self.pulse,
+                'step_seconds': self.step_seconds, 'beat_seconds': round(60.0 / self.bpm, 4), 'patterns': list(PULSE_PATTERNS)}
+
+    def reset(self, seed: int = 0):
+        """Back to the starting triads, an empty log and a re-seeded random stream (call at the start of a scene)."""
+        self.seed = int(seed)
+        self.rng = random.Random(self.seed)
+        self._agents.clear(); self._prev_e.clear()
+        self.log = []; self._t0 = None
+
+    def record(self, names: list, ops: dict, now: float = None):
+        """Append the stacked state of the named agents after a step."""
+        now = time.time() if now is None else now
+        if self._t0 is None:
+            self._t0 = now
+        triads = {n: self._agents[n].current_triad for n in names if n in self._agents}
+        fc = field_chord(list(triads.values()))
+        self.log.append({'step': len(self.log) + 1, 't': round(now - self._t0, 2),
+                         'triads': {n: str(t) for n, t in triads.items()}, 'ops': {n: ops.get(n) for n in triads},
+                         'chord': fc['symbol'], 'root': fc['root'], 'suffix': fc['suffix'], 'exact': fc['exact']})
+        if len(self.log) > 2000:
+            self.log = self.log[-2000:]
+
+    def progression(self) -> list:
+        """The field chord over time, repeats merged: [{chord, root, suffix, steps, start, seconds, exact, triads}]."""
+        runs = []
+        for i, e in enumerate(self.log):
+            end = self.log[i + 1]['t'] if i + 1 < len(self.log) else e['t'] + self.step_seconds
+            if runs and runs[-1]['chord'] == e['chord']:
+                runs[-1]['steps'] += 1; runs[-1]['seconds'] = round(end - runs[-1]['start'], 2)
+            else:
+                runs.append({'chord': e['chord'], 'root': e['root'], 'suffix': e['suffix'], 'steps': 1, 'start': e['t'],
+                             'seconds': round(max(0.0, end - e['t']), 2), 'exact': e['exact'], 'triads': e['triads']})
+        return runs
+
+    def lanes(self) -> dict:
+        """Each agent's own chord line: {agent: [{triad, steps, start}]} with repeats merged."""
+        out = {}
+        for e in self.log:
+            for n, tr_ in e['triads'].items():
+                lane = out.setdefault(n, [])
+                if lane and lane[-1]['triad'] == tr_:
+                    lane[-1]['steps'] += 1
+                else:
+                    lane.append({'triad': tr_, 'steps': 1, 'start': e['t']})
+        return out
 
     def register_agent(self, agent_name: str, starting_triad: Triad = None):
         t = starting_triad or Triad(self.default_triad.root, self.default_triad.quality)
@@ -365,7 +550,7 @@ class NeoRiemannianTransformer:
         probs = compute_plr_probabilities(
             e_channel, uncertainty, identity_drift, coherence, prev_e
         )
-        op = sample_operation(probs, temperature)
+        op = sample_operation(probs, temperature, self.rng)
 
         if op:
             self._agents[agent_name].apply_op(op)
@@ -390,12 +575,12 @@ class NeoRiemannianTransformer:
     def get_all_states(self) -> dict:
         return {name: self.get_state(name) for name in self._agents}
 
-    def field_harmony(self) -> dict:
+    def field_harmony(self, names: list = None) -> dict:
         """
         Aggregate harmonic field state: average Tonnetz distance,
         consonance score (how similar are all agents' triads).
         """
-        agents = list(self._agents.values())
+        agents = [a for n, a in self._agents.items() if names is None or n in names]
         if len(agents) < 2:
             return {"consonance": 1.0, "avg_distance": 0.0}
 
@@ -419,69 +604,154 @@ class NeoRiemannianTransformer:
 # Flask API factory
 # ---------------------------------------------------------------------------
 
-def make_neoriemannian_api(field, transformer: NeoRiemannianTransformer = None):
+# Minimum seconds between harmonic steps. Polling /neoriemannian/state faster than this
+# returns the current state without moving it, so the music does not depend on poll rate.
+STEP_INTERVAL_S = 2.0
+
+
+def make_neoriemannian_api(field, transformer: NeoRiemannianTransformer = None, live=None):
     """
     Create Flask blueprint for Neo-Riemannian endpoints.
     Attach to mccf_api.py with:
         from mccf_neoriemannian import make_neoriemannian_api, NeoRiemannianTransformer
         nr_transformer = NeoRiemannianTransformer()
-        nr_bp = make_neoriemannian_api(field, nr_transformer)
+        nr_bp = make_neoriemannian_api(field, nr_transformer, live=callable)
         app.register_blueprint(nr_bp)
+
+    `live` (optional) is a callable returning {agent: {'observed': {E,B,P,S}, 'drift': 0..1, 'coherence': float|None}} for the characters
+    in the scene being played. When it returns anything, those characters (and only those) drive and take part in the harmony,
+    from their live EBPS state; otherwise the old behaviour (every registered agent, static weights) is used.
+    `nr_bp.advance()` takes one harmonic step if one is due, so the scene's tick can keep the music moving without a browser polling.
     """
-    from flask import Blueprint, jsonify, request
+    from flask import Blueprint, jsonify, request, Response
 
     nr_bp = Blueprint('neoriemannian', __name__)
     tr = transformer or NeoRiemannianTransformer()
+    last_step = {"t": 0.0}
+
+    def _live():
+        try:
+            return (live() if live else None) or {}
+        except Exception:
+            return {}
+
+    def _participants(lv):
+        return list(lv.keys()) if lv else list(field.agents.keys())
+
+    def advance(force=False):
+        """One harmonic step for every participant, at most once per STEP_INTERVAL_S. Returns the participants."""
+        lv = _live()
+        names = _participants(lv)
+        for name in names:
+            tr.ensure_agent(name)
+        now = time.time()
+        if not (force or now - last_step["t"] >= tr.step_seconds):
+            return names
+        last_step["t"] = now
+        ops = {}
+        for name in names:
+            agent = field.agents.get(name)
+            L = lv.get(name)
+            if L:
+                e_ch   = L['observed'].get('E', 0.35)
+                drift  = min(0.12, float(L.get('drift', 0.0)) * 0.25)        # expressive drift stands in for identity drift
+                coh    = L.get('coherence')
+            else:
+                e_ch   = agent.weights.get('E', 0.35) if agent else 0.35
+                drift  = 0.0
+                coh    = None
+            uncert = agent.meta_state.uncertainty if agent else 0.5
+            if L is None and agent is not None:
+                d = agent.identity.as_dict()['drift']
+                drift = max(abs(v) for v in d.values()) if d else 0.0
+            if coh is None and agent is not None:
+                scores = [agent.coherence_toward(o) for o in agent._known_agents]
+                coh = sum(scores) / len(scores) if scores else 0.5
+            ops[name] = tr.step(name, e_ch, uncert, drift, 0.5 if coh is None else coh)
+        tr.record(names, ops, now)
+        return names
+
+    nr_bp.advance = advance
 
     @nr_bp.route('/neoriemannian/state', methods=['GET'])
     def nr_state():
         """
-        Current harmonic state of all registered agents.
+        Current harmonic state of the characters in the scene (or of every registered agent when no scene is running).
         Poll from voice HTML or X3D loader to drive Web Audio synthesis.
+        ?step=1 forces a step (for tests and manual stepping).
         """
-        # Sync agents from field
-        for name in field.agents:
-            tr.ensure_agent(name)
-
-        # Step each agent based on current MCCF state
-        for name, agent in field.agents.items():
-            # Extract affective state
-            e_ch    = agent.weights.get('E', 0.35)
-            uncert  = agent.meta_state.uncertainty
-            drift   = max(abs(v) for v in agent.identity.as_dict()['drift'].values()) \
-                      if agent.identity.as_dict()['drift'] else 0.0
-            # Average coherence toward all known agents
-            scores = [agent.coherence_toward(other)
-                      for other in agent._known_agents]
-            coherence = sum(scores) / len(scores) if scores else 0.5
-
-            tr.step(name, e_ch, uncert, drift, coherence)
-
-        # Build response
-        all_states = tr.get_all_states()
-        harmony    = tr.field_harmony()
-
-        # Add audio params per agent
+        names = advance(force=request.args.get("step") == "1")
+        lv = _live()
+        all_states = {n: tr.get_state(n) for n in names}
+        harmony    = tr.field_harmony(names)
         for name, state in all_states.items():
             agent = field.agents.get(name)
-            if agent:
+            L = lv.get(name)
+            if agent or L:
+                obs = (L or {}).get('observed') or {}
                 agent_state = {
-                    'arousal': agent.meta_state.valence * 0.5 + 0.5,
-                    'valence': agent.meta_state.valence,
-                    'E': agent.weights.get('E', 0.35),
-                    'B': agent.weights.get('B', 0.25),
+                    'arousal': (agent.meta_state.valence * 0.5 + 0.5) if agent else 0.5,
+                    'valence': agent.meta_state.valence if agent else 0.0,
+                    'E': obs.get('E', agent.weights.get('E', 0.35) if agent else 0.35),
+                    'B': obs.get('B', agent.weights.get('B', 0.25) if agent else 0.25),
                 }
-                scores = [agent.coherence_toward(o) for o in agent._known_agents]
-                coh = sum(scores) / len(scores) if scores else 0.5
-                # Get current Triad object
+                coh = (L or {}).get('coherence')
+                if coh is None and agent:
+                    scores = [agent.coherence_toward(o) for o in agent._known_agents]
+                    coh = sum(scores) / len(scores) if scores else 0.5
                 ha = tr._agents.get(name)
                 if ha:
-                    state['audio'] = compute_audio_params(agent_state, ha.current_triad, coh)
+                    state['audio'] = compute_audio_params(agent_state, ha.current_triad, 0.5 if coh is None else coh)
+        return jsonify({"agents": all_states, "harmony": harmony, "live": bool(lv), "steps": len(tr.log),
+                        "field_chord": tr.log[-1]["chord"] if tr.log else None, "chords": len(tr.progression()),
+                        "pulse": tr.config()})
 
-        return jsonify({
-            "agents":  all_states,
-            "harmony": harmony
-        })
+    @nr_bp.route('/neoriemannian/progression', methods=['GET'])
+    def nr_progression():
+        """
+        The harvested progression: every agent's triads stacked at each step and named as one field chord, repeats merged.
+          ?format=json (default) | chart (text, one chord per line) | mid (Standard MIDI File) | symbols (space-separated chord symbols)
+          ?lanes=1 adds each agent's own chord line to the JSON.   ?bpm= and ?pulse= override the MIDI tempo and pulse pattern (default: the current settings).
+        """
+        fmt = request.args.get('format', 'json').lower()
+        runs = tr.progression()
+        if fmt == 'mid':
+            try: bpm = float(request.args.get('bpm', tr.bpm))
+            except ValueError: bpm = tr.bpm
+            return Response(progression_to_midi(runs, bpm, pulse=request.args.get('pulse', tr.pulse)), mimetype='audio/midi',
+                            headers={'Content-Disposition': 'attachment; filename=mccf_field_progression.mid'})
+        if fmt == 'symbols':
+            return Response(' '.join(r['chord'] for r in runs if r['chord']), mimetype='text/plain')
+        if fmt == 'chart':
+            lines = ['MCCF field progression  (seed %s, %d steps, %d chords)' % (tr.seed, len(tr.log), len(runs))]
+            for r in runs:
+                lines.append('%7.1fs  %-8s %s%s' % (r['start'], r['chord'], ' + '.join(r['triads'].values()), '' if r['exact'] else '   (best fit)'))
+            return Response('\n'.join(lines) + '\n', mimetype='text/plain')
+        out = {'seed': tr.seed, 'steps': len(tr.log), 'step_seconds': tr.step_seconds, 'config': tr.config(), 'progression': runs,
+               'symbols': [r['chord'] for r in runs if r['chord']]}
+        if request.args.get('lanes') == '1':
+            out['lanes'] = tr.lanes()
+        return jsonify(out)
+
+    @nr_bp.route('/neoriemannian/config', methods=['GET', 'POST'])
+    def nr_config():
+        """Tempo and pulse. Body: {bpm, beats_per_chord, pulse}; any subset. The harmony steps every beats_per_chord * 60 / bpm seconds
+        (0.25 to 30 s). pulse is one of: sustain, quarter, eighth, offbeat, arp. Settings last until the server restarts."""
+        if request.method == 'POST':
+            d = request.get_json(silent=True) or {}
+            try:
+                tr.configure(d.get('bpm'), d.get('beats_per_chord'), d.get('pulse'))
+            except (TypeError, ValueError):
+                return jsonify({'status': 'error', 'error': 'bpm and beats_per_chord must be numbers'}), 400
+        return jsonify({'status': 'ok', **tr.config()})
+
+    @nr_bp.route('/neoriemannian/reset', methods=['POST'])
+    def nr_reset():
+        """Start the harmony over: starting triads, empty progression, random stream re-seeded. Body: {seed}"""
+        data = request.get_json(silent=True) or {}
+        tr.reset(int(data.get('seed', 0)))
+        last_step["t"] = 0.0
+        return jsonify({"status": "ok", "seed": tr.seed})
 
     @nr_bp.route('/neoriemannian/arc/<waypoint>', methods=['GET'])
     def nr_arc_triad(waypoint):

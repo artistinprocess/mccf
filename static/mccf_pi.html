@@ -1,0 +1,1279 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>MCCF Help Composer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a browser-side lesson panel. Left, the step list as a waypoint rail; right, one frame at a time (step, question, feedback). Edit mode exposes the same frame as QRS fields. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#16212b; --dim:#5b6b79; --line:#d5dde4;
+  --blue:#2f6fb3; --teal:#1f8a83; --coral:#d9573f; --green:#2e8b4f; --amber:#b9801a; --rose:#b84a7a;
+  --blue-soft:#e3eef9; --green-soft:#e1f3e8; --coral-soft:#fbe7e2; --amber-soft:#faf0d9;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace; --sans:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f161d; --panel:#17212b; --ink:#e4ecf3; --dim:#93a4b3; --line:#2b3a47;
+  --blue:#6aa8e8; --teal:#4cc2b9; --coral:#f08b73; --green:#6fcf94; --amber:#e3b45a; --rose:#e48ab4;
+  --blue-soft:#1b2d40; --green-soft:#17301f; --coral-soft:#3a1f1a; --amber-soft:#33290f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161d; --panel:#17212b; --ink:#e4ecf3; --dim:#93a4b3; --line:#2b3a47;
+  --blue:#6aa8e8; --teal:#4cc2b9; --coral:#f08b73; --green:#6fcf94; --amber:#e3b45a; --rose:#e48ab4;
+  --blue-soft:#1b2d40; --green-soft:#17301f; --coral-soft:#3a1f1a; --amber-soft:#33290f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5;
+  padding-block:20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1000px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+h1{font-size:20px;margin:0;text-wrap:balance}
+.dm{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.mode{display:flex;gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.mode button{font:inherit;font-size:14px;padding:6px 14px;background:var(--panel);color:var(--dim);border:0;cursor:pointer}
+.mode button[aria-pressed="true"]{background:var(--blue);color:#fff}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px}
+@media(max-width:700px){.layout{grid-template-columns:1fr}}
+.rail{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;align-self:start}
+.rail h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.rail li button{width:100%;text-align:left;font:inherit;font-size:14px;background:none;border:0;border-radius:5px;padding:5px 6px;color:var(--ink);cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.rail li button:hover{background:var(--blue-soft)}
+.rail li button[aria-current="step"]{background:var(--blue-soft);font-weight:600}
+.dot{flex:none;width:12px;height:12px;border-radius:50%;border:2px solid var(--line);margin-top:5px}
+.dot.step{border-color:var(--blue)} .dot.q{border-radius:2px;border-color:var(--amber)}
+.dot.done{background:var(--green);border-color:var(--green)}
+.frame{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:20px;min-height:340px}
+.tag{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:99px;margin-bottom:10px}
+.tag.step{background:var(--blue-soft);color:var(--blue)} .tag.q{background:var(--amber-soft);color:var(--amber)}
+.frame h3{margin:0 0 8px;font-size:18px;text-wrap:balance}
+.do{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:10px 0;font-family:var(--mono);font-size:14px;overflow-x:auto}
+.note{font-size:14px;color:var(--dim);margin:8px 0}
+.guide{margin-top:12px;padding:8px 10px;border:1px dashed var(--line);border-radius:6px;font-size:13px;color:var(--dim)}
+.guide a{color:var(--blue);text-decoration:none}.guide a:hover{text-decoration:underline}
+.guide code{font-family:var(--mono);font-size:12px}
+.opts{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.opt{font:inherit;text-align:left;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 12px;cursor:pointer;display:flex;gap:10px}
+.opt:hover:not(:disabled){border-color:var(--blue)}
+.opt b{font-family:var(--mono);color:var(--dim);font-weight:400}
+.opt.right{background:var(--green-soft);border-color:var(--green)}
+.opt.wrong{background:var(--coral-soft);border-color:var(--coral)}
+.fb{border-left:4px solid var(--line);padding:8px 12px;margin-top:10px;font-size:15px;background:var(--bg);border-radius:0 6px 6px 0}
+.fb.right{border-color:var(--green)} .fb.wrong{border-color:var(--coral)}
+.nav{display:flex;justify-content:space-between;gap:8px;margin-top:16px}
+.btn{font:inherit;font-size:14px;padding:7px 16px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+label{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:12px 0 4px}
+input[type=text],textarea{width:100%;font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink)}
+.row{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1.4fr);gap:8px;align-items:center;margin-bottom:6px}
+.row .k{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.bar{height:6px;background:var(--line);border-radius:3px;margin-top:14px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--green);width:0;transition:width .25s}
+.hint{font-size:13px;color:var(--dim);margin-top:14px}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.bar i{transition:none}}
+
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+@media(max-width:860px){.cols{grid-template-columns:1fr}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.box h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.top[hidden]{display:none}
+.top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:14px 0}
+@media(max-width:860px){.top{grid-template-columns:1fr}}
+.refimg{background:#0f1720;border-radius:6px;height:250px;position:relative;overflow:hidden;color:#dfe8f0;font-size:13px;padding:10px 14px}
+.refimg .tabs{display:flex;gap:2px;margin-bottom:8px}.refimg .tabs span{padding:3px 10px;background:#17212b;border:1px solid #2d3c4b;font-size:12px;color:#9fb1c0}.refimg .tabs .on{background:#2a6fb5;color:#fff;border-color:#2a6fb5}
+.refimg .fr{display:flex;align-items:center;gap:8px;margin:5px 0}.refimg .fr label{width:92px;margin:0;font-size:12px;letter-spacing:0;text-transform:none;color:#9fb1c0}
+.refimg .fv{width:120px;background:#0b121a;border:1px solid #2d3c4b;border-radius:4px;padding:3px 8px;font-family:var(--mono);font-size:13px}
+.refimg .hl{border-color:#f0b040;box-shadow:0 0 0 2px rgba(240,176,64,.35)}
+.refimg .n{display:inline-flex;width:18px;height:18px;border-radius:50%;background:#f0b040;color:#101820;font-weight:700;align-items:center;justify-content:center;font-size:11px}
+.refimg .bt{display:inline-block;margin-top:8px;background:#2a6fb5;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px}
+.refimg .bt.on{outline:2px solid #f0b040}
+.refimg .toast{position:absolute;right:12px;bottom:10px;background:#17382a;border:1px solid #2d8a58;color:#7fe0a8;padding:5px 10px;border-radius:5px;font-size:12px}
+.refimg .none{color:#7e90a0;font-size:13px;position:absolute;left:14px;top:50%;transform:translateY(-50%)}
+.xite{background:#0b1a33;border-radius:6px;height:250px;position:relative;overflow:hidden;color:#cfe0f5;font-family:var(--mono);font-size:12px}
+.xite .gr{position:absolute;left:0;right:0;bottom:0;height:55%;background:#05080d;border-top:1px solid #2a4a7a}
+.xite .cap{position:absolute;left:8px;top:6px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--mono)}
+.tbl th{text-align:left;color:var(--dim);font-weight:400;padding:3px 4px;border-bottom:1px solid var(--line)}
+.tbl td{padding:3px 4px;border-bottom:1px solid var(--line)}
+.ok{color:var(--green)} .bad{color:var(--coral)}
+.chip{display:inline-block;font-family:var(--mono);font-size:12px;padding:1px 8px;border-radius:99px;background:var(--amber-soft);color:var(--amber)}
+select{font:inherit;font-size:14px;padding:5px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink)}
+.imp{margin-top:14px}
+.dmbar{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.dmbar b{color:var(--ink);font-weight:600;font-family:var(--sans);font-size:13px}
+.hb{height:10px;background:var(--line);border-radius:3px;min-width:60px}.hb i{display:block;height:100%;background:var(--coral);border-radius:3px}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.kpi div{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 14px;min-width:120px}
+.kpi b{display:block;font-size:20px}.kpi span{font-size:12px;color:var(--dim)}
+.flag{color:var(--coral);font-weight:600}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:14px}
+.toolbar input[type=text]{width:190px}
+.toolbar select{max-width:360px}
+.msg{font-size:13px;color:var(--dim)}
+.rem{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--amber-soft);color:var(--ink);font-size:14px}
+.rem .btn{margin-top:8px}
+.okbox{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--green-soft);font-size:14px}
+.refimg img{max-width:100%;max-height:100%;display:block;margin:0 auto;border-radius:4px}
+.refimg.pic img{cursor:zoom-in}
+.co-tgl{position:absolute;top:6px;right:6px;z-index:5;font:inherit;font-size:11px;background:#17212b;color:#dfe8f0;border:1px solid #2d3c4b;border-radius:4px;padding:2px 8px;cursor:pointer;opacity:.9}
+.co-off .co-ov,.co-off .co-leg{display:none!important}
+#frame.co-off .co-ref{background:none;border-bottom:0;cursor:inherit;box-shadow:none}
+.co-ov{position:absolute;pointer-events:none}.co-ov.off{display:none}
+.co-hot{position:absolute;border:1.5px solid #f0b040;border-radius:3px;pointer-events:auto;cursor:pointer;background:rgba(240,176,64,.07)}
+.co-hot i{position:absolute;left:-8px;top:-9px;min-width:17px;height:17px;border-radius:9px;background:#f0b040;color:#101820;font:700 11px/17px var(--mono);text-align:center;font-style:normal;padding:0 3px}
+.co-hot.co-hide{display:none}
+.co-nonum .co-hot i{display:none}
+.co-hot:hover,.co-hot.on{background:rgba(240,176,64,.38)}.co-hot.on{box-shadow:0 0 0 2px #fff}
+.co-legon{align-items:flex-start!important}.co-legon img{max-height:calc(100% - 58px)!important}   /* the name strip sits under the picture, not over it */
+.co-leg{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(10,16,24,.94);border:1px solid #2d3c4b;border-radius:6px;padding:6px 10px;font-size:12px;color:#dfe8f0;display:flex;gap:10px;align-items:center}
+.co-leg span{flex:1}.co-leg button{font:inherit;font-size:11px;background:#17212b;color:#9fb1c0;border:1px solid #2d3c4b;border-radius:4px;padding:2px 8px;cursor:pointer}
+.co-ref{background:rgba(240,176,64,.16);border-bottom:1px dashed #f0b040;cursor:pointer;border-radius:2px}.co-ref.on{background:#f0b040;color:#101820;box-shadow:0 0 0 2px #f0b040}
+.refimg .co-big{position:absolute;top:6px;left:6px;z-index:5;font:inherit;font-size:11px;background:rgba(10,16,24,.85);color:#cfd9e2;border:1px solid #2d3c4b;border-radius:4px;padding:2px 8px;cursor:pointer}
+#imgmodal{position:fixed;inset:0;background:rgba(5,10,16,.92);display:none;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out}
+#imgmodal.on{display:flex}
+#vidmodal{position:fixed;inset:0;background:rgba(5,10,16,.94);display:flex;align-items:center;justify-content:center;z-index:9999}
+#vidmodal img{max-width:96vw;max-height:94vh;border-radius:6px;box-shadow:0 8px 40px #000}
+.au-thumb{cursor:zoom-in}
+#vidmodal video{max-width:96vw;max-height:92vh;border-radius:6px;box-shadow:0 8px 40px #000}
+#vidmodal span{position:absolute;top:12px;right:18px;color:#cfd9e2;font-size:13px}
+#imgmodal img{max-width:96vw;max-height:94vh;border-radius:6px;box-shadow:0 8px 40px #000}
+#imgmodal span{position:absolute;top:12px;right:18px;color:#cfd9e2;font-size:13px}
+.refimg.multi{display:flex;flex-direction:column;gap:10px;overflow:auto;padding:6px}
+.refcell{flex:1 1 0;min-height:0;display:flex;flex-direction:column}
+.refcell>div:first-child{flex:1;position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+.refpic{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.refpic img,.refpic video{max-width:100%;max-height:100%}
+.reftabs{display:flex;gap:0;margin-bottom:6px;flex-wrap:wrap}.reftabs button{font:inherit;font-size:12px;padding:4px 12px;background:#17212b;color:#9fb1c0;border:1px solid #2d3c4b;cursor:pointer;margin-right:-1px}.reftabs button:first-child{border-radius:6px 0 0 6px}.reftabs button:last-child{border-radius:0 6px 6px 0;margin-right:0}.reftabs button[aria-selected=true]{background:#2a6fb5;color:#fff;border-color:#2a6fb5}
+.refcap{font-size:12px;color:#9fb1c0;text-align:center;padding-top:3px}
+.refimg.pic{padding:0;display:flex;align-items:center;justify-content:center}
+.xframe{width:100%;height:100%;border:0;border-radius:6px;background:#0b1a33}
+.xite.live{padding:0}
+textarea.src{font-family:var(--mono);font-size:12px;min-height:320px;line-height:1.4}
+.big{font-size:20px}
+[hidden]{display:none!important}
+.pop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
+.pop>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;max-width:780px;width:92%;max-height:82vh;overflow:auto}
+.pop-row{display:flex;gap:12px;align-items:baseline;width:100%;text-align:left;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:4px 0;cursor:pointer}
+.pop-row:hover{border-color:var(--blue)}.pop-row small{color:var(--dim);font-family:var(--mono);font-size:12px}
+.pop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px}
+.pop-grid button{font:inherit;font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px;cursor:pointer;text-align:center;word-break:break-all}
+.pop-grid button:hover{border-color:var(--blue)}.pop-grid img{max-width:100%;max-height:80px;display:block;margin:0 auto 4px}
+.xite,.refimg{height:clamp(300px,62vh,640px);resize:vertical}
+.xite.xbig{position:fixed;inset:3vh 2vw;height:auto;width:auto;z-index:9000;resize:none;box-shadow:0 0 0 100vmax rgba(5,10,16,.88)}
+#xbigClose{position:fixed;top:5px;right:2vw;z-index:9001;font-size:12px;padding:3px 12px}
+body.xbig-on{overflow:hidden}
+.au-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.au-problems{background:var(--coral-soft);border:1px solid var(--coral);border-radius:6px;padding:8px 14px;margin:8px 0;font-size:14px}
+.au-problems ul{margin:4px 0 0;padding-left:20px}
+.au-problems.ok{background:var(--green-soft);border-color:var(--green)}
+.au-sec{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0;background:var(--bg)}
+.au-sec>h3{margin:0 0 6px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.au-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 12px}
+.au-main{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;margin:12px 0}
+@media(max-width:800px){.au-main{grid-template-columns:1fr}}
+.au-list{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:8px;align-self:start}
+.au-list .it{display:flex;gap:4px;align-items:center;padding:3px;border-radius:5px}
+.au-list .it.on{background:var(--blue-soft)}
+.au-list .it button.pick{flex:1;text-align:left;font:inherit;font-size:14px;background:none;border:0;color:var(--ink);cursor:pointer;padding:3px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-list .mini{font-size:12px;padding:1px 6px;border:1px solid var(--line);background:var(--panel);color:var(--dim);border-radius:4px;cursor:pointer}
+.au-rowx{display:grid;gap:6px;align-items:start;margin-bottom:6px}
+.au-rowx input[type=text],.au-rowx select,.au-rowx textarea{min-width:0}
+.au-sub{font-size:13px;color:var(--dim);margin:2px 0 6px}
+.au-x{font-size:13px;padding:3px 8px;border:1px solid var(--line);background:var(--panel);color:var(--coral);border-radius:4px;cursor:pointer}
+.au-thumb{max-height:90px;max-width:160px;border:1px solid var(--line);border-radius:4px;margin-top:4px;display:block}
+.au-xml{margin-top:14px}.au-xml summary{cursor:pointer;color:var(--dim);font-size:14px}
+.au-tag{display:inline-block;font-family:var(--mono);font-size:11px;padding:0 6px;border-radius:99px;margin-right:4px}
+.au-tag.s{background:var(--blue-soft);color:var(--blue)}.au-tag.q{background:var(--amber-soft);color:var(--amber)}
+textarea.au-ta{min-height:70px}
+</style>
+
+<div class="pop" id="pop" hidden><div id="popBox"></div></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="h-title">MCCF Help Composer</h1>
+      <div class="dm" id="h-dm">No lesson loaded</div>
+    </div>
+    <div class="mode" role="group" aria-label="View">
+      <button id="m-learn" aria-pressed="true">Learner view</button>
+      <button id="m-edit" aria-pressed="false">Author view</button>
+      <button id="m-rep" aria-pressed="false">Dashboard report</button>
+    </div>
+  </header>
+
+  <div class="dm" style="text-align:right;margin:-6px 0 8px" id="buildStamp">PI page build 2026-11-16a (form editor, new lesson, read aloud)</div>
+  <div class="toolbar" id="toolbar">
+    <label style="margin:0">Lesson</label>
+    <select id="lessonSel"></select>
+    <button class="btn" id="fileBtn">Load lesson file…</button>
+    <a class="btn" id="regBtn" href="/pi/graphics.csv" download title="Downloads the graphics register with the Used-in columns filled in from the lessons" style="text-decoration:none">Graphics register</a>
+    <button class="btn" id="newBtn" title="Starts a new, empty lesson with the next free DM code. The code is only kept when you save it.">New lesson</button>
+    <input type="file" id="fileIn" accept=".xml,application/xml,text/xml" style="display:none">
+    <label style="margin:0">Your name</label>
+    <input type="text" id="learner" placeholder="name or initials" maxlength="40">
+    <button class="btn pri" id="startBtn">Start</button>
+    <span class="msg" id="tmsg"></span>
+    <span id="spkBox" style="display:none;margin-left:10px;white-space:nowrap" title="Reads each step aloud with a voice installed in your browser">
+      <label style="margin:0"><input type="checkbox" id="spkOn"> Read aloud</label>
+      <select id="spkVoice" style="max-width:190px" title="Voice"></select>
+      <select id="spkRate" title="Speed"><option value="0.8">slow</option><option value="1" selected>normal</option><option value="1.2">fast</option><option value="1.4">faster</option></select>
+      <button class="btn" id="spkAgain" title="Read this step again">&#8635;</button>
+      <button class="btn" id="spkStop" title="Stop reading">&#9632;</button>
+    </span>
+  </div>
+
+  <section class="frame" id="report" hidden style="min-height:0">
+    <div class="dmbar"><b>Dashboard &gt; Diagnostic Reports &gt; PI Performance Report and Analysis</b><span id="rdm"></span></div>
+    <p class="note" style="margin-top:0" id="rsrc">Source: the performance log (pi_logs), one line per learner session.</p>
+    <div class="kpi" id="rkpi"></div>
+    <h2 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)">By frame</h2>
+    <div style="overflow-x:auto"><table class="tbl" id="rtab"></table></div>
+    <h2 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:16px">Remediation path used</h2>
+    <table class="tbl" id="rpath"></table>
+    <h2 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:16px">Analysis</h2>
+    <ul style="margin:6px 0 0;padding-left:20px;font-size:14px" id="rnotes"></ul>
+    <div class="hint" id="rrule"></div>
+  </section>
+
+  <section class="frame" id="author" hidden style="min-height:0">
+    <div class="dmbar"><b>Author view: build the lesson</b><span>schema xmlschemas/mccf_pi.xsd</span></div>
+    <p class="note" style="margin-top:0">Fill in the boxes. The lesson file is built for you. Apply tries it in the learner view. Save to server puts it in static/pi/lessons/ (the old copy is kept in lessons/_backup).</p>
+    <div class="au-bar">
+      <button class="btn pri" id="auApply">Apply (try it)</button>
+      <button class="btn" id="auSave">Save to server</button>
+      <button class="btn" id="dlSrc">Download</button>
+      <button class="btn" id="auCheck">Check lesson</button>
+      <span class="msg" id="smsg"></span>
+    </div>
+    <div id="auProblems" class="au-problems" hidden></div>
+    <div id="aform"></div>
+    <details class="au-xml">
+      <summary>XML and import (advanced)</summary>
+      <textarea id="src" class="src" spellcheck="false"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+        <button class="btn" id="applySrc">Use this XML in the boxes</button>
+      </div>
+      <h2 style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:18px">Import a written lesson</h2>
+      <textarea id="imp" rows="5" placeholder="Numbered lines become steps. A line starting Q: is a question; the lines after it starting A: are its answers, and a * in front marks the right one."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="btn" id="impgo">Add as frames</button><span class="msg" id="impmsg"></span></div>
+    </details>
+    <datalist id="dl-media"></datalist><datalist id="dl-callouts"><option value="auto"><option value="all"><option value="none"></datalist><datalist id="dl-dm"></datalist><datalist id="dl-paths">
+      <option value="/Scene/@id"><option value="/Scene/@width"><option value="/Scene/@depth"><option value="/Scene/@timestamp">
+      <option value="/Scene/Navigation/@type"><option value="/Scene/Navigation/@transitionTime"></datalist>
+  </section>
+
+  <div class="top" id="toppanes">
+    <section class="box" aria-label="X_ITE window">
+      <h2 style="display:flex;align-items:center;justify-content:space-between;gap:8px">X_ITE window (module scene) <button type="button" class="btn" id="xbigBtn" style="font-size:11px;padding:2px 10px" title="Fill the browser window with the X3D view; Esc returns">Enlarge</button></h2>
+      <div class="xite live" id="xite"></div>
+      <div class="hint" id="xmeta"></div>
+    </section>
+    <section class="box" aria-label="Reference image">
+      <h2>Reference image <span id="refid" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div class="refimg" id="refimg"></div>
+      <div class="hint" id="refmeta"></div>
+    </section>
+  </div>
+
+  <div class="layout" id="lay">
+    <nav class="rail" aria-label="Frames">
+      <h2>Frames</h2>
+      <ol id="rail"></ol>
+      <div class="bar"><i id="prog"></i></div>
+      <div class="hint">Round: step. Square: question. Each frame is one waypoint.</div>
+      <div class="guide" id="guidelist" style="margin-top:14px"></div>
+    </nav>
+    <div>
+      <main class="frame" id="frame"></main>
+      <section class="box" style="margin-top:14px" aria-label="State check" id="chkbox">
+        <h2>State check: scene vs lesson file</h2>
+        <table class="tbl" id="chk"></table>
+        <div class="hint" id="chkmsg"></div>
+      </section>
+      <section class="box" style="margin-top:14px" aria-label="Performance record">
+        <h2>Performance record (this learner)</h2>
+        <div id="perf" style="font-size:14px"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+var API = location.protocol === 'file:' ? 'http://localhost:5000' : '';
+var PATHS = ['none', 'retest', 'review', 'reteach'];
+var L = null;            // the loaded lesson
+var S = null;            // the running session
+var view = 'learn';
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function nowIso(){ var d = new Date(), p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
+
+// ---------- lesson parsing ----------
+function kids(el, name){ return Array.prototype.filter.call(el.children, function(c){ return c.localName === name; }); }
+function txt(el, name){ var k = kids(el, name)[0]; return k ? k.textContent.trim() : ''; }
+function parseLesson(xml){
+  var doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('The file is not well-formed XML.');
+  var r = doc.documentElement;
+  if (r.localName !== 'PILesson') throw new Error('The root element is ' + r.localName + ', not PILesson.');
+  var meta = kids(r, 'Meta')[0]; if (!meta) throw new Error('Meta is missing.');
+  var sc = kids(r, 'Scene')[0];
+  var out = { xml: xml, title: txt(meta, 'Title'), dm: txt(meta, 'DmCode'), issue: txt(meta, 'Issue'), date: txt(meta, 'IssueDate'),
+    scene: sc ? { file: sc.getAttribute('file') || '', dm: sc.getAttribute('dmCode') || '', learner: sc.getAttribute('learnerScene') || '' } : { file: '', dm: '', learner: '' },
+    frames: [], policy: [] };
+  var fr = kids(r, 'Frames')[0]; if (!fr) throw new Error('Frames is missing.');
+  Array.prototype.forEach.call(fr.children, function(e){
+    var t = e.localName; if (t !== 'Step' && t !== 'Question') return;
+    var f = { id: e.getAttribute('id'), title: e.getAttribute('title') || e.getAttribute('id'), t: t === 'Step' ? 'step' : 'q',
+      guide: kids(e, 'Guide').map(function(g){ return { dm: g.getAttribute('dmCode'), title: g.getAttribute('title'), sec: g.getAttribute('section') || '' }; }),
+      media: kids(e, 'Media').map(function(m){ return { kind: m.getAttribute('kind'), file: m.getAttribute('file'), role: m.getAttribute('role') || 'reference', caption: m.getAttribute('caption') || '', callouts: m.getAttribute('callouts') || '' }; }) };
+    if (t === 'Step'){
+      f.instruction = txt(e, 'Instruction');
+      f.commands = kids(e, 'Command').map(function(c){ return c.textContent.trim(); });
+      f.notes = kids(e, 'Note').map(function(c){ return c.textContent.trim(); });
+      f.expects = kids(e, 'Expect').map(function(x){ return { path: x.getAttribute('path'), value: x.getAttribute('value'), tol: x.getAttribute('tolerance'), label: x.getAttribute('label') || x.getAttribute('path') }; });
+      var om = kids(e, 'OnMismatch')[0]; f.rem = om ? { kind: om.getAttribute('kind'), target: om.getAttribute('target'), retest: om.getAttribute('retest') } : null;
+    } else {
+      f.prompt = txt(e, 'Prompt');
+      f.responses = kids(e, 'Response').map(function(x){ return { id: x.getAttribute('id'), text: x.getAttribute('text'), correct: x.getAttribute('correct') === 'true', fb: txt(x, 'Feedback') }; });
+      var oi = kids(e, 'OnIncorrect')[0]; f.rem = oi ? { kind: oi.getAttribute('kind'), target: oi.getAttribute('target'), retest: oi.getAttribute('retest') } : null;
+    }
+    out.frames.push(f);
+  });
+  if (!out.frames.length) throw new Error('The lesson has no frames.');
+  var pol = kids(r, 'RemediationPolicy')[0];
+  if (pol) out.policy = kids(pol, 'Level').map(function(l){ return { min: parseInt(l.getAttribute('minMisses'), 10) || 0, action: l.getAttribute('action') }; }).sort(function(a, b){ return a.min - b.min; });
+  return out;
+}
+
+// ---------- loading ----------
+function lessonSet(xml){
+  window._piNew = false;
+  try { L = parseLesson(xml); } catch (e){ $('tmsg').textContent = e.message; return false; }
+  $('h-title').textContent = L.title;
+  $('h-dm').textContent = L.dm + ' · Issue ' + L.issue + ' · ' + L.date;
+  $('src').value = xml;
+  try { M = authParse(xml); } catch (e){ M = null; }
+  if (view === 'edit' && M) A.draw();
+  S = null; idx = 0; pending = null; checkRes = null; answeredWrong = {};
+  drawGuideList(); drawScenePane(true); draw(); $('tmsg').textContent = '';
+  return true;
+}
+var DMT = {}, mediaInfo = {};
+function mediaOpts(){ return mediaFiles.map(function(n){ var i = mediaInfo[n] || {}; var t = i.caption || ''; return '<option value="' + esc(n) + '"' + (t ? ' label="' + esc(t) + '"' : '') + '>' + (t ? esc(t) : '') + '</option>'; }).join(''); }
+function mediaNote(n){ var i = mediaInfo[n]; if (!i) return ''; var u = (i.used || []).map(function(x){ return x.dm + ' \u2014 ' + x.title; });
+  return (i.caption ? i.caption + '. ' : '') + (u.length ? 'Used in: ' + u.join('; ') : 'Not used in any lesson yet.') + (i.registered ? '' : ' Not in the graphics register.'); }
+function dmLabel(l){ return l.dm ? l.dm + ' \u2014 ' + (l.title || l.file) : (l.title || l.file); }
+function dmNote(l){ if (l && l.dm && l.title) DMT[l.dm] = l.title; }
+function loadList(){
+  fetch(API + '/pi/lessons').then(function(r){ return r.json(); }).then(function(d){
+    var sel = $('lessonSel'); sel.innerHTML = '';
+    (d.lessons || []).sort(function(a, b){ return (a.dm || a.file) < (b.dm || b.file) ? -1 : 1; }).forEach(function(l){ var o = document.createElement('option'); o.value = l.file; dmNote(l); o.textContent = dmLabel(l); sel.appendChild(o); });
+    if (!(d.lessons || []).length){ $('tmsg').textContent = 'No lessons in static/pi/lessons. Load a lesson file.'; return; }
+    var want = new URLSearchParams(location.search).get('lesson');
+    if (want && Array.prototype.some.call(sel.options, function(o){ return o.value === want; })) sel.value = want;
+    loadLesson(sel.value);
+  }).catch(function(){ $('tmsg').textContent = 'The server is not reachable. Load a lesson file to work offline (checks and the log need the server).'; });
+}
+function loadLesson(file){
+  fetch(API + '/pi/lesson?file=' + encodeURIComponent(file)).then(function(r){ if (!r.ok) throw 0; return r.text(); }).then(lessonSet)
+    .catch(function(){ $('tmsg').textContent = 'Could not load ' + file + '.'; });
+}
+$('lessonSel').onchange = function(){ loadLesson(this.value); };
+function popOpen(h){ $('popBox').innerHTML = h; $('pop').hidden = false; }
+function popClose(){ $('pop').hidden = true; }
+$('pop').onclick = function(e){ if (e.target === this) popClose(); };
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') popClose(); });
+function lessonFromComputer(){
+  if (window.showOpenFilePicker){
+    window.showOpenFilePicker({ id: 'mccf-pi-lessons', types: [{ description: 'PI lesson (XML)', accept: { 'application/xml': ['.xml'] } }] })
+      .then(function(h){ return h[0].getFile(); }).then(function(f){ return f.text(); }).then(lessonSet)
+      .catch(function(e){ if (!(e && e.name === 'AbortError')) $('fileIn').click(); });
+  } else $('fileIn').click();
+}
+function openLessonPanel(){
+  popOpen('<h3 style="margin:0 0 4px;font-size:16px">Open a lesson</h3><div class="note" style="margin:0 0 8px">Lessons in static/pi/lessons on the server:</div><input type="text" id="popQ" placeholder="Search by code, title or file" style="width:100%;margin:0 0 8px"><div id="popList">Loading...</div>'
+    + '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="popPc">A file from my computer...</button><button class="btn" onclick="popClose()">Close</button></div>');
+  $('popPc').onclick = function(){ popClose(); lessonFromComputer(); };
+  fetch(API + '/pi/lessons').then(function(r){ if (!r.ok) throw 0; return r.json(); }).then(function(d){
+    var ls = (d.lessons || []).sort(function(a, b){ return (a.dm || a.file) < (b.dm || b.file) ? -1 : 1; }); ls.forEach(dmNote);
+    function draw(q){ q = (q || '').toLowerCase(); var v = ls.filter(function(l){ return !q || (l.dm + ' ' + l.title + ' ' + l.file).toLowerCase().indexOf(q) >= 0; });
+      $('popList').innerHTML = v.length ? v.map(function(l){ return '<button class="pop-row" data-f="' + esc(l.file) + '"><b>' + esc(l.dm || l.file) + (l.title ? ' \u2014 ' + esc(l.title) : '') + '</b><small>' + (l.issue ? 'issue ' + esc(l.issue) + ' \u00b7 ' : '') + esc(l.file) + '</small></button>'; }).join('') : (ls.length ? 'No lesson matches.' : 'No lessons in the folder yet.');
+      Array.prototype.forEach.call($('popList').querySelectorAll('.pop-row'), function(b){ b.onclick = function(){ var f = b.getAttribute('data-f'); $('lessonSel').value = f; popClose(); loadLesson(f); }; }); }
+    draw(''); $('popQ').oninput = function(){ draw(this.value); }; $('popQ').focus();
+  }).catch(function(){ $('popList').textContent = 'The server is not reachable, so the folder cannot be listed.'; });
+}
+$('fileBtn').title = 'Lists the lessons in static/pi/lessons. A file from your computer is an option there.';
+$('fileBtn').onclick = openLessonPanel;
+$('fileIn').onchange = function(){ var f = this.files[0]; if (!f) return; var rd = new FileReader(); rd.onload = function(){ lessonSet(rd.result); }; rd.readAsText(f); this.value = ''; };
+
+// ---------- the session ----------
+var idx = 0, pending = null, checkRes = null, frameT0 = Date.now(), answeredWrong = {};
+$('startBtn').onclick = function(){
+  var name = $('learner').value.trim();
+  if (!L){ $('tmsg').textContent = 'Load a lesson first.'; return; }
+  if (!name){ $('tmsg').textContent = 'Type your name first.'; $('learner').focus(); return; }
+  S = { id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), learner: name, start: nowIso(), end: null, attempts: [], done: {}, path: 'none', finished: false };
+  idx = 0; pending = null; checkRes = null; answeredWrong = {}; frameT0 = Date.now();
+  $('startBtn').textContent = 'Restart'; $('tmsg').textContent = '';
+  drawScenePane(true); draw(); postLog();
+};
+function misses(){ return S ? S.attempts.filter(function(a){ return !a.correct; }).length : 0; }
+function pathFor(m){
+  if (!m) return 'none';
+  var act = 'retest';
+  (L.policy || []).forEach(function(l){ if (l.min <= m) act = l.action; });
+  return act;
+}
+function maxPath(a, b){ return PATHS.indexOf(a) >= PATHS.indexOf(b) ? a : b; }
+function postLog(){
+  if (!S) return;
+  var body = { id: S.id, learner: S.learner, lesson: L.dm, issue: L.issue, start: S.start, end: S.end, path: S.path, attempts: S.attempts };
+  fetch(API + '/pi/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(function(r){ if (!r.ok) throw 0; $('perf').dataset.logged = '1'; }).catch(function(){ $('perf').dataset.logged = '0'; drawPerf(); });
+}
+function logAttempt(f, kind, correct, response, remedial){
+  var secs = Math.max(0, Math.round((Date.now() - frameT0) / 100) / 10);
+  S.attempts.push({ frame: f.id, kind: kind, response: response || '', correct: correct, seconds: secs, at: nowIso(), remedial: remedial || null });
+  frameT0 = Date.now();
+  S.path = maxPath(S.path, pathFor(misses()));
+  postLog();
+}
+function idxOf(id){ for (var n = 0; n < L.frames.length; n++) if (L.frames[n].id === id) return n; return -1; }
+function go(n){ idx = Math.max(0, Math.min(L.frames.length - 1, n)); checkRes = null; frameT0 = Date.now(); draw(); }
+
+// A miss gives a remedial route: the frame's own, raised by the lesson's policy for the number of misses so far.
+function remedyFor(f){
+  if (!f.rem) return null;
+  var level = pathFor(misses());
+  var kind = maxPath(f.rem.kind || 'retest', level);
+  return { kind: kind, target: kind === 'reteach' ? L.frames[0].id : f.rem.target, retest: f.rem.retest || f.id };
+}
+function remHTML(r){
+  if (!r) return '';
+  var tgt = L.frames[idxOf(r.target)];
+  var msg = r.kind === 'reteach' ? 'Reteach: the module scene reloads and you repeat the steps from the first frame.'
+    : r.kind === 'review' ? 'Review frame "' + esc(tgt ? tgt.title : r.target) + '", then come back and try again.' : 'Try again.';
+  return '<div class="rem">' + msg + '<br><button class="btn" id="remgo">' + (r.kind === 'retest' ? 'Try again' : 'Go to ' + esc(tgt ? tgt.title : r.target)) + '</button></div>';
+}
+function bindRem(r){
+  var b = $('remgo'); if (!b || !r) return;
+  b.onclick = function(){
+    if (r.kind === 'retest'){ checkRes = null; draw(); return; }
+    pending = { from: r.target, to: r.retest };
+    if (r.kind === 'reteach') drawScenePane(true);
+    go(idxOf(r.target));
+  };
+}
+
+// ---------- the check ----------
+function xp(path, ns){
+  // prefix element steps so the XPath matches the scene file's default namespace
+  return ns ? path.replace(/(^|\/)([A-Za-z_][\w.-]*)(?=\/|\[|$)/g, '$1m:$2') : path;
+}
+function evalExpect(doc, x){
+  var ns = doc.documentElement.namespaceURI, v = null, exists = false;
+  try {
+    var res = doc.evaluate(xp(x.path, ns), doc, function(p){ return p === 'm' ? ns : null; }, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    if (res.singleNodeValue){ exists = true; v = res.singleNodeValue.nodeValue != null && res.singleNodeValue.nodeType === 2 ? res.singleNodeValue.nodeValue : res.singleNodeValue.textContent; }
+  } catch (e){}
+  var ok;
+  if (x.value === '*') ok = exists;
+  else if (!exists) ok = false;
+  else if (x.tol != null && x.tol !== '' && !isNaN(parseFloat(x.value)) && !isNaN(parseFloat(v))) ok = Math.abs(parseFloat(v) - parseFloat(x.value)) <= parseFloat(x.tol);
+  else ok = String(v).trim() === String(x.value).trim();
+  return { label: x.label, want: x.value === '*' ? 'present' : x.value, got: exists ? (x.value === '*' ? 'present' : v) : 'not found', ok: ok };
+}
+function runCheck(f){
+  if (!L.scene.learner){ checkRes = { error: 'This lesson names no learner scene to check.' }; draw(); return; }
+  var file = L.scene.learner + '_scene.xml';
+  fetch(API + '/scene/load/scene/raw?filename=' + encodeURIComponent(file)).then(function(r){ if (!r.ok) throw new Error('No saved scene file ' + file + '. Export the scene first.'); return r.text(); })
+    .then(function(t){
+      var doc = new DOMParser().parseFromString(t, 'application/xml');
+      if (doc.getElementsByTagName('parsererror').length) throw new Error('The saved scene file could not be read.');
+      var rows = f.expects.map(function(x){ return evalExpect(doc, x); });
+      var bad = rows.filter(function(r){ return !r.ok; }).length;
+      checkRes = { rows: rows, bad: bad, frame: f.id };
+      var rem = bad ? remedyFor(f) : null;
+      logAttempt(f, 'check', !bad, '', rem && rem.kind);
+      if (!bad) S.done[f.id] = true;
+      checkRes.rem = rem; draw();
+    }).catch(function(e){ checkRes = { error: e.message }; draw(); });
+}
+
+// ---------- drawing ----------
+function drawRail(){
+  var rail = $('rail'); rail.innerHTML = '';
+  L.frames.forEach(function(f, n){
+    var li = document.createElement('li'), b = document.createElement('button');
+    var done = S && S.done[f.id];
+    b.innerHTML = '<span class="dot ' + f.t + (done ? ' done' : '') + '"></span><span>' + esc(f.title) + '</span>';
+    if (n === idx) b.setAttribute('aria-current', 'step');
+    b.onclick = function(){ if (S) go(n); }; li.appendChild(b); rail.appendChild(li);
+  });
+  var d = S ? Object.keys(S.done).length : 0;
+  $('prog').style.width = Math.round(100 * d / L.frames.length) + '%';
+}
+function dmbar(f){ return '<div class="dmbar"><b>' + esc(f.title) + '</b><span>' + esc(L.dm) + ' · ' + esc(f.id) + ' · issue ' + esc(L.issue) + ' · ' + esc(L.date) + '</span></div>'; }
+function guideHTML(f){
+  if (!f.guide.length) return '';
+  return '<div class="guide">Guide: ' + f.guide.map(function(g){
+    return '<a href="guide/' + esc(g.dm) + '.pdf' + (g.sec ? '#' + esc(g.sec) : '') + '" target="_blank" rel="noopener">' + esc(g.title) + '</a> <code>' + esc(g.dm) + '</code>';
+  }).join(' · ') + ' (PDF)</div>';
+}
+function drawGuideList(){
+  var seen = {}, order = [];
+  L.frames.forEach(function(f, n){ f.guide.forEach(function(g){ var k = g.dm + '|' + g.title; if (!seen[k]){ seen[k] = { g: g, fr: [] }; order.push(k); } seen[k].fr.push(n + 1); }); });
+  var h = '<b style="color:var(--ink);font-weight:600">Guide modules for this lesson</b><ul style="margin:6px 0 0;padding-left:18px">';
+  order.forEach(function(k){ var e = seen[k];
+    h += '<li style="margin:4px 0"><a href="guide/' + esc(e.g.dm) + '.pdf' + (e.g.sec ? '#' + esc(e.g.sec) : '') + '" target="_blank" rel="noopener">' + esc(e.g.title) + '</a><br><code>' + esc(e.g.dm) + '</code> · frame' + (e.fr.length > 1 ? 's ' : ' ') + e.fr.join(', ') + '</li>'; });
+  $('guidelist').innerHTML = h + '</ul>';
+}
+function drawScenePane(reload){
+  var box = $('xite'); if (!L) return;
+  var name = (L.scene.file || '').replace(/\.x3d$/i, '');
+  if (!name){ box.innerHTML = '<div class="msg" style="padding:12px">This lesson names no module scene.</div>'; return; }
+  if (reload || !box.firstChild){
+    box.innerHTML = '<iframe class="xframe" title="Module scene" src="mccf_x3d_loader.html?scene=' + encodeURIComponent(name) + '"></iframe>';
+  }
+  $('xmeta').textContent = 'Module scene ' + L.scene.file + (L.scene.dm ? ' · ' + L.scene.dm : '') + '. It reloads when you restart or are sent back to reteach.';
+}
+function piCalloutSet(spec, items, groups){   // -> {mode, set} ; mode auto = only the controls named in the step text
+  var sp = String(spec || 'auto').trim().toLowerCase();
+  if (sp === '' || sp === 'auto') return { mode: 'auto' };
+  if (sp === 'all') return { mode: 'all' };
+  if (sp === 'none') return { mode: 'none' };
+  var set = {};
+  sp.split(/[,;]/).forEach(function(tok){
+    tok = tok.trim(); if (!tok) return; var m;
+    if (/^\d+$/.test(tok)) set[+tok] = 1;
+    else if ((m = /^(\d+)\s*-\s*(\d+)$/.exec(tok))){ for (var k = +m[1]; k <= +m[2] && k < 500; k++) set[k] = 1; }
+    else {
+      var g = (groups || []).filter(function(q){ return String(q.name || '').toLowerCase() === tok; })[0];
+      if (g) (g.items || []).forEach(function(n){ set[n] = 1; });
+      else items.forEach(function(it){ if (tok.length >= 3 && String(it.name).toLowerCase().indexOf(tok) >= 0) set[it.n] = 1; });
+    }
+  });
+  return { mode: 'list', set: set };
+}
+function piCallouts(box, im, items, spec, groups, burned){
+  var ov = document.createElement('div'); ov.className = 'co-ov'; var leg = document.createElement('div'); leg.className = 'co-leg'; leg.style.display = 'none';
+  box.appendChild(ov); box.appendChild(leg);
+  var tg = document.createElement('button'); tg.className = 'co-tgl'; tg.type = 'button'; box.appendChild(tg);
+  function applyOn(on){ box.classList.toggle('co-off', !on); $('frame').classList.toggle('co-off', !on); tg.textContent = on ? 'Callouts: on' : 'Callouts: off'; tg.title = on ? 'Hide the numbered boxes on this picture and the highlights in the text' : 'Show the numbered boxes on this picture and the highlights in the text'; }
+  var wantOn = true; try { wantOn = localStorage.getItem('piCallouts') !== 'off'; } catch (e) {}
+  tg.onclick = function(e){ e.stopPropagation(); wantOn = box.classList.contains('co-off'); applyOn(wantOn); try { localStorage.setItem('piCallouts', wantOn ? 'on' : 'off'); } catch (e2) {} };
+  applyOn(wantOn);
+  var nb = document.createElement('button'); nb.className = 'co-tgl'; nb.type = 'button'; nb.style.right = '104px'; box.appendChild(nb);
+  var nums = true; try { nums = localStorage.getItem('piCoNums') !== 'off'; } catch (e) {}
+  function applyNums(on){ nums = on; box.classList.toggle('co-nonum', !on); nb.textContent = on ? 'Numbers: on' : 'Numbers: off'; nb.title = on ? 'Hide the numbers but keep the highlighted controls; click a highlight to see its name below' : 'Show the numbers on the highlights'; var lb = box.querySelector('.co-leg button'); if (lb) lb.textContent = on ? 'Hide numbers' : 'Show numbers'; try { localStorage.setItem('piCoNums', on ? 'on' : 'off'); } catch (e2) {} }
+  nb.onclick = function(e){ e.stopPropagation(); applyNums(!nums); };
+  applyNums(nums);
+  if (burned){ box.classList.add('co-nonum'); nb.textContent = 'Numbers: in picture'; nb.disabled = true; nb.title = 'This picture already has its numbers drawn in; the boxes are clickable on top of them'; var lb0 = box.querySelector('.co-leg button'); if (lb0) lb0.style.display = 'none'; }
+  function place(){ var r = im.getBoundingClientRect(), b = box.getBoundingClientRect(); ov.style.left = (r.left - b.left) + 'px'; ov.style.top = (r.top - b.top) + 'px'; ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px'; }
+  if (im.complete) place(); im.addEventListener('load', place); if (window.ResizeObserver){ var ro = new ResizeObserver(place); ro.observe(box); ro.observe(im); } else window.addEventListener('resize', place);
+  items.forEach(function(it){ var h = document.createElement('div'); h.className = 'co-hot'; h.setAttribute('data-n', it.n); h.title = it.n + '. ' + it.name + (it.desc ? ': ' + it.desc : '');
+    h.style.cssText = 'left:' + it.x * 100 + '%;top:' + it.y * 100 + '%;width:' + it.w * 100 + '%;height:' + it.h * 100 + '%'; h.innerHTML = '<i>' + it.n + '</i>';
+    h.onclick = function(e){ e.stopPropagation(); pick(it.n, true); }; ov.appendChild(h); });
+  function clean(n){ return String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+(slider|value)$/i, '').trim(); }
+  var fr = $('frame'), used = {}, list = items.map(function(it){ return { n: it.n, k: clean(it.name) }; }).filter(function(x){ return x.k.length >= 5; }).sort(function(a, b){ return b.k.length - a.k.length; });
+  list.forEach(function(x){ if (used[x.k.toLowerCase()]) return; used[x.k.toLowerCase()] = 1;
+    var re = new RegExp('(^|[^A-Za-z0-9])(' + x.k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![A-Za-z0-9])', 'i');
+    var w = document.createTreeWalker(fr, NodeFilter.SHOW_TEXT, { acceptNode: function(t){ var p = t.parentNode; return (p.closest && p.closest('button,input,textarea,select,.dmbar,.co-ref,script,style')) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; } }), nodes = [], t;
+    while ((t = w.nextNode())) nodes.push(t);
+    for (var i = 0; i < nodes.length; i++){ var tx = nodes[i], mm = re.exec(tx.nodeValue); if (!mm) continue;
+      var st = mm.index + mm[1].length, en = st + mm[2].length, after = tx.splitText(en), mid = tx.splitText(st), sp = document.createElement('span');
+      sp.className = 'co-ref'; sp.setAttribute('data-n', x.n); sp.title = 'Show on the picture'; mid.parentNode.replaceChild(sp, mid); sp.appendChild(mid); sp.onclick = function(){ pick(+this.getAttribute('data-n'), false); }; } });
+  var ps = piCalloutSet(spec, items, groups), mentioned = {};
+  Array.prototype.forEach.call(fr.querySelectorAll('.co-ref'), function(r){ mentioned[+r.getAttribute('data-n')] = 1; });
+  function isVis(n){ return ps.mode === 'all' ? true : ps.mode === 'none' ? false : ps.mode === 'auto' ? !!mentioned[n] : !!ps.set[n]; }
+  Array.prototype.forEach.call(fr.querySelectorAll('.co-ref'), function(r){   // text highlights only for controls the author put on view
+    if (!isVis(+r.getAttribute('data-n'))){ var par = r.parentNode; while (r.firstChild) par.insertBefore(r.firstChild, r); par.removeChild(r); } });
+  var hidden = 0, showAll = false;
+  function applyVis(){ Array.prototype.forEach.call(ov.querySelectorAll('.co-hot'), function(h){ h.classList.toggle('co-hide', !showAll && !isVis(+h.getAttribute('data-n'))); }); }
+  items.forEach(function(it){ if (!isVis(it.n)) hidden++; });
+  applyVis();
+  if (hidden){
+    var ab = document.createElement('button'); ab.className = 'co-tgl'; ab.type = 'button'; ab.style.right = '204px'; box.appendChild(ab);
+    function lab(){ ab.textContent = showAll ? 'This step only' : 'Show all ' + items.length; ab.title = showAll ? 'Show only the callouts this step is about' : 'Show every callout on the picture'; }
+    lab(); ab.onclick = function(e){ e.stopPropagation(); showAll = !showAll; applyVis(); lab(); };
+  }
+  function pick(n, fromPic){ var it = items.filter(function(q){ return q.n === n; })[0]; if (!it) return;
+    Array.prototype.forEach.call(ov.querySelectorAll('.co-hot'), function(h){ h.classList.toggle('on', +h.getAttribute('data-n') === n); });
+    var refs = fr.querySelectorAll('.co-ref'); Array.prototype.forEach.call(refs, function(r){ r.classList.toggle('on', +r.getAttribute('data-n') === n); });
+    var hit = fr.querySelector('.co-ref.on'); if (hit && fromPic && hit.scrollIntoView) hit.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    leg.style.display = 'flex'; box.classList.add('co-legon'); leg.innerHTML = '<span><b>' + it.n + '. ' + esc(it.name) + '</b>' + (it.desc ? ' \u2014 ' + esc(it.desc) : '') + (fromPic && !hit ? ' <em>(not named in this step)</em>' : '') + '</span><button>Hide numbers</button>';
+    if (burned) leg.querySelector('button').style.display = 'none'; else { leg.querySelector('button').textContent = nums ? 'Hide numbers' : 'Show numbers'; leg.querySelector('button').onclick = function(e){ e.stopPropagation(); applyNums(!nums); }; } }
+}
+function isVid(n){ return /\.(mp4|webm|mov|m4v)$/i.test(n || ''); }
+// Author view: Enlarge button or a click on the thumbnail opens the picture or video large
+function piBigMedia(file, t){
+  var old = document.getElementById('vidmodal'); if (old) old.remove();
+  var md = document.createElement('div'); md.id = 'vidmodal';
+  var vid = isVid(file), src = 'pi/media/' + file;
+  md.innerHTML = '<span>Press Esc or click outside to close</span>' + (vid ? '<video controls playsinline autoplay></video>' : '<img alt="">');
+  var el = md.firstChild.nextSibling; el.src = src;
+  if (vid && t) el.addEventListener('loadedmetadata', function(){ try { el.currentTime = t; } catch (e) {} });
+  function close(){ if (vid) el.pause(); md.remove(); document.removeEventListener('keydown', key); }
+  function key(e){ if (e.key === 'Escape') close(); }
+  md.onclick = function(e){ if (e.target !== el) close(); }; document.addEventListener('keydown', key); document.body.appendChild(md);
+}
+document.addEventListener('click', function(e){
+  var b = e.target.closest && e.target.closest('.au-big'); if (b){ e.preventDefault(); var th = b.previousElementSibling, t = 0; if (th && th.tagName === 'VIDEO'){ t = th.currentTime; th.pause(); } piBigMedia(b.getAttribute('data-big'), t); return; }
+  var im = e.target.closest && e.target.closest('img.au-thumb'); if (im){ var f = (im.getAttribute('src') || '').replace(/^pi\/media\//, ''); if (f) piBigMedia(f, 0); }
+});
+function drawRef(f){
+  var all = f.media.filter(function(x){ return x.file && (x.kind === 'image' || x.kind === 'video' || isVid(x.file)); });
+  var imgs = all.filter(function(x){ return x.kind === 'image' && !isVid(x.file); });
+  var list = imgs.length ? imgs.concat(all.filter(function(x){ return imgs.indexOf(x) < 0; })) : all;   // pictures first, then videos
+  var box = $('refimg');
+  $('refid').textContent = '(frame ' + f.id + ')';
+  if (!list.length){ box.className = 'refimg'; box.innerHTML = '<div class="none">No reference image on this frame.</div>'; $('refmeta').textContent = 'A frame may carry one or more Media elements, kind image or video, role reference.'; return; }
+  if (list.length === 1){ drawOne(box, list[0], true); return; }
+  // several pictures: one tab per picture (same segmented style as the Learner / Author / Report switch), one shown at a time
+  box.className = 'refimg multi'; box.innerHTML = '';
+  var bar = document.createElement('div'); bar.className = 'reftabs'; bar.setAttribute('role', 'tablist');
+  var cell = document.createElement('div'); cell.className = 'refcell'; var inner = document.createElement('div'); var cap = document.createElement('div'); cap.className = 'refcap'; cell.appendChild(inner); cell.appendChild(cap);
+  box.appendChild(bar); box.appendChild(cell);
+  var tabs = list.map(function(m, k){ var t = document.createElement('button'); t.type = 'button'; t.setAttribute('role', 'tab'); t.textContent = (k + 1) + '. ' + (m.caption ? (m.caption.length > 28 ? m.caption.slice(0, 27) + '...' : m.caption) : (isVid(m.file) ? 'Video' : 'Picture')); t.title = m.caption || m.file; t.onclick = function(){ show(k); }; bar.appendChild(t); return t; });
+  function show(k){ var m = list[k]; tabs.forEach(function(t, i){ t.setAttribute('aria-selected', i === k ? 'true' : 'false'); }); inner.innerHTML = ''; var host = document.createElement('div'); host.className = 'refpic'; inner.appendChild(host); drawOne(host, m, false); cap.textContent = (m.caption ? m.caption + '. ' : '') + m.file;
+    $('refmeta').textContent = 'Picture ' + (k + 1) + ' of ' + list.length + ': ' + (m.caption ? m.caption + '. ' : '') + 'Media: ' + (isVid(m.file) ? 'video' : 'image') + ', role ' + m.role + ', file ' + m.file + '.'; }
+  show(0);
+}
+function drawOne(box, m, single){
+  if (isVid(m.file) || m.kind === 'video'){
+    if (single) box.className = 'refimg pic'; else box.className = 'refpic';
+    box.innerHTML = '<video controls playsinline preload="metadata" style="max-width:100%;max-height:100%" src="pi/media/' + esc(m.file) + '"></video>';
+    var vb = document.createElement('button'); vb.type = 'button'; vb.className = 'co-big'; vb.textContent = 'Enlarge'; vb.title = 'Play the video in a large window (Esc closes)'; box.style.position = 'relative';
+    vb.onclick = function(){ var v0 = box.querySelector('video'); if (!v0) return; var t = v0.currentTime, wasPlaying = !v0.paused; v0.pause();
+      var md = document.getElementById('vidmodal'); if (md) md.remove();
+      md = document.createElement('div'); md.id = 'vidmodal'; md.className = 'on';
+      md.innerHTML = '<span>Press Esc or click outside the video to close</span><video controls playsinline autoplay src="' + v0.currentSrc + '"></video>';
+      var v1 = md.querySelector('video'); v1.addEventListener('loadedmetadata', function(){ try { v1.currentTime = t; } catch (e) {} if (!wasPlaying) v1.pause(); });
+      function close(){ var back = v1.currentTime; v1.pause(); md.remove(); document.removeEventListener('keydown', key); try { v0.currentTime = back; } catch (e) {} }
+      function key(e){ if (e.key === 'Escape') close(); }
+      md.onclick = function(e){ if (e.target === md) close(); }; document.addEventListener('keydown', key); document.body.appendChild(md); };
+    box.appendChild(vb);
+    var vd = box.querySelector('video'); vd.onerror = function(){ box.innerHTML = '<div class="none">This browser cannot play ' + esc(m.file) + ' (or the file is not in static/pi/media). Use H.264 video with AAC audio in an .mp4, or a .webm.</div>'; };
+    if (single) $('refmeta').textContent = (m.caption ? m.caption + '. ' : '') + 'Media: video, role ' + m.role + ', file ' + m.file + '.';
+    return;
+  }
+  if (single) box.className = 'refimg pic'; else box.className = 'refpic';
+  box.innerHTML = '<img alt="' + esc(m.caption || 'reference image') + '" src="pi/media/' + esc(m.file) + '">';
+  (function(){ var im = box.querySelector('img'); if (!im) return; im.title = 'Click to enlarge';
+    function big(){ var md = $('imgmodal'); if (!md){ md = document.createElement('div'); md.id = 'imgmodal'; md.innerHTML = '<span>Click anywhere or press Esc to close</span><img alt="">'; md.onclick = function(){ md.classList.remove('on'); }; document.body.appendChild(md); document.addEventListener('keydown', function(e){ if (e.key === 'Escape') md.classList.remove('on'); }); }
+      var bi = md.querySelector('img'); bi.src = im.src; bi.alt = im.alt; md.classList.add('on'); }
+    im.onclick = big;
+    // callout boxes sit over the picture and take the click, so there is also an Enlarge button
+    box.style.position = 'relative';
+    var eb = document.createElement('button'); eb.type = 'button'; eb.className = 'co-big'; eb.textContent = 'Enlarge'; eb.title = 'Open the picture in a large window (Esc closes)';
+    eb.onclick = function(e){ e.stopPropagation(); big(); }; box.appendChild(eb); })();
+  (function(){ var im = box.querySelector('img'); if (!im) return;
+    var stem = m.file.replace(/\.[^.]+$/, ''), base = stem.replace(/-\d{3}$/, '-001');   // a picture with numbers drawn in (issue 002 and later) shares the clean picture's callout list
+    function getJ(st){ return fetch('pi/media/' + st + '.callouts.json').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); }
+    getJ(stem).then(function(d){ if (d || base === stem) return [d, false]; return getJ(base).then(function(d2){ return [d2, true]; }); }).then(function(res){ var d = res[0]; if (d && d.items && d.items.length) piCallouts(box, im, d.items, m.callouts, d.groups, res[1]); }); })();
+  if (single) $('refmeta').textContent = (m.caption ? m.caption + '. ' : '') + 'Media: image, role ' + m.role + ', file ' + m.file + '.';
+}
+function nextBtn(f, enabled, label){
+  return '<div class="nav"><button class="btn" id="prev" ' + (idx === 0 ? 'disabled' : '') + '>Back</button><button class="btn pri" id="next" ' + (enabled ? '' : 'disabled') + '>' + label + '</button></div>';
+}
+function bindNav(f){
+  var p = $('prev'), n = $('next');
+  if (p) p.onclick = function(){ go(idx - 1); };
+  if (n) n.onclick = function(){
+    if (pending && pending.from === f.id){ var to = pending.to; pending = null; go(idxOf(to)); return; }
+    if (idx === L.frames.length - 1) return finish();
+    go(idx + 1);
+  };
+}
+function finish(){
+  S.end = nowIso(); S.finished = true; postLog(); drawFrame();
+}
+function drawFrame(){
+  var fr = $('frame');
+  if (!S){ fr.innerHTML = '<div class="dmbar"><b>' + esc(L.title) + '</b><span>' + esc(L.dm) + '</span></div><p class="big">Type your name and press Start.</p><p class="note">Each frame is a step or a question. Your answers and checks are recorded so the lesson can be improved.</p>'; $('chkbox').hidden = true; drawRef(L.frames[0]); drawRail(); return; }
+  if (S.finished){
+    var m = misses(), q = S.attempts.filter(function(a){ return a.kind === 'question'; });
+    fr.innerHTML = '<div class="dmbar"><b>Lesson complete</b><span>' + esc(L.dm) + '</span></div><h3>Done, ' + esc(S.learner) + '.</h3><p>Misses: ' + m + '. Remediation path used: <span class="chip">' + S.path + '</span>.</p><p class="note">The session is in the performance log.</p><div class="nav"><button class="btn" id="again">Start again</button></div>';
+    $('again').onclick = function(){ $('startBtn').click(); }; $('chkbox').hidden = true; drawRail(); return;
+  }
+  var f = L.frames[idx], h;
+  if (f.t === 'step'){
+    h = dmbar(f) + '<span class="tag step">Step ' + (idx + 1) + ' of ' + L.frames.length + '</span><h3>' + esc(f.title) + '</h3><p>' + esc(f.instruction) + '</p>';
+    if (f.commands.length) h += '<div class="do"><pre style="margin:0;font:inherit">' + esc(f.commands.join('\n')) + '</pre></div>';
+    f.notes.forEach(function(n){ h += '<p class="note">' + esc(n) + '</p>'; });
+    h += guideHTML(f);
+    var passed = !f.expects.length || S.done[f.id];
+    if (f.expects.length) h += '<div style="margin-top:12px"><button class="btn" id="chkgo">Check my scene</button></div>';
+    if (checkRes && checkRes.frame === f.id && checkRes.bad) h += remHTML(checkRes.rem);
+    if (checkRes && checkRes.frame === f.id && !checkRes.bad) h += '<div class="okbox">Your scene matches the lesson file.</div>';
+    if (!f.expects.length) S.done[f.id] = true;
+    fr.innerHTML = h + nextBtn(f, passed || !f.expects.length, 'Done, next');
+    if ($('chkgo')) $('chkgo').onclick = function(){ runCheck(f); };
+    if (checkRes && checkRes.rem) bindRem(checkRes.rem);
+  } else {
+    h = dmbar(f) + '<span class="tag q">Question ' + (idx + 1) + ' of ' + L.frames.length + '</span><h3>' + esc(f.prompt) + '</h3><div class="opts">';
+    f.responses.forEach(function(r, n){
+      var st = answeredWrong[f.id + '|' + r.id] ? ' wrong' : (S.done[f.id] && r.correct ? ' right' : '');
+      h += '<button class="opt' + st + '" data-r="' + esc(r.id) + '"' + ((S.done[f.id] || answeredWrong[f.id + '|' + r.id]) ? ' disabled' : '') + '><b>' + String.fromCharCode(65 + n) + '</b><span>' + esc(r.text) + '</span></button>';
+    });
+    h += '</div><div id="fb"></div>' + guideHTML(f);
+    fr.innerHTML = h + nextBtn(f, !!S.done[f.id], idx === L.frames.length - 1 ? 'Finish' : 'Next');
+    Array.prototype.forEach.call(fr.querySelectorAll('.opt'), function(b){ b.onclick = function(){ answer(f, b.getAttribute('data-r')); }; });
+    if (checkRes && checkRes.frame === f.id) { $('fb').innerHTML = checkRes.html; if (checkRes.rem) bindRem(checkRes.rem); }
+  }
+  var last = f.t === 'step' && idx === L.frames.length - 1;
+  if (last && $('next')) $('next').textContent = 'Finish';
+  bindNav(f);
+  $('chkbox').hidden = f.t !== 'step' || !f.expects.length;
+  drawRef(f); drawRail();
+}
+function answer(f, rid){
+  var r = f.responses.filter(function(x){ return x.id === rid; })[0];
+  if (r.correct){
+    S.done[f.id] = true; logAttempt(f, 'question', true, rid);
+    checkRes = { frame: f.id, html: '<div class="okbox">' + esc(r.fb) + '</div>' };
+  } else {
+    answeredWrong[f.id + '|' + rid] = true;
+    var rem = remedyFor(f); logAttempt(f, 'question', false, rid, rem && rem.kind);
+    checkRes = { frame: f.id, rem: rem, html: '<div class="rem">' + esc(r.fb) + '</div>' + remHTML(rem) };
+  }
+  draw();
+  if (window.PISpeak) PISpeak.reply((r.correct ? 'Right. ' : 'Not quite. ') + (r.fb || ''));
+}
+function drawCheck(){
+  var t = $('chk'), m = $('chkmsg');
+  if (!checkRes || !L || !S || (!checkRes.error && (!checkRes.rows || L.frames[idx].id !== checkRes.frame))){ t.innerHTML = ''; m.textContent = S ? 'Press Check my scene to compare your saved scene with the lesson file.' : ''; return; }
+  if (checkRes.error){ t.innerHTML = ''; m.textContent = checkRes.error; return; }
+  var h = '<tr><th>Property</th><th>Lesson file</th><th>Your scene</th><th></th></tr>';
+  checkRes.rows.forEach(function(r){ h += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.want) + '</td><td>' + esc(r.got) + '</td><td class="' + (r.ok ? 'ok' : 'bad') + '">' + (r.ok ? 'match' : 'differs') + '</td></tr>'; });
+  t.innerHTML = h;
+  m.textContent = checkRes.bad ? checkRes.bad + (checkRes.bad === 1 ? ' difference. ' : ' differences. ') + 'Fix it in the Scene Composer, export the scene again, and check again.' : 'Your scene matches the lesson file.';
+}
+function drawPerf(){
+  if (!S){ $('perf').textContent = 'Start the lesson to record your performance.'; return; }
+  var q = S.attempts.filter(function(a){ return a.kind === 'question'; }), r = q.filter(function(a){ return a.correct; }).length;
+  var ck = S.attempts.filter(function(a){ return a.kind === 'check'; });
+  $('perf').innerHTML = 'Questions answered: ' + q.length + '. Right: ' + r + '. Wrong: ' + (q.length - r) + '. Checks run: ' + ck.length + ' (' + ck.filter(function(a){ return !a.correct; }).length + ' with differences). Remediation path selected: <span class="chip">' + S.path + '</span>'
+    + ($('perf').dataset.logged === '0' ? ' <span class="chip" style="background:var(--coral-soft);color:var(--coral)">log not saved</span>' : '');
+}
+function draw(){ if (!L) return; drawFrame(); drawCheck(); drawPerf(); if (window.PISpeak) PISpeak.maybe(); }
+
+
+// ---------- read aloud (browser voices) ----------
+var PISpeak = (function(){
+  var ok = ('speechSynthesis' in window) && ('SpeechSynthesisUtterance' in window);
+  var box = document.getElementById('spkBox'), on = document.getElementById('spkOn'), vs = document.getElementById('spkVoice'), rate = document.getElementById('spkRate');
+  var last = '', cfg = { on: false, voice: '', rate: '1' };
+  if (!ok){ return { maybe: function(){}, reply: function(){}, stop: function(){} }; }
+  try { var c0 = JSON.parse(localStorage.getItem('piSpeak') || 'null'); if (c0) cfg = c0; } catch (e) {}
+  function save(){ try { localStorage.setItem('piSpeak', JSON.stringify(cfg)); } catch (e) {} }
+  function fillVoices(){
+    var list = speechSynthesis.getVoices();
+    if (!list.length) return;
+    list = list.slice().sort(function(a, b){
+      var ea = /^en/i.test(a.lang) ? 0 : 1, eb = /^en/i.test(b.lang) ? 0 : 1;
+      return (ea - eb) || (a.localService === b.localService ? 0 : (a.localService ? -1 : 1)) || a.name.localeCompare(b.name);
+    });
+    vs.innerHTML = list.map(function(v){ return '<option value="' + esc(v.name) + '">' + esc(v.name.replace(/^Microsoft /, '') + ' (' + v.lang + (v.localService ? '' : ', online') + ')') + '</option>'; }).join('');
+    var have = list.some(function(v){ return v.name === cfg.voice; });
+    if (!have){ var d = list.filter(function(v){ return /^en/i.test(v.lang); })[0] || list[0]; cfg.voice = d.name; }
+    vs.value = cfg.voice;
+    box.style.display = '';
+  }
+  function say(text){
+    speechSynthesis.cancel();
+    if (!cfg.on || !text) return;
+    var v = speechSynthesis.getVoices().filter(function(x){ return x.name === cfg.voice; })[0];
+    var parts = text.match(/[^.!?;:]+[.!?;:]?/g) || [text];   // short pieces: long utterances stall in some online voices
+    parts.forEach(function(t){
+      t = t.trim(); if (!t) return;
+      var u = new SpeechSynthesisUtterance(t); if (v){ u.voice = v; u.lang = v.lang; }
+      u.rate = parseFloat(cfg.rate) || 1; speechSynthesis.speak(u);
+    });
+  }
+  function clean(t){   // what a person would say, not what is typed
+    return String(t || '')
+      .replace(/https?:\/\/\S+/g, 'the address shown')
+      .replace(/\b[\w.-]+\.(xml|x3d|wav|mp3|mid|csv|png|json|py|html)\b/gi, function(m){ return m.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_]/g, ' ').replace(/\.(\w+)$/, ' dot $1'); })
+      .replace(/\bMCCF\b/g, 'M C C F').replace(/\bX3D\b/gi, 'X 3 D').replace(/\bX_ITE\b/gi, 'ex ite')
+      .replace(/\bWP(\d+)/g, 'waypoint $1').replace(/\bZ(\d)\b/g, 'zone $1').replace(/\bCAM_/g, 'camera ')
+      .replace(/localhost:(\d+)/g, 'localhost port $1').replace(/\bmccf_full\b/g, 'M C C F full')
+      .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function frameText(f){
+    if (f.t === 'step'){
+      var ttl = String(f.title || ''), ins = String(f.instruction || '');   // imported steps use the first words of the text as the title: do not read it twice
+      var dup = ttl && ins.toLowerCase().indexOf(ttl.slice(0, Math.min(18, ttl.length)).toLowerCase()) === 0;
+      var t = (dup ? '' : ttl + '. ') + ins;
+      if (f.commands && f.commands.length) t += ' The command is shown in the box.';
+      (f.notes || []).forEach(function(n){ t += ' Note. ' + n; });
+      return t;
+    }
+    var q = f.prompt + ' ';
+    (f.responses || []).forEach(function(r, n){ q += 'Option ' + String.fromCharCode(65 + n) + '. ' + r.text + '. '; });
+    return q;
+  }
+  function current(){ return (typeof L !== 'undefined' && L && typeof S !== 'undefined' && S && !S.finished) ? L.frames[idx] : null; }
+  on.checked = !!cfg.on; rate.value = cfg.rate || '1';
+  on.onchange = function(){ cfg.on = on.checked; save(); if (!cfg.on) speechSynthesis.cancel(); else { var f = current(); if (f) say(clean(frameText(f))); } };
+  vs.onchange = function(){ cfg.voice = vs.value; save(); var f = current(); if (f && cfg.on) say(clean(frameText(f))); };
+  rate.onchange = function(){ cfg.rate = rate.value; save(); };
+  document.getElementById('spkAgain').onclick = function(){ var f = current(); if (f){ var was = cfg.on; cfg.on = true; say(clean(frameText(f))); cfg.on = was; } };
+  document.getElementById('spkStop').onclick = function(){ speechSynthesis.cancel(); };
+  document.getElementById('startBtn').addEventListener('click', function(){ last = ''; }, true);
+  window.addEventListener('beforeunload', function(){ speechSynthesis.cancel(); });
+  fillVoices(); speechSynthesis.onvoiceschanged = fillVoices;
+  return {
+    maybe: function(){
+      var f = current();
+      if (!f){ speechSynthesis.cancel(); last = ''; return; }
+      var key = idx + '|' + f.id;
+      if (key === last) return;
+      last = key; say(clean(frameText(f)));
+    },
+    reply: function(t){ if (cfg.on && t) say(clean(t)); },   // the Statement of a Question, Response, Statement frame
+    stop: function(){ speechSynthesis.cancel(); }
+  };
+})();
+
+// ---------- author view ----------
+$('impgo').onclick = function(){
+  var lines = $('imp').value.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean), out = '', n = 0, q = null;
+  function x(s){ return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function flush(){ if (!q) return; var k = 'w' + (++n);
+    out += '    <Question id="' + k + '" title="' + x(q.p.slice(0, 40)) + '">\n      <Prompt>' + x(q.p) + '</Prompt>\n' + q.a.map(function(a, i){ return '      <Response id="' + String.fromCharCode(97 + i) + '" text="' + x(a.t) + '"' + (a.c ? ' correct="true"' : '') + '><Feedback>' + (a.c ? 'Right.' : 'Not that one.') + '</Feedback></Response>\n'; }).join('') + '    </Question>\n'; q = null; }
+  lines.forEach(function(l){
+    var m;
+    if ((m = /^Q:\s*(.+)$/i.exec(l))){ flush(); q = { p: m[1], a: [] }; }
+    else if (q && (m = /^A:\s*(\*?)\s*(.+)$/i.exec(l))) q.a.push({ t: m[2], c: !!m[1] });
+    else if ((m = /^\d+[.)]\s*(.+)$/.exec(l))){ flush(); var k = 'w' + (++n); out += '    <Step id="' + k + '" title="' + x(m[1].slice(0, 40)) + '">\n      <Instruction>' + x(m[1]) + '</Instruction>\n    </Step>\n'; }
+  });
+  flush();
+  if (!out){ $('impmsg').textContent = 'Nothing recognised. Use numbered lines and Q: / A: lines.'; return; }
+  var src = $('src').value;
+  if (src.indexOf('</Frames>') < 0){ $('impmsg').textContent = 'Load a lesson first.'; return; }
+  $('src').value = src.replace('  </Frames>', out + '  </Frames>');
+  if (A.fromXml($('src').value)) A.draw();
+  $('impmsg').textContent = 'Added. Frame ids start with w. Find them in the frame list above and give each its title and checks.';
+};
+// ---------- author view: the form editor ----------
+var M = null, selFrame = 0, mediaFiles = [];
+var NSPI = 'http://mccf.artistinprocess.com/pi/v1';
+var DM_RE = /^[A-Z0-9]{3,5}-[A-Z]-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}[A-Z]-[0-9]{3}[A-Z]-[A-Z]$/;
+function xe(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function xa(s){ return xe(s).replace(/"/g, '&quot;'); }
+function authParse(xml){
+  var doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('The text is not well-formed XML.');
+  var r = doc.documentElement; if (r.localName !== 'PILesson') throw new Error('The root element is ' + r.localName + ', not PILesson.');
+  var meta = kids(r, 'Meta')[0], sc = kids(r, 'Scene')[0], fr = kids(r, 'Frames')[0], pol = kids(r, 'RemediationPolicy')[0];
+  if (!meta || !fr) throw new Error('Meta or Frames is missing.');
+  var cm = /^\s*(?:<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->)/.exec(xml);
+  var m = { comment: cm ? cm[1] : '',
+    meta: { title: txt(meta, 'Title'), dm: txt(meta, 'DmCode'), issue: txt(meta, 'Issue'), date: txt(meta, 'IssueDate'), issuer: txt(meta, 'Issuer'),
+      objectives: kids(meta, 'Objective').map(function(e){ return e.textContent.trim(); }), prereqs: kids(meta, 'Prerequisite').map(function(e){ return e.textContent.trim(); }) },
+    scene: { dm: sc ? sc.getAttribute('dmCode') || '' : '', issue: sc ? sc.getAttribute('issue') || '' : '', file: sc ? sc.getAttribute('file') || '' : '', learner: sc ? sc.getAttribute('learnerScene') || '' : '' },
+    frames: [], policy: { scope: pol ? pol.getAttribute('scope') || 'module' : 'module', levels: pol ? kids(pol, 'Level').map(function(l){ return { min: l.getAttribute('minMisses') || '0', action: l.getAttribute('action') || 'retest' }; }) : [] } };
+  function media(e){ return kids(e, 'Media').map(function(x){ return { kind: x.getAttribute('kind') || 'image', file: x.getAttribute('file') || '', role: x.getAttribute('role') || 'reference', dm: x.getAttribute('dmCode') || '', caption: x.getAttribute('caption') || '', callouts: x.getAttribute('callouts') || '' }; }); }
+  function guides(e){ return kids(e, 'Guide').map(function(g){ return { dm: g.getAttribute('dmCode') || '', title: g.getAttribute('title') || '', sec: g.getAttribute('section') || '' }; }); }
+  function rem(e, n){ var o = kids(e, n)[0]; return o ? { kind: o.getAttribute('kind') || 'review', target: o.getAttribute('target') || '', retest: o.getAttribute('retest') || '' } : null; }
+  Array.prototype.forEach.call(fr.children, function(e){
+    var t = e.localName; if (t !== 'Step' && t !== 'Question') return;
+    var f = { t: t === 'Step' ? 's' : 'q', id: e.getAttribute('id') || '', title: e.getAttribute('title') || '', waypoint: e.getAttribute('waypoint') || '', dm: e.getAttribute('dmCode') || '', media: media(e), guides: guides(e) };
+    if (f.t === 's'){ f.instruction = txt(e, 'Instruction'); f.commands = kids(e, 'Command').map(function(c){ return c.textContent.trim(); });
+      f.notes = kids(e, 'Note').map(function(c){ return c.textContent.trim(); });
+      f.expects = kids(e, 'Expect').map(function(x){ return { path: x.getAttribute('path') || '', value: x.getAttribute('value') || '', tol: x.getAttribute('tolerance') || '', label: x.getAttribute('label') || '' }; });
+      f.rem = rem(e, 'OnMismatch'); }
+    else { f.note = e.getAttribute('note') || ''; f.prompt = txt(e, 'Prompt');
+      f.responses = kids(e, 'Response').map(function(x){ return { id: x.getAttribute('id') || '', text: x.getAttribute('text') || '', correct: x.getAttribute('correct') === 'true', fb: txt(x, 'Feedback') }; });
+      f.rem = rem(e, 'OnIncorrect'); }
+    m.frames.push(f);
+  });
+  return m;
+}
+function authXml(m){
+  var o = '<?xml version="1.0" encoding="UTF-8"?>\n' + (m.comment ? m.comment + '\n' : '') + '<PILesson xmlns="' + NSPI + '">\n  <Meta>\n';
+  o += '    <Title>' + xe(m.meta.title) + '</Title>\n    <DmCode>' + xe(m.meta.dm) + '</DmCode>\n    <Issue>' + xe(m.meta.issue) + '</Issue><IssueDate>' + xe(m.meta.date) + '</IssueDate><Issuer>' + xe(m.meta.issuer) + '</Issuer>\n';
+  m.meta.objectives.forEach(function(s){ if (s.trim()) o += '    <Objective>' + xe(s) + '</Objective>\n'; });
+  m.meta.prereqs.forEach(function(s){ if (s.trim()) o += '    <Prerequisite>' + xe(s) + '</Prerequisite>\n'; });
+  o += '  </Meta>\n  <Scene' + (m.scene.dm ? ' dmCode="' + xa(m.scene.dm) + '"' : '') + (m.scene.issue ? ' issue="' + xa(m.scene.issue) + '"' : '') + ' file="' + xa(m.scene.file) + '"' + (m.scene.learner ? ' learnerScene="' + xa(m.scene.learner) + '"' : '') + '/>\n  <Frames>\n';
+  m.frames.forEach(function(f){
+    var tag = f.t === 's' ? 'Step' : 'Question';
+    o += '    <' + tag + ' id="' + xa(f.id) + '" title="' + xa(f.title) + '"' + (f.waypoint ? ' waypoint="' + xa(f.waypoint) + '"' : '') + (f.dm ? ' dmCode="' + xa(f.dm) + '"' : '') + (f.t === 'q' && f.note ? ' note="' + xa(f.note) + '"' : '') + '>\n';
+    f.media.forEach(function(x){ if (x.file) o += '      <Media kind="' + xa(x.kind) + '" file="' + xa(x.file) + '" role="' + xa(x.role) + '"' + (x.dm ? ' dmCode="' + xa(x.dm) + '"' : '') + (x.caption ? ' caption="' + xa(x.caption) + '"' : '') + (x.callouts ? ' callouts="' + xa(x.callouts) + '"' : '') + '/>\n'; });
+    if (f.t === 's'){
+      o += '      <Instruction>' + xe(f.instruction) + '</Instruction>\n';
+      f.commands.forEach(function(c){ if (c.trim()) o += '      <Command>' + xe(c) + '</Command>\n'; });
+      f.notes.forEach(function(c){ if (c.trim()) o += '      <Note>' + xe(c) + '</Note>\n'; });
+    } else {
+      o += '      <Prompt>' + xe(f.prompt) + '</Prompt>\n';
+      f.responses.forEach(function(r){ o += '      <Response id="' + xa(r.id) + '" text="' + xa(r.text) + '"' + (r.correct ? ' correct="true"' : '') + '><Feedback>' + xe(r.fb) + '</Feedback></Response>\n'; });
+    }
+    f.guides.forEach(function(g){ if (g.dm) o += '      <Guide dmCode="' + xa(g.dm) + '" title="' + xa(g.title) + '"' + (g.sec ? ' section="' + xa(g.sec) + '"' : '') + '/>\n'; });
+    if (f.t === 's') f.expects.forEach(function(x){ if (x.path) o += '      <Expect path="' + xa(x.path) + '" value="' + xa(x.value) + '"' + (x.tol !== '' ? ' tolerance="' + xa(x.tol) + '"' : '') + (x.label ? ' label="' + xa(x.label) + '"' : '') + '/>\n'; });
+    if (f.rem && f.rem.target) o += '      <' + (f.t === 's' ? 'OnMismatch' : 'OnIncorrect') + ' kind="' + xa(f.rem.kind) + '" target="' + xa(f.rem.target) + '"' + (f.rem.retest ? ' retest="' + xa(f.rem.retest) + '"' : '') + '/>\n';
+    o += '    </' + tag + '>\n';
+  });
+  o += '  </Frames>\n';
+  if (m.policy.levels.length){ o += '  <RemediationPolicy scope="' + xa(m.policy.scope) + '">\n'; m.policy.levels.forEach(function(l){ o += '    <Level minMisses="' + xa(l.min) + '" action="' + xa(l.action) + '"/>\n'; }); o += '  </RemediationPolicy>\n'; }
+  return o + '</PILesson>\n';
+}
+function authCheck(m){
+  var p = [], ids = {};
+  if (!m.meta.title.trim()) p.push('The lesson needs a title.');
+  if (!DM_RE.test(m.meta.dm)) p.push('The lesson DM code is not valid. Form: MCCF-P-10-01-00-00A-520A-D.');
+  if (!m.meta.issue.trim()) p.push('The lesson needs an issue number.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(m.meta.date)) p.push('The issue date must look like 2026-10-31.');
+  if (!m.meta.issuer.trim()) p.push('The lesson needs an issuer.');
+  if (!m.scene.file.trim()) p.push('The module scene file is empty.');
+  [['scene', m.scene.dm]].forEach(function(a){ if (a[1] && !DM_RE.test(a[1])) p.push('The scene DM code is not valid.'); });
+  if (!m.frames.length) p.push('The lesson has no frames.');
+  m.frames.forEach(function(f){ if (f.id) ids[f.id] = (ids[f.id] || 0) + 1; });
+  m.frames.forEach(function(f, n){
+    var w = 'Frame ' + (n + 1) + (f.title ? ' (' + f.title + ')' : '') + ': ';
+    if (!/^[A-Za-z_][A-Za-z0-9._-]*$/.test(f.id)) p.push(w + 'the id must start with a letter and use only letters, digits, dot, dash or underscore.');
+    else if (ids[f.id] > 1) p.push(w + 'the id ' + f.id + ' is used more than once.');
+    if (!f.title.trim()) p.push(w + 'it needs a title.');
+    if (f.dm && !DM_RE.test(f.dm)) p.push(w + 'its DM code is not valid.');
+    f.guides.forEach(function(g){ if (g.dm && !DM_RE.test(g.dm)) p.push(w + 'Guide DM code ' + g.dm + ' is not valid.'); if (g.dm && !g.title.trim()) p.push(w + 'a Guide link needs a title.'); });
+    f.media.forEach(function(x){ if (!x.file) p.push(w + 'a media row has no file.'); if (x.dm && !DM_RE.test(x.dm)) p.push(w + 'media DM code is not valid.'); });
+    if (f.t === 's'){
+      if (!f.instruction.trim()) p.push(w + 'the instruction is empty.');
+      f.expects.forEach(function(x){ if (x.path && x.value === '') p.push(w + 'a check on ' + x.path + ' has no expected value (use * to mean "must exist").'); if (x.tol !== '' && isNaN(Number(x.tol))) p.push(w + 'tolerance must be a number.'); });
+    } else {
+      if (!f.prompt.trim()) p.push(w + 'the question text is empty.');
+      if (f.responses.length < 2) p.push(w + 'a question needs at least two answers.');
+      if (f.responses.length > 8) p.push(w + 'a question can have at most eight answers.');
+      var ok = f.responses.filter(function(r){ return r.correct; }).length;
+      if (ok !== 1) p.push(w + 'mark exactly one answer as right (now ' + ok + ').');
+      var rid = {}; f.responses.forEach(function(r){ if (!r.text.trim()) p.push(w + 'an answer has no text.'); if (rid[r.id]) p.push(w + 'answer id ' + r.id + ' is repeated.'); rid[r.id] = 1; });
+    }
+    if (f.rem && f.rem.target){ if (!ids[f.rem.target]) p.push(w + 'the remedial target ' + f.rem.target + ' is not a frame.'); if (f.rem.retest && !ids[f.rem.retest]) p.push(w + 'the retest frame ' + f.rem.retest + ' is not a frame.'); }
+  });
+  var seen = {}; m.policy.levels.forEach(function(l){ if (isNaN(parseInt(l.min, 10)) || parseInt(l.min, 10) < 0) p.push('A remediation level needs a number of misses, 0 or more.'); if (seen[l.min]) p.push('Two remediation levels use ' + l.min + ' misses.'); seen[l.min] = 1; });
+  return p;
+}
+var A = {
+  get: function(path){ return path.split('.').reduce(function(o, k){ return o == null ? o : o[k]; }, M); },
+  set: function(path, v){ var ks = path.split('.'), last = ks.pop(), o = ks.reduce(function(o, k){ return o[k]; }, M); o[last] = v; A.sync(); if (/\.title$|\.waypoint$/.test(path)) A.drawList(); },
+  add: function(path, item){ var a = A.get(path); a.push(item); A.sync(); A.drawFrame(); },
+  del: function(path, i){ A.get(path).splice(i, 1); A.sync(); A.drawFrame(); },
+  sync: function(){ $('src').value = authXml(M); $('smsg').textContent = 'Changed. Apply to try it, Save to keep it.'; },
+  newId: function(){ var n = M.frames.length + 1, used = {}; M.frames.forEach(function(f){ used[f.id] = 1; }); while (used['f' + n]) n++; return 'f' + n; },
+  renameId: function(i, v){
+    var old = M.frames[i].id; M.frames[i].id = v;
+    M.frames.forEach(function(f){ if (f.rem){ if (f.rem.target === old) f.rem.target = v; if (f.rem.retest === old) f.rem.retest = v; } });
+    A.sync(); A.drawList(); A.drawFrame();
+  },
+  addFrame: function(t){
+    var id = A.newId(), f = t === 's' ? { t: 's', id: id, title: 'New step', waypoint: '', dm: '', media: [], guides: [], instruction: '', commands: [], notes: [], expects: [], rem: null }
+      : { t: 'q', id: id, title: 'New question', waypoint: '', dm: '', note: '', media: [], guides: [], prompt: '', responses: [{ id: 'a', text: '', correct: false, fb: '' }, { id: 'b', text: '', correct: true, fb: '' }], rem: null };
+    M.frames.splice(selFrame + 1, 0, f); selFrame++; A.sync(); A.drawList(); A.drawFrame();
+  },
+  dupFrame: function(){ var c = JSON.parse(JSON.stringify(M.frames[selFrame])); c.id = A.newId(); c.title += ' (copy)'; M.frames.splice(selFrame + 1, 0, c); selFrame++; A.sync(); A.drawList(); A.drawFrame(); },
+  moveFrame: function(i, d){ var j = i + d; if (j < 0 || j >= M.frames.length) return; var t = M.frames[i]; M.frames[i] = M.frames[j]; M.frames[j] = t; if (selFrame === i) selFrame = j; else if (selFrame === j) selFrame = i; A.sync(); A.drawList(); },
+  delFrame: function(i){ if (!confirm('Delete frame ' + (i + 1) + ' (' + M.frames[i].title + ')?')) return; var id = M.frames[i].id; M.frames.splice(i, 1);
+    M.frames.forEach(function(f){ if (f.rem && (f.rem.target === id)) f.rem = null; else if (f.rem && f.rem.retest === id) f.rem.retest = ''; });
+    selFrame = Math.max(0, Math.min(selFrame, M.frames.length - 1)); A.sync(); A.drawList(); A.drawFrame(); },
+  pick: function(i){ selFrame = i; A.drawList(); A.drawFrame(); },
+  addAnswer: function(){ var f = M.frames[selFrame]; if (f.responses.length >= 8) return; var n = f.responses.length, id = String.fromCharCode(97 + n); f.responses.push({ id: id, text: '', correct: false, fb: '' }); A.sync(); A.drawFrame(); },
+  delAnswer: function(i){ var f = M.frames[selFrame]; if (f.responses.length <= 2) return; f.responses.splice(i, 1); f.responses.forEach(function(r, n){ r.id = String.fromCharCode(97 + n); }); A.sync(); A.drawFrame(); },
+  setCorrect: function(i){ M.frames[selFrame].responses.forEach(function(r, n){ r.correct = n === i; }); A.sync(); },
+  setRem: function(k, v){ var f = M.frames[selFrame]; if (!f.rem) f.rem = { kind: 'review', target: '', retest: '' }; f.rem[k] = v; A.sync(); },
+  guideDm: function(gi, v){ var g = M.frames[selFrame].guides[gi]; g.dm = v; if (!g.title){ var k = A.guideTitles()[v]; if (k){ g.title = k; A.sync(); A.drawFrame(); return; } } A.sync(); },
+  guideTitles: function(){ var o = {}; M.frames.forEach(function(f){ f.guides.forEach(function(g){ if (g.dm && g.title) o[g.dm] = g.title; }); }); return o; },
+  upload: function(mi){ A.imgDlg({ mi: mi }); },
+  registerDlg: function(file){ A.imgDlg({ file: file }); },
+  imgDlg: function(o){
+    var reg = !!o.file, lastTool = ''; try { lastTool = localStorage.getItem('piLastTool') || ''; } catch (e) {}
+    popOpen('<h3 style="margin:0 0 4px;font-size:16px">' + (reg ? 'Add ' + esc(o.file) + ' to the graphics register' : 'Add a picture') + '</h3>'
+      + '<div class="note" style="margin:0 0 8px">' + (reg ? 'This picture is in static/pi/media but not in the register. Say what it shows so authors can find it.' : 'The picture is stored under the next free ICN name and entered in the graphics register for you.') + '</div>'
+      + (reg ? '' : '<label>Picture or video file</label><input type="file" id="ud-file" accept="image/*,video/mp4,video/webm"><img id="ud-prev" alt="" style="display:none;max-width:100%;max-height:140px;margin:6px 0;border-radius:4px">')
+      + '<label>Which tool does it show? (required)</label><select id="ud-tool"><option value="">Choose a tool...</option></select>'
+      + '<label>Caption (required): what does the picture show?</label><textarea id="ud-cap" rows="2" maxlength="300" placeholder="e.g. Scene Composer Actors tab with Salida placed and the scale box set to 1.2" style="width:100%"></textarea>'
+      + '<label>Scene or test data used (optional)</label><input type="text" id="ud-scene" maxlength="120" placeholder="e.g. ConeAndCamera" style="width:100%">'
+      + '<div id="ud-name" class="note" style="margin:8px 0 0"></div><div id="ud-err" role="alert" style="margin:8px 0 0;color:#ff8f8f;font-size:13px;white-space:pre-line"></div>'
+      + '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="ud-go">' + (reg ? 'Add to register' : 'Upload and register') + '</button><button class="btn" id="ud-x">Cancel</button></div>');
+    var tsel = $('ud-tool'), cap = $('ud-cap'), fil = $('ud-file'), tools = {}, serverErr = '';
+    fetch(API + '/pi/graphics/tools').then(function(r){ return r.json(); }).then(function(d){
+      (d.tools || []).forEach(function(t){ tools[t.code] = t.name; var op = document.createElement('option'); op.value = t.code; op.textContent = t.code + ' — ' + t.name; tsel.appendChild(op); });
+      if (lastTool && tools[lastTool]) tsel.value = lastTool; check();
+    }).catch(function(){ $('ud-err').textContent = 'The server is not reachable, or mccf_pi.py is not the new version. Install it and restart the server.'; });
+    function problems(){ var p = [];
+      if (!reg){ var f = fil.files[0]; if (!f) p.push('Choose a picture or video file.'); else if (!/\.(png|jpe?g|gif|webp|mp4|webm)$/i.test(f.name)) p.push('That file type is not accepted. Use png, jpg, gif, webp, mp4 or webm.'); else if (f.size > 16 * 1048576) p.push('The file is larger than 16 MB.'); }
+      if (!tsel.value) p.push('Choose which tool the picture shows.');
+      if (cap.value.trim().length < 8) p.push('Write a caption of at least 8 characters saying what the picture shows.');
+      return p; }
+    function check(){ var p = problems(), shown = serverErr ? [serverErr] : p;
+      $('ud-err').textContent = shown.length ? shown.map(function(x){ return '• ' + x; }).join('\n') : '';
+      $('ud-go').disabled = p.length > 0;
+      if (tsel.value && !reg) fetch(API + '/pi/graphics/next?tool=' + tsel.value).then(function(r){ return r.json(); }).then(function(d){
+        var f = fil && fil.files[0], ext = f ? (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase() : ''; if (d.icn) $('ud-name').textContent = 'It will be saved as ' + d.icn + ext; }).catch(function(){});
+      else if (!tsel.value && !reg) $('ud-name').textContent = 'Choose a tool to see the name it will get.'; }
+    [tsel, cap, $('ud-scene')].forEach(function(e){ e.oninput = e.onchange = function(){ serverErr = ''; check(); }; });
+    if (fil) fil.onchange = function(){ serverErr = ''; var f = fil.files[0], im = $('ud-prev'); if (f && /^image\//.test(f.type)){ im.src = URL.createObjectURL(f); im.style.display = 'block'; } else im.style.display = 'none'; check(); };
+    $('ud-x').onclick = popClose;
+    $('ud-go').onclick = function(){ var p = problems(); if (p.length){ check(); return; }
+      try { localStorage.setItem('piLastTool', tsel.value); } catch (e) {}
+      $('ud-go').disabled = true; $('ud-err').style.color = ''; $('ud-err').textContent = reg ? 'Saving...' : 'Uploading...';
+      var req;
+      if (reg) req = fetch(API + '/pi/graphics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ icn: o.file.replace(/\.[^.]+$/, ''), tool: tsel.value, caption: cap.value, scene_or_data: $('ud-scene').value }) });
+      else { var fd = new FormData(); fd.append('file', fil.files[0]); fd.append('tool', tsel.value); fd.append('caption', cap.value); fd.append('scene', $('ud-scene').value); req = fetch(API + '/pi/media', { method: 'POST', body: fd }); }
+      req.then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); }).then(function(x){
+        if (!x.ok){ serverErr = x.d.error || 'The server refused it.'; $('ud-err').style.color = '#ff8f8f'; check(); $('ud-go').disabled = false; return; }
+        popClose();
+        if (!reg){ var m = M.frames[selFrame].media[o.mi]; m.file = x.d.file; m.kind = /\.(mp4|webm)$/i.test(x.d.file) ? 'video' : 'image'; if (!m.caption) m.caption = cap.value.trim(); }
+        A.loadMedia(function(){ A.sync(); A.drawFrame(); $('smsg').textContent = reg ? 'Added to the graphics register.' : 'Saved as ' + x.d.file + ' and entered in the graphics register.'; });
+      }).catch(function(){ serverErr = 'The server did not answer. Is mccf_pi.py the new version, and is the server running?'; $('ud-err').style.color = '#ff8f8f'; check(); $('ud-go').disabled = false; });
+    };
+    check();
+  },
+  mediaPanel: function(mi){
+    popOpen('<h3 style="margin:0 0 4px;font-size:16px">Choose a file</h3><div class="note" style="margin:0 0 6px">Files in static/pi/media on the server. Click one to use it.</div>'
+      + '<div style="display:flex;gap:8px;margin:6px 0"><select id="mp-tool" title="Show one tool\'s pictures"><option value="">All tools</option></select><input type="text" id="mp-q" placeholder="Search captions and names" style="flex:1"></div>'
+      + '<div id="popList">Loading...</div>'
+      + '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="popUp">Upload a new file...</button><button class="btn" onclick="popClose()">Close</button></div>');
+    $('popUp').onclick = function(){ popClose(); A.upload(mi); };
+    A.loadMedia(function(){
+      var codes = {}; mediaFiles.forEach(function(n){ var m = n.match(/^ICN-MCCF-([A-Z0-9]+)-/); codes[m ? m[1] : 'other'] = 1; });
+      Object.keys(codes).sort().forEach(function(c){ var o = document.createElement('option'); o.value = c; o.textContent = c === 'other' ? 'Other (not ICN-named)' : c; $('mp-tool').appendChild(o); });
+      function draw(){ var tc = $('mp-tool').value, q = $('mp-q').value.toLowerCase();
+        var list = mediaFiles.filter(function(n){ var m = n.match(/^ICN-MCCF-([A-Z0-9]+)-/), c = m ? m[1] : 'other', inf = mediaInfo[n] || {};
+          return (!tc || tc === c) && (!q || (n + ' ' + (inf.caption || '')).toLowerCase().indexOf(q) >= 0); });
+        $('popList').innerHTML = list.length ? '<div class="pop-grid">' + list.map(function(n){ var img = /\.(png|jpe?g|gif|webp)$/i.test(n);
+          var inf = mediaInfo[n] || {}; return '<button data-f="' + esc(n) + '" title="' + esc(mediaNote(n)) + '">' + (img ? '<img alt="" src="pi/media/' + esc(n) + '">' : '') + esc(n) + (inf.caption ? '<small style="display:block;font-weight:400;opacity:.8">' + esc(inf.caption) + '</small>' : '') + ((inf.used || []).length ? '' : '<small style="display:block;color:#f0b040">not used yet</small>') + '</button>'; }).join('') + '</div>' : (mediaFiles.length ? 'No picture matches.' : 'No files in the folder yet. Upload one.');
+        Array.prototype.forEach.call($('popList').querySelectorAll('button'), function(b){ b.onclick = function(){ var m = M.frames[selFrame].media[mi], n = b.getAttribute('data-f'); m.file = n; if (!m.caption && (mediaInfo[n] || {}).caption) m.caption = mediaInfo[n].caption; m.kind = /\.(mp4|webm)$/i.test(n) ? 'video' : 'image'; popClose(); A.sync(); A.drawFrame(); }; }); }
+      $('mp-tool').onchange = draw; $('mp-q').oninput = draw; draw(); $('mp-q').focus();
+    });
+  },
+  refreshMedia: function(btn){
+    var msg = $('mrefmsg'); if (msg) msg.textContent = ' Loading...';
+    fetch(API + '/pi/media').then(function(r){ if (!r.ok) throw 0; return r.json(); }).then(function(d){
+      mediaFiles = d.files || []; mediaInfo = d.info || {};
+      $('dl-media').innerHTML = mediaOpts();
+      A.drawFrame();
+      var m2 = $('mrefmsg'); if (m2) m2.textContent = ' ' + mediaFiles.length + ' files in static/pi/media.';
+    }).catch(function(){ var m2 = $('mrefmsg'); if (m2) m2.textContent = ' Could not reach the server.'; });
+  },
+  loadMedia: function(cb){
+    fetch(API + '/pi/media').then(function(r){ if (!r.ok) throw 0; return r.json(); }).then(function(d){ mediaFiles = d.files || []; mediaInfo = d.info || {}; $('dl-media').innerHTML = mediaOpts(); if (cb) cb(); })
+      .catch(function(){ if (cb) cb(); });
+  },
+  drawDm: function(){ var s = {}; function add(v){ if (v) s[v] = 1; } add(M.meta.dm); add(M.scene.dm); M.meta.prereqs.forEach(add);
+    M.frames.forEach(function(f){ add(f.dm); f.guides.forEach(function(g){ add(g.dm); }); f.media.forEach(function(x){ add(x.dm); }); });
+    Object.keys(DMT).forEach(add);
+    $('dl-dm').innerHTML = Object.keys(s).map(function(k){ return '<option value="' + esc(k) + '"' + (DMT[k] ? ' label="' + esc(DMT[k]) + '"' : '') + '>'; }).join(''); },
+  drawList: function(){
+    var h = '<div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn" onclick="A.addFrame(\'s\')">+ Step</button><button class="btn" onclick="A.addFrame(\'q\')">+ Question</button></div>';
+    M.frames.forEach(function(f, i){
+      h += '<div class="it' + (i === selFrame ? ' on' : '') + '"><button class="pick" onclick="A.pick(' + i + ')" title="' + esc(f.title) + '"><span class="au-tag ' + f.t + '">' + (f.t === 's' ? 'step' : 'Q') + '</span>' + (i + 1) + '. ' + esc(f.title || f.id) + '</button>'
+        + '<button class="mini" onclick="A.moveFrame(' + i + ',-1)" title="Move up">&uarr;</button><button class="mini" onclick="A.moveFrame(' + i + ',1)" title="Move down">&darr;</button></div>';
+    });
+    $('auList').innerHTML = h;
+  },
+  sceneSel: function(){
+    var cur = A.get('scene.file') || '', names = (A._scenes || []).slice(), have = names.some(function(n){ return n + '.x3d' === cur; });
+    var h = '<div><label>Scene X3D file</label><select onchange="A.pickScene(this.value)"><option value="">Choose from the scene folder' + (names.length ? '' : ' (none found; the server may be off)') + '</option>';
+    names.forEach(function(n){ h += '<option value="' + esc(n) + '.x3d"' + (n + '.x3d' === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; });
+    return h + '</select><input type="text" id="au-scenefile" style="margin-top:4px" value="' + esc(cur) + '" placeholder="or type a file name, e.g. GettingStarted_M1.x3d" oninput="A.set(\'scene.file\',this.value)"></div>';
+  },
+  pickScene: function(v){ if (!v) return; var i = document.getElementById('au-scenefile'); if (i) i.value = v; A.set('scene.file', v); },
+  tin: function(label, path, ph, cls){ return '<div><label>' + label + '</label><input type="text" value="' + esc(A.get(path)) + '" placeholder="' + esc(ph || '') + '" oninput="A.set(\'' + path + '\',this.value)"' + (cls ? ' list="' + cls + '"' : '') + '></div>'; },
+  ta: function(label, path, rows){ return '<label>' + label + '</label><textarea class="au-ta" rows="' + (rows || 3) + '" oninput="A.set(\'' + path + '\',this.value)">' + esc(A.get(path)) + '</textarea>'; },
+  strList: function(label, path, hint, ph){
+    var a = A.get(path), h = '<label>' + label + '</label>' + (hint ? '<div class="au-sub">' + hint + '</div>' : '');
+    a.forEach(function(v, i){ h += '<div class="au-rowx" style="grid-template-columns:1fr auto"><input type="text" value="' + esc(v) + '" placeholder="' + esc(ph || '') + '" oninput="A.set(\'' + path + '.' + i + '\',this.value)"><button class="au-x" onclick="A.del(\'' + path + '\',' + i + ')">Remove</button></div>'; });
+    return h + '<button class="btn" onclick="A.add(\'' + path + '\',\'\')">+ Add</button>';
+  },
+  drawMeta: function(){
+    var h = '<div class="au-sec"><h3>Lesson</h3><div class="au-grid">' + A.tin('Title', 'meta.title') + A.tin('DM code', 'meta.dm', 'MCCF-P-10-01-00-00A-520A-D') + A.tin('Issue', 'meta.issue', '001') + A.tin('Issue date', 'meta.date', '2026-10-31') + A.tin('Issuer', 'meta.issuer', 'MCCF') + '</div>'
+      + A.strList('Objectives', 'meta.objectives', 'What the learner will be able to do.', 'Start the server, open the Scene Composer...') + A.strList('Prerequisites', 'meta.prereqs', 'DM codes of lessons to finish first.', 'MCCF-P-...') + '</div>'
+      + '<div class="au-sec"><h3>Module scene</h3><div class="au-sub">The scene the learner works in. It loads in the viewer pane.</div><div class="au-grid">' + A.sceneSel() + A.tin('Scene DM code (optional)', 'scene.dm', '', 'dl-dm') + A.tin('Scene issue (optional)', 'scene.issue') + A.tin('Learner saves as (scene name)', 'scene.learner', 'GettingStarted') + '</div></div>';
+    var p = '<div class="au-sec"><h3>Remediation policy</h3><div class="au-sub">Misses in the whole module choose what happens next: retest, review or reteach.</div>'
+      + '<label>Scope</label><select onchange="A.set(\'policy.scope\',this.value)">' + ['frame', 'module', 'course'].map(function(s){ return '<option' + (M.policy.scope === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>';
+    M.policy.levels.forEach(function(l, i){ p += '<div class="au-rowx" style="grid-template-columns:110px 1fr auto;margin-top:6px"><input type="text" value="' + esc(l.min) + '" oninput="A.set(\'policy.levels.' + i + '.min\',this.value)" title="Misses at least"><select onchange="A.set(\'policy.levels.' + i + '.action\',this.value)">' + ['retest', 'review', 'reteach'].map(function(s){ return '<option' + (l.action === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select><button class="au-x" onclick="A.del(\'policy.levels\',' + i + ')">Remove</button></div>'; });
+    p += '<div class="au-sub">Left: number of misses at or above which the action applies.</div><button class="btn" onclick="A.add(\'policy.levels\',{min:\'0\',action:\'retest\'})">+ Add level</button></div>';
+    $('auMeta').innerHTML = h; $('auPolicy').innerHTML = p;
+  },
+  drawFrame: function(){
+    A.drawDm(); var f = M.frames[selFrame]; if (!f){ $('auFrame').innerHTML = '<p class="note">No frames yet. Add a step or a question.</p>'; return; }
+    var b = 'frames.' + selFrame, h = '<div class="au-sec"><h3>' + (f.t === 's' ? 'Step' : 'Question') + ' ' + (selFrame + 1) + ' of ' + M.frames.length + '</h3>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"><button class="btn" onclick="A.dupFrame()">Duplicate</button><button class="au-x" onclick="A.delFrame(' + selFrame + ')">Delete frame</button></div>'
+      + '<div class="au-grid"><div><label>Id</label><input type="text" value="' + esc(f.id) + '" onchange="A.renameId(' + selFrame + ',this.value.trim())"></div>' + A.tin('Title', b + '.title') + A.tin('Waypoint (optional)', b + '.waypoint', 'W3') + A.tin('Frame DM code (optional)', b + '.dm', '', 'dl-dm') + '</div>';
+    if (f.t === 's'){
+      h += A.ta('Instruction', b + '.instruction', 3) + A.strList('Commands (shown in a code box)', b + '.commands', '', 'cd mccf_full') + A.strList('Notes', b + '.notes', '', 'Leave this window open while you work.');
+    } else {
+      h += A.ta('Question', b + '.prompt', 2) + A.tin('Author note (not shown to the learner)', b + '.note');
+      h += '<label>Answers</label><div class="au-sub">Pick the round button beside the right answer. Each answer has its own reply, a statement the learner reads and, with Read aloud on, hears.</div>';
+      f.responses.forEach(function(r, i){
+        h += '<div class="au-rowx" style="grid-template-columns:auto 1fr auto"><input type="radio" name="right" ' + (r.correct ? 'checked' : '') + ' onchange="A.setCorrect(' + i + ')" title="Right answer" style="margin-top:9px"><div><input type="text" value="' + esc(r.text) + '" placeholder="Answer ' + esc(r.id) + '" oninput="A.set(\'' + b + '.responses.' + i + '.text\',this.value)"><input type="text" style="margin-top:4px" value="' + esc(r.fb) + '" placeholder="Statement (reply) shown and spoken after this answer" oninput="A.set(\'' + b + '.responses.' + i + '.fb\',this.value)"></div><button class="au-x" onclick="A.delAnswer(' + i + ')" ' + (f.responses.length <= 2 ? 'disabled' : '') + '>Remove</button></div>';
+      });
+      h += '<button class="btn" onclick="A.addAnswer()" ' + (f.responses.length >= 8 ? 'disabled' : '') + '>+ Add answer</button>';
+    }
+    h += '</div>';
+    // media
+    h += '<div class="au-sec"><h3>Reference image or media</h3><div class="au-sub">The learner view shows the first image here beside the scene. Choose a file already in static/pi/media, or upload one. <button class="btn" id="mrefresh" onclick="A.refreshMedia(this)">Refresh picture list</button> <span id="mrefmsg"></span></div>';
+    f.media.forEach(function(x, i){
+      var mb = b + '.media.' + i;
+      h += '<div class="au-rowx" style="grid-template-columns:90px 1fr 110px;"><select onchange="A.set(\'' + mb + '.kind\',this.value);A.drawFrame()">' + ['image', 'video', 'x3d'].map(function(k){ return '<option' + (x.kind === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select>'
+        + '<input type="text" list="dl-media" value="' + esc(x.file) + '" placeholder="file name in static/pi/media" onchange="A.set(\'' + mb + '.file\',this.value.trim());A.drawFrame()">'
+        + '<select onchange="A.set(\'' + mb + '.role\',this.value)">' + ['reference', 'scene', 'target'].map(function(k){ return '<option' + (x.role === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></div>'
+        + '<div class="au-rowx" style="grid-template-columns:1fr auto auto"><input type="text" value="' + esc(x.caption) + '" placeholder="Caption" oninput="A.set(\'' + mb + '.caption\',this.value)"><button class="btn" onclick="A.mediaPanel(' + i + ')">Choose or upload...</button><button class="au-x" onclick="A.del(\'' + b + '.media\',' + i + ')">Remove</button></div>'
+        + '<div class="au-rowx" style="grid-template-columns:auto 1fr"><label style="margin:6px 8px 0 0" title="Which numbered boxes the learner sees on this picture">Callouts shown</label><input type="text" list="dl-callouts" value="' + esc(x.callouts) + '" placeholder="auto (only the controls named in this step) | all | none | 3-8,12 | control names" oninput="A.set(\'' + mb + '.callouts\',this.value.trim())"></div>'
+        + (x.file && isVid(x.file) ? '<video class="au-thumb" controls preload="metadata" src="pi/media/' + esc(x.file) + '"></video>' : '') + (x.file ? '<button type="button" class="btn au-big" data-big="' + esc(x.file) + '" title="Open in a large window (Esc closes)" style="display:block;margin:4px 0">Enlarge</button>' : '') + (x.kind === 'image' && x.file && !isVid(x.file) ? '<img class="au-thumb" alt="" src="pi/media/' + esc(x.file) + '" onerror="this.style.display=\'none\'">' : '')
+        + (x.file ? '<div class="au-sub" style="margin:2px 0 8px">' + esc(mediaNote(x.file)) + ((mediaInfo[x.file] && !mediaInfo[x.file].registered) ? ' <button class="btn" onclick="A.registerDlg(\'' + esc(x.file) + '\')">Add to register...</button>' : '') + '</div>' : '');
+    });
+    h += '<button class="btn" onclick="A.add(\'' + b + '.media\',{kind:\'image\',file:\'\',role:\'reference\',dm:\'\',caption:\'\',callouts:\'\'})">+ Add media</button></div>';
+    // guide
+    var gt = A.guideTitles(); h += '<div class="au-sec"><h3>Guide links</h3><div class="au-sub">Link to the User\'s Guide data module that explains this frame. Section is an anchor inside it.</div>';
+    f.guides.forEach(function(g, i){
+      h += '<div class="au-rowx" style="grid-template-columns:1.1fr 1.3fr .7fr auto"><input type="text" list="dl-dm" value="' + esc(g.dm) + '" placeholder="Guide DM code" onchange="A.guideDm(' + i + ',this.value.trim())"><input type="text" value="' + esc(g.title) + '" placeholder="Title shown" oninput="A.set(\'' + b + '.guides.' + i + '.title\',this.value)"><input type="text" value="' + esc(g.sec) + '" placeholder="section" oninput="A.set(\'' + b + '.guides.' + i + '.sec\',this.value)"><button class="au-x" onclick="A.del(\'' + b + '.guides\',' + i + ')">Remove</button></div>';
+    });
+    h += '<button class="btn" onclick="A.add(\'' + b + '.guides\',{dm:\'\',title:\'\',sec:\'\'})">+ Add Guide link</button></div>';
+    // expects
+    if (f.t === 's'){
+      h += '<div class="au-sec"><h3>Checks on the learner\'s saved scene</h3><div class="au-sub">Each row compares one value in the learner\'s saved scene file with what you expect. Use * as the value to require only that it exists. Tolerance is for numbers.</div>';
+      f.expects.forEach(function(x, i){
+        var eb = b + '.expects.' + i;
+        h += '<div class="au-rowx" style="grid-template-columns:1fr 1.4fr .8fr .5fr auto"><input type="text" value="' + esc(x.label) + '" placeholder="Label" oninput="A.set(\'' + eb + '.label\',this.value)"><input type="text" list="dl-paths" value="' + esc(x.path) + '" placeholder="/Scene/@width" oninput="A.set(\'' + eb + '.path\',this.value)"><input type="text" value="' + esc(x.value) + '" placeholder="expected" oninput="A.set(\'' + eb + '.value\',this.value)"><input type="text" value="' + esc(x.tol) + '" placeholder="tol." oninput="A.set(\'' + eb + '.tol\',this.value)"><button class="au-x" onclick="A.del(\'' + b + '.expects\',' + i + ')">Remove</button></div>';
+      });
+      h += '<button class="btn" onclick="A.add(\'' + b + '.expects\',{path:\'\',value:\'\',tol:\'\',label:\'\'})">+ Add check</button></div>';
+    }
+    // remedial
+    var r = f.rem || { kind: 'review', target: '', retest: '' };
+    function opts(sel, blank){ return '<option value="">' + blank + '</option>' + M.frames.map(function(g, n){ return '<option value="' + esc(g.id) + '"' + (g.id === sel ? ' selected' : '') + '>' + (n + 1) + '. ' + esc(g.title || g.id) + '</option>'; }).join(''); }
+    h += '<div class="au-sec"><h3>' + (f.t === 's' ? 'If the checks fail' : 'If the answer is wrong') + '</h3><div class="au-grid"><div><label>Action</label><select onchange="A.setRem(\'kind\',this.value)">' + ['review', 'retest', 'reteach'].map(function(k){ return '<option' + (r.kind === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></div>'
+      + '<div><label>Go to frame</label><select onchange="A.setRem(\'target\',this.value)">' + opts(r.target, '(no remedial)') + '</select></div><div><label>Then ask again at</label><select onchange="A.setRem(\'retest\',this.value)">' + opts(r.retest, '(none)') + '</select></div></div></div>';
+    $('auFrame').innerHTML = h;
+  },
+  draw: function(){
+    if (!M) return;
+    if (selFrame >= M.frames.length) selFrame = Math.max(0, M.frames.length - 1);
+    if (!$('auMeta').firstChild){ }
+    A.drawMeta(); A.drawList(); A.drawFrame();
+  },
+  fromXml: function(xml){ try { M = authParse(xml); } catch (e){ M = null; $('smsg').textContent = e.message; return false; } return true; }
+};
+var _auBuilt = false;
+function authInit(){
+  if (_auBuilt) return; _auBuilt = true;
+  $('aform').innerHTML = '<div id="auMeta"></div><div class="au-main"><div class="au-list" id="auList"></div><div id="auFrame"></div></div><div id="auPolicy"></div>';
+}
+function authShow(){ authInit(); if (!M && !A.fromXml($('src').value)) return; A.loadMedia(); A.draw(); }
+$('auApply').onclick = function(){ if (!M) return; var ok = lessonSet(authXml(M)); $('smsg').textContent = ok ? 'Applied. Press Learner view to try it.' : $('tmsg').textContent; };
+$('applySrc').onclick = function(){ if (!A.fromXml($('src').value)) return; A.draw(); $('smsg').textContent = 'The boxes now show this XML.'; };
+$('auCheck').onclick = function(){
+  if (!M) return; var p = authCheck(M), b = $('auProblems'); b.hidden = false;
+  if (!p.length){ b.className = 'au-problems ok'; b.innerHTML = 'No problems found.'; return; }
+  b.className = 'au-problems'; b.innerHTML = p.length + ' to fix:<ul>' + p.map(function(s){ return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>';
+};
+$('auSave').onclick = function(){
+  if (!M) return; var p = authCheck(M);
+  if (!DM_RE.test(M.meta.dm)){ $('smsg').textContent = 'Fix the lesson DM code before saving.'; $('auCheck').click(); return; }
+  if (p.length && !confirm('The check found ' + p.length + ' problem(s). Save anyway?')) { $('auCheck').click(); return; }
+  fetch(API + '/pi/lesson', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ xml: authXml(M) }) })
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+    .then(function(x){ if (!x.ok){ $('smsg').textContent = 'Not saved: ' + (x.d.error || 'error'); return; }
+      $('smsg').textContent = 'Saved as static/pi/lessons/' + x.d.file + (x.d.backup ? ' (old copy: lessons/_backup/' + x.d.backup + ')' : '') + '.';
+      fetch(API + '/pi/lessons').then(function(r){ return r.json(); }).then(function(d){ var sel = $('lessonSel'), cur = x.d.file; sel.innerHTML = '';
+        (d.lessons || []).sort(function(a, b){ return (a.dm || a.file) < (b.dm || b.file) ? -1 : 1; }).forEach(function(l){ var o = document.createElement('option'); o.value = l.file; dmNote(l); o.textContent = dmLabel(l); sel.appendChild(o); }); sel.value = cur; }); })
+    .catch(function(){ $('smsg').textContent = 'Saving needs the server (POST /pi/lesson). Is mccf_pi.py the new version? Use Download instead.'; });
+};
+// ---------- new lesson ----------
+// The next free DM code is worked out from the lessons on the server. Nothing is written until Save;
+// at Save the code is checked again and moved up if another lesson has taken it in the meantime.
+function piTakenDms(){ return fetch(API + '/pi/lessons').then(function(r){ return r.json(); }).then(function(d){ return (d.lessons || []).map(function(l){ return l.dm; }); }).catch(function(){ return []; }); }
+function piNextDm(taken){
+  var used = {}; taken.forEach(function(d){ var m = /^MCCF-P-10-(\d\d)-/.exec(d || ''); if (m) used[parseInt(m[1], 10)] = 1; });
+  var n = 1; while (used[n]) n++;
+  return 'MCCF-P-10-' + ('0' + n).slice(-2) + '-00-00A-520A-D';
+}
+$('newBtn').onclick = function(){
+  var title = window.prompt('Title of the new lesson:', 'Getting Started, Module');
+  if (title === null || !title.trim()) return;
+  piTakenDms().then(function(taken){
+    var dm = piNextDm(taken), sdm = dm.replace('520A', '040A'), d = new Date().toISOString().slice(0, 10);
+    function xe2(t){ return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var xml = '<?xml version="1.0" encoding="UTF-8"?>\n<PILesson xmlns="http://mccf.artistinprocess.com/pi/v1">\n  <Meta>\n    <Title>' + xe2(title.trim()) + '</Title>\n    <DmCode>' + dm + '</DmCode>\n    <Issue>001</Issue><IssueDate>' + d + '</IssueDate><Issuer>MCCF</Issuer>\n    <Objective>Write the objective here.</Objective>\n  </Meta>\n  <Scene dmCode="' + sdm + '" issue="001" file="NewScene.x3d" learnerScene="NewScene"/>\n  <Frames>\n    <Step id="f1" title="First step">\n      <Instruction>Replace this with the first step, or import a written lesson below.</Instruction>\n    </Step>\n  </Frames>\n  <RemediationPolicy scope="module">\n    <Level minMisses="0" action="retest"/>\n    <Level minMisses="2" action="review"/>\n    <Level minMisses="4" action="reteach"/>\n  </RemediationPolicy>\n</PILesson>\n';
+    if (!lessonSet(xml)) return;
+    window._piNew = true; setView('edit');
+    $('smsg').textContent = 'New lesson ' + dm + '. The code is kept only when you click Save to server. Open XML and import (advanced) to paste a written lesson.';
+  });
+};
+var _piDoSave = $('auSave').onclick;
+$('auSave').onclick = function(){
+  if (!window._piNew || !M) return _piDoSave();
+  piTakenDms().then(function(taken){
+    if (taken.indexOf(M.meta.dm) >= 0){
+      var old = M.meta.dm, nd = piNextDm(taken);
+      M.meta.dm = nd; if (M.scene && M.scene.dm) M.scene.dm = nd.replace('520A', '040A');
+      A.sync(); A.draw();
+      $('smsg').textContent = 'DM code ' + old + ' was already taken. This lesson is now ' + nd + '.';
+    }
+    window._piNew = false; _piDoSave();
+  });
+};
+function piLoadScenes(){
+  fetch(API + '/scene/list/scenes').then(function(r){ return r.json(); }).then(function(d){
+    var s = {}; (d.files || []).forEach(function(f){ var m = /^(.+)_scene\.xml$/.exec(f); if (m) s[m[1]] = 1; });
+    var a = Object.keys(s).sort();
+    if (JSON.stringify(a) !== JSON.stringify(A._scenes || [])){ A._scenes = a; if (view === 'edit' && M) A.draw(); }
+  }).catch(function(){});
+}
+piLoadScenes();
+$('dlSrc').onclick = function(){
+  var text = M ? authXml(M) : $('src').value, name = (M ? M.meta.dm : (L ? L.dm : 'lesson')) + '.xml';
+  if (window.showSaveFilePicker){
+    window.showSaveFilePicker({ id: 'mccf-pi-lessons-save', suggestedName: name, types: [{ description: 'PI lesson (XML)', accept: { 'application/xml': ['.xml'] } }] })
+      .then(function(h){ return h.createWritable().then(function(w){ return w.write(text).then(function(){ return w.close(); }); }); })
+      .then(function(){ $('smsg').textContent = 'Saved to the file you chose. To use it, put it in static/pi/lessons, or use Save to server.'; })
+      .catch(function(e){ if (e && e.name !== 'AbortError') $('smsg').textContent = 'Could not save: ' + e.message; });
+    return;
+  }
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/xml' })); a.download = name; a.click();
+};
+
+
+// ---------- views and the report ----------
+function setView(v){
+  view = v; var rep = v === 'rep', ed = v === 'edit';
+  $('report').hidden = !rep; $('author').hidden = !ed; $('lay').hidden = rep || ed; $('toppanes').hidden = rep || ed;
+  $('m-learn').setAttribute('aria-pressed', v === 'learn'); $('m-edit').setAttribute('aria-pressed', ed); $('m-rep').setAttribute('aria-pressed', rep);
+  if (rep) loadReport();
+  if (ed){ authShow(); piLoadScenes(); }
+}
+$('m-learn').onclick = function(){ setView('learn'); }; $('m-edit').onclick = function(){ setView('edit'); }; $('m-rep').onclick = function(){ setView('rep'); };
+function loadReport(){
+  if (!L){ $('rnotes').innerHTML = '<li>Load a lesson first.</li>'; return; }
+  $('rdm').textContent = L.dm + ' · issue ' + L.issue;
+  fetch(API + '/pi/report?lesson=' + encodeURIComponent(L.dm)).then(function(r){ if (!r.ok) throw 0; return r.json(); }).then(function(d){
+    var mm = d.meanSecondsToFinish == null ? 'n/a' : Math.floor(d.meanSecondsToFinish / 60) + ' min ' + Math.round(d.meanSecondsToFinish % 60) + ' s';
+    $('rkpi').innerHTML = '<div><b>' + d.sessions + '</b><span>sessions</span></div><div><b>' + d.finishedPct + '%</b><span>finished the module</span></div><div><b>' + mm + '</b><span>mean time to finish</span></div><div><b>' + d.flaggedFrames + '</b><span>flagged frames</span></div>';
+    var h = '<tr><th>Frame</th><th>Kind</th><th>Sessions</th><th>Miss rate</th><th></th><th>Mean s</th><th>Common wrong</th></tr>';
+    d.frames.forEach(function(r){ h += '<tr><td>' + esc(r.frame) + '</td><td>' + esc(r.kind) + '</td><td>' + r.sessions + '</td><td>' + Math.round(r.missRate * 100) + '%</td><td><div class="hb" style="width:160px"><i style="width:' + Math.round(r.missRate * 100) + '%"></i></div></td><td>' + r.meanSeconds + '</td><td' + (r.flagged ? ' class="flag"' : '') + '>' + esc(r.commonWrong.join(', ')) + (r.flagged ? ' flagged' : '') + '</td></tr>'; });
+    $('rtab').innerHTML = d.frames.length ? h : '<tr><td>No attempts recorded yet.</td></tr>';
+    var p = '<tr><th>Path</th><th>Sessions</th><th>Finished after</th></tr>';
+    d.paths.forEach(function(r){ p += '<tr><td>' + r.path + '</td><td>' + r.sessions + '</td><td>' + r.finished + ' of ' + r.sessions + '</td></tr>'; });
+    $('rpath').innerHTML = d.paths.length ? p : '<tr><td>No sessions yet.</td></tr>';
+    $('rnotes').innerHTML = d.analysis.length ? d.analysis.map(function(s){ return '<li>' + esc(s) + '</li>'; }).join('') : '<li>Nothing flagged.</li>';
+    $('rrule').textContent = 'Flag rule: a frame is flagged when the ' + d.flagRule + '. Reports run from the Dashboard, like the other diagnostic reports.';
+  }).catch(function(){ $('rnotes').innerHTML = '<li>The report needs the server (GET /pi/report).</li>'; });
+}
+
+setView('learn');
+loadList();
+
+// Enlarge the X_ITE panel to nearly the whole window (the iframe is not moved, so the scene keeps running)
+(function(){
+  var x = $('xite'), btn = $('xbigBtn'), close = null;
+  function on(){ x.classList.add('xbig'); close = document.createElement('button'); close.type = 'button'; close.className = 'btn pri'; close.id = 'xbigClose'; close.textContent = 'Close (Esc)'; close.onclick = off; document.body.appendChild(close); document.body.classList.add('xbig-on'); }
+  function off(){ x.classList.remove('xbig'); document.body.classList.remove('xbig-on'); if (close){ close.remove(); close = null; } }
+  btn.onclick = function(){ if (x.classList.contains('xbig')) off(); else on(); };
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && x.classList.contains('xbig')) off(); });
+})();
+</script>
+
+</html>

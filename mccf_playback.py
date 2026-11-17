@@ -405,6 +405,17 @@ class PlaybackSession:
             self._cancel_timer()
             self._current_step_idx = 0
             self._status = self.STATUS_IDLE
+            self._restore_cultivar_weights()
+
+    def _restore_cultivar_weights(self):
+        """Playback writes the recorded E, B, P, S into agent.weights so /field shows them.
+        Reset puts each agent it touched back to its own cultivar weights."""
+        for wp_list in self._steps:
+            for wp in wp_list:
+                agent = self.field.agents.get(wp.cultivar)
+                base = getattr(agent, "_cultivar_weights", None) if agent else None
+                if base:
+                    agent.weights = dict(base)
 
     def step_forward(self) -> bool:
         """Manually advance one step. Returns False if already at end."""

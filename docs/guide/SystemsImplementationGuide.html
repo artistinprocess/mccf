@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MCCF V5 Systems Implementation</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">body{font-family:Georgia,'Times New Roman',serif;max-width:900px;margin:2em auto;padding:0 1em;line-height:1.5;color:#222}
+h1{border-bottom:2px solid #444;padding-bottom:.2em;margin-top:1.5em}
+h2{margin-top:1.4em}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em}
+th,td{border:1px solid #bbb;padding:4px 7px;vertical-align:top;text-align:left}
+th{background:#eee}
+img{max-width:100%;height:auto}
+code{background:#f3f3f3;padding:0 3px;font-size:.92em}
+pre{background:#f3f3f3;padding:8px;overflow:auto}
+.chapter-break{page-break-before:always}
+table{table-layout:fixed;width:100%}
+td,th{overflow-wrap:anywhere;word-break:break-word}
+td{font-size:.88em}
+</style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#mccf-v5-systems-implementation" id="toc-mccf-v5-systems-implementation">MCCF V5 Systems
+Implementation</a>
+<ul>
+<li><a href="#system-map-impl-01" id="toc-system-map-impl-01">1. System
+map (IMPL-01)</a></li>
+<li><a href="#xml-documents-and-namespaces-impl-02" id="toc-xml-documents-and-namespaces-impl-02">2. XML documents and
+namespaces (IMPL-02)</a></li>
+<li><a href="#voice-and-dialogue-impl-03" id="toc-voice-and-dialogue-impl-03">3. Voice and dialogue
+(IMPL-03)</a></li>
+<li><a href="#llm-adapters-impl-04" id="toc-llm-adapters-impl-04">4. LLM
+adapters (IMPL-04)</a></li>
+<li><a href="#cultivars-and-characters-impl-05" id="toc-cultivars-and-characters-impl-05">5. Cultivars and characters
+(IMPL-05)</a></li>
+<li><a href="#h-anim-api-impl-06" id="toc-h-anim-api-impl-06">6. H-Anim
+API (IMPL-06)</a></li>
+<li><a href="#coherence-engine-impl-07" id="toc-coherence-engine-impl-07">7. Coherence engine (IMPL-07)</a></li>
+<li><a href="#route-graph-and-effects" id="toc-route-graph-and-effects">8. Route Graph and effects</a></li>
+<li><a href="#assets-and-libraries" id="toc-assets-and-libraries">9.
+Assets and libraries</a></li>
+<li><a href="#events-cues-and-loader-playback" id="toc-events-cues-and-loader-playback">10. Events, cues and Loader
+playback</a></li>
+<li><a href="#dm-codes-and-registry-proposal-not-built" id="toc-dm-codes-and-registry-proposal-not-built">11. DM codes and
+registry (proposal, not built)</a></li>
+<li><a href="#voice-engine-api-what-mccf-could-support-later" id="toc-voice-engine-api-what-mccf-could-support-later">12. Voice engine
+API: what MCCF could support later</a></li>
+<li><a href="#zones-scenes-and-playback-modules" id="toc-zones-scenes-and-playback-modules">13. Zones, scenes and
+playback modules</a></li>
+<li><a href="#field-drift-and-sound-modules" id="toc-field-drift-and-sound-modules">14. Field, drift and sound
+modules</a></li>
+<li><a href="#not-yet-covered" id="toc-not-yet-covered">15. Not yet
+covered</a></li>
+<li><a href="#issue-register-impl-09" id="toc-issue-register-impl-09">16. Issue register (IMPL-09)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="mccf-v5-systems-implementation">MCCF V5 Systems
+Implementation</h1>
+<p>Oct 24, 2026 · MCCF Product Team</p>
+<p>This document describes how the V5 code is built, module by module,
+and records the defects found while checking each module against the
+User&#39;s Guide. It is written from the source files, not from memory.
+Where a claim could not be checked, it says so. Section ids (IMPL-nn)
+are stable so the sections can move into the CSDB later.</p>
+<h2 id="system-map-impl-01">1. System map (IMPL-01)</h2>
+<p>MCCF is a localhost system. A Flask server (mccf_api.py, about 3,300
+lines) serves the static tools and the APIs. The tools are single HTML
+files served from the static folder, for example
+localhost:5000/static/mccf_x3d_loader.html.</p>
+<table style="width:97%;">
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 33%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Part</th>
+<th style="text-align: left;">File</th>
+<th style="text-align: left;">Role</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Server</td>
+<td style="text-align: left;">mccf_api.py</td>
+<td style="text-align: left;">Flask app. Scene and zone save, arc
+runner, scene parsing, registers the blueprints below.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Coherence engine</td>
+<td style="text-align: left;">mccf_core.py</td>
+<td style="text-align: left;">ChannelVector, CoherenceRecord, Agent,
+CoherenceField, MetaState, Identity. A pure computation module that
+holds its state in memory. For each pair of agents it tracks how
+coherent each feels toward the other, and for each agent its drift,
+regulation and mode. Callers pass in channel vectors and read back
+results. It does no file or network I/O: the API modules do that.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Voice API</td>
+<td style="text-align: left;">mccf_voice_api.py</td>
+<td style="text-align: left;">Blueprint voice_bp: /voice/speak,
+/voice/preview, /voice/configure, /voice/state, /voice/prosody,
+/voice/adapters, /voice/lexicon and /voice/lexicon/reload.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Zone API</td>
+<td style="text-align: left;">mccf_zone_api.py</td>
+<td style="text-align: left;">Blueprint zone_bp: /zone (list, create),
+/zone/&lt;name&gt; (read, delete), /zone/&lt;name&gt;/episode,
+/zone/presets, /scene/pressure, /waypoint, /path,
+/path/&lt;name&gt;/arc, /scene, /export/x3d/zones and /sensor/spatial.
+The scene graph lives in memory only and is empty after a restart. The
+host application must attach zone_bp.scene and zone_bp.field after
+registering the blueprint.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">LLM adapters</td>
+<td style="text-align: left;">mccf_llm.py</td>
+<td style="text-align: left;">Adapter registry (registered: stub and
+ollama; hosted adapters exist in the code but are not registered),
+affective prompt builder, voice parameter mapping.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Cultivars</td>
+<td style="text-align: left;">mccf_cultivar_lambda.py</td>
+<td style="text-align: left;">Blueprint cultivar_bp: CultivarDefinition,
+CultivarRegistry, /cultivars endpoints.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">H-Anim</td>
+<td style="text-align: left;">mccf_hanim_api.py</td>
+<td style="text-align: left;">Blueprint hanim_bp: avatar upload,
+preview, list, H-Anim export, joints, displacers, ingest (about 4,100
+lines).</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Tools</td>
+<td style="text-align: left;">Launcher, Dashboard, Scene Composer,
+Character Creator, X3D Loader, Dialogue Editor, Events Editor, Route
+Graph, Ambient Composer, Help Composer (the lesson player)</td>
+<td style="text-align: left;">Browser tools, one HTML file each.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Not yet reviewed:</strong> mccf_cultivars.py (the built-in
+cultivar dictionary) and any server routes the Events Editor and Route
+Graph use.</p>
+<h2 id="xml-documents-and-namespaces-impl-02">2. XML documents and
+namespaces (IMPL-02)</h2>
+<p>The schema (Appendix B, version 1.1) puts every document type in the
+namespace http://mccf.artistinprocess.com/v1.</p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 32%" />
+<col style="width: 25%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Document</th>
+<th style="text-align: left;">Written by</th>
+<th style="text-align: left;">Read by</th>
+<th style="text-align: left;">Namespace today</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Scene XML</td>
+<td style="text-align: left;">Composer, _doExportSceneXML</td>
+<td style="text-align: left;">Server scene parser, Loader, Composer,
+Events Editor</td>
+<td style="text-align: left;">v1 (added in V5)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Zone XML (ZoneSet)</td>
+<td style="text-align: left;">Composer, exportZoneXML, saved through
+/scene/save/zones</td>
+<td style="text-align: left;">Composer, Loader</td>
+<td style="text-align: left;">v1 (added in V5)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Take (arc export)</td>
+<td style="text-align: left;">Server, arc export</td>
+<td style="text-align: left;">Server cultivar loader (reads the Cultivar
+element)</td>
+<td style="text-align: left;">none; must stay none</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Cultivar</td>
+<td style="text-align: left;">CultivarDefinition.to_xml</td>
+<td style="text-align: left;">CultivarRegistry, hanim export</td>
+<td style="text-align: left;">cultivar/v3 (differs from the schema, see
+IMPL-I03)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ZoneTemplate</td>
+<td style="text-align: left;">Composer</td>
+<td style="text-align: left;">Server, /zones templates</td>
+<td style="text-align: left;">none; must stay none</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reader rules.</strong> The server&#39;s scene parsers remove
+xmlns before parsing (mccf_api.py around lines 746 and 2372). The
+cultivar reader uses the {*} wildcard, so it accepts any namespace.
+Browser readers use querySelector and getElementsByTagName, which ignore
+a default namespace. The zone-template reader and the cultivar and take
+loaders use ElementTree without stripping, so those files must not gain
+a namespace.</p>
+<p><strong>Element name.</strong> The per-agent element in a scene is
+AgentPlacement. EmotionalArc now means only the take root. The Composer
+writes the new name. The Composer, the Loader and the server read both,
+so older scenes still open (IMPL-I08). The schema keeps EmotionalArc as
+a deprecated alias inside a Scene until old scenes are re-saved.</p>
+<h2 id="voice-and-dialogue-impl-03">3. Voice and dialogue (IMPL-03)</h2>
+<p><strong>Preview pipeline</strong> (POST /voice/preview, stateless, no
+agent, no LLM call):</p>
+<ol type="1">
+<li><p>Count positive, negative and uncertainty words in the text from
+module-level word sets.</p></li>
+<li><p>Compute tag valence. It needs at least two positive or negative
+hits, otherwise it is 0.0. Uncertainty words weigh 0.15.</p></li>
+<li><p>Count channel words (S, E, P, B) and derive arousal (0.3 + 0.6
+times min(1, hits/8)) and engagement from the S and E hits.</p></li>
+<li><p>derive_emotion_tag turns valence, arousal and engagement into one
+of the 11 core tags, or none. The tag cute is never derived: the rules
+cannot tell it from the other positive tags using valence, arousal and
+engagement alone, so it appears only when the author types it.</p></li>
+<li><p>Return suggested_tag and suggested_tts_text, which is the tag in
+brackets followed by the text.</p></li>
+</ol>
+<p><strong>Speak pipeline</strong> (POST /voice/speak, server-sent
+events): builds the affective context from the field, sends the affect
+parameters first, streams tokens from the selected adapter, records the
+response sentiment into the field, and ends with a done event.</p>
+<p><strong>Tags.</strong> The 22 delivery tags are hardcoded in the
+Dialogue Editor (11 core and 11 nonverbal). Free-form tags in a line&#39;s
+ttsText are accepted.</p>
+<p><strong>Lexicon packs.</strong> Packs are JSON files read at start-up
+from lexicon_packs/ beside mccf_voice_api.py (POST /voice/lexicon/reload
+re-reads them; a broken file is logged and skipped). A word pack
+(default_narrative) adds pos, neg, unc and S, E, P, B words on top of
+the core lists. An engine pack (elevenlabs_v3) supplies the delivery tag
+chips in groups, with an optional tag_map from the decision tree&#39;s tag
+to the engine&#39;s tag. With no pack active, scoring is identical to the
+core lists. GET /voice/lexicon lists the packs; /voice/configure and
+/voice/preview accept lexicon_packs and engine_pack. The core lexicon
+itself is still in code (IMPL-I01).</p>
+<h2 id="llm-adapters-impl-04">4. LLM adapters (IMPL-04)</h2>
+<p>All adapters implement complete() as an async generator. The registry
+holds stub, anthropic, openai, ollama and google. The prompt builder
+turns the field state into narrative text: arousal, valence, regulation,
+relationships, zone pressure, trajectory and a coherence-health
+block.</p>
+<ul>
+<li><p><strong>Ollama</strong> is the only supported adapter in this
+release. It posts to /api/chat on localhost:11434 with stream set to
+false, waits 180 seconds, retries once at 240, then yields the whole
+reply word by word.</p></li>
+<li><p><strong>Hosted adapters</strong> (anthropic, openai, google) are
+still registered and still accepted by /voice/configure. Hiding them in
+the UI does not remove them (IMPL-I02).</p></li>
+<li><p><strong>API key.</strong> /voice/configure keeps the key in
+process memory (_voice_state). The /voice/state and /voice/configure
+responses do not return it. Other modules were not checked for
+logging.</p></li>
+</ul>
+<h2 id="cultivars-and-characters-impl-05">5. Cultivars and characters
+(IMPL-05)</h2>
+<p>A CultivarDefinition holds weights, regulation, shadow context
+(lambda), voice, alias, portrait, H-Anim figure, receptivity and a
+behavior-clip table. CultivarRegistry loads the built-in dictionary,
+then every .xml file in cultivars/. The registry key is the name
+attribute, not the filename.</p>
+<ul>
+<li><p>The writer&#39;s element order matches the schema.</p></li>
+<li><p>Files are saved as cultivars/cultivar_&lt;lowercase name&gt;.xml.
+The H-Anim exporter uses the same slug so that both write one
+file.</p></li>
+<li><p>The writer does not escape text (IMPL-I04) and the loader skips a
+malformed file without a message (IMPL-I04).</p></li>
+</ul>
+<h2 id="h-anim-api-impl-06">6. H-Anim API (IMPL-06)</h2>
+<p>Routes: /avatar/upload, /avatar/preview, /avatar/list,
+/hanim/skin_upload, /hanim/export, /hanim/joints, /hanim/wire-joints,
+/hanim/normalize-joints, /hanim/build-displacers, /hanim/ingest,
+/hanim/ingest-mixamo. The export writes the avatar X3D, an expressions
+XML file, a camera-rig manifest and the cultivar&#39;s clip data. Every
+write keeps five timestamped backups of the file, and a single avatar
+file can be about 24 MB. <strong>Reviewed so far:</strong> route list,
+file paths and the cultivar namespace constant. The export logic itself
+is not yet reviewed.</p>
+<h2 id="coherence-engine-impl-07">7. Coherence engine (IMPL-07)</h2>
+<p>The engine is a pure computation module. It imports only math, time,
+uuid, random, collections and dataclasses, and it never reads a file,
+opens a socket or calls a service. All its state lives in memory, and it
+does its work when called: callers pass in channel vectors and read back
+coherence scores, affect values and reports. Everything that touches the
+outside world (files, HTTP, the browser, the voice engine) lives in
+mccf_api.py and the other API modules. Coherence is directional: what A
+feels toward B differs from what B feels toward A. Each record keeps a
+rolling history of 20 episodes with exponential decay, a credibility
+score that drops when a channel is implausibly steady, and a
+coupling-strength modulation (CCS). An Agent also carries MetaState,
+Identity (drift capped at 0.10) and a mode (explore, exploit, repair,
+avoid or shift). CoherenceField, Librarian and Gardener provide the
+matrix, the reports and the interventions. The voice API feeds it
+through field.interact().</p>
+<h2 id="route-graph-and-effects">8. Route Graph and effects</h2>
+<p>The Route Graph is a node-and-wire editor, embedded as a Composer tab
+(mccf_route_graph_prototype.html). A node is an X3D node and a wire is a
+ROUTE. An author wires sensors to interpolators to targets without
+writing X3D.</p>
+<p><strong>Node types.</strong> Transform, ProximitySensor, TimeSensor,
+ScalarInterpolator, ColorInterpolator, PositionInterpolator,
+OrientationInterpolator, RecordedPath, BasicPointLight, BasicSpotLight,
+BasicDirectionalLight, TimelineTrigger, BasicAudioSource and
+TouchSensor. Script nodes are registered on import from a scene, with
+their fields read from the Script itself. Only a TimeSensor and the four
+interpolators can be created fresh. Every other type is a reference to
+something that already exists in the scene, such as an agent&#39;s Transform
+or a placed light.</p>
+<p><strong>Persistence.</strong> The tool sends its state to the
+Composer as a mccf_route_graph_save message: nodes, connections, hidden
+layers and nodes, and the schema of any Script type used. The Composer
+keeps it, sends it back when the tab reopens, and writes it into
+scene.xml as a RouteGraph element whose data attribute holds the
+JSON.</p>
+<p><strong>Export rules.</strong> At export the Composer bakes the graph
+into the compiled X3D under two hard rules. It never creates a node
+whose DEF already exists anywhere in the scene being built, and it never
+repeats a ROUTE that already exists. Both checks scan the export text
+built so far, so they reflect the real scene. Nodes the event cues
+generate themselves (names beginning Path, PathEase, Turn or Effect,
+then Timer, Interp or Orient, then <em>EC</em>) are skipped, because
+only the cue builders make correct ones.</p>
+<p><strong>Effect assets.</strong> Click a wire, and the whole connected
+chain it belongs to can be saved as an Effect Asset: an X3D 4.1
+Interchange file holding the nodes and their ROUTEs. Nodes outside the
+chain are written as comments, so reusing the file needs a node with the
+same DEF in the target scene. The tool downloads the file and also posts
+it to /effects/save, which writes only to the user tier. The library has
+three tiers under static/x3d/Effects/: rich (ports of official X_ITE
+reference examples), common (simpler versions) and user (live saves).
+Load Effect Asset lists a tier with /effects/list and merges the chosen
+file into the graph through the same parser as scene import.</p>
+<p><strong>Not built.</strong> Shift-click subassemblies (naming and
+seeding are undecided). Load Effect Asset asks for the tier and the file
+name through browser prompt boxes instead of a list (IMPL-I17).</p>
+<h2 id="assets-and-libraries">9. Assets and libraries</h2>
+<p>Every library is a folder under static/x3d/ that the server lists and
+the Composer reads. MCCF does no X3D schema validation on what goes in.
+X_ITE checks a file when it loads it, so a bad asset fails at that
+point.</p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 13%" />
+<col style="width: 17%" />
+<col style="width: 22%" />
+<col style="width: 9%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Library</th>
+<th style="text-align: left;">Folder</th>
+<th style="text-align: left;">Listing</th>
+<th style="text-align: left;">Accepts</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Assets</td>
+<td style="text-align: left;">X3DAssets/</td>
+<td style="text-align: left;">GET /x3d/assets/list</td>
+<td style="text-align: left;">.x3d, .glb, .gltf</td>
+<td style="text-align: left;">Top level only. The texture/ subfolder is
+not listed. glTF is preferred for static objects: fewer vertices.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Audio and MIDI</td>
+<td style="text-align: left;">X3DAssets/media/</td>
+<td style="text-align: left;">GET /media/list (subdir, ext)</td>
+<td style="text-align: left;">mp3, wav, ogg, flac, aac, m4a, mid,
+midi</td>
+<td style="text-align: left;">subdir=convolver gives
+X3DAssets/media/convolver/file.wav.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Effects</td>
+<td style="text-align: left;">Effects/rich, common, user</td>
+<td style="text-align: left;">GET /effects/list?subdir=</td>
+<td style="text-align: left;">.x3d</td>
+<td style="text-align: left;">Live saves write only to user.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Compiled scenes</td>
+<td style="text-align: left;">static/x3d/</td>
+<td style="text-align: left;">GET /scene/x3d/list</td>
+<td style="text-align: left;">.x3d</td>
+<td style="text-align: left;">POST /scene/x3d/upload writes
+{scene_name}.x3d.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Scene definitions</td>
+<td style="text-align: left;">scenes folder</td>
+<td style="text-align: left;">GET /scene/list/scenes</td>
+<td style="text-align: left;">.xml</td>
+<td style="text-align: left;">POST /scene/save/scene and
+/scene/save/zones write them.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Cultivars</td>
+<td style="text-align: left;">cultivars/</td>
+<td style="text-align: left;">cultivar registry</td>
+<td style="text-align: left;">.xml</td>
+<td style="text-align: left;">File name cultivar_&lt;slug&gt;.xml
+(IMPL-I10).</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lexicon packs</td>
+<td style="text-align: left;">lexicon_packs/</td>
+<td style="text-align: left;">GET /voice/lexicon</td>
+<td style="text-align: left;">.json</td>
+<td style="text-align: left;">See section 3.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Placing an asset.</strong> The Composer writes a placed asset
+as a Transform (DEF PlacedAsset_name, with translation, rotation and
+scale) holding an Inline (DEF AssetInline_name, with the asset&#39;s url). A
+click on the map places it. It can then be dragged or adjusted with the
+X, Y and Z inputs.</p>
+<p><strong>Editing an asset.</strong> POST /x3d/assets/save overwrites
+an existing asset file. Only .x3d files can be edited as text. The
+server resolves the real path and refuses anything that escapes
+X3DAssets/. The Events Editor&#39;s asset-file viewer uses it.</p>
+<p><strong>Extending the libraries.</strong> Sunrize and X_ITE can
+author or convert assets. A file dropped into the folder appears in the
+next listing. Anything it routes to must still match the MCCF schema&#39;s
+names.</p>
+<h2 id="events-cues-and-loader-playback">10. Events, cues and Loader
+playback</h2>
+<p>The Events Editor places cues on a playhead clock. The Composer
+writes them into scene.xml as EventCues, one Cue element per cue with
+track, target, label, t0 and dur attributes plus track-specific ones.
+The Loader reads EventCues &gt; Cue and plays them against a scene clock
+that starts at zero when the scene loads.</p>
+<p><strong>Firing.</strong> fireScheduledEventCues sets one timer per
+cue at its t0, in seconds from scene start. It runs once per scene. The
+timers share one list with every other pending cue, so Stop and Reset
+cancel them together. The older named-trigger path
+(fireEventCuesForTrigger) is dormant: parsed cues no longer carry a
+trigger, so it matches nothing.</p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 21%" />
+<col style="width: 38%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Track</th>
+<th style="text-align: left;">Handler</th>
+<th style="text-align: left;">What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">camera</td>
+<td style="text-align: left;">_fireCameraEventCue</td>
+<td style="text-align: left;">Binds a baked viewpoint, or drives the
+free camera for a shot type</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">light, fog, bg</td>
+<td style="text-align: left;">_fireLightEventCue, _fireFogEventCue,
+_fireBgEventCue</td>
+<td style="text-align: left;">Changes a light, the fog, or the
+background</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">gesture, face</td>
+<td style="text-align: left;">_fireGestureEventCue,
+_fireFaceEventCue</td>
+<td style="text-align: left;">Plays a body clip, or an authored facial
+expression</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">behavior, animation</td>
+<td style="text-align: left;">_fireBehaviorEventCue,
+_fireAnimationEventCue</td>
+<td style="text-align: left;">Plays a cultivar behavior or an avatar
+animation clip</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">path, turn</td>
+<td style="text-align: left;">_firePathEventCue, _fireTurnEventCue</td>
+<td style="text-align: left;">Moves an agent or asset along a recorded
+path, or turns it</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">effect</td>
+<td style="text-align: left;">_fireEffectEventCue</td>
+<td style="text-align: left;">Triggers an effect on an effect
+target</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">movie</td>
+<td style="text-align: left;">_fireMovieVisibilityEventCue</td>
+<td style="text-align: left;">Shows or hides a movie screen</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">audio, midi</td>
+<td style="text-align: left;">_fireAudioEventCue, _fireMidiEventCue</td>
+<td style="text-align: left;">Plays a placed audio source, or a
+registered MIDI source</td>
+</tr>
+</tbody>
+</table>
+<p>An unknown track logs a warning and does nothing.</p>
+<p><strong>Camera cues.</strong> Baked cameras are Viewpoint nodes in
+the X3D file, bound by name, and the Loader only binds them. Runtime
+cameras are a single free viewpoint that the Loader moves through the
+scripting interface. Ten static shot types are implemented: wide,
+medium, closeup, extreme_closeup, overhead, worms_eye, dutch,
+over_shoulder, profile and two_shot. The move shots dolly_in, dolly_out,
+pan, tilt, crane_up and orbit are implemented by interpolating those
+same values. A free-camera track shot is not implemented, and warns and
+skips. Agent orbit and agent track are the baked, parented versions.</p>
+<p><strong>Sources.</strong> Audio sources are read from AudioSources in
+the scene XML, not from the X3D proto, because the proto&#39;s ExternProto
+file failed to load. MIDI sources come from MidiSources with their
+per-track settings.</p>
+<p><strong>Dialogue lines</strong> are a separate system, read from
+Dialogue &gt; Line and spoken through the same voice pipeline as
+waypoint dialogue. The scene-start, sensed (chained) and declared (fixed
+time) triggers are wired. Zone, touch and arc-complete triggers are
+parsed and round-trip, but by the code&#39;s own comment they are not fired
+yet.</p>
+<h2 id="dm-codes-and-registry-proposal-not-built">11. DM codes and
+registry (proposal, not built)</h2>
+<p>Nothing in the code or schema carries a data module code today. Guide
+modules have stable ids only. This section is a proposal for review.</p>
+<p><strong>What a code needs.</strong> An S1000D data module code is
+built from: model identification code, system difference code, system
+code, subsystem and sub-subsystem codes, assembly code, disassembly code
+with variant, information code with variant, and item location code. For
+MCCF the model code would be fixed, and the system, subsystem and
+assembly codes would follow the system map in section 1. The information
+code separates descriptive modules from procedural ones.</p>
+<p><strong>Registry.</strong> One table in the CSDB repository, one row
+per module: stable id, DM code, title, issue number, issue date, status.
+The generator reads it to stamp each module&#39;s header (code, title and
+date on the left) and footer (provenance and page number).</p>
+<p><strong>Schema and code changes.</strong> The module schema gains a
+dmc element or attribute set. The generator refuses a module whose id is
+missing from the registry. Appendix B is regenerated from the schema as
+usual.</p>
+<p><strong>Decisions.</strong> Settled on 2026-10-26: chapter order
+drives the codes, and the code appears in the file name and in a
+module&#39;s header or footer. Codes are assigned last, as the final step
+before publishing, once Getting Started is written and all content is
+approved. Advice: the author is the sole code authority, since there is
+one author and one system. Assign codes by hand once and record them in
+the registry, which is the authority. Never reuse or renumber a code.
+Number in steps of 10 (system code from the Part, subsystem from the
+chapter, assembly code from the module&#39;s place in the chapter) so a
+module inserted later does not force renumbering. Information codes: use
+040 (description) for explanatory modules, which is the usual single
+code for a small project, and one project-defined code for step-by-step
+modules such as Getting Started and the worked examples. S1000D allows
+project-specific information codes. Record the set in the registry.
+Leave the disassembly code at 00 with variant A, the information code
+variant at A, and the item location code at D (all locations), as other
+single-system projects do.</p>
+<h3 id="a.-graphics-register-and-icns-built-in-v5">11a. Graphics
+register and ICNs (built in V5)</h3>
+<p>Pictures used by the PI lessons and the Guide are named and tracked
+as S1000D-style ICNs. This part of section 11 is built and in V5; the DM
+code registry above is still a proposal.</p>
+<p><strong>Name.</strong>
+ICN-MCCF-&lt;tool&gt;-&lt;nnnn&gt;-&lt;issue&gt;.&lt;ext&gt;, for
+example ICN-MCCF-CMP-0008-001.png. The name is an opaque, stable
+identifier. It carries no owner or module. The tool code is AMB (Ambient
+Composer), CMP (Scene Composer), LDR (X3D Loader), PI (Programmed
+Instruction), DSH (Dashboard), GDE (Guide) or GEN (General). The number
+is a plain sequence per tool code. The issue number goes up only when
+the picture itself changes. A version with numbered callouts burned in
+is a different picture, so it has its own issue (-002).</p>
+<p><strong>Register.</strong> registers/graphics_register.csv is the
+semantic record, one row per ICN: icn, issue, caption, tool,
+scene_or_data, used_in_dm, used_in_title, used_where, date_shot,
+shot_by, status (current, retake or superseded). The server writes it
+when a picture is added and keeps the previous copy as
+graphics_register.csv.bak. registers/callout_legend.csv lists the
+numbered controls of each callout picture for reference; the app does
+not read it.</p>
+<p><strong>Server (mccf_pi.py).</strong> GET /pi/media lists
+static/pi/media with each file&#39;s caption and the lessons that use it.
+POST /pi/media with a tool code and a caption stores the file under the
+next free ICN and adds the register row; if the register cannot be saved
+the file is not kept. GET /pi/graphics/tools and GET
+/pi/graphics/next?tool= support the add-a-picture dialog. POST
+/pi/graphics adds or edits one row, for a file already in the folder.
+GET /pi/graphics.csv downloads the register with the used-by columns
+filled in.</p>
+<p><strong>Used-by is derived, not stored.</strong> Each lesson frame
+names its picture in a Media element (file=). The server reads every
+lesson and works out which DM codes and titles use each picture, so the
+answer is always current. Uses in the Guide are not in the lessons, so
+they are recorded by hand in the register&#39;s used_in columns, and the
+download keeps them.</p>
+<p><strong>Callouts.</strong> A picture can have a sidecar
+&lt;ICN&gt;.callouts.json in static/pi/media: a list of numbered
+controls, each with a name, a description and its box as fractions of
+the picture. In the learner view the PI page draws the boxes over the
+picture. Clicking a box highlights the control&#39;s name in the step text;
+clicking the name in the text lights the box. The link is by matching
+the control&#39;s label in the text, so a step that calls a control by
+another name does not link. Pictures without a sidecar show no
+callouts.</p>
+<p><strong>Checks.</strong> The add-a-picture dialog and the server both
+refuse a missing file, an unaccepted file type, a file over 16 MB, no
+tool code and a caption under 8 characters, and say which.</p>
+<p><strong>Not done.</strong> Older pictures keep their old names until
+after the V5 release. The callout names for most panes come from the
+control labels and have not been edited by hand; the Actor Edit pane
+has. The Guide&#39;s Composer callout pictures (forms open, tables numbered
+to match) are not yet replaced by the new set, because the numbering
+differs.</p>
+<h2 id="voice-engine-api-what-mccf-could-support-later">12. Voice engine
+API: what MCCF could support later</h2>
+<p>Composition does not run against the voice engine&#39;s servers: authors
+render lines there by hand and bring the audio back. Someone building a
+more improvised, real-time experience would call the engine live. This
+section records what ElevenLabs offers, read from its documentation on
+2026-10-25, so a later MCCF version can be designed for it. Nothing here
+is built.</p>
+<p><strong>Tags are not an enum.</strong> Eleven v3, v4 and v4 Turbo
+take natural-language tags in square brackets, placed where the delivery
+should change. The help page names [curious], [crying], [mischievously],
+[whispers], [shouts], [laughs], [clears throat] and [sighs] as examples.
+Anna&#39;s narration in The Garden of the Goddess uses 35 distinct tags, and
+almost all are free-form phrases such as [quietly, with profound
+conviction] and [with wonder]. A lexicon pack is therefore a vocabulary
+to draw from, never a validator.</p>
+<p><strong>Models</strong> (from the ElevenLabs overview page):</p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 24%" />
+<col style="width: 13%" />
+<col style="width: 29%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Model ID</th>
+<th style="text-align: left;">Role</th>
+<th>Audio tags</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">eleven_v4</td>
+<td style="text-align: left;">Most expressive</td>
+<td>Yes</td>
+<td style="text-align: left;">90+ languages, 10,000 characters</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">eleven_v4_turbo</td>
+<td style="text-align: left;">Real time, about 100 ms</td>
+<td>Yes</td>
+<td style="text-align: left;">90+ languages</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">eleven_v3</td>
+<td style="text-align: left;">Dramatic delivery</td>
+<td>Yes</td>
+<td style="text-align: left;">70+ languages, 5,000 characters,
+multi-speaker dialogue</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">eleven_flash_v2_5</td>
+<td style="text-align: left;">Lowest latency, about 75 ms</td>
+<td>Not listed</td>
+<td style="text-align: left;">32 languages</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">eleven_multilingual_v2</td>
+<td style="text-align: left;">Stable long-form</td>
+<td>Not listed</td>
+<td style="text-align: left;">29 languages</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Endpoints that matter to MCCF</strong></p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 38%" />
+<col style="width: 23%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Endpoint</th>
+<th style="text-align: left;">What it gives</th>
+<th style="text-align: left;">Later MCCF use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">POST /v1/text-to-speech/{voice_id} (and a
+stream form)</td>
+<td style="text-align: left;">One voice, inline tags, audio</td>
+<td style="text-align: left;">Render one Dialogue Line to an mp3</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Text to speech with timestamps</td>
+<td style="text-align: left;">Audio plus per-character timing</td>
+<td style="text-align: left;">Save timing beside each mp3</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">POST /v1/text-to-dialogue (convert,
+stream, and timestamp forms)</td>
+<td style="text-align: left;">Up to 10 voices and 2,000 characters per
+request. Returns audio, a voice_segments list (voice, start and end
+seconds, character range, input index) and character alignment</td>
+<td style="text-align: left;">Render a whole scene&#39;s lines in one call,
+with correct turn-taking</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Dialogue settings</td>
+<td style="text-align: left;">stability, similarity, clone_strength,
+seed, previous_text and future_text (100 characters each), previous and
+next request ids, pronunciation dictionaries (up to 3),
+audio_effects</td>
+<td style="text-align: left;">Continuity across lines, repeatable
+renders, per-scene pronunciation</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">wss .../stream-input</td>
+<td style="text-align: left;">Streaming audio chunks with alignment.
+Options: sync_alignment, auto_mode, inactivity_timeout (max 180 s),
+chunk_length_schedule, flush</td>
+<td style="text-align: left;">Real-time speech from a language model&#39;s
+token stream</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Forced alignment (speech to text
+family)</td>
+<td style="text-align: left;">Aligns known text to existing audio</td>
+<td style="text-align: left;">Timing for audio made in a DAW, with no
+re-render</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Sound effects, music, voice design, voice
+changer</td>
+<td style="text-align: left;">Generated sound and voices</td>
+<td style="text-align: left;">Optional sources for the audio
+library</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Timing.</strong> The WebSocket alignment uses chars,
+charStartTimesMs and charDurationsMs, relative to each chunk. The REST
+forms use characters, character_start_times_seconds and
+character_end_times_seconds. A tag&#39;s character offset can be turned into
+a time, which would let a tag act as a timed control point on the
+emotional curve. Not yet checked: whether tags appear in the returned
+character list or are stripped. Test before designing on it.</p>
+<p><strong>Open questions in the documentation.</strong> The WebSocket
+page does not say which models it supports and defaults to
+eleven_multilingual_v2. An older cheat sheet lists audio tags for v3
+only. Check both with a real call before a real-time design depends on
+them.</p>
+<p><strong>What MCCF could add, in order</strong></p>
+<ol type="1">
+<li><p>A voice-engine adapter beside the language-model adapters, with
+declared capabilities: tags, dialogue, streaming, alignment.</p></li>
+<li><p>A Render lines button that sends each line&#39;s ttsText to the
+engine through the MCCF server, saves the mp3 and its timing, and writes
+audioFile and audioSource into the line. The key stays on the server and
+never reaches the browser, which also removes the cross-origin exposure
+in IMPL-I07.</p></li>
+<li><p>Alignment-driven face and gesture cues, so lip sync and tag-timed
+expressions need no hand placement.</p></li>
+<li><p>Per-character voice settings: stability, similarity, style and
+speed driven by the cultivar&#39;s EBPS state, with a fixed seed so a render
+can be repeated.</p></li>
+<li><p>Real-time loop: language model, tag chosen from the live EBPS
+state by the decision tree (or a pack&#39;s own mapping), streamed speech,
+audio and alignment into the Loader. This needs a turbo or flash model
+and a measured latency budget.</p></li>
+<li><p>Pack fields for the engine: models supported, whether tags are
+free-form, placement, a group meaning (emotion, non-verbal, ambient),
+and an optional mapping from each tag to valence, arousal and engagement
+values, so a pack can drive suggestions instead of the fixed decision
+tree. An EmotionML mapping would sit in the same field.</p></li>
+</ol>
+<p><strong>Cautions.</strong> Character limits differ by model and
+endpoint. Logging can be switched off only on enterprise plans, so scene
+text goes to the provider by default. Use needs an account, a key and a
+plan. Voice cloning and use of a voice have their own terms.</p>
+<p><strong>Sources.</strong> <a href="https://elevenlabs.io/docs/overview/intro">ElevenLabs
+overview</a>, <a href="https://elevenlabs.io/docs/help-center/product/core-capabilities/text-to-speech/how-do-audio-tags-work-with-eleven-v3-and-v4">audio
+tags help page</a>, <a href="https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert-with-timestamps.md">Text
+to Dialogue with timestamps</a>, <a href="https://elevenlabs.io/docs/es/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input.md">WebSocket
+stream-input</a>, <a href="https://elevenlabs.io/docs/api-reference/streaming-with-timestamps">streaming
+with timestamps</a>, <a href="https://www.webfuse.com/elevenlabs-cheat-sheet">third-party cheat
+sheet</a>. A pasted Q and A was not used as a source: several of its
+details could not be confirmed.</p>
+<h2 id="zones-scenes-and-playback-modules">13. Zones, scenes and
+playback modules</h2>
+<p>These modules were read from the files supplied on 26 October 2026.
+Each is a Flask blueprint or a plain library that mccf_api.py registers
+or imports. Findings are in the register (section 16).</p>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 37%" />
+<col style="width: 24%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Module</th>
+<th style="text-align: left;">What it does</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mccf_zones.py</td>
+<td style="text-align: left;">The zone model. A SemanticZone has a
+centre, a radius and an E, B, P, S bias. Pressure falls off smoothly
+from the centre to the edge. A zone also keeps a memory of past episodes
+that decays over hours and amplifies later pressure. SceneGraph holds
+zones, waypoints and paths and predicts the affective arc along a path.
+Eight presets.</td>
+<td style="text-align: left;">Pure computation, no file or network
+access. Preset names (intimate_alcove, forum_plaza, garden_path) differ
+from the zone types (intimate, forum, garden). Regulation changes are
+keyed by zone type.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_zone_api.py</td>
+<td style="text-align: left;">The V2 REST layer over mccf_zones: /zone,
+/waypoint, /path, /scene/pressure, /sensor/spatial and an X3D zone
+export.</td>
+<td style="text-align: left;">The scene graph lives in memory and is
+empty after a restart. Findings IMPL-I18 and IMPL-I19.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_zone_attractor.py</td>
+<td style="text-align: left;">V3. A zone gets its own channel vector
+from its Descriptor text, by matching words against a small vocabulary.
+An agent that stays inside a zone builds coherence with it, and the zone
+then pulls the agent&#39;s channels toward its own. Routes under /zones,
+plus ZoneSet XML import and export.</td>
+<td style="text-align: left;">It stores Zone elements in its own
+namespace (/zones/v3) and drops the Chorus child. See IMPL-I22 and
+IMPL-I23.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_scene_wrapper.py</td>
+<td style="text-align: left;">V3. A SceneDefinition (zones and layout,
+reusable) and a SceneEpisode (one run, with its arc references). Routes
+under /scene/definition and /scene/episode.</td>
+<td style="text-align: left;">Uses the name EmotionalArc for a run
+reference, which is a third meaning of that word. Its GET /scene
+collides with the zone API (IMPL-I24).</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_scene_generate_api.py</td>
+<td style="text-align: left;">POST /scene/generate builds a whole X3D
+file from a SceneDefinition and cultivars, and writes
+static/mccf_scene.x3d. Also lists scenes and cultivars and receives
+/scene/x3d/upload.</td>
+<td style="text-align: left;">The older route to a scene file. The
+Composer&#39;s own export is the current route.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_x3d_generator.py</td>
+<td style="text-align: left;">Called by the route above. Writes a
+self-contained X3D 4.0 file with a placeholder avatar PROTO, zone rings,
+sound nodes and a Script that polls /field every 200 ms.</td>
+<td style="text-align: left;">Fixed output name, so each run overwrites
+the last scene. The creation date in the header is fixed text.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_versions_api.py</td>
+<td style="text-align: left;">Scene history and drafts. Saving a scene
+copies the old state into scenes/NAME/versions/NNNN first. Restore,
+promote and discard are all undoable. Writes are accepted from this
+machine only.</td>
+<td style="text-align: left;">Cleanest module in the set: atomic writes,
+a safe-name filter and a size-free history prune. The agent count was
+wrong after the rename; fixed in the patched copy (IMPL-I20).</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_playback.py</td>
+<td style="text-align: left;">Replays a recorded take (EmotionalArc
+file) through the field with no LLM. Walks scenes/NAME/arcs/TAKE.
+Several takes can play at once. Steps are timed or driven by the
+client.</td>
+<td style="text-align: left;">It overwrites each agent&#39;s channel weights
+as it plays (IMPL-I25).</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_chorus.py</td>
+<td style="text-align: left;">The Chorus. When an arc completes, it asks
+an LLM (stub, Ollama or OpenAI) for a short observation and shows it as
+an overlay. With a voice_actor it also builds a dialogue Line from that
+character&#39;s cultivar file.</td>
+<td style="text-align: left;">One Chorus per scene. The route
+/chorus/load looks in the wrong folder (IMPL-I26).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Zone XML in three forms.</strong> The Scene document (schema
+1.1) carries Zone elements in the v1 namespace. mccf_zone_attractor
+writes the same elements in /zones/v3 and omits the Chorus.
+mccf_scene_wrapper wraps them again in a third namespace (/scene/v3).
+All three loaders strip namespaces before parsing, so they read each
+other&#39;s files, but only the Scene document keeps the Chorus.</p>
+<h2 id="field-drift-and-sound-modules">14. Field, drift and sound
+modules</h2>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Module</th>
+<th style="text-align: left;">What it does</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">mccf_couplers.py</td>
+<td style="text-align: left;">Seven coupler functions (Resonance,
+Damping, Inversion, Gated, Threshold, Delay, Integration) that return a
+change for the expressive channels. apply_coupler is the only entry
+point.</td>
+<td style="text-align: left;">Pure computation. The field tick in
+mccf_api.py gathers all changes before applying any.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_drift.py</td>
+<td style="text-align: left;">Measures how far an agent&#39;s accumulated
+history pulls a response away from a fresh reading. Runs the same
+word-matching decomposition twice, with and without history, and reports
+the distance.</td>
+<td style="text-align: left;">Diagnostic only. It does not drive any
+control logic. Carries a second copy of the descriptor vocabulary.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_collapse.py</td>
+<td style="text-align: left;">The S, P, G, M, U pipeline: schema limits,
+candidate scoring, honor filter, identity check, then one weighted
+random pick. Returns the chosen line and an XML record for the next
+stage.</td>
+<td style="text-align: left;">Built without a honor or trust object, so
+the honor stage does nothing (see below). Channel values for candidates
+are estimated from word lists, not from an LLM. Own zone table.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_energy.py</td>
+<td style="text-align: left;">Scores candidate actions on valence,
+salience and coherence and ranks them with a temperature. Routes
+/energy/weights, /energy/evaluate, /energy/state.</td>
+<td style="text-align: left;">Adds random noise to every score, so two
+runs differ. The zone positions it uses for its salience bonus are fixed
+at z = 5 to 35.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_neoriemannian.py</td>
+<td style="text-align: left;">Maps field state to triads and moves
+between them with the P, L and R operations. Returns frequencies for Web
+Audio.</td>
+<td style="text-align: left;">Plain computation. A GET to
+/neoriemannian/state steps every agent, so polling changes the
+state.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_ambient_api.py</td>
+<td style="text-align: left;">The output bus: /ambient/sync returns
+lighting, music and voice settings from one field state. Also saves MIDI
+and Theme Workshop recipes into the media folder and holds the last arc
+mapping.</td>
+<td style="text-align: left;">The save routes check the file header,
+size, name pattern and that the request comes from this machine. They
+need nothing else. /ambient/sync and /lighting/* need mccf_lighting.py,
+which is not in the set.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">mccf_hotHouse.py</td>
+<td style="text-align: left;">A stand-alone cultivar simulator with a
+dynamic trust field. mccf_api bridges core agents into it on
+request.</td>
+<td style="text-align: left;">Does not touch scenes or XML. Third copy
+of the zone biases.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">mccf_honor_trust.py</td>
+<td style="text-align: left;">Honor penalties and trust propagation
+between agents.</td>
+<td style="text-align: left;">Deprecated for now, by decision of 26
+October 2026. It is complete but not connected: mccf_api.py never
+imports it, never registers its routes, and builds the collapse pipeline
+without it. Keep the file and leave it unwired.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Obsolete module.</strong> mccf_lighting.py is retired (14
+November 2026; the V3 spec had already dropped the Dashboard lighting
+panel). It is not needed and need not be found. mccf_ambient_api.py
+still imports it inside /ambient/sync, and the /lighting routes read
+what that call stores, so those routes fail with an import error until
+the lighting code is removed from the module. No V5 page calls them.
+Lighting is now set in the Composer (light sets, standard lights and
+per-actor lights) and written into the scene.</p>
+<h2 id="not-yet-covered">15. Not yet covered</h2>
+<ul>
+<li><p>Character Creator, Ambient, Dashboard and Launcher</p></li>
+<li><p>Chorus, waypoint arcs and the coupler tick (server and
+Loader)</p></li>
+<li><p>Zone commands and the Loader&#39;s waypoint playback</p></li>
+<li><p>Accessibility text for blind users (not designed)</p></li>
+</ul>
+<p><strong>Server modules not yet read.</strong> All the modules
+mccf_api.py imports have been read except mccf_lighting.py, which is
+obsolete (see the Obsolete module note). mccf_world_model.py, named in
+mccf_honor_trust.py, is also unread; nothing in mccf_api.py uses it. The
+reviews are in sections 13 and 14.</p>
+<h2 id="issue-register-impl-09">16. Issue register (IMPL-09)</h2>
+<table style="width:98%;">
+<colgroup>
+<col style="width: 9%" />
+<col style="width: 23%" />
+<col style="width: 30%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Id</th>
+<th style="text-align: left;">Where</th>
+<th style="text-align: left;">Issue</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I01</td>
+<td style="text-align: left;">mccf_voice_api.py</td>
+<td style="text-align: left;">Lexicon packs are never loaded.
+default_narrative.json exists and nothing reads it.</td>
+<td style="text-align: left;">Fixed in patched mccf_voice_api.py and the
+Dialogue Editor: packs load from lexicon_packs/, with a pack list in the
+editor. Default scoring unchanged (checked on eight lines). The core
+lexicon is still in code, not a pack file.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I02</td>
+<td style="text-align: left;">mccf_llm.py</td>
+<td style="text-align: left;">Hosted adapters are registered and
+accepted. Hidden only in the UI.</td>
+<td style="text-align: left;">Fixed in patched mccf_llm.py: not
+registered (enable_hosted() re-enables). Adapter list is now stub and
+ollama.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I03</td>
+<td style="text-align: left;">mccf_cultivar_lambda.py,
+mccf_hanim_api.py</td>
+<td style="text-align: left;">Cultivar files use the namespace
+cultivar/v3, not the schema&#39;s v1. to_xml_all writes a CultivarSet root
+the schema does not define.</td>
+<td style="text-align: left;">Fixed in patched mccf_cultivar_lambda.py
+and mccf_hanim_api.py: the writer uses v1 and the H-Anim upserts follow
+the file&#39;s own namespace, so old v3 files still work. CultivarSet is
+still not defined in the schema.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I04</td>
+<td style="text-align: left;">mccf_cultivar_lambda.py</td>
+<td style="text-align: left;">to_xml writes names, descriptions, phrases
+and notes without escaping &amp;, &lt; and quotes. The loader then skips
+the file silently, so the character disappears.</td>
+<td style="text-align: left;">Fixed: all text and attribute values are
+escaped, and a skipped file is logged. Test: a character with &amp; &lt;
+and quotes in its name and description produced a broken file before,
+and now round-trips and validates.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I05</td>
+<td style="text-align: left;">mccf_llm.py</td>
+<td style="text-align: left;">OllamaAdapter changes the first message of
+the shared conversation history in place, so the system prompt is
+prepended again on later turns. Reproduced: after two turns the second
+request held the system prompt twice.</td>
+<td style="text-align: left;">Fixed: messages are copied before editing.
+Test: history unchanged after two turns.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I06</td>
+<td style="text-align: left;">mccf_llm.py</td>
+<td style="text-align: left;">Ollama is called with stream false and a
+blocking urllib call, so the speaker hears nothing until the whole reply
+arrives.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I07</td>
+<td style="text-align: left;">mccf_voice_api.py</td>
+<td style="text-align: left;">/voice/speak allows any origin
+(Access-Control-Allow-Origin star). Acceptable only on localhost.</td>
+<td style="text-align: left;">Discuss with exposures.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I08</td>
+<td style="text-align: left;">mccf_api.py, loader</td>
+<td style="text-align: left;">The element name EmotionalArc is read by
+the server (findall near line 767) and by about 10 loader sites.</td>
+<td style="text-align: left;">Fixed: Composer, Loader and server read
+both names and the Composer writes AgentPlacement. The server change was
+tested in isolation only.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I09</td>
+<td style="text-align: left;">mccf_core.py</td>
+<td style="text-align: left;">entanglement_negativity looks for
+agent.records, which does not exist, so episode_count is always 0.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I10</td>
+<td style="text-align: left;">mccf_cultivar_lambda.py</td>
+<td style="text-align: left;">The registry is keyed by name. Two files
+with the same name collide with no warning. The file slug lowercases and
+replaces spaces, so two different names can share one file.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I11</td>
+<td style="text-align: left;">Scene XML</td>
+<td style="text-align: left;">The scene attribute dialogueTTYEnabled
+keeps the old TTY name.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I12</td>
+<td style="text-align: left;">Dialogue Editor, voice API</td>
+<td style="text-align: left;">The 22 tags and the tag decision tree are
+hardcoded.</td>
+<td style="text-align: left;">Partly fixed: the 22 tags now come from
+the elevenlabs_v3 engine pack. The decision tree is still in code.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I13</td>
+<td style="text-align: left;">mccf_hanim_api.py, schema</td>
+<td style="text-align: left;">H-Anim ingest adds JointMap and Animations
+elements to cultivar files, and appends HAnimFigure after Metadata. The
+schema has no JointMap or Animations, and the element order no longer
+matches the writer&#39;s order.</td>
+<td style="text-align: left;">Schema side fixed: JointMap and Animations
+are optional elements after Metadata. The ingest&#39;s element order is
+still not enforced.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I14</td>
+<td style="text-align: left;">mccf_cultivars.py</td>
+<td style="text-align: left;">Reviewed. The file compiles. It holds the
+seven built-in cultivars, the seven-waypoint test arc, a scenario path
+per cultivar and a setup helper that posts to /agent, /cultivar, /zone,
+/waypoint and /path. The zone preset forum_plaza differs from the preset
+name forum used elsewhere. The helper&#39;s endpoints were not checked
+against mccf_api.py.</td>
+<td style="text-align: left;">Partly checked. /agent and /cultivar exist
+in mccf_api.py. /zone, /waypoint and /path are confirmed in
+mccf_zone_api.py. forum_plaza does not appear there or in mccf_api.py.
+It would have to come from ZONE_PRESETS in mccf_zones.py, which has not
+been read, and an unknown preset name falls back silently to neutral
+(IMPL-I18).</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I15</td>
+<td style="text-align: left;">mccf_voice_api.py</td>
+<td style="text-align: left;">The preview&#39;s arousal estimate counts only
+E, B, P and S channel words. A line with strong positive words but none
+of those reads as low arousal, so a radiant, thrilled line scores
+valence 1.0 and is tagged whisper.</td>
+<td style="text-align: left;">Give word packs their own arousal
+words.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I16</td>
+<td style="text-align: left;">mccf_api.py</td>
+<td style="text-align: left;">The scene loader reads each placement&#39;s x
+and z but stores the agent position as [x, 0, z], so the placement&#39;s y
+is dropped on load.</td>
+<td style="text-align: left;">Check whether anything needs the
+height.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I17</td>
+<td style="text-align: left;">Route Graph tool</td>
+<td style="text-align: left;">Load Effect Asset asks for the tier and
+the file name through browser prompt boxes, and the author must type the
+name exactly.</td>
+<td style="text-align: left;">Replace with a list.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I18</td>
+<td style="text-align: left;">mccf_zone_api.py</td>
+<td style="text-align: left;">POST /zone with an unknown preset name
+silently uses the neutral preset and returns status created, so a
+misspelled preset (forum_plaza for forum, say) gives a zone with no bias
+and no warning.</td>
+<td style="text-align: left;">Return 400 with the list of valid
+presets.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I19</td>
+<td style="text-align: left;">mccf_zone_api.py</td>
+<td style="text-align: left;">The POST routes (/zone,
+/zone/&lt;name&gt;/episode, /waypoint, /path, /sensor/spatial) call
+request.get_json() and use the result without checking it. A missing or
+malformed body gives a 500 error instead of a 400. /sensor/spatial also
+registers the named agents before it checks that both names were
+given.</td>
+<td style="text-align: left;">Use get_json(silent=True) with a 400
+reply, and validate names before registering.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I20</td>
+<td style="text-align: left;">mccf_versions_api.py</td>
+<td style="text-align: left;">The history summary counted agents with
+the pattern for EmotionalArc, so every scene written since the
+AgentPlacement rename showed 0 agents. A comment also swallowed the
+&#39;zones&#39; key, so the zone count was never reported.</td>
+<td style="text-align: left;">Fixed in
+server/patched/mccf_versions_api.py (counts both names, zones restored).
+Install to apply.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I22</td>
+<td style="text-align: left;">mccf_zone_attractor.py</td>
+<td style="text-align: left;">A zone&#39;s default colour is looked up in
+ZONE_PRESETS by zone type, but the presets are keyed by preset name.
+Only library and neutral match. For intimate, forum, authority, garden,
+threat and sacred the lookup falls back to neutral grey.</td>
+<td style="text-align: left;">Fixed in
+server/patched/mccf_zone_attractor.py. The lookup now matches on the
+preset&#39;s zone type, and a Color in the XML still wins.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I23</td>
+<td style="text-align: left;">mccf_zone_attractor.py</td>
+<td style="text-align: left;">Exporting zones with GET /zones/xml writes
+them in the /zones/v3 namespace and leaves out the Chorus child.
+Importing that file into a scene loses the Chorus configuration.</td>
+<td style="text-align: left;">Fixed (26 Oct 2026). Chorus, SoundDesign
+and Asset children now pass through import and export; round-trip
+tested, Persona kept.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I24</td>
+<td style="text-align: left;">mccf_zone_api.py,
+mccf_scene_wrapper.py</td>
+<td style="text-align: left;">Both blueprints define GET /scene. Flask
+answers from whichever was registered first and the other is
+unreachable. mccf_api.py registers the zone API first, so the scene
+registry summary is the hidden one.</td>
+<td style="text-align: left;">Fixed in
+server/patched/mccf_scene_wrapper.py. The registry summary is now GET
+/scene/registry. GET /scene stays with the zone API.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I25</td>
+<td style="text-align: left;">mccf_playback.py</td>
+<td style="text-align: left;">Each playback step overwrites the agent&#39;s
+channel weights with the recorded values. After a take plays, the
+character&#39;s cultivar weights stay changed until the agent is
+re-registered.</td>
+<td style="text-align: left;">Partly fixed in
+server/patched/mccf_playback.py. Reset now restores each agent&#39;s
+cultivar weights. During and after a take the recorded values still show
+in /field, because the avatars read them from there.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I26</td>
+<td style="text-align: left;">mccf_chorus.py</td>
+<td style="text-align: left;">POST /chorus/load looks for
+scenes/NAME_scene.xml. Scenes are saved in scenes/NAME/NAME_scene.xml,
+so it reports that the scene was not found. The Chorus does still load
+when the Loader fetches the X3D file, because that path uses the nested
+folder. The cultivars folder is also resolved from the working
+directory, not the module&#39;s folder.</td>
+<td style="text-align: left;">Fixed in server/patched/mccf_chorus.py.
+/chorus/load tries the nested folder first and the flat one second, and
+the cultivars folder is found beside the module.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I27</td>
+<td style="text-align: left;">mccf_honor_trust.py, mccf_collapse.py</td>
+<td style="text-align: left;">The honor and trust module is not imported
+by mccf_api.py, its routes are not registered, and the collapse pipeline
+is built with no honor object. The honor stage of collapse therefore
+does nothing.</td>
+<td style="text-align: left;">Deprecated by decision, 26 October 2026.
+Leave unwired.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I28</td>
+<td style="text-align: left;">mccf_lighting.py</td>
+<td style="text-align: left;">Retired, not in the file set.
+/ambient/sync and /lighting/* fail with an import error, but no V5 page
+calls them. The Dashboard lighting panel was already removed (V3 spec).
+The Guide does not document lighting.</td>
+<td style="text-align: left;">Closed. Obsolete. Remove the lighting
+import and routes from mccf_ambient_api.py when convenient.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-I29</td>
+<td style="text-align: left;">mccf_zones.py, mccf_collapse.py,
+mccf_hotHouse.py, mccf_drift.py</td>
+<td style="text-align: left;">The zone tables are not all copies.
+mccf_zones (pressure deltas by preset name) and mccf_collapse (floors
+and ceilings by zone type) hold different data. mccf_hotHouse held a
+true duplicate of the collapse numbers, now removed. The descriptor
+vocabularies in mccf_drift.py and mccf_zone_attractor.py are separate by
+design.</td>
+<td style="text-align: left;">Fixed (26 Oct 2026). hotHouse now reads
+mccf_collapse.ZONE_PRESETS. Behavior change: forum and sacred zones now
+apply pressure. Other tables kept separate on purpose.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-I30</td>
+<td style="text-align: left;">mccf_neoriemannian.py, mccf_energy.py</td>
+<td style="text-align: left;">GET /neoriemannian/state advances every
+agent&#39;s harmony each time it is polled, so the music depends on how
+often the page polls. /energy/evaluate adds random noise, so the same
+request gives different scores.</td>
+<td style="text-align: left;">Fixed in
+server/patched/mccf_neoriemannian.py and mccf_energy.py. Harmony now
+steps at most once every 2 seconds however fast the page polls (add
+?step=1 to force a step). /energy/evaluate takes an optional seed; the
+same seed gives the same scores, and with no seed it is random as
+before.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R01</td>
+<td style="text-align: left;">Composer, mccf_zones.py, mccf_collapse.py,
+schema ZoneType</td>
+<td style="text-align: left;">Request (26 Oct 2026). Zone Desig types
+are a fixed list in three modules and the Composer. They should be
+extensible like a lexicon, for the same reasons: a pack file adds a type
+and its pressures, floors, ceilings and scale, with no code change. Name
+the concept ZoneType or ZoneClass (a type is a class); the Composer&#39;s
+label is just &quot;Type&quot;.</td>
+<td style="text-align: left;">n first; builds on the I29 table
+work.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R02</td>
+<td style="text-align: left;">Zones, Ambient Composer, assets</td>
+<td style="text-align: left;">Request (26 Oct 2026). Style Conce is not
+a concept in MCCF yet. Ambient scale is assignable and not enforced;
+venues have styles. Style should be one tree of asset types that zones,
+scales, sounds and looks can draw from.</td>
+<td style="text-align: left;">pt to define; Guide text already says the
+scale is not enforced.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R03</td>
+<td style="text-align: left;">Chorus tone, Dialogue Editor, Lexicon
+Packs, EBPS curve</td>
+<td style="text-align: left;">Request (26 Oct 2026). Tone Desig is an
+instruction that belongs with the Dialogue Editor. Put the tag libraries
+on the emotional arc line, coupled, and send those values both to the
+real-time assets and to the dialogue tag. This is a higher-level
+semantic layer for emotes and gestures. An EBPS modulator is a tone
+control: it adjusts emotional expression frequencies.</td>
+<td style="text-align: left;">n; ties to the Lexicon Pack plan and
+chapters 10 to 12.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R04</td>
+<td style="text-align: left;">Composer, asset and zone-asset
+rotation</td>
+<td style="text-align: left;">Request (26 Oct 2026). Built Rotation is Y
+axis only, in degrees. It should be XYZ. Add a large trackball (an
+eyeball is fine) above the text coordinate fields, easy to control with
+a mouse. Applies to every place a rotation is edited; XYZ stays one
+standard.</td>
+<td style="text-align: left;">2026-10-28, tested headlessly (conversion
+round trips), not yet run in a live install: placed assets and zone
+assets take X, Y and Z rotation (degrees; Y first, then X, then Z) with
+an eyeball trackball (drag turns Y and pitches X, Shift-drag rolls Z,
+double-click resets); lights gain Roll (rotation composed and read back
+from the stored rotation); cameras already had yaw, pitch and roll.
+Scene XML and the schema carry rotationX and rotationZ beside rotationY
+(old files read as 0). Agents: start rotation added (2026-10-28 night):
+X, Y, Z boxes, trackball and Apply Rotation in the agent detail panel;
+saved as StartRotation beside StartPosition (schema updated, optional);
+written to the Avatar_ Transform on export; the Loader applies it at
+load and on Reset Pos. Untested in a live install. Not done: Point
+lights hide the aim fields as before; tumbling during a path run would
+need rotation keys on the path (not built).</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R05</td>
+<td style="text-align: left;">Composer Dialogue tab, Generate LLM
+prompt; EBPS displays</td>
+<td style="text-align: left;">Request (26 Oct 2026). The Uses generated
+lines are written with no EBPS values. That is exactly the data EBPS
+should rank automatically. Rank each generated line on E, B, P and S,
+record the values, and map those curves for the EBPS displays.</td>
+<td style="text-align: left;">the existing sentiment analysis; the Guide
+row says nothing is recorded until this is built.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R06</td>
+<td style="text-align: left;">Scene Composer</td>
+<td style="text-align: left;">Zone Ambient: use the neo-Riemannian
+editor from the Ambient Composer as the zone ambient chooser.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R07</td>
+<td style="text-align: left;">Scene Composer / Chorus</td>
+<td style="text-align: left;">Guide described the Chorus wrongly: it
+fires once at arc end with the full heard transcript, not on zone exit.
+Trigger design to revisit (per-zone exit speaker vs arc-end Chorus).
+Ollama has no num_ctx set, so long transcripts can truncate; add a
+num_ctx option.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R08</td>
+<td style="text-align: left;">Scene Composer</td>
+<td style="text-align: left;">Rename Paths to WP Paths (waypoint paths).
+Move WP Arc and the path export into the right pane beside them.</td>
+<td style="text-align: left;">Built 2026-10-28: tab and heading read WP
+Paths; WP Arc controls now in the right frame (see R26). Path export not
+moved.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R09</td>
+<td style="text-align: left;">Scene Composer</td>
+<td style="text-align: left;">Terrain controls last on the form (global
+menu change). Each tab opens on the top function of its group.</td>
+<td style="text-align: left;">Mostly present: terrain overlay already
+sits below the sub-panels. Tab-opens-on-top-function not checked.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R10</td>
+<td style="text-align: left;">Scene Composer</td>
+<td style="text-align: left;">Paste buttons read Paste XYZ; XYZ row
+drops (height); Audio Source, Asset Position and Rotation labeled XYZ; Y
+label is just Y.</td>
+<td style="text-align: left;">Partly built 2026-10-28: Paste buttons
+read Paste XYZ; Asset Position already had X, Y and Z; asset and
+zone-asset rotation now X, Y, Z (see R04). Remaining wording of the row
+is ambiguous; other panels are being checked.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R11</td>
+<td style="text-align: left;">Scene Composer</td>
+<td style="text-align: left;">Zone command list did not match the
+server&#39;s ten-word vocabulary.</td>
+<td style="text-align: left;">Fixed in code</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R12</td>
+<td style="text-align: left;">All chapters</td>
+<td style="text-align: left;">Color/colour spelling made consistent
+(color).</td>
+<td style="text-align: left;">Fixed in Guide</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R13</td>
+<td style="text-align: left;">Character Creator / cultivars</td>
+<td style="text-align: left;">Cultivar collection must be extensible
+(personality templates, breeding stock). Default set has no villains.
+Check and document how a new cultivar is authored, saved and picked up
+(file location, reload), and consider a Create Cultivar from Character
+action.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R14</td>
+<td style="text-align: left;">mccf_cultivar_lambda.py</td>
+<td style="text-align: left;">Cultivar folder is scanned only at start
+(no reload route) and unreadable files are skipped silently (except:
+pass). Hand-added cultivars must be loadable in the Character Creator.
+Proposed: POST /cultivars/reload, and a skipped-files list returned by
+GET /cultivars/xml.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R15</td>
+<td style="text-align: left;">Scene Composer / cameras</td>
+<td style="text-align: left;">Default origin view: four standard cameras
+around the origin and a traffic cone as visual root (by design). Not in
+code: Add standard cameras today gives Basic (3) or Coverage (6) shots
+framed on a character. Decide set, camera names, cone as an asset, and
+whether new scenes get them automatically.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R16</td>
+<td style="text-align: left;">Route Graph</td>
+<td style="text-align: left;">Refused connections (type mismatch,
+self-route, cycle) only console.warn. Acceptable: the port colors are
+the signal; no change. Also: 7 field types, no conversion; only
+TimeSensor and 4 interpolators creatable; node-level cycle check
+stricter than X3D needs. Pick lists fill from the open scene except
+TouchSensor, which keeps sample names (see R17).</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R17</td>
+<td style="text-align: left;">Route Graph</td>
+<td style="text-align: left;">(a) Modal that displays a Script node&#39;s
+contents. (b) FIXED in code, untested in a browser: sample instance
+names removed from every list; the TouchSensor list is now read from
+placed avatar and asset files (Composer sends sensorSources). (c) Saved
+Effect Assets (/effects/save, user tier) carry only a name, generator
+and created meta tags; no DM code. BUILT 2026-10-27 (c), server tested
+in isolation, client untested in a browser: assemblies get a DM code at
+save, in a SEPARATE range from the Guide&#39;s A series, written in a meta
+tag; registry is the authority. SCHEME (&#39;best guess&#39;, adopted): code =
+ISSUER-E-CC-NN-00-00A-040A-D, e.g. MCCF-E-20-01-00-00A-040A-D. ISSUER =
+model identification code: MCCF for the project&#39;s own, otherwise the
+author&#39;s own 3 to 5 letter code. E = effect assembly (the Guide uses A).
+CC = category chosen at save: 10 timing and triggers, 20 camera, 30
+light, 40 audio, 50 movement and paths, 90 other (default). NN = serial
+01 to 99 per issuer and category, issued by the author&#39;s server in order
+(no gaps reused). 00-00A-040A-D as in the Guide. Registry:
+effects/effects_registry.json beside the effects library, code -&gt;
+file, title, issuer, created, status (active or retired). Retire, never
+reuse or renumber. /effects/save issues the next free code, writes it
+into the file as meta name dmCode plus meta name issuer, and returns it;
+Load Effect Asset lists the code. Cross-author collisions are avoided by
+the ISSUER segment, so no central issuer is needed. Loop check stays
+strict until someone complains.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R18</td>
+<td style="text-align: left;">Getting Started / Loader</td>
+<td style="text-align: left;">R15 closed by design (by design): n four
+cameras or cone by code; the Guide has the author place a cone or a
+default-shape character at center as the first exercise. Idea under
+thought: Getting Started as Building a Story, narrated by The Witness
+(built-in cultivar) through waypoint dialogue; DM codes mapped to
+waypoints could drive a programmed lesson. Needs: a dmCode field on a
+waypoint (none exists), and a lesson panel in the X3D Loader showing the
+linked module on waypoint arrival. Not built; still under
+consideration.</td>
+<td style="text-align: left;">o</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R19</td>
+<td style="text-align: left;">Waypoint lexicon / lexicon packs</td>
+<td style="text-align: left;">Waypoint lexicon (agreed): one extensible
+file, entry per waypoint (id, name, color, triad, authored E/B/P/S
+target curves, borrowing suggestions from the Dialogue Editor), plus a
+zone-type curve and a per-agent zone-type override (cultivar
+zone_affinity is the existing hook). Dashboard Arc Waypoints legend
+reads from it. Today W1 to W7 meaning is split across dashboard (names,
+colors), neo-Riemannian ARC_TRIADS, voice_api (W5 tuning), hotHouse and
+zone tables. Lexicon packs today are NOT EmotionML: JSON {pack_id, kind
+words|engine_tags}. EmotionML adapter is on the WORKLIST at low priority
+(buys credibility as a good standards cohort and interoperability,
+little else); it is an adapter, not a change to packs: EBPS as a custom
+dimension-set, W1-W7 as a custom category-set. Not built.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R20</td>
+<td style="text-align: left;">Character Creator</td>
+<td style="text-align: left;">Voices are the browser&#39;s library voices.
+Roadmap: expose ElevenLabs voices in the Voice list in a future version.
+The Guide already says so.</td>
+<td style="text-align: left;">Roadmap</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R21</td>
+<td style="text-align: left;">Composer, Character Creator</td>
+<td style="text-align: left;">Reminder: avatar camera positions must be
+set per avatar for best results. Add to the Guide where cameras are
+covered; check whether a per-avatar camera offset can be stored.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R22</td>
+<td style="text-align: left;">Couplers, X3D Loader</td>
+<td style="text-align: left;">Honor derived per character from the
+phi/epsilon split (keeps its word while drift stays within half of
+max_drift); reputation = mean incoming trust. Read-only in
+/couplers/tick and the trust / honor panel. Open: should it feed back
+into coupler strength or regulation (affects feed effects, effects feed
+affects, or a gated loop). Weak points: regulation 1.0 is always
+honorable; rupture waypoints; per-cultivar tolerance. Not run on a live
+install.</td>
+<td style="text-align: left;">Built, read-only</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R23</td>
+<td style="text-align: left;">Dialogue Editor, voice API</td>
+<td style="text-align: left;">A Lexicon Pack file changes Built nothing;
+loading packs not implemented. Built: POST /voice/lexicon/upload
+(validates, saves to lexicon_packs/&lt;pack_id&gt;.json, reloads at
+once, 409 on an existing id unless replace) and a Load pack file button
+in the Dialogue Editor. Server tested with the Flask test client in
+isolation; editor JS syntax-checked, not run in a browser. Needs the
+updated mccf_voice_api.py and Dialogue Editor installed. Guide Part 3
+and Appendix D updated.</td>
+<td style="text-align: left;">, untested in browser</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R24</td>
+<td style="text-align: left;">Scene validator</td>
+<td style="text-align: left;">The schema checked form only. Added
+Schematron rules and a Python validator: references resolve, values fit
+the scene grid, JSON attributes parse. Scene save returns a report.</td>
+<td style="text-align: left;">Built and tested (15 cases). Composer does
+not display the report yet.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R25</td>
+<td style="text-align: left;">XSLT document export</td>
+<td style="text-align: left;">A second dashboard button to repurpose
+scene XML as other document types with XSLT: a movie script, and a stage
+script with lighting and sound directions plus stage-set images derived
+from assets. One stylesheet per document type.</td>
+<td style="text-align: left;">Planned. Not started. Noted in the
+Dashboard chapter.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R26</td>
+<td style="text-align: left;">WP Arc moves into Assets &gt; Paths</td>
+<td style="text-align: left;">Record-path pane moves to the Assets &gt;
+Paths frame. The WP Arc controls (path select, adapter, Record Arc,
+Stop, Reset) go to the right frame, in place of the Affective Arc
+display. The WP Arc master tab is removed.</td>
+<td style="text-align: left;">Built 2026-10-28 and confirmed in a
+browser. Arc chart appears below the controls only after a run.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R27</td>
+<td style="text-align: left;">Programmed Instruction (PI) toolkit</td>
+<td style="text-align: left;">2026-10-28: a PI publication schem type
+for teaching any X3D MCCF project. One scene file per module; learner&#39;s
+saved scene XML compared with expected state in the lesson file; QRS
+frames chain to remedial tests; performance log selects the remediation
+path; Dashboard report PI Performance Report and Analysis; import of
+written lessons. Draft schema mccf_pi.xsd (lesson and performance log)
+with samples, validated. Mockup published (learner view, author view
+with QRS editor, X_ITE pane, state check, performance record, import,
+Dashboard report view, DM code and title bar on every screen). Decisions
+(2026-10-28): host (exis the lesson player in the X3D Loader, with the
+Loader sending attempts to a server endpoint (/pi/log) so the Loader
+still writes nothing to disk; the lesson editor is its own page with the
+module&#39;s scene loaded beside the QRS panel, optional when no scene
+exists yet; a Capture button on each step fills Expect rows from the
+loaded scene; module scenes are data modules with their own DM code
+(lesson MCCF-P-10-01-00-00A-520A-D, scene MCCF-P-10-01-00-00A-040A-D);
+Scene element carries dmCode and issue so a lesson records the scene
+issue it was written against; lists show the title with the code
+beneath. Report log location proposed:
+scenes/&lt;scene&gt;/pi/logs/.</td>
+<td style="text-align: left;">a mccf_pi.xsd validates with samples
+(xmlschemas/). Built 2026-10-29, tested against a sandbox server with a
+stub Loader (not on a live install): live page mccf_pi.html (learner
+view with Start, frames, questions with feedback, Check my scene against
+the learner&#39;s saved scene XML, remedial routes raised by the lesson&#39;s
+policy, performance record; author view with the lesson XML, Apply,
+Download and import of written lessons; Dashboard report view reading
+GET /pi/report); server mccf_pi.py with /pi/lessons, /pi/lesson,
+/pi/log, /pi/report, logs in pi_logs/ (changed from the proposed scene
+folder; one JSONL file per lesson); schema gained a Guide element and
+Expect value * ts); Getting Started Module 1 as the first lesson (draft
+from the mockup text, the final text replaces it); reference images for
+f3 and f6. Hosted in the Composer Help Composer tab as its own page, not
+in the Loader. Still to do: a live install test; the Capture button that
+fills Expect rows from a loaded scene; an author control to attach
+images and Guide links without editing XML; Save to server from the
+author view; the Dashboard menu entry for the report; the Getting
+Started text; Guide PDFs for the links.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R28</td>
+<td style="text-align: left;">Composer zone and link panels</td>
+<td style="text-align: left;">2026-10-29: show the zone Part type in the
+zone edit panel and wherever link values are set, because type matters
+when tuning link effects against EBPS. Types must be extensible (see
+R01). A type description names the zone and states its intended effect
+on the EBPS curve. Tag to curve or curve to tag: a type carries its
+curve, and a drawn curve can suggest the nearest type.</td>
+<td style="text-align: left;">built 2026-10-29, tested headlessly: the
+zone form, zone detail panel and the Affects link panel show a
+description of the type, generated from the preset table (channels it
+leans toward, noise, scale). Not built: extensible type packs with a
+stored curve and description text; tag-to-curve matching. Do with
+R01.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R29</td>
+<td style="text-align: left;">Ambient Composer</td>
+<td style="text-align: left;">2026-10-29: add an X_ITE Part middle-pane
+tab to the Ambient Composer. Scenes and their MIDI and sound components
+are associated through DM codes, the same system PI uses. The author
+plays the scene while composing; the scene is not synced. Loading a
+scene collects the MIDI assigned to zones and cues and offers them in
+the load-MIDI dialog as a subdivision of the sound MIDI assets. Also
+tracks which sound assets belong to which scenes.</td>
+<td style="text-align: left;">built 2026-10-29 (see R30): the Ambient
+Editor lists the wav, mp3 and MIDI files a chosen scene uses. Not built:
+the X_ITE tab, the asset-to-scene registry keyed by DM code, and MIDI
+grouped by scene in the load-MIDI dialog. The Ambient page&#39;s own script
+files were not available here, so the page was tested only as the new
+panel on its own.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R30</td>
+<td style="text-align: left;">Reaper bridge</td>
+<td style="text-align: left;">2026-10-29: manage audio, Built wav, mp3
+and MIDI assets with the Ambient system and open them in Reaper from
+MCCF, including the Reaper project of a scene, from any pane where these
+are selected as assets. Reaper is a consumer of MCCF assets and a
+partner of the Ambient Composer (MIDI).</td>
+<td style="text-align: left;">2026-10-29, server tested with a stand-in
+program (not with Reaper): new mccf_reaper.py (GET /scene/names, GET
+/scene/audio_assets, GET and POST /reaper/config, POST /reaper/open),
+registered from mccf_api.py. Opens only wav, mp3, ogg, flac, MIDI and
+rpp files inside the server&#39;s web folders; no shell. Ambient Editor
+panel Scene audio assets lists a scene&#39;s audio with Open in Reaper.
+Ambient Editor does not edit them; testing in a scene is the Events
+Timeline Editor. Needs: mccf_reaper.py and mccf_api.py installed, then a
+real launch on the author&#39;s machine.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R31</td>
+<td style="text-align: left;">PI viewer pane</td>
+<td style="text-align: left;">2026-10-29: the pane that Schem hosts the
+X3D scene in MCCF/PI should also host other image media types, or those
+stay inline in the DM docs. Loading an image directly into the viewer is
+likely a good idea.</td>
+<td style="text-align: left;">a built 2026-10-29: optional Media element
+(kind x3d, image or video; file; role scene, target or reference;
+optional DM code and caption) on Steps and Questions in mccf_pi.xsd;
+sample lesson updated and validates. Mockup done 2026-10-29 and
+approved: learner view has two panes across the top, the X_ITE window
+(module scene) and a Reference image pane for the frame (Media kind
+image, role reference, with the file name and numbered marks on the
+image), and the instruction, state check and performance record below.
+Frames with no image say so; the pane hides in the Dashboard report
+view. Blog image: mccf_pi_blog_panes.png. Not built: the viewer pane in
+the real Loader player, and an author control to attach the image file
+to a frame. Also done 2026-10-29: Composer tab Help Composer (last tab)
+hosts the lesson page mccf_pi.html (the mockup, still not a working
+player), and each frame carries a Guide link line (title, DM code, PDF
+path guide/&lt;DM&gt;.pdf) with best-guess DM codes; the PDFs do not
+exist until the Guide is built.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R32</td>
+<td style="text-align: left;">mccf_hanim_api.py, hanim_export</td>
+<td style="text-align: left;">Not atomic as documented. The expressions
+file is written first and on its own, so a later failure of the X3D or
+cultivar write leaves it changed. The skin PNG is written with a plain
+write before the integrity gate and with no backup, so a refused export
+(409) still changes it. The cultivar validity gate comment says clip
+names are not escaped; they now are.</td>
+<td style="text-align: left;">Patched 2026-10-30 (skin, expressions, X3D
+and cultivar now written together after the gates pass; failed rename
+restores). Tested on a stub only. Verify on a real avatar.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R33</td>
+<td style="text-align: left;">mccf_hanim_api.py, namespaces</td>
+<td style="text-align: left;">The displacer update strips the
+x3d-namespaces prefix but the file is serialised under x3d-4.0.xsd, so
+on a namespaced file it can update 0 nodes without saying so. The skin
+EXPORT is created without a namespace while the camera EXPORTs have
+one.</td>
+<td style="text-align: left;">Test on a namespaced avatar, then match
+both.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R34</td>
+<td style="text-align: left;">Exports of subassemblies and
+components</td>
+<td style="text-align: left;">Name and track exported subassemblies and
+components by data module code (DMC) instead of {slug}_hanim.x3d, so the
+Guide, PI lessons and the asset registry point at the same file.</td>
+<td style="text-align: left;">Planned. Design first.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R35</td>
+<td style="text-align: left;">Main tabs, X3DEdit button</td>
+<td style="text-align: left;">A configurable X3D editor button on the
+main tabs, defaulting to Sunrize, with its path set like the Reaper
+path. If the program is not found, a message says so and where to get
+it. Opens only files inside the web folders. Built 2026-10-30 on the
+Composer, Loader and Character Creator; first tested on stubs. Launch on
+Windows was fixed 2026-10-31 (see IMPL-R43) and works with Sunrize 2.4.1
+on the author&#39;s machine. Launcher, Dashboard and Ambient do not have
+it.</td>
+<td style="text-align: left;">Done. Works on the author&#39;s machine.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R36</td>
+<td style="text-align: left;">Route Editor</td>
+<td style="text-align: left;">Graph inline imports and exports of
+timers: one lane per timer showing start, length and loop, imports and
+exports in different colours, ROUTEs drawn as links so a dangling one is
+visible.</td>
+<td style="text-align: left;">Planned.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R37</td>
+<td style="text-align: left;">Lexicon packs, curve editor</td>
+<td style="text-align: left;">A future curve editor for the default EBPS
+values of a pack: a curve per tagged utterance and a curve per dialogue,
+so the author sees how the curve forms. Note for the ElevenLabs upload:
+it allows multi-actor conversations; confirm what its API accepts before
+relying on it.</td>
+<td style="text-align: left;">Future version.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R38</td>
+<td style="text-align: left;">Scene files, Guide</td>
+<td style="text-align: left;">Authors ask whether a scene is stored
+twice. It is two files (scene XML is the source, compiled X3D is the
+output), plus versions (automatic copies before each save) and takes
+(recorded runs). The Guide should say which is which, with one
+diagram.</td>
+<td style="text-align: left;">Guide text.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R39</td>
+<td style="text-align: left;">Ambient Workshop, serial /
+twelve-tone</td>
+<td style="text-align: left;">New js/mccf_serial.js (mccf_theory.js
+unchanged). Tone rows (presets, seeded random with all-interval and
+no-triad rules, from theme, typed), forms P/I/R/RI with relative
+transposition labels, 12x12 matrix, a line generator (rhythm: even,
+pattern, random, theme; register: closest, wide, fixed; velocity and
+accent; rests; seed; mood presets), a serial rule check (each 12-note
+statement a P/I/R/RI form of the row; repeated note allowed inside a
+statement only; triad and octave flags), and a chromatic key scale with
+no tonic. The generated line is a hand-edited voice with its row and
+settings in frozenFrom. Built 2026-11-01; tested in a headless browser
+on a stand-in page, not on the author&#39;s install. Not done: rules between
+voices (vertical), a &#39;serial&#39; entry in the rule-set list (needs a theory
+change), tuning of generated harmony under the chromatic scale. A recipe
+with scale chromatic needs the new script to load.</td>
+<td style="text-align: left;">Built. Author to test.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R40</td>
+<td style="text-align: left;">File open and save lists the server folder
+(system rule)</td>
+<td style="text-align: left;">Rule set 2026-11-01: the system does not
+make the author memorize the file trees. Every upload, download, open
+and save control lists the server folder for its content type. Ambient
+done (MIDI, recipes, mappings, score snapshots, arcs; new routes
+/ambient/files, /ambient/file, /ambient/save_file; saves ask before
+replacing; localhost only). Help Composer done for lessons and media.
+Built 2026-11-07 (shared MccfPick chooser, inlined in each page;
+localhost only): Scene Composer zone image; Character Creator H-Anim
+figure, portrait and skin atlas (new route GET /avatar/skins in
+mccf_hanim_api.py); Dialogue Editor lexicon pack (upload mode: lists
+lexicon_packs/, asks before replacing) and scene XML (lists saved
+scenes, loads the chosen one). Each keeps a From my computer button.
+Tested in a browser against a stand-in server; not on a live install.
+The Ambient API file was built from the repository copy; if the author&#39;s
+live copy differs, the three routes must be merged.</td>
+<td style="text-align: left;">Built, stub-tested. Awaits install and the
+author&#39;s check on a live server.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R41</td>
+<td style="text-align: left;">Help Composer, structured Author view</td>
+<td style="text-align: left;">The Author view was an XML text box. It is
+now a form editor (lesson, scene and policy sections; frames with add,
+duplicate, move, delete; step and question forms; answers with
+right-answer choice and feedback; media chosen from the server media
+folder with upload; Guide links with title fill; Expect rows; remedial
+frame choices; Check lesson; Apply; Save to server; Download). New
+server routes /pi/media (list, upload) and /pi/lesson (validated save by
+DM code, keeps ten backups in lessons/_backup). Load lesson lists
+static/pi/lessons. The XML is under a fold-out. Viewer panes resize.
+Tested on stubs in a headless browser; the structure round-trips the
+sample lesson with identical elements and attributes.</td>
+<td style="text-align: left;">Built 2026-10-31 and 2026-11-01. Author to
+confirm on the install.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R42</td>
+<td style="text-align: left;">Install diagnostics</td>
+<td style="text-align: left;">A replaced page can look unchanged because
+the file went to the wrong folder or the browser keeps its old copy.
+Added: no-cache headers on static pages, scripts, styles and schemas; a
+verify_install script in each download set (OK, STALE or MISSING by
+md5); a build stamp on the PI page; unique file names in download sets.
+Candidates: a build stamp on every page, and a /version route that
+reports the installed files.</td>
+<td style="text-align: left;">Done. Stamp on other pages open.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IMPL-R43</td>
+<td style="text-align: left;">X3D Edit launcher on Windows</td>
+<td style="text-align: left;">Launch printed OK but nothing opened.
+Sunrize installs a launcher stub plus app-VERSION folders, and the
+server&#39;s ELECTRON_RUN_AS_NODE setting can stop Electron programs from
+starting. mccf_x3dedit.py now prefers the newest app-* copy, removes
+that setting for the child process, waits two seconds, reports an early
+exit with the end of the log, and writes x3dedit_last.log. Error
+messages separate a missing route (HTTP status shown) from an
+unreachable server. Confirmed working with Sunrize 2.4.1 on the author&#39;s
+machine 2026-10-31. Guide: Appendix D and the Loader, Composer and
+Character Creator chapters.</td>
+<td style="text-align: left;">Done.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IMPL-R44</td>
+<td style="text-align: left;">Open observations, 2026-11-01</td>
+<td style="text-align: left;">(a) Fixed 2026-11-02, awaiting install:
+the PI log stored an unfinished session&#39;s end time as the text &quot;None&quot;
+(str() of a missing value), and the report counted any non-empty end as
+finished, so unfinished sessions showed as 100% finished with mean time
+n/a. mccf_pi.py now stores no end time for an unfinished session and
+reads old &quot;None&quot; lines as unfinished. Tested on the author&#39;s three real
+log lines: 0% finished before any finished session, then correct
+percentage and mean time. (b) Fixed 2026-11-02: Anna.x3d declared the
+ExternProtoDeclares AgentTrackCamera and AgentOrbitCamera twice, left by
+a write on or before 6 October. The export&#39;s check by name did not add
+more, and the export now removes later duplicates of these two
+(mccf_hanim_api.py, _ensure_camera_proto_declares). Confirmed on the
+real avatar: two declarations after export. (c) Done 2026-11-02: H-Anim
+export tested on Anna.x3d (24 MB): exported 15 clips, TimeSensor count
+unchanged at 152 before and after (repeatable), loads in Sunrize with
+the figure intact.</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-01</td>
+<td style="text-align: left;">V6 trace, transition record</td>
+<td style="text-align: left;">The proposal&#39;s before/after for E and B
+does not match V5. E, B, P and S are the input to Agent.observe(); what
+changes is the coherence record, regulation, mode and identity traits.
+The record should hold the input channel vector and the changed state
+fields. Confirm against Agent.observe first.</td>
+<td style="text-align: left;">Open. Design.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-02</td>
+<td style="text-align: left;">V6 trace, Gardener</td>
+<td style="text-align: left;">Gardener interventions (reweight,
+regulate, reset identity drift, nudge mode, set CCS) change state
+outside interact() and are logged separately. They must be recorded as
+transitions with cause gardener, or a character can move with no
+explanation.</td>
+<td style="text-align: left;">Open. Design.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-03</td>
+<td style="text-align: left;">V6 trace, timebase</td>
+<td style="text-align: left;">The EBPS engine runs on the server; cues,
+playback and gestures run in the browser. Use a take-relative time plus
+a server-issued sequence number so the lanes do not drift.</td>
+<td style="text-align: left;">Open. Design.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-04</td>
+<td style="text-align: left;">V6 trace, event identity</td>
+<td style="text-align: left;">There is no single event envelope in V5.
+Dialogue lines have ids, cues have triggerRef only, engine episodes have
+no id. Make an event a (kind, id) reference to existing identities, and
+give cues and episodes ids. Guide glossary must separate the Events
+Editor&#39;s event (a timeline cue) from the trace event.</td>
+<td style="text-align: left;">Open. Phase 1.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-05</td>
+<td style="text-align: left;">V6 trace, first clusters</td>
+<td style="text-align: left;">Seed clusters from structure that exists:
+a dialogue line, its audio and its gesture and face cues, chained by
+trigger (declared / sensed). Test on Garden of the Goddess. Authoring
+tools wait for Phase 5.</td>
+<td style="text-align: left;">Planned.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-06</td>
+<td style="text-align: left;">V6 trace, acceptance</td>
+<td style="text-align: left;">Add a non-interference test: run a scene
+with the same seed with tracing off and on, and require identical final
+field state.</td>
+<td style="text-align: left;">Planned.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-07</td>
+<td style="text-align: left;">V6 trace, vocabulary and storage</td>
+<td style="text-align: left;">Own XSD and Schematron pair and namespace
+(not the sketch&#39;s mccf: prefix; V5 uses the default namespace).
+Append-only trace file per take under
+scenes/&lt;scene&gt;/arcs/&lt;take&gt;/, batched, a record replaced by
+id. Perception, interpretation and audience knowledge have no V5 data
+source: optional unknown fields only.</td>
+<td style="text-align: left;">Open. Phase 1.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-08</td>
+<td style="text-align: left;">V6 timeline view</td>
+<td style="text-align: left;">The timeline lanes could share a component
+with the Route Editor timer graph (IMPL-R36): both are lanes on a time
+axis.</td>
+<td style="text-align: left;">Idea.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-09</td>
+<td style="text-align: left;">V6 revision 2 (review of
+Agent.observe())</td>
+<td style="text-align: left;">Reviewer read the public main source and
+confirmed the local code. Transition record (V6-01) now holds: raw input
+per agent, regulated vector, pair-record and credibility change,
+MetaState, identity, CCS, delta history. Regulation is input-side, not
+changed by observe(). Derived values such as pair coherence are
+recomputed, not stored. Timebase (V6-03) is three things: takeTime,
+server sequence, sourceSequence. Non-interference test (V6-06) must
+reset every random source (novelty uses random.uniform; interact()
+mirrors with random.gauss) and compare full state. The transition table
+is frozen against one exact source commit.</td>
+<td style="text-align: left;">Specification and blog updated to revision
+2. Open: choose the commit.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-10</td>
+<td style="text-align: left;">V6 author annotations</td>
+<td style="text-align: left;">Requirement from the Narrative Exploration
+post (1 Nov 2026). Author notes (intended trajectory, observed behavior,
+interpretation, question, decision) are a separate, editable annotation
+record: kind, author, time, and a reference to a cluster, transition or
+take. The trace stays append-only and untouched. Observation and
+interpretation are kept in different stores.</td>
+<td style="text-align: left;">Requirement. Add to the
+specification.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-11</td>
+<td style="text-align: left;">V6 intended versus observed overlay</td>
+<td style="text-align: left;">Requirement. An authored emotional arc (V5
+arc files, E B P S curves) is the intended trajectory. Overlay it on the
+E B P S values the trace recorded for the take. Cheapest useful feature
+in the post; build first. Uses the timeline lane component (V6-08).</td>
+<td style="text-align: left;">Requirement. Add to the
+specification.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-12</td>
+<td style="text-align: left;">Villain modelling: measurable patterns
+only</td>
+<td style="text-align: left;">Open question. State findings as observed
+patterns, not labels or intent. V5 pair records are directed, so these
+are measurable: asymmetric coupling (CCS), one-sided regulation, rising
+dependence, credibility diverging from outcomes. Needs a defined list of
+pattern detectors before any experiment. The specification already says
+intent is not inferred.</td>
+<td style="text-align: left;">Open. Applications document.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-13</td>
+<td style="text-align: left;">Repeated seeded runs</td>
+<td style="text-align: left;">Open question. Comparing benign,
+manipulative and well-intentioned-but-harmful versions of one character
+needs many seeded runs, reported as distributions, not single runs.
+Depends on confirming that the scene seed attribute seeds the Python
+engine&#39;s random calls (novelty term, mirrored vector). LLM-driven
+characters add model and prompt variance.</td>
+<td style="text-align: left;">Open. Check seeding first.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">V6-14</td>
+<td style="text-align: left;">Comparative dramaturgy of existing
+works</td>
+<td style="text-align: left;">Open question. Modelling Hamlet, Macbeth,
+Lear or Stoppard is interpretation: someone assigns the EBPS values from
+the text. Record modeller and rationale; two modellers will differ, and
+measuring that is a result. Keep line references only, no script text
+(Shakespeare is public domain, Stoppard is not). Needs a way to author a
+character network from a play.</td>
+<td style="text-align: left;">Open. Applications document.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">V6-15</td>
+<td style="text-align: left;">Compositional apprenticeship and student
+studies</td>
+<td style="text-align: left;">Open question. The comparison step needs a
+trace diff of two takes (later feature). Any study of whether
+scaffolding improves student writing involves human subjects: consent,
+ethical review and a data-handling plan first. Do not state outcomes in
+advance. The human-learning and AI-training analogy stays an
+analogy.</td>
+<td style="text-align: left;">Open. Applications document.</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

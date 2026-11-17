@@ -53,6 +53,8 @@ Backward compatibility:
     are not modified.
 
 New endpoints (registered as Flask Blueprint):
+    GET  /scene/registry                summary of definitions and episodes
+                                        (was GET /scene, which collided with mccf_zone_api)
     GET  /scene/definition              list loaded SceneDefinitions
     POST /scene/definition              load a SceneDefinition (JSON or XML)
     GET  /scene/definition/<id>         get a SceneDefinition
@@ -688,7 +690,7 @@ def attach_arc(episode_id):
     return jsonify({"status": "attached", "episode": ep.to_dict()})
 
 
-@scene_bp.route("/scene", methods=["GET"])
+@scene_bp.route("/scene/registry", methods=["GET"])
 def scene_summary():
     return jsonify(_reg().summary())
 

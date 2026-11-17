@@ -249,7 +249,7 @@ def parse_chorus_from_zone_xml(zone_xml_str: str, target_zone_id: str = None) ->
 # directory listing. So this doesn't trust a filename convention alone: it
 # tries the fast direct-filename path first, then falls back to scanning the
 # directory and matching by the file's own `name` attribute, case-insensitively.
-CULTIVARS_DIR = "cultivars"  # relative to the Flask app's working directory —
+CULTIVARS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cultivars")  # beside this module, not the working directory —
                               # adjust here if mccf_api.py runs from elsewhere.
 
 
@@ -506,15 +506,23 @@ def _call_ollama(config: ChorusConfig, transcript: str, cv: dict) -> str:
         "stream": False,
         "options": {"num_predict": config.max_tokens},
     }).encode("utf-8")
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = json.loads(resp.read())
-    return (data.get("response") or "").strip()
+    def _go(n_predict):
+        body = json.loads(payload)
+        body["options"]["num_predict"] = n_predict
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=int(os.environ.get("MCCF_CHORUS_TIMEOUT", "120"))) as resp:
+            return (json.loads(resp.read()).get("response") or "").strip()
+    out = _go(config.max_tokens)
+    if not out:
+        bigger = int(config.max_tokens * float(os.environ.get("MCCF_EMPTY_RETRY_FACTOR", "3")))
+        print(f"[MCCF] chorus: empty reply from {model} (num_predict={config.max_tokens}); retrying once with {bigger}")
+        out = _go(bigger) or f"[Empty reply from {model}. Raise max_tokens on the Chorus element or use a non-reasoning model.]"
+    return out
 
 
 def _call_openai(config: ChorusConfig, transcript: str, cv: dict) -> str:
@@ -875,6 +883,10 @@ def chorus_load():
 
     scenes_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "scenes")
     candidates = [
+        # current layout: scenes/NAME/NAME_scene.xml
+        _os.path.join(scenes_dir, scene_name, scene_name + "_scene.xml"),
+        _os.path.join(scenes_dir, scene_name, scene_name + ".xml"),
+        # older flat layout
         _os.path.join(scenes_dir, scene_name + "_scene.xml"),
         _os.path.join(scenes_dir, scene_name + ".xml"),
     ]

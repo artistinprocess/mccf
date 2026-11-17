@@ -242,6 +242,12 @@ function shiftNote(c, n, steps, mode, ki) {   // sets c.pitch (and the degree hi
   var d = degOf(n, ki); putDeg(c, d.abs + steps, d.alt, ki);
 }
 
+function parseList(v, what, dflt) {   // "2,3,5" -> [2,3,5]; a number passes through; empty -> [dflt]
+  if (typeof v === 'number') return [v];
+  var parts = String(v === undefined || v === null ? '' : v).split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x !== ''; });
+  if (!parts.length) return [dflt];
+  return parts.map(function (x) { var n = Number(x); if (!isFinite(n)) throw new Error('repeat: ' + what + ' must be numbers separated by commas (got "' + x + '")'); return n; });
+}
 var TRANSFORMS = {
   transpose: { version: 1,
     defaults: { steps: 0, mode: 'diatonic' },
@@ -274,6 +280,38 @@ var TRANSFORMS = {
         }
       }
       return { notes: out, length: len * p.copies };
+    } },
+  repeat: { version: 1,            // copies of the line, each its own distance apart, shift and transform (see parseList)
+    // copies = total including the original (which is never changed); gaps = beats (quarter notes) from the start of one copy
+    // to the start of the next, e.g. "4" or "2,3,5" (the last value repeats); shifts = scale steps (or semitones) for repeat 1, 2, 3...;
+    // ops = one code per repeat: - none, i invert, r retrograde, ri retrograde-inversion, a augment 2:1, d diminish 2:1;
+    // velocity = change in loudness per copy.  Gap 0 stacks the copies.
+    defaults: { copies: 3, gaps: '4', shifts: '0', ops: '', velocity: 0, mode: 'diatonic', fragment: null },
+    fn: function (notes, p, ctx) {
+      if (!(p.copies >= 1) || p.copies % 1 !== 0) throw new Error('repeat: copies must be a positive integer');
+      var gaps = parseList(p.gaps, 'gaps', 4), shifts = parseList(p.shifts, 'shifts', 0), ops = String(p.ops === undefined || p.ops === null ? '' : p.ops).split(',').map(function (x) { return x.trim().toLowerCase(); });
+      gaps.forEach(function (g) { if (!(g >= 0)) throw new Error('repeat: gaps are beats and cannot be negative'); });
+      var sel = fragRange(notes, p.fragment, ctx), base = rebase(sel), len = sel.t1 - sel.t0, out = [], off = 0, end = len;
+      var c2 = { ki: ctx.ki, ppq: ctx.ppq, barTicks: ctx.barTicks, length: len, anchor: ctx.anchor };
+      for (var i = 0; i < p.copies; i++) {
+        var k = i - 1, code = i === 0 || ops[k] === undefined || ops[k] === '' ? '-' : ops[k], cur = base, clen = len, r;
+        if (code === 'i') cur = TRANSFORMS.invert.fn(cur, { axis: 'first', mode: p.mode }, c2).notes;
+        else if (code === 'r') cur = TRANSFORMS.retrograde.fn(cur, {}, c2).notes;
+        else if (code === 'ri') cur = TRANSFORMS.retrogradeInversion.fn(cur, { axis: 'first', mode: p.mode }, c2).notes;
+        else if (code === 'a') { r = TRANSFORMS.augment.fn(cur, { p: 2, q: 1 }, c2); cur = r.notes; clen = r.length; }
+        else if (code === 'd') { r = TRANSFORMS.diminish.fn(cur, { p: 2, q: 1 }, c2); cur = r.notes; clen = r.length; }
+        else if (code !== '-') throw new Error('repeat: ops code "' + code + '" is not one of - i r ri a d');
+        var sh = i === 0 ? 0 : shifts[Math.min(k, shifts.length - 1)];
+        for (var j = 0; j < cur.length; j++) {
+          var c = cn(cur[j]); c.startTick += off;
+          if (sh) shiftNote(c, cur[j], sh, p.mode, ctx.ki);
+          if (p.velocity) c.velocity = Math.max(1, Math.min(127, Math.round((cur[j].velocity === undefined ? 90 : cur[j].velocity) + p.velocity * i)));
+          out.push(c);
+        }
+        end = Math.max(end, off + clen);
+        off += Math.round(gaps[Math.min(i, gaps.length - 1)] * ctx.ppq);
+      }
+      return { notes: out, length: end };
     } },
   fragment: { version: 1,          // keep a bar range or note range; result is rebased to 0
     defaults: { bars: null, notes: null },

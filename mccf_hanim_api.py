@@ -299,7 +299,7 @@ def avatar_preview():
     <div id="mo-status" class="mo-status"></div>
   </div>
   <script type="module">
-    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@16.1.3/dist/x_ite.min.mjs';
+    import X3D from 'https://cdn.jsdelivr.net/npm/x_ite@16.7.1/dist/x_ite.min.mjs';
     // Bumped from 11.6.0 → 16.1.3 to match mccf_x3d_loader.html's pin
     // (same verified-latest version, not the unconfirmed "16.3" from the
     // cycleComplete seed note). Kept in sync so this preview and the main
@@ -523,6 +523,21 @@ def list_avatars():
         reverse=True
     )
     return jsonify({'avatars': files})
+
+
+@hanim_bp.route('/avatar/skins', methods=['GET'])
+def list_avatar_skins():
+    """List skin atlas images (png/jpg) in static/avatars/, newest first.
+    Used by the Character Creator's skin atlas chooser."""
+    avatar_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'avatars')
+    if not os.path.isdir(avatar_dir):
+        return jsonify({'skins': []})
+    files = sorted(
+        [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))],
+        key=lambda f: os.path.getmtime(os.path.join(avatar_dir, f)),
+        reverse=True
+    )
+    return jsonify({'skins': files})
 
 
 # ---------------------------------------------------------------------------
@@ -894,7 +909,7 @@ def _update_displacer_weights(scene_el, displacers: list) -> int:
     return updated
 
 
-def _write_expressions_xml(expressions_path: str, expressions: list) -> int:
+def _write_expressions_xml(expressions_path: str, expressions: list, defer: bool = False):
     """
     Upsert <Expression> blocks into an MCCFExpressions XML file.
 
@@ -911,11 +926,13 @@ def _write_expressions_xml(expressions_path: str, expressions: list) -> int:
       - Writes atomically via .tmp + os.replace().
 
     Returns count of expressions written.
+    defer=True (R32): nothing is written; returns (count, xml_text) so hanim_export can write it
+    together with the other files after its gates pass. xml_text is None when nothing changed.
     """
     import xml.etree.ElementTree as _ET
 
     if not expressions:
-        return 0
+        return (0, None) if defer else 0
 
     # ── Parse or create root ─────────────────────────────────────────────
     root = None
@@ -972,12 +989,15 @@ def _write_expressions_xml(expressions_path: str, expressions: list) -> int:
         written += 1
 
     if written == 0:
-        return 0
+        return (0, None) if defer else 0
 
     # ── Serialise with readable indentation ─────────────────────────────
     _ET.indent(root, space='  ')
     xml_text = ('<?xml version="1.0" encoding="UTF-8"?>\n'
                 + _ET.tostring(root, encoding='unicode'))
+
+    if defer:
+        return written, xml_text
 
     # ── Atomic write ─────────────────────────────────────────────────────
     tmp_path = expressions_path + '.tmp'
@@ -1091,13 +1111,21 @@ def _ensure_camera_proto_declares(scene_el):
     ProtoDeclare exactly (position/rotation via initialTranslation/initialRotation,
     not a single combined field — same reasoning as that file's own comment: ordinary
     parent/child Transform nesting composes yaw/pitch/roll, not custom JS axis-angle
-    math). Idempotent — checks by name before inserting, inserted at the front of
+    math). Idempotent — checks by name before inserting, removes duplicate camera declarations, inserted at the front of
     Scene so it precedes any ProtoInstance that references it.
     """
     ns = _X3D_NS
     existing_names = set()
-    for el in scene_el.findall(f'{{{ns}}}ExternProtoDeclare'):
-        if el.get('name'):
+    # Declaring the same PROTO name twice in one file is invalid X3D. Keep the first declaration
+    # of each camera proto and remove later copies (older exports wrote duplicates). Matches by
+    # local tag name, so it does not depend on the namespace the file was parsed with.
+    for el in list(scene_el):
+        tag = el.tag.split('}')[-1] if isinstance(el.tag, str) else ''
+        if tag != 'ExternProtoDeclare' or not el.get('name'):
+            continue
+        if el.get('name') in existing_names and el.get('name') in ('AgentOrbitCamera', 'AgentTrackCamera'):
+            scene_el.remove(el)
+        else:
             existing_names.add(el.get('name'))
 
     def _make_declare(name, extra_fields):
@@ -1753,8 +1781,9 @@ def hanim_export():
       * Response adds: warnings, loop_updated, skipped, preexisting_problems, clips_removed,
         registry_refreshed.
 
-    Atomic triple-write via .tmp + os.replace().  All three files backed up first.
-    No file is modified if any write fails.
+    Atomic write via .tmp + os.replace() of every file the export changes (X3D, cultivar,
+    expressions, skin image).  All are backed up first and written only after every gate has
+    passed.  If a rename fails, the files already renamed are restored.
 
     Returns:
     {
@@ -1798,6 +1827,7 @@ def hanim_export():
 
     # ── Handle data URL skin — decode and save before any file writes ────
     final_skin_url = skin_url if skin_url and not skin_url.startswith('data:') else None
+    skin_pending = None
     if skin_url and skin_url.startswith('data:'):
         match = _re.match(r'^data:(image/(?:png|jpeg|jpg));base64,(.+)$',
                           skin_url, _re.DOTALL)
@@ -1809,16 +1839,12 @@ def hanim_export():
         except Exception as exc:
             return jsonify({'status': 'error',
                             'error': f'skin data URL decode failed: {exc}'}), 400
-        os.makedirs(_avatar_dir(), exist_ok=True)
+        # R32: the image is only decoded here. It is written with the other files, after every
+        # gate below has passed, so a refused export leaves the old skin untouched.
         slug      = _re.sub(r'[^A-Za-z0-9_\-]', '_', cultivar_name).lower()
         skin_file = f'{slug}_skin.png'
         skin_path = os.path.join(_avatar_dir(), skin_file)
-        try:
-            with open(skin_path, 'wb') as fh:
-                fh.write(img_bytes)
-        except OSError as exc:
-            return jsonify({'status': 'error',
-                            'error': f'skin image write failed: {exc}'}), 500
+        skin_pending = (skin_path, img_bytes)
         final_skin_url = f'/static/avatars/{skin_file}'
 
     # ── Parse X3D ────────────────────────────────────────────────────────
@@ -1982,10 +2008,9 @@ def hanim_export():
         }), 409
 
     # -- Cultivar validity gate -------------------------------------------
-    # CultivarDefinition.to_xml() writes clip names into attributes WITHOUT escaping, so a
-    # gesture called  Tom & Jerry  (or containing < > or a double quote) would produce an
-    # unparseable cultivar file and the character would fail to load at the next startup.
-    # Serialise once, prove it parses, and refuse (writing nothing) if it does not.
+    # CultivarDefinition.to_xml() now escapes clip names (V5), so a gesture called  Tom & Jerry
+    # is safe. This check stays as a backstop: serialise once, prove it parses, and refuse
+    # (writing nothing) if it does not.
     new_cultivar_xml = cultivar_def.to_xml()
     try:
         _ET_hanim.fromstring(new_cultivar_xml.split('?>', 1)[1] if new_cultivar_xml.lstrip().startswith('<?xml') else new_cultivar_xml)
@@ -1999,55 +2024,70 @@ def hanim_export():
     # ── Skin PhysicalMaterial Effect export (opt-in, Skin pane checkbox) ───
     skin_effect_result = _apply_skin_effect_export(x3d_root, scene_el, skin_effect_export)
 
-    # ── Atomic triple-write ──────────────────────────────────────────────
-    # 1. Back up all three files (expressions XML may not exist yet — that is fine)
-    _hanim_backup(x3d_filepath)
-    _hanim_backup(cultivar_filepath)
-    _hanim_backup(expressions_filepath)
-
-    new_x3d_xml      = _serialise_x3d(xml_decl, x3d_root)
-
-    tmp_x3d      = x3d_filepath      + '.tmp'
-    tmp_cultivar = cultivar_filepath + '.tmp'
-    # expressions written atomically inside _write_expressions_xml() itself;
-    # call it now so any error aborts before we touch the other two files.
+    # ── Atomic write of every file this export changes (R32) ────────────
+    # Nothing is written to a real path until every temp file exists. The set is the X3D, the
+    # cultivar record, the expressions file (if sent) and the skin image (if sent). On a failed
+    # rename each file is restored from its backup, or removed if it did not exist before.
     expressions_written = 0
+    expr_text = None
     if expressions:
         try:
-            expressions_written = _write_expressions_xml(expressions_filepath, expressions)
+            expressions_written, expr_text = _write_expressions_xml(expressions_filepath, expressions, defer=True)
         except OSError as exc:
             return jsonify({'status': 'error',
-                            'error': f'expressions XML write failed: {exc}'}), 500
+                            'error': f'expressions XML build failed: {exc}'}), 500
 
-    # 2. Write X3D and cultivar temp files
+    new_x3d_xml = _serialise_x3d(xml_decl, x3d_root)
+    plan = [(x3d_filepath, new_x3d_xml.encode('utf-8')),
+            (cultivar_filepath, new_cultivar_xml.encode('utf-8'))]
+    if expr_text is not None:
+        plan.append((expressions_filepath, expr_text.encode('utf-8')))
+    if skin_pending is not None:
+        os.makedirs(_avatar_dir(), exist_ok=True)
+        plan.append((skin_pending[0], skin_pending[1]))
+
+    existed = {path: os.path.exists(path) for path, _ in plan}
+    for path, _ in plan:
+        _hanim_backup(path)
+
+    tmps = []
     try:
-        with open(tmp_x3d, 'w', encoding='utf-8') as fh:
-            fh.write(new_x3d_xml)
-        with open(tmp_cultivar, 'w', encoding='utf-8') as fh:
-            fh.write(new_cultivar_xml)
+        for path, data in plan:
+            tmp = path + '.tmp'
+            tmps.append(tmp)
+            with open(tmp, 'wb') as fh:
+                fh.write(data)
     except OSError as exc:
-        for p in (tmp_x3d, tmp_cultivar):
+        for t in tmps:
             try:
-                os.remove(p)
+                os.remove(t)
             except OSError:
                 pass
-        return jsonify({'status': 'error', 'error': f'temp write failed: {exc}'}), 500
+        return jsonify({'status': 'error', 'error': f'temp write failed (nothing changed): {exc}'}), 500
 
-    # 3. Rename into place — both or neither
+    done = []
     try:
-        os.replace(tmp_x3d,      x3d_filepath)
-        os.replace(tmp_cultivar, cultivar_filepath)
+        for path, _ in plan:
+            os.replace(path + '.tmp', path)
+            done.append(path)
     except OSError as exc:
-        # Attempt restore from .bak
-        for src, dst in [(x3d_filepath + '.bak',      x3d_filepath),
-                         (cultivar_filepath + '.bak', cultivar_filepath)]:
-            if os.path.exists(src):
+        for path, _ in plan:
+            if path in done:
+                bak = path + '.bak'
                 try:
-                    _shutil_hanim.copy2(src, dst)
+                    if existed[path] and os.path.exists(bak):
+                        _shutil_hanim.copy2(bak, path)
+                    elif not existed[path]:
+                        os.remove(path)
+                except OSError:
+                    pass
+            else:
+                try:
+                    os.remove(path + '.tmp')
                 except OSError:
                     pass
         return jsonify({'status': 'error',
-                        'error': f'atomic rename failed (backups preserved): {exc}'}), 500
+                        'error': f'atomic rename failed, files restored from backup: {exc}'}), 500
 
     # Day 95: the running server serves cultivars from an IN-MEMORY registry that is loaded
     # from disk once, at startup. Writing the file alone left the Composer/Events editor
@@ -3075,11 +3115,12 @@ def _write_cultivar_joint_map(cultivar_path: str, joint_map: dict,
     """
     import xml.etree.ElementTree as _ET
 
-    _CULTIVAR_NS = 'http://mccf.artistinprocess.com/cultivar/v3'
-    _ET.register_namespace('', _CULTIVAR_NS)  # suppress ns0: prefixes on serialize
-
     tree = _ET.parse(cultivar_path)
     root = tree.getroot()
+    # V5: use the namespace the file already has (v1 in V5 files, cultivar/v3 in older ones),
+    # so the lookups below match and no duplicate elements accumulate.
+    _CULTIVAR_NS = root.tag[1:root.tag.index('}')] if root.tag.startswith('{') else 'http://mccf.artistinprocess.com/v1'
+    _ET.register_namespace('', _CULTIVAR_NS)  # suppress ns0: prefixes on serialize
 
     # Detect namespace prefix for find() — works with or without xmlns
     _ns_tag = lambda tag: (

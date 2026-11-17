@@ -92,8 +92,12 @@ class Store:
     @staticmethod
     def _summary(xml):
         t = (xml or b'').decode('utf-8', 'replace')
-        return {'cues': len(re.findall(r'<(?:Cue|EventCue)\b', t)),                       # the Composer writes <EventCues><Cue .../></EventCues> 'zones': len(re.findall(r'<Zone\b', t)),
-                'agents': len(re.findall(r'<EmotionalArc\b', t)), 'waypoints': len(re.findall(r'<Waypoint\b', t))}
+        # The Composer writes <EventCues><Cue .../></EventCues>.  Placements are <AgentPlacement> since the rename;
+        # older scenes wrote <EmotionalArc> for the same thing, so count both.
+        return {'cues': len(re.findall(r'<(?:Cue|EventCue)\b', t)),
+                'zones': len(re.findall(r'<Zone\b', t)),
+                'agents': len(re.findall(r'<(?:AgentPlacement|EmotionalArc)\b', t)),
+                'waypoints': len(re.findall(r'<Waypoint\b', t))}
 
     def _numbers(self, scene):
         d = self.vdir(scene)

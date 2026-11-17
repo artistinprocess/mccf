@@ -11,6 +11,9 @@ Endpoints:
   POST /voice/configure - set active adapter, persona, params
   GET  /voice/state     - current voice agent state
   POST /voice/prosody   - receive audio features from Web Audio API
+  GET  /voice/lexicon   - lexicon packs found, active packs, engine tag packs
+  POST /voice/lexicon/reload - re-read the pack folders
+  POST /voice/lexicon/upload - add a pack file {pack, replace?}; saved and loaded at once
 """
 
 import json
@@ -18,6 +21,8 @@ import asyncio
 import time
 import math
 import re
+import os
+import logging
 from flask import Blueprint, request, Response, jsonify, stream_with_context
 
 voice_bp = Blueprint('voice', __name__)
@@ -44,7 +49,9 @@ _voice_state = {
     },
     "conversation_history": [],
     "last_affect": {},
-    "agent_position": [0, 0, 0]
+    "agent_position": [0, 0, 0],
+    "lexicon_packs": [],          # extra sentiment packs applied on top of core (empty = core only)
+    "engine_pack":   "elevenlabs_v3"
 }
 
 
@@ -169,6 +176,16 @@ def _get_affective_context(agent_name: str, position: list) -> dict:
     }
 
 
+def _trim_to_sentences(text: str, n: int) -> str:
+    """Drop stage directions "(...)" and keep at most n whole sentences."""
+    import re
+    t = re.sub(r"\([^)]*\)", " ", text)
+    t = re.sub(r"\s*\n\s*", " ", t).strip()
+    parts = re.findall(r"[^.!?]+[.!?]+[\"')\]]*|[^.!?]+$", t)
+    parts = [x.strip() for x in parts if x.strip()]
+    return " ".join(parts[:max(1, n)]) if parts else t
+
+
 @voice_bp.route('/voice/speak', methods=['POST'])
 def voice_speak():
     """
@@ -195,6 +212,35 @@ def voice_speak():
     agent_name  = data.get("agent_name",
                            _voice_state["persona"].get("agent_name", "Agent"))
     position    = data.get("position", _voice_state["agent_position"])
+
+    # Optional brevity controls (waypoint answers recorded by the Composer):
+    #   max_sentences  keep at most N whole sentences, no stage directions
+    #   max_tokens     hard token cap for this call only
+    try:
+        max_sentences = int(data.get("max_sentences") or 0)
+    except (TypeError, ValueError):
+        max_sentences = 0
+    try:
+        call_max_tokens = int(data.get("max_tokens") or 0)
+    except (TypeError, ValueError):
+        call_max_tokens = 0
+    call_params  = dict(_voice_state["params"])
+    call_persona = dict(_voice_state["persona"])
+    if call_max_tokens > 0:
+        call_params["max_tokens"] = call_max_tokens
+    # Optional intent for this reply (the author's line text on a live reply): what the character
+    # wants from this moment. Shapes the reply; never shown as the reply.
+    intent = str(data.get("intent") or "").strip()[:400]
+    if intent:
+        call_persona["description"] = (
+            (call_persona.get("description", "") + " ").lstrip() +
+            "In this reply your aim is: " + intent + " Answer the person's words directly and let that aim show "
+            "in how you say it, not in naming it.")
+    if max_sentences > 0:
+        call_persona["description"] = (
+            (call_persona.get("description", "") + " ").lstrip() +
+            f"Answer in at most {max_sentences} short sentences of plain speech. "
+            "No stage directions, no parentheticals, no lists, no follow-up questions.")
 
     if not user_text.strip():
         return jsonify({"error": "empty text"}), 400
@@ -271,8 +317,8 @@ def voice_speak():
                 async for token in adapter.complete(
                     messages=_voice_state["conversation_history"],
                     affective_context=affective_context,
-                    persona=_voice_state["persona"],
-                    params=_voice_state["params"],
+                    persona=call_persona,
+                    params=call_params,
                     delta_context=delta_ctx
                 ):
                     tokens.append(token)
@@ -282,6 +328,8 @@ def voice_speak():
 
         try:
             tokens = loop.run_until_complete(collect())
+            if max_sentences > 0:
+                tokens = [_trim_to_sentences("".join(tokens), max_sentences)]
             for token in tokens:
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
         except Exception as e:
@@ -557,20 +605,27 @@ def voice_preview():
     base_weights = data.get('base_weights') or {'E': 0.25, 'B': 0.25, 'P': 0.25, 'S': 0.25}
     regulation = data.get('regulation', 1.0)
 
-    sentiment = _estimate_sentiment(text)
-    channel_deltas = _decompose_to_channels(text, base_weights)
+    req_packs = data.get('lexicon_packs')
+    if req_packs is not None and not isinstance(req_packs, list):
+        return jsonify({'error': 'lexicon_packs must be a list of pack ids'}), 400
+    used_packs = _resolve_pack_ids(req_packs)
+    unknown = [i for i in (req_packs or []) if i not in used_packs]
+    engine_pack = data.get('engine_pack', _voice_state.get('engine_pack'))
+
+    sentiment = _estimate_sentiment(text, used_packs)
+    channel_deltas = _decompose_to_channels(text, base_weights, used_packs)
     weights = {
         ch: round(min(1.0, max(0.0, base_weights.get(ch, 0.25) + channel_deltas.get(ch, 0.0))), 4)
         for ch in ['E', 'B', 'P', 'S']
     }
 
-    sentiment_hits = _sentiment_hit_counts(text)
+    sentiment_hits = _sentiment_hit_counts(text, used_packs)
     tag_valence = _tag_valence_from_hits(sentiment_hits)
 
-    channel_hits = _channel_hit_counts(text)
+    channel_hits = _channel_hit_counts(text, used_packs)
     arousal_proxy, engagement_proxy = _preview_arousal_engagement(channel_hits)
 
-    suggested_tag = derive_emotion_tag(tag_valence, arousal_proxy, engagement_proxy)
+    suggested_tag = _engine_tag(engine_pack, derive_emotion_tag(tag_valence, arousal_proxy, engagement_proxy))
     suggested_tts_text = build_tts_text(text, suggested_tag)
 
     return jsonify({
@@ -583,6 +638,8 @@ def voice_preview():
         'regulation':          regulation,
         'suggested_tag':       suggested_tag,
         'suggested_tts_text':  suggested_tts_text,
+        'lexicon_packs':       used_packs,
+        'lexicon_unknown':     unknown,
     })
 
 
@@ -603,6 +660,13 @@ def configure_voice():
         _voice_state["params"].update(data["params"])
     if "position" in data:
         _voice_state["agent_position"] = data["position"]
+    if "lexicon_packs" in data:
+        ids = data["lexicon_packs"]
+        if not isinstance(ids, list):
+            return jsonify({"error": "lexicon_packs must be a list of pack ids"}), 400
+        _voice_state["lexicon_packs"] = _resolve_pack_ids(ids)
+    if "engine_pack" in data:
+        _voice_state["engine_pack"] = data["engine_pack"]
     if "clear_history" in data and data["clear_history"]:
         _voice_state["conversation_history"] = []
 
@@ -610,8 +674,136 @@ def configure_voice():
         "status": "configured",
         "adapter": _voice_state["adapter_id"],
         "persona": _voice_state["persona"],
-        "model":   _voice_state["model"] or "(default)"
+        "model":   _voice_state["model"] or "(default)",
+        "lexicon_packs": _voice_state["lexicon_packs"],
+        "engine_pack":   _voice_state["engine_pack"]
     })
+
+
+def _ebps_tag(text):
+    """Per-word EBPS weights from every loaded 'ebps' pack. Sum over word occurrences, signed -1..1 each.
+    No negation handling, by design for now; see the pack's own description."""
+    packs = [p for p in _PACKS.values() if p.get('kind') == 'ebps']
+    toks = re.findall(r"[a-z']+", text.lower())
+    total = {'E': 0.0, 'B': 0.0, 'P': 0.0, 'S': 0.0}
+    hits = []
+    for tok in toks:
+        for p in packs:
+            v = p['_ebps'].get(tok)
+            if v:
+                hits.append({'word': tok, 'pack': p['pack_id'], **{k: v.get(k, 0.0) for k in total}})
+                for k in total:
+                    total[k] += v.get(k, 0.0)
+                break
+    return {'sum': {k: round(x, 3) for k, x in total.items()}, 'hits': hits,
+            'packs': [p['pack_id'] for p in packs], 'word_count': len(toks)}
+
+
+@voice_bp.route('/voice/tag', methods=['POST'])
+def voice_tag():
+    """
+    POST {"text": "..."}  ->  what the lexicon word lists find in a piece of text.
+
+    Returns raw hit counts per channel (E, B, P, S) and for the sentiment lists, plus the
+    sentiment estimate. Raw counts on purpose: the signed channel nudges used elsewhere read
+    a short text as negative because it has few hits. This is a word-count estimate of the
+    affect expressed in the text. It does not measure what a person feels and is unvalidated.
+    """
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text", ""))
+    if not text.strip():
+        return jsonify({"error": "empty text"}), 400
+    return jsonify({
+        "channels":  _channel_hit_counts(text),
+        "sentiment_hits": _sentiment_hit_counts(text),
+        "sentiment": round(_estimate_sentiment(text), 3),
+        "ebps":      _ebps_tag(text),
+        "basis":     "word-list count; unvalidated estimate of expressed affect",
+    })
+
+
+@voice_bp.route('/voice/lexicon', methods=['GET'])
+def list_lexicon():
+    """Every pack found, which are active, and the built-in core tag list (fallback for editors)."""
+    return jsonify({
+        "packs":  [_pack_summary(_PACKS[k]) for k in sorted(_PACKS)],
+        "active": _voice_state["lexicon_packs"],
+        "engine_pack": _voice_state["engine_pack"],
+        "core_emotion_tags": CORE_EMOTION_TAGS,
+    })
+
+
+def _validate_pack_for_upload(p):
+    """Return an error string, or None if the pack is acceptable."""
+    if not isinstance(p, dict):
+        return 'a pack file must hold one JSON object'
+    pid = p.get('pack_id')
+    if not isinstance(pid, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', pid):
+        return 'pack_id is required: 1-64 letters, digits, - or _'
+    kind = p.get('kind', 'words')
+    if kind == 'words':
+        for k in _WORD_KEYS:
+            if k in p and not (isinstance(p[k], list) and all(isinstance(w, str) for w in p[k])):
+                return f'"{k}" must be a list of words'
+    elif kind == 'engine_tags':
+        g = p.get('groups')
+        if not (isinstance(g, dict) and all(isinstance(v, list) for v in g.values())):
+            return 'an engine_tags pack needs "groups": {name: [tags]}'
+    elif kind == 'ebps':
+        w = p.get('words')
+        if not isinstance(w, dict) or not w:
+            return 'an ebps pack needs "words": {word: {E, B, P, S}}'
+        for word, vals in w.items():
+            if not isinstance(vals, dict) or not vals:
+                return f'"{word}": give a weight object such as {{"E": 0.5}}'
+            for ch, v in vals.items():
+                if ch not in ('E', 'B', 'P', 'S'):
+                    return f'"{word}": unknown channel {ch!r} (use E, B, P, S)'
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or not -1.0 <= v <= 1.0:
+                    return f'"{word}": {ch} must be a number from -1 to 1'
+    else:
+        return f'unknown kind {kind!r}: use "words", "engine_tags" or "ebps"'
+    return None
+
+
+@voice_bp.route('/voice/lexicon/upload', methods=['POST'])
+def upload_lexicon():
+    """
+    Add a pack from a file the author chose. Body: {pack: {...}, replace?: bool}.
+    Saved as lexicon_packs/<pack_id>.json beside this file, then all packs are re-read,
+    so it works at once without a restart. An existing pack_id is only replaced when
+    replace is true (otherwise 409 and nothing is written).
+    """
+    data = request.get_json(silent=True) or {}
+    pack = data.get('pack')
+    err = _validate_pack_for_upload(pack)
+    if err:
+        return jsonify({'error': err}), 400
+    pid = pack['pack_id']
+    folder = os.path.join(_HERE, 'lexicon_packs')
+    path = os.path.join(folder, pid + '.json')
+    if pid in _PACKS and not data.get('replace'):
+        return jsonify({'error': f'a pack named {pid} already exists', 'exists': True, 'pack_id': pid}), 409
+    try:
+        os.makedirs(folder, exist_ok=True)
+        tmp = path + '.tmp'
+        with open(tmp, 'w', encoding='utf8') as fh:
+            json.dump(pack, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except OSError as e:
+        return jsonify({'error': f'could not save the pack: {e}'}), 500
+    ids = load_lexicon_packs()
+    _voice_state["lexicon_packs"] = _resolve_pack_ids(_voice_state["lexicon_packs"])
+    if pid not in ids:
+        return jsonify({'error': 'the pack was saved but not accepted on re-read; see the server log'}), 422
+    return jsonify({'status': 'added', 'pack_id': pid, 'packs': ids})
+
+
+@voice_bp.route('/voice/lexicon/reload', methods=['POST'])
+def reload_lexicon():
+    ids = load_lexicon_packs()
+    _voice_state["lexicon_packs"] = _resolve_pack_ids(_voice_state["lexicon_packs"])
+    return jsonify({"status": "reloaded", "packs": ids})
 
 
 @voice_bp.route('/voice/state', methods=['GET'])
@@ -706,7 +898,125 @@ _UNCERTAINTY_WORDS = {
 }
 
 
-def _sentiment_hit_counts(text: str) -> dict:
+# ---------------------------------------------------------------------------
+# Lexicon packs ("tag bags")
+#
+# A pack is a JSON file: {pack_id, label, description, kind?, ...}
+#   kind "words" (default): optional word lists pos, neg, unc, S, E, P, B.
+#                           Added on top of the core lists, never replacing them.
+#   kind "engine_tags":     delivery tags for one voice engine:
+#                           {engine, placement, groups:{name:[tags]}, tag_map?}
+#                           tag_map translates the tag the decision tree derives
+#                           (core names) into this engine's tag.
+# Packs are read from lexicon_packs/ beside this file, and from *.json files in
+# the folder above this file that carry a pack_id. Read at start-up; POST
+# /voice/lexicon/reload re-reads them.
+# With no pack active the scoring is exactly the original core scoring.
+# ---------------------------------------------------------------------------
+_log = logging.getLogger(__name__)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PACK_DIRS = [os.path.join(_HERE, 'lexicon_packs'), _HERE, os.path.dirname(_HERE)]
+_WORD_KEYS = ('pos', 'neg', 'unc', 'S', 'E', 'P', 'B')
+_PACKS = {}
+
+
+def load_lexicon_packs(dirs=None):
+    """(Re)read all packs. Bad files are logged and skipped, never fatal."""
+    found = {}
+    for d in (dirs or _PACK_DIRS):
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if not fn.lower().endswith('.json'):
+                continue
+            path = os.path.join(d, fn)
+            try:
+                with open(path, encoding='utf8') as fh:
+                    p = json.load(fh)
+            except Exception as e:
+                if d.endswith('lexicon_packs'):
+                    _log.warning('lexicon pack %s skipped: %s', path, e)
+                continue
+            if not isinstance(p, dict) or not isinstance(p.get('pack_id'), str):
+                continue
+            kind = p.get('kind', 'words')
+            if kind == 'words':
+                clean = {k: {str(w).lower() for w in p.get(k, []) if isinstance(w, str)}
+                         for k in _WORD_KEYS if isinstance(p.get(k, []), list)}
+                p = dict(p, _words=clean)
+            elif kind == 'ebps':
+                w = p.get('words')
+                if not isinstance(w, dict):
+                    _log.warning('lexicon pack %s skipped: ebps needs a words object', path)
+                    continue
+                table = {}
+                for word, vals in w.items():
+                    if not isinstance(word, str) or not isinstance(vals, dict):
+                        continue
+                    table[word.lower()] = {ch: max(-1.0, min(1.0, float(vals.get(ch, 0.0))))
+                                           for ch in ('E', 'B', 'P', 'S') if isinstance(vals.get(ch, 0.0), (int, float))}
+                p = dict(p, _ebps=table)
+            elif kind == 'engine_tags':
+                if not isinstance(p.get('groups'), dict):
+                    _log.warning('lexicon pack %s skipped: engine_tags needs groups', path)
+                    continue
+            else:
+                _log.warning('lexicon pack %s skipped: unknown kind %r', path, kind)
+                continue
+            if p['pack_id'] in found:
+                _log.warning('lexicon pack_id %s repeated in %s; first one kept', p['pack_id'], path)
+                continue
+            p['_path'] = path
+            found[p['pack_id']] = p
+    _PACKS.clear()
+    _PACKS.update(found)
+    return sorted(_PACKS)
+
+
+def _pack_summary(p):
+    s = {'pack_id': p['pack_id'], 'label': p.get('label', p['pack_id']),
+         'description': p.get('description', ''), 'kind': p.get('kind', 'words')}
+    if s['kind'] == 'words':
+        s['counts'] = {k: len(v) for k, v in p['_words'].items()}
+    elif s['kind'] == 'ebps':
+        s['counts'] = {'words': len(p['_ebps'])}
+        s['status'] = p.get('status', '')
+    else:
+        s['engine'] = p.get('engine', '')
+        s['placement'] = p.get('placement', 'prefix')
+        s['groups'] = p['groups']
+        s['tag_map'] = p.get('tag_map', {})
+    return s
+
+
+def _resolve_pack_ids(ids):
+    """None -> configured packs. Unknown ids are ignored (reported by callers)."""
+    if ids is None:
+        ids = _voice_state.get('lexicon_packs', [])
+    return [i for i in ids if i in _PACKS and _PACKS[i].get('kind', 'words') == 'words']
+
+
+def _words(key, core, ids=None):
+    """Core word set for `key` plus the same list from each active pack."""
+    ids = _resolve_pack_ids(ids)
+    if not ids:
+        return core
+    out = set(core)
+    for i in ids:
+        out |= _PACKS[i]['_words'].get(key, set())
+    return out
+
+
+def _engine_tag(pack_id, tag):
+    """Translate a derived core tag through the engine pack's tag_map (identity if none)."""
+    p = _PACKS.get(pack_id or '')
+    if tag and p and p.get('kind') == 'engine_tags':
+        return p.get('tag_map', {}).get(tag, tag)
+    return tag
+
+
+
+def _sentiment_hit_counts(text: str, packs=None) -> dict:
     """
     Shared raw word-hit counter for sentiment scoring. Returns counts, not
     a blended scalar — callers decide how to weight them for their use case.
@@ -718,14 +1028,14 @@ def _sentiment_hit_counts(text: str) -> dict:
     """
     words = set(re.findall(r'\b\w+\b', text.lower()))
     return {
-        "pos":        len(words & _POS_WORDS),
-        "neg":        len(words & _NEG_WORDS),
-        "unc":        len(words & _UNCERTAINTY_WORDS),
+        "pos":        len(words & _words('pos', _POS_WORDS, packs)),
+        "neg":        len(words & _words('neg', _NEG_WORDS, packs)),
+        "unc":        len(words & _words('unc', _UNCERTAINTY_WORDS, packs)),
         "word_count": len(re.findall(r'\b\w+\b', text)),
     }
 
 
-def _estimate_sentiment(text: str) -> float:
+def _estimate_sentiment(text: str, packs=None) -> float:
     """
     Semantic decomposition sentiment estimator — V2.2.
     Returns overall valence scalar (-1.0 to 1.0) for field outcome_delta.
@@ -741,7 +1051,7 @@ def _estimate_sentiment(text: str) -> float:
     tuning); the calibration bug this refactor fixes lives entirely in
     voice_preview's downstream use, not here.
     """
-    hits  = _sentiment_hit_counts(text)
+    hits  = _sentiment_hit_counts(text, packs)
     pos, neg, unc = hits["pos"], hits["neg"], hits["unc"]
     total = pos + neg + unc
 
@@ -813,7 +1123,7 @@ _CHANNEL_NUDGE     = 0.04   # maximum per-channel delta magnitude
 _CHANNEL_THRESHOLD = 2      # hits needed for positive signal (tanh inflection)
 
 
-def _channel_hit_counts(text: str) -> dict:
+def _channel_hit_counts(text: str, packs=None) -> dict:
     """
     Shared raw per-channel word-hit counter. Returns counts, not the
     tanh-transformed delta — see _decompose_to_channels for the live-field
@@ -826,14 +1136,14 @@ def _channel_hit_counts(text: str) -> dict:
     """
     words = set(re.findall(r'\b\w+\b', text.lower()))
     return {
-        "S": len(words & _S_WORDS),
-        "E": len(words & _E_WORDS),
-        "P": len(words & _P_WORDS),
-        "B": len(words & _B_WORDS),
+        "S": len(words & _words('S', _S_WORDS, packs)),
+        "E": len(words & _words('E', _E_WORDS, packs)),
+        "P": len(words & _words('P', _P_WORDS, packs)),
+        "B": len(words & _words('B', _B_WORDS, packs)),
     }
 
 
-def _decompose_to_channels(text: str, base_weights: dict) -> dict:
+def _decompose_to_channels(text: str, base_weights: dict, packs=None) -> dict:
     """
     Semantic decomposition matrix — V2.3.
     Maps LLM response text to per-channel delta nudges.
@@ -853,9 +1163,12 @@ def _decompose_to_channels(text: str, base_weights: dict) -> dict:
     that was voice_preview's Day 72 bug. Use _channel_hit_counts directly
     for anything that wants "how much signal is actually here."
     """
-    hits = _channel_hit_counts(text)
+    hits = _channel_hit_counts(text, packs)
     deltas = {
         ch: round(_CHANNEL_NUDGE * math.tanh(hits[ch] - _CHANNEL_THRESHOLD), 4)
         for ch in ["S", "E", "P", "B"]
     }
     return deltas
+
+
+load_lexicon_packs()
